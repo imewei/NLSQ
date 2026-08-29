@@ -315,3 +315,56 @@ class TestCMAESDiagnosticsIntegration:
         # Should track restarts
         assert "total_restarts" in diag
         assert isinstance(diag["total_restarts"], int)
+
+
+class TestAutoGlobalCMAESKwargsLeak:
+    """Regression tests for fit(workflow='auto_global', method='cmaes')
+    forwarding timeit/return_eval/full_output into the internal NLSQ
+    refinement curve_fit() call.
+
+    Those kwargs make that internal curve_fit() return a plain tuple
+    instead of a CurveFitResult; _nlsq_refinement then does
+    result.x/result.pcov on the tuple, raising AttributeError, which was
+    silently swallowed by a broad except and treated identically to a
+    genuine numerical refinement failure -- falling back to the raw
+    CMA-ES point estimate (pcov=inf) while curve_fit still reported
+    success=True, with no signal that refinement never ran.
+    """
+
+    def test_timeit_kwarg_does_not_break_refinement(self, caplog) -> None:
+        import logging
+
+        from nlsq.core.minpack import fit
+        from nlsq.global_optimization.cmaes_config import CMAESConfig
+
+        def model(x, a):
+            return a * x
+
+        x = np.linspace(0, 10, 50)
+        y = 2.5 * x
+
+        with caplog.at_level(
+            logging.WARNING, logger="nlsq.global_optimization.cmaes_optimizer"
+        ):
+            result = fit(
+                model,
+                x,
+                y,
+                p0=[1.0],
+                workflow="auto_global",
+                method="cmaes",
+                bounds=([0.1], [10.0]),
+                cmaes_config=CMAESConfig(max_generations=10, popsize=8, seed=42),
+                timeit=True,
+            )
+
+        assert type(result).__name__ == "CurveFitResult"
+        assert result.popt is not None
+        # The bug's failure signature: refinement silently falls back to
+        # the unrefined CMA-ES estimate, logging this exact warning.
+        assert not any(
+            "NLSQ refinement failed" in rec.message for rec in caplog.records
+        ), "timeit kwarg leaked into refinement and was silently swallowed"
+        # A fallback also always reports an all-inf diagonal (see
+        # _estimate_pcov_from_cmaes) -- a working refinement should not.
+        assert np.all(np.isfinite(np.diag(np.asarray(result.pcov))))

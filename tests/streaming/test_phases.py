@@ -251,6 +251,51 @@ class TestWarmupPhase:
         expected = 1.25 + 25.0
         assert float(loss) == pytest.approx(expected, rel=1e-5)
 
+    def test_best_tracker_cost_global_is_ssr_not_mse(self):
+        """best_tracker['best_cost_global'] must be stored on the same SSR
+        (sum of squared residuals) scale that GaussNewtonPhase uses, not
+        raw MSE.
+
+        Regression test: storing Phase 1's MSE loss directly meant Phase
+        2's `new_cost < best_cost_global` (SSR vs MSE) was essentially
+        never true for datasets beyond a few points, silently freezing
+        best_params_global at wherever Phase 1 left it. Mirrors the fix
+        already applied in adaptive_hybrid.py's _update_global_best.
+        """
+        n = 5
+        config = HybridStreamingConfig(
+            chunk_size=1000,
+            warmup_iterations=1,
+            max_warmup_iterations=1,
+            lbfgs_initial_step_size=0.01,
+            gradient_norm_threshold=1e-12,
+            verbose=0,
+            enable_warm_start_detection=False,
+        )
+
+        def model(x_batch, *params):
+            return jnp.full_like(x_batch, params[0])
+
+        phase = WarmupPhase(config, model)
+
+        x_data = jnp.zeros(n)
+        y_data = jnp.ones(n)
+        best_tracker: dict = {}
+
+        result = phase.run(
+            data_source=(x_data, y_data),
+            initial_params=jnp.array([0.0]),
+            phase_history=[],
+            best_tracker=best_tracker,
+        )
+
+        assert "best_cost_global" in best_tracker
+        expected_ssr = result["final_loss"] * n
+        assert best_tracker["best_cost_global"] == pytest.approx(expected_ssr, rel=1e-6)
+        # The bug stored raw MSE (== final_loss) instead of the SSR-scaled
+        # value -- fail loudly if this regresses.
+        assert best_tracker["best_cost_global"] != pytest.approx(result["final_loss"])
+
 
 class TestGaussNewtonPhase:
     """Tests for GaussNewtonPhase class."""
@@ -287,6 +332,52 @@ class TestGaussNewtonPhase:
         bounds = (jnp.array([0.0, 0.0]), jnp.array([1.0, 1.0]))
         phase = GaussNewtonPhase(config, mock_model, bounds)
         assert phase.normalized_bounds is not None
+
+    def test_rejected_first_step_does_not_falsely_converge(self, config):
+        """A rejected first Gauss-Newton iteration must not report false
+        'Cost change below tolerance' convergence.
+
+        Regression test: on the first iteration, prev_cost is still inf, so
+        the pre-fix fallback `cost_before_step = new_cost` made
+        `cost_change = abs(cost_before_step - new_cost)` exactly zero
+        whenever that first step was rejected -- reporting convergence
+        after one rejected step with zero real progress, regardless of how
+        far new_cost actually was from the true initial cost.
+        """
+
+        def model(x, a):
+            return a * x
+
+        phase = GaussNewtonPhase(config, model)
+
+        # _gauss_newton_iteration is mocked to a value (-999.0) that can
+        # never equal a real sum-of-squared-residuals (always >= 0), so a
+        # correct cost_before_step (the true pre-loop SSR) makes cost_change
+        # large and non-zero, while the pre-fix fallback (new_cost itself)
+        # would make it exactly zero.
+        phase._gauss_newton_iteration = (
+            lambda data_source, params, trust_radius: {
+                "new_params": params,
+                "new_cost": -999.0,
+                "gradient_norm": 10.0,  # above gauss_newton_tol: no gradient-based convergence
+                "actual_reduction": -1.0,  # rejected step
+                "trust_radius": trust_radius,
+            }
+        )
+
+        x_data = jnp.array([1.0, 2.0, 3.0, 4.0])
+        y_data = jnp.array([1.0, 2.0, 3.0, 4.0])
+
+        result = phase.run(
+            data_source=(x_data, y_data),
+            initial_params=jnp.array([1.0]),
+            phase_history=[],
+            best_tracker={},
+        )
+
+        assert result["convergence_reason"] != "Cost change below tolerance"
+        assert result["convergence_reason"] == "Maximum iterations reached"
+        assert result["iterations"] == config.gauss_newton_max_iterations
 
 
 class TestPhaseOrchestrator:

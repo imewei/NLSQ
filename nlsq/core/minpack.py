@@ -1618,6 +1618,20 @@ def _fit_global_cmaes(
 
     optimizer = CMAESOptimizer(config=cmaes_config)
 
+    # timeit/return_eval/full_output would flow through **kwargs into
+    # _nlsq_refinement's internal curve_fit() call and make it return a
+    # plain tuple instead of a CurveFitResult; _nlsq_refinement then does
+    # result.x/result.pcov on that tuple, which raises AttributeError,
+    # silently swallowed by a broad except there and falling back to the
+    # unrefined CMA-ES point estimate (pcov=inf) while this function still
+    # reports success=True below. Mirrors the same filter already applied
+    # in the standalone method='cmaes' entry point above.
+    extra_kwargs = {
+        k: v
+        for k, v in kwargs.items()
+        if k not in ("timeit", "return_eval", "full_output")
+    }
+
     result_dict = optimizer.fit(
         f=f,
         xdata=xdata,
@@ -1629,7 +1643,7 @@ def _fit_global_cmaes(
         # its **kwargs flows through to _nlsq_refinement's curve_fit() call,
         # which does accept it -- forward it there instead of dropping it.
         absolute_sigma=absolute_sigma,
-        **kwargs,
+        **extra_kwargs,
     )
 
     # Convert to CurveFitResult

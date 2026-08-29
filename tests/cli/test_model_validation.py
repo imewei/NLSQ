@@ -185,6 +185,72 @@ def model(x, a):
         assert not result.is_valid
         assert any("ctypes" in v for v in result.violations)
 
+    def test_aliased_importlib_import_module_blocked(self, tmp_path: Path):
+        """Aliasing importlib.import_module must not bypass detection.
+
+        Regression test for a sandbox-escape hole: aliasing the imported
+        symbol (`as im`) rebinds it to a name absent from DANGEROUS_PATTERNS,
+        so only checking the module root let this through undetected.
+        """
+        model_file = tmp_path / "malicious_importlib_alias.py"
+        model_file.write_text("""
+from importlib import import_module as im
+
+def model(x, a):
+    im("subprocess").run(["echo", "pwned"])
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("importlib" in v.lower() for v in result.violations)
+
+    def test_aliased_builtins_eval_blocked(self, tmp_path: Path):
+        """Aliasing builtins.eval must not bypass detection."""
+        model_file = tmp_path / "malicious_builtins_alias.py"
+        model_file.write_text("""
+from builtins import eval as ev
+
+def model(x, a):
+    ev("__import__('os').system('pwned')")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("builtins" in v.lower() for v in result.violations)
+
+    def test_bare_dunder_import_blocked(self, tmp_path: Path):
+        """Bare __import__() (no explicit import statement) must be blocked."""
+        model_file = tmp_path / "malicious_dunder_import.py"
+        model_file.write_text("""
+def model(x, a):
+    __import__("os").system("pwned")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("__import__" in v for v in result.violations)
+
+    def test_dotted_submodule_import_blocked(self, tmp_path: Path):
+        """`import os.path as p` must be blocked via the module root."""
+        model_file = tmp_path / "malicious_dotted_import.py"
+        model_file.write_text("""
+import os.path as p
+
+def model(x, a):
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("os.path" in v for v in result.violations)
+
     def test_trusted_bypasses_validation(self, tmp_path: Path):
         """trusted=True should bypass validation."""
         model_file = tmp_path / "malicious_but_trusted.py"

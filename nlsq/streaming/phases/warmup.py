@@ -693,10 +693,26 @@ class WarmupPhase:
                 return params, float(loss_value), float(grad_norm), opt_state, True
             raise ValueError("NaN/Inf in parameters after L-BFGS update")
 
-        # Track best parameters globally
-        if float(loss_value) < best_tracker.get("best_cost_global", float("inf")):
-            best_tracker["best_cost_global"] = float(loss_value)
-            best_tracker["best_params_global"] = new_params
+        # Track best parameters globally. loss_value is Phase 1's MSE; Phase 2
+        # (gauss_newton.py) tracks best_cost_global as SSR (jnp.sum, not
+        # jnp.mean). Storing MSE directly here means Phase 2's
+        # `new_cost < best_cost_global` (SSR vs MSE) is essentially never
+        # true for datasets beyond a few points, silently freezing
+        # best_params_global at wherever Phase 1 left it -- mirror
+        # adaptive_hybrid.py's _update_global_best fix by converting to an
+        # SSR-equivalent (* batch size) before comparing/storing. Skipped
+        # under residual weighting: the weighted loss
+        # (sum(w*r^2)/sum(w)) isn't convertible to unweighted SSR by a
+        # simple batch-size scale, and Phase 2 never applies residual
+        # weighting, so a weighted Phase 1 loss isn't comparable to Phase
+        # 2's cost at all.
+        if not (
+            self.config.enable_residual_weighting and self._residual_weights is not None
+        ):
+            ssr_equivalent = float(loss_value) * x_batch.shape[0]
+            if ssr_equivalent < best_tracker.get("best_cost_global", float("inf")):
+                best_tracker["best_cost_global"] = ssr_equivalent
+                best_tracker["best_params_global"] = new_params
 
         # Record history buffer fill event
         if iteration == self.config.lbfgs_history_size:

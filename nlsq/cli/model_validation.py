@@ -133,6 +133,12 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "cffi",
         "multiprocessing",
         "concurrent",
+        # Sandbox-escape via aliased symbol import: `from importlib import
+        # import_module as im; im("subprocess")` or `from builtins import
+        # eval as ev` previously bypassed detection entirely because only
+        # the module root (not the imported symbol) was checked.
+        "importlib",
+        "builtins",
         # Bytecode/function construction — bypasses exec/eval detection by
         # building and running arbitrary code objects directly
         "types",
@@ -288,17 +294,30 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """Check for dangerous module imports."""
         for alias in node.names:
             module_root = alias.name.split(".")[0]
-            if module_root in DANGEROUS_MODULES:
+            if module_root in DANGEROUS_MODULES or module_root in DANGEROUS_PATTERNS:
                 self.violations.append(f"Dangerous import: import {alias.name}")
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
-        """Check for dangerous from...import statements."""
-        if node.module:
-            module_root = node.module.split(".")[0]
-            if module_root in DANGEROUS_MODULES:
+        """Check for dangerous from...import statements.
+
+        Checks both the source module and each imported symbol name, since
+        `from importlib import import_module as im` or `from builtins import
+        eval as ev` rebind the dangerous symbol to a clean-looking alias --
+        checking the module alone lets the aliased name evade every later
+        Name/Attribute/Call check in this visitor.
+        """
+        module_root = node.module.split(".")[0] if node.module else None
+        if module_root and (
+            module_root in DANGEROUS_MODULES or module_root in DANGEROUS_PATTERNS
+        ):
+            self.violations.append(
+                f"Dangerous import: from {node.module} import ...",
+            )
+        for alias in node.names:
+            if alias.name in DANGEROUS_PATTERNS or alias.name in DANGEROUS_MODULES:
                 self.violations.append(
-                    f"Dangerous import: from {node.module} import ...",
+                    f"Dangerous import: from {node.module} import {alias.name}",
                 )
         self.generic_visit(node)
 
