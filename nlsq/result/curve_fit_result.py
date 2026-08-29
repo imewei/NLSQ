@@ -504,6 +504,25 @@ class CurveFitResult(OptimizeResult):
 
         return intervals
 
+    def _finite_diff_jacobian(self, x, popt, eps: float = 1e-8):
+        """Compute y_pred and the finite-difference Jacobian of ``self.model``
+        w.r.t. ``popt`` at ``x``. Shared by ``prediction_interval`` and
+        ``confidence_band``, which both need the same parameter-uncertainty
+        propagation through the model.
+        """
+        n_points = len(x)
+        n_params = len(popt)
+
+        y_pred = np.array(self.model(x, *popt))
+        jacobian = np.zeros((n_points, n_params))
+        for i in range(n_params):
+            params_plus = popt.copy()
+            params_plus[i] += eps
+            y_plus = np.array(self.model(x, *params_plus))
+            jacobian[:, i] = (y_plus - y_pred) / eps
+
+        return y_pred, jacobian
+
     def prediction_interval(self, x=None, alpha: float = 0.95):
         """Compute prediction interval at x values.
 
@@ -553,20 +572,9 @@ class CurveFitResult(OptimizeResult):
         x = np.asarray(x)
         popt = self.popt
         pcov = self.pcov
-
-        # Jacobian calculation (finite difference) - same approach as confidence_band
-        n_points = len(x)
         n_params = len(popt)
-        eps = 1e-8
 
-        y_pred = np.array(self.model(x, *popt))
-        jacobian = np.zeros((n_points, n_params))
-
-        for i in range(n_params):
-            params_plus = popt.copy()
-            params_plus[i] += eps
-            y_plus = np.array(self.model(x, *params_plus))
-            jacobian[:, i] = (y_plus - y_pred) / eps
+        y_pred, jacobian = self._finite_diff_jacobian(x, popt)
 
         # Variance of the mean response (parameter-uncertainty contribution),
         # same as confidence_band: J @ pcov @ J.T (diagonal)
@@ -631,21 +639,9 @@ class CurveFitResult(OptimizeResult):
         x = np.asarray(x)
         popt = self.popt
         pcov = self.pcov
-
-        # Jacobian calculation (finite difference)
-        n_points = len(x)
         n_params = len(popt)
-        eps = 1e-8
 
-        # Calculate base prediction
-        y0 = np.array(self.model(x, *popt))
-        jacobian = np.zeros((n_points, n_params))
-
-        for i in range(n_params):
-            params_plus = popt.copy()
-            params_plus[i] += eps
-            y_plus = np.array(self.model(x, *params_plus))
-            jacobian[:, i] = (y_plus - y0) / eps
+        y0, jacobian = self._finite_diff_jacobian(x, popt)
 
         # Variance of the mean response: J @ pcov @ J.T (diagonal)
         # element-wise for diagonal

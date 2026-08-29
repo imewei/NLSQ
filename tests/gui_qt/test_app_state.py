@@ -39,3 +39,22 @@ class TestFitResultInvalidation:
         app_state.set_data(np.array([1.0]), np.array([2.0]))
 
         assert received == []
+
+    def test_reset_clears_completed_fit_result_and_emits(self, app_state, qtbot):
+        app_state.set_fit_result(object())
+
+        with qtbot.waitSignal(app_state.fit_completed, timeout=1000) as blocker:
+            app_state.reset()
+
+        assert blocker.args == [None]
+        assert app_state.state.fit_result is None
+
+    def test_reset_without_prior_fit_does_not_emit_fit_completed(
+        self, app_state, qtbot
+    ):
+        received = []
+        app_state.fit_completed.connect(received.append)
+
+        app_state.reset()
+
+        assert received == []

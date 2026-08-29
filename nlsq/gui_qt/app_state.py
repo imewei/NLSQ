@@ -170,7 +170,10 @@ class AppState(QObject):
 
     def reset(self) -> None:
         """Reset state to initial values."""
+        had_fit_result = self._state.fit_result is not None
         self._state = SessionState()
+        if had_fit_result:
+            self.fit_completed.emit(None)
         self.data_changed.emit()
         self.model_changed.emit()
         self.page_access_changed.emit()

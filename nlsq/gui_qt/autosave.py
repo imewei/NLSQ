@@ -190,6 +190,12 @@ class AutosaveManager(QObject):
         """
         state = self._app_state.state
 
+        # Restoring session state mutates `state` directly rather than going
+        # through set_data()/set_model(), so it must invalidate any existing
+        # fit result itself -- otherwise a fit_result from before recovery
+        # would silently survive paired with the restored data/model.
+        self._app_state._clear_fit_result()
+
         # Restore data arrays — validate before accepting to avoid emitting
         # data_changed with NaN/Inf-contaminated or malformed arrays.
         xdata = (

@@ -145,6 +145,18 @@ class TestRestoreStateValidation:
         assert lb == [0.0, -1.0]
         assert ub == [10.0, 1.0]
 
+    def test_restore_state_invalidates_stale_fit_result(self, tmp_path):
+        """_restore_state mutates AppState.state directly rather than going
+        through set_data()/set_model(), so it must clear any existing
+        fit_result itself -- otherwise a fit_result from before recovery
+        would silently survive paired with the restored data/model."""
+        manager, mock_state = self._make_manager(tmp_path)
+        data = {"xdata": [1.0, 2.0, 3.0], "ydata": [4.0, 5.0, 6.0]}
+
+        manager._restore_state(data)
+
+        mock_state._clear_fit_result.assert_called_once()
+
 
 class TestAtomicWrite:
     """Tests for atomic autosave write behaviour."""
