@@ -168,5 +168,4 @@ Results can be saved:
 Next Steps
 ----------
 
-- :doc:`../factories_di/index` - Factory patterns
-- :doc:`../orchestration/index` - Component-based design
+- :doc:`../performance/index` - Performance tuning and profiling

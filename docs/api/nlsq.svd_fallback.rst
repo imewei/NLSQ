@@ -102,6 +102,5 @@ See ``tests/test_svd_regression.py`` for detailed regression tests.
 See Also
 --------
 
-- :doc:`nlsq.robust_decomposition` - Robust decomposition algorithms
 - :doc:`nlsq.stability` - Numerical stability utilities
 - :doc:`../howto/troubleshooting` - Stability and troubleshooting guide

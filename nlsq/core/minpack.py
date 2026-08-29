@@ -4293,6 +4293,13 @@ class CurveFit:
                 if hasattr(HybridStreamingConfig, key):
                     config_overrides[key] = kwargs.pop(key)
 
+            if kwargs:
+                raise TypeError(
+                    "Unrecognized keyword argument(s) for method="
+                    f"'hybrid_streaming': {sorted(kwargs)}. These are not "
+                    "HybridStreamingConfig fields.",
+                )
+
             config = (
                 HybridStreamingConfig(**config_overrides)
                 if config_overrides

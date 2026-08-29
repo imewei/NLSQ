@@ -430,8 +430,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Enable numerical stability checks and fixes
         """
         TrustRegionJITFunctions.__init__(self)
-        self.name = "trf"
-        self.logger = get_logger(f"optimizer.{self.name}")
+        self.logger = get_logger("optimizer.trf")
         self.cJIT = CommonJIT()
 
         # Initialize unified cache for JIT compilation tracking

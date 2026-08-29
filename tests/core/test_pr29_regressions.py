@@ -12,16 +12,12 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit, fit
-from nlsq.core.factories import ConfiguredOptimizer, OptimizerConfig
 from nlsq.core.minpack import (
     CurveFit,
     _apply_auto_bounds,
     _fit_global_multistart,
     _is_auto_p0,
 )
-from nlsq.core.orchestration.data_preprocessor import DataPreprocessor
-from nlsq.core.orchestration.optimization_selector import OptimizationSelector
-from nlsq.core.orchestration.streaming_coordinator import StreamingCoordinator
 from nlsq.core.trf_jit import _seed_lm_alpha
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
@@ -162,96 +158,6 @@ class TestTRFFractionalMaxNfev:
         # a real termination should complete in well under a second for
         # this trivial 50-point linear fit.
         assert elapsed < 10.0
-
-
-class TestTRTrustRegionSolverForLM:
-    """tr_solver auto-selection ran even for method='lm', which has no
-    trust-region-solver concept, producing a meaningless value."""
-
-    def test_lm_method_leaves_tr_solver_none_when_unspecified(self):
-        selector = OptimizationSelector()
-        xdata = np.linspace(0, 1, 20)
-        ydata = 2 * xdata + 1
-        result = selector.select(
-            _linear,
-            xdata,
-            ydata,
-            p0=np.array([1.0, 1.0]),
-            method="lm",
-            tr_solver=None,
-            bounds=None,
-        )
-        assert result.tr_solver is None
-
-
-class TestStreamingChunkFloorRemoved:
-    """chunk-size floor of 1000 could push the Jacobian chunk over budget
-    for large-n_params/low-memory combinations."""
-
-    def test_configure_hybrid_chunk_size_can_go_below_1000_under_tight_budget(self):
-        coordinator = StreamingCoordinator()
-        config = coordinator.configure_hybrid(
-            n_data=1_000_000,
-            n_params=5000,
-            available_memory_mb=50,
-        )
-        # With n_params this large and memory this tight, the memory-safe
-        # chunk size is well under 1000; pre-fix the max(1000, ...) floor
-        # would force it back up regardless.
-        assert config.chunk_size < 1000
-        assert config.chunk_size >= 1
-
-
-class TestFactoriesDiagnosticsWiring:
-    """create_optimizer(diagnostics=True) accepted diagnostics_config but
-    never forwarded compute_diagnostics/diagnostics_config to curve_fit()."""
-
-    def test_configured_optimizer_diagnostics_reach_curve_fit(self, linear_data):
-        x, y = linear_data
-        optimizer = ConfiguredOptimizer(
-            OptimizerConfig(enable_diagnostics=True),
-        )
-        result = optimizer.fit(_linear, x, y)
-        # Pre-fix, compute_diagnostics never reached curve_fit(), so
-        # result.diagnostics stayed None regardless of enable_diagnostics.
-        assert getattr(result, "diagnostics", None) is not None
-
-
-class TestFeatureFlagsFalsyOverride:
-    """with_override used `x or self.x` for 4 of 5 fields, silently
-    discarding falsy-but-valid override values."""
-
-    def test_with_override_accepts_falsy_rollout_percent(self):
-        from nlsq.core.feature_flags import FeatureFlags
-
-        base = FeatureFlags(rollout_percent=50)
-        overridden = base.with_override(rollout_percent=0)
-        assert overridden.rollout_percent == 0
-
-    def test_with_override_does_not_silently_keep_old_value_for_falsy_impl_string(self):
-        # ImplChoice is typed Literal["old","new","auto"] (never falsy) at
-        # the type-check level, but nothing stops a caller from passing an
-        # empty string at runtime. Pre-fix `x or self.x` would silently
-        # discard "" and keep the old value instead of the caller's
-        # override; the fix (`x is not None`) must apply it as given.
-        from nlsq.core.feature_flags import FeatureFlags
-
-        base = FeatureFlags(
-            preprocessor_impl="new",
-            selector_impl="new",
-            covariance_impl="new",
-            streaming_impl="new",
-        )
-        overridden = base.with_override(
-            preprocessor_impl="",
-            selector_impl="",
-            covariance_impl="",
-            streaming_impl="",
-        )
-        assert overridden.preprocessor_impl == ""
-        assert overridden.selector_impl == ""
-        assert overridden.covariance_impl == ""
-        assert overridden.streaming_impl == ""
 
 
 class TestAutoP0RemainingFitSites:
@@ -417,25 +323,3 @@ class TestSeedLMAlpha:
             popt_cg[0] + popt_cg[1], rel=0.1
         )
         assert np.all(np.isfinite(popt_cg))
-
-
-class TestDataPreprocessorSigmaNaNInf:
-    """Round-1 fix: sigma's NaN/Inf values weren't folded into
-    has_nans_removed/has_infs_removed, so a sigma-only NaN/Inf that caused a
-    row to be dropped was mis-reported as "no NaN/Inf removed"."""
-
-    def test_sigma_nan_flags_has_nans_removed(self):
-        x = np.array([0.0, 1.0, 2.0, 3.0])
-        y = np.array([0.0, 1.0, 2.0, 3.0])
-        sigma = np.array([1.0, np.nan, 1.0, 1.0])
-
-        preprocessor = DataPreprocessor()
-        result = preprocessor.preprocess(
-            _linear,
-            x,
-            y,
-            sigma=sigma,
-            check_finite=True,
-            nan_policy="omit",
-        )
-        assert result.has_nans_removed is True

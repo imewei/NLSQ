@@ -377,9 +377,27 @@ class CLILogger:
         }
         self.logger.setLevel(level_map[self._verbosity])
 
+    _LOG_METHODS: ClassVar[frozenset[str]] = frozenset(
+        {"debug", "info", "warning", "error", "critical", "exception", "log"},
+    )
+
     def __getattr__(self, name: str) -> Any:
-        """Delegate log calls (debug/info/warning/error/...) to the wrapped Logger."""
-        return getattr(self.logger, name)
+        """Delegate to the wrapped Logger.
+
+        Log-level methods (debug/info/warning/...) route extra keyword
+        arguments through ``extra=`` so JsonFormatter can surface them as
+        structured fields on the LogRecord, matching the wrapped Logger's
+        own kwarg contract. Everything else (handlers, level, ...) passes
+        through unchanged.
+        """
+        attr = getattr(self.logger, name)
+        if name not in self._LOG_METHODS:
+            return attr
+
+        def wrapper(message: str, *args: Any, **kwargs: Any) -> None:
+            attr(message, *args, extra=kwargs or None)
+
+        return wrapper
 
 
 # Global logger instance

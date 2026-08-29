@@ -50,7 +50,6 @@ _MODULE_ALIASES = {
     "nlsq.memory_manager": "nlsq.caching.memory_manager",
     "nlsq.error_messages": "nlsq.utils.error_messages",
     "nlsq.algorithm_selector": "nlsq.precision.algorithm_selector",
-    "nlsq.memory_pool": "nlsq.caching.memory_pool",
     "nlsq.profiling": "nlsq.utils.profiling",
     # Note: nlsq.diagnostics is a real top-level package (Model Health Diagnostics System)
     # The old nlsq.utils.diagnostics module still exists for optimization monitoring
@@ -61,13 +60,10 @@ _MODULE_ALIASES = {
     "nlsq.workflow": "nlsq.core.workflow",
     "nlsq.recovery": "nlsq.stability.recovery",
     "nlsq.unified_cache": "nlsq.caching.unified_cache",
-    "nlsq.smart_cache": "nlsq.caching.smart_cache",
     "nlsq.profiler": "nlsq.utils.profiler",
     "nlsq.minpack": "nlsq.core.minpack",
     "nlsq.parameter_normalizer": "nlsq.precision.parameter_normalizer",
-    "nlsq.compilation_cache": "nlsq.caching.compilation_cache",
     "nlsq.trf": "nlsq.core.trf",
-    "nlsq.robust_decomposition": "nlsq.stability.robust_decomposition",
     "nlsq.profiler_visualization": "nlsq.utils.profiler_visualization",
     "nlsq.validators": "nlsq.utils.validators",
     "nlsq.stability": "nlsq.stability.guard",

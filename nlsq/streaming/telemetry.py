@@ -299,6 +299,53 @@ class DefenseLayerTelemetry:
                 },
             }
 
+    def get_recent_events(self, n: int = 10) -> list[dict]:
+        """Get most recent N events.
+
+        Parameters
+        ----------
+        n : int
+            Number of recent events to return
+
+        Returns
+        -------
+        list[dict]
+            Most recent events
+        """
+        with self._lock:
+            return list(self._event_log)[-n:]
+
+    def export_metrics(self) -> dict:
+        """Export metrics in a format suitable for monitoring systems.
+
+        Returns
+        -------
+        dict
+            Metrics with consistent naming for Prometheus/Grafana/etc.
+        """
+        with self._lock:
+            return {
+                "nlsq_defense_warmup_calls_total": self.total_warmup_calls,
+                "nlsq_defense_layer1_triggers_total": self.layer1_warm_start_triggers,
+                "nlsq_defense_layer2_refinement_total": self.layer2_lr_mode_counts[
+                    "refinement"
+                ],
+                "nlsq_defense_layer2_careful_total": self.layer2_lr_mode_counts[
+                    "careful"
+                ],
+                "nlsq_defense_layer2_exploration_total": self.layer2_lr_mode_counts[
+                    "exploration"
+                ],
+                "nlsq_defense_layer3_triggers_total": self.layer3_cost_guard_triggers,
+                "nlsq_defense_layer4_triggers_total": self.layer4_clip_triggers,
+                "nlsq_defense_lbfgs_history_fill_total": (
+                    self.lbfgs_history_buffer_fill_events
+                ),
+                "nlsq_defense_lbfgs_line_search_failures_total": (
+                    self.lbfgs_line_search_failures
+                ),
+            }
+
 
 # Global telemetry instance for monitoring
 _defense_telemetry: DefenseLayerTelemetry | None = None

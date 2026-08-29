@@ -19,24 +19,7 @@ Module Hierarchy
    │   ├── profiler.py             # TRFProfiler / NullProfiler
    │   ├── workflow.py             # 3-workflow system + MemoryBudgetSelector
    │   ├── functions.py            # Built-in models
-   │   ├── factories.py            # Factory functions
-   │   ├── sparse_jacobian.py      # Sparse Jacobian support
-   │   ├── orchestration/          # CurveFit God Class decomposition (v0.6.4)
-   │   │   ├── data_preprocessor.py
-   │   │   ├── optimization_selector.py
-   │   │   ├── covariance_computer.py
-   │   │   ├── streaming_coordinator.py
-   │   │   └── entities.py
-   │   └── adapters/               # Protocol adapters
-   │       └── curve_fit_adapter.py
-   │
-   ├── interfaces/            # Protocol definitions
-   │   ├── optimizer_protocol.py   # OptimizerProtocol, CurveFitProtocol
-   │   ├── cache_protocol.py       # CacheProtocol, BoundedCacheProtocol
-   │   ├── data_source_protocol.py
-   │   ├── jacobian_protocol.py
-   │   ├── orchestration_protocol.py
-   │   └── result_protocol.py
+   │   └── sparse_jacobian.py      # Sparse Jacobian support
    │
    ├── diagnostics/           # Optimization health & identifiability
    │   ├── types.py                 # DiagnosticsConfig, IdentifiabilityReport
@@ -62,8 +45,7 @@ Module Hierarchy
    │
    ├── caching/               # Performance
    │   ├── memory_manager.py       # Memory pooling
-   │   ├── smart_cache.py          # JIT caching (xxhash)
-   │   └── compilation_cache.py    # Persistent cache
+   │   └── unified_cache.py        # JIT compilation caching
    │
    ├── stability/             # Numerical stability
    │   ├── guard.py                # NumericalStabilityGuard
@@ -122,13 +104,6 @@ Import Patterns
    from nlsq.core.trf import TrustRegionReflective
    from nlsq.core.workflow import MemoryBudgetSelector
 
-**Protocols:**
-
-.. code-block:: python
-
-   from nlsq.interfaces.optimizer_protocol import OptimizerProtocol
-   from nlsq.interfaces.cache_protocol import CacheProtocol
-
 **Diagnostics:**
 
 .. code-block:: python
@@ -167,14 +142,9 @@ Dependency Graph
      │
      ├──► CurveFit
      │       │
-     │       ├──► DataPreprocessor
-     │       ├──► OptimizationSelector
-     │       ├──► LeastSquares
-     │       │       │
-     │       │       └──► TrustRegionReflective
-     │       │
-     │       ├──► CovarianceComputer
-     │       └──► StreamingCoordinator
+     │       └──► LeastSquares
+     │               │
+     │               └──► TrustRegionReflective
      │
      ├──► MemoryBudgetSelector
      │
@@ -196,5 +166,4 @@ Circular dependencies are broken via:
 Next Steps
 ----------
 
-- :doc:`optimization_pipeline` - Data flow through the system
 - :doc:`jax_patterns` - JAX programming patterns

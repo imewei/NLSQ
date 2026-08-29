@@ -255,4 +255,3 @@ Next Steps
 ----------
 
 - :doc:`trf_optimizer` - Algorithm details
-- :doc:`../orchestration/index` - Decomposed components

@@ -69,6 +69,4 @@ Example Usage
 See Also
 --------
 
-- :doc:`nlsq.compilation_cache` - Legacy compilation cache
 - :doc:`nlsq.caching` - General caching utilities
-- :doc:`nlsq.smart_cache` - Smart cache with adaptive features

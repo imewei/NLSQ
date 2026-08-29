@@ -26,17 +26,13 @@ Chapter Overview
 Extension Points
 ----------------
 
-NLSQ can be extended at multiple levels:
-
-1. **Custom Optimizers**: Implement OptimizerProtocol
-2. **Custom Preprocessors**: Implement DataPreprocessorProtocol
-3. **Custom Covariance**: Implement CovarianceComputerProtocol
-4. **Custom Caches**: Implement CacheProtocol
+NLSQ's optimizer classes are duck-typed rather than defined against a formal
+protocol/ABC hierarchy: :class:`~nlsq.core.trf.TrustRegionReflective` is a
+plain class exposing ``.trf()``, ``.calculate_cost()``, and
+``.default_loss_func()``, and anything providing the same interface can be
+used in its place.
 
 .. code-block:: python
-
-   from nlsq.interfaces import OptimizerProtocol
-
 
    class MyOptimizer:
        def optimize(self, fun, x0, **kwargs):
@@ -45,4 +41,4 @@ NLSQ can be extended at multiple levels:
 
 
    # Use with NLSQ infrastructure
-   optimizer: OptimizerProtocol = MyOptimizer()
+   optimizer = MyOptimizer()

@@ -211,4 +211,3 @@ Next Steps
 ----------
 
 - :doc:`least_squares` - Lower-level optimizer control
-- :doc:`../factories_di/index` - Factory patterns

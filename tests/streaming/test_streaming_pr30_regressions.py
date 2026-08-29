@@ -358,7 +358,7 @@ class TestDefenseLayerTelemetryThreadSafety:
         telemetry = DefenseLayerTelemetry()
         # Kept under DefenseLayerTelemetry's _event_log deque cap (maxlen
         # 1000, an intentional bound -- not the bug under test) so the
-        # _event_log length assertion below is meaningful.
+        # get_recent_events() length assertion below is meaningful.
         n_threads = 8
         calls_per_thread = 100
 

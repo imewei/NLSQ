@@ -2,8 +2,8 @@ Advanced User Guide
 ===================
 
 This guide is for developers and scientists who need to leverage the full power
-of NLSQ: custom optimization pipelines, protocol-based design, orchestration
-components, and library extension.
+of NLSQ: custom optimization pipelines, protocol-based design, and library
+extension.
 
 .. grid:: 2
    :gutter: 3
@@ -44,12 +44,6 @@ NLSQ provides multiple API levels for different needs:
    optimizer = LeastSquares()
    result = optimizer.least_squares(fun=residuals, x0=p0)
 
-   # Orchestration: Decomposed components (v0.6.4)
-   from nlsq.core.orchestration import DataPreprocessor, OptimizationSelector
-
-   preprocessor = DataPreprocessor()
-   preprocessed = preprocessor.preprocess(f=model, xdata=x, ydata=y)
-
 .. toctree::
    :maxdepth: 2
    :caption: Advanced Tutorials
@@ -57,22 +51,14 @@ NLSQ provides multiple API levels for different needs:
    tutorials/advanced/index
    tutorials/advanced/architecture/index
    tutorials/advanced/core_apis/index
-   tutorials/advanced/orchestration/index
 
 .. toctree::
    :maxdepth: 2
    :caption: API Reference
 
    reference/core_api
-   reference/orchestration
    reference/facades
    howto/advanced_api
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Factories & DI
-
-   tutorials/advanced/factories_di/index
 
 .. toctree::
    :maxdepth: 2

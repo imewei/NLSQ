@@ -66,7 +66,7 @@ Advanced Features
 
 - ``nlsq.large_dataset`` - Large dataset handling
 - ``nlsq.memory_manager`` - Memory management
-- ``nlsq.smart_cache`` - Intelligent caching
+- ``nlsq.unified_cache`` - JIT compilation caching
 - ``nlsq.diagnostics`` - Model Health Diagnostics System (identifiability, gradient health, sloppy model analysis)
 - ``nlsq.adaptive_hybrid_streaming`` - Four-phase hybrid optimizer
 - ``nlsq.hybrid_streaming_config`` - Hybrid streaming configuration

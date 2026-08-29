@@ -32,32 +32,23 @@ Quick Example
 
 .. code-block:: python
 
-   from nlsq.core.orchestration import DataPreprocessor, OptimizationSelector
+   import numpy as np
    from nlsq.core.least_squares import LeastSquares
 
 
    class CustomPipeline:
        def __init__(self):
-           self.preprocessor = DataPreprocessor()
-           self.selector = OptimizationSelector()
            self.optimizer = LeastSquares()
 
-       def fit(self, model, x, y, p0, **kwargs):
-           # Custom preprocessing
-           preprocessed = self.preprocessor.preprocess(f=model, xdata=x, ydata=y)
+       def fit(self, model, x, y, p0, bounds=None):
+           # Custom preprocessing (drop non-finite points)
+           finite = np.isfinite(x) & np.isfinite(y)
+           x, y = x[finite], y[finite]
 
-           # Custom configuration
-           config = self.selector.select(
-               f=model, xdata=preprocessed.xdata, ydata=preprocessed.ydata, p0=p0
-           )
-
-           # Run optimization
            def residuals(params):
-               return model(preprocessed.xdata, *params) - preprocessed.ydata
+               return model(x, *params) - y
 
-           result = self.optimizer.least_squares(
-               fun=residuals, x0=config.p0, bounds=config.bounds
-           )
+           result = self.optimizer.least_squares(fun=residuals, x0=p0, bounds=bounds)
 
            return result.x, None  # popt, pcov
 
