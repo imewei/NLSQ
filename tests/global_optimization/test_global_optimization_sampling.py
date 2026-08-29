@@ -55,6 +55,33 @@ class TestLatinHypercubeSample:
                     f"Sample {sample} at index {i} should be in [{lower_bound}, {upper_bound})"
                 )
 
+    def test_lhs_draws_independent_keys_per_dimension(self, monkeypatch):
+        """Each dimension must get its own (key_uniform, key_perm) pair.
+
+        Regression test: the previous implementation split n_dims + 1 keys
+        and reused keys[i] as key_perm for dimension i-1 AND key_uniform for
+        dimension i, correlating adjacent dimensions. The fix draws
+        2 * n_dims keys so no index is shared across dimensions.
+        """
+        n_samples = 8
+        n_dims = 4
+        rng_key = jax.random.PRNGKey(0)
+
+        requested_counts = []
+        real_split = jax.random.split
+
+        def spy_split(key, num=2):
+            requested_counts.append(num)
+            return real_split(key, num)
+
+        monkeypatch.setattr(jax.random, "split", spy_split)
+
+        latin_hypercube_sample(n_samples, n_dims, rng_key=rng_key)
+
+        # 2 keys per dimension (key_uniform + key_perm), none shared across
+        # dimensions -- the buggy version requested only n_dims + 1 keys.
+        assert requested_counts[0] == 2 * n_dims
+
 
 class TestSobolSample:
     """Test Sobol sequence generation."""

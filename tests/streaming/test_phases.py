@@ -208,6 +208,49 @@ class TestWarmupPhase:
         loss_fn = phase._create_loss_fn()
         assert callable(loss_fn)
 
+    def test_group_variance_regularization_unequal_trailing_group(self):
+        """Trailing group with unequal size must not pull values from the
+        previous group.
+
+        Regression test: dynamic_slice(params, (start,), (max_group_size,))
+        clamps its start index to stay in bounds, so a trailing group whose
+        start + max_group_size overruns len(params) silently slides the
+        window into the previous group instead of raising. Padding params
+        with max_group_size zeros (mirrors the fix already applied in
+        adaptive_hybrid.py's _create_warmup_loss_fn) avoids the clamp.
+        """
+        config = HybridStreamingConfig(
+            chunk_size=1000,
+            warmup_iterations=50,
+            max_warmup_iterations=100,
+            lbfgs_initial_step_size=0.1,
+            gradient_norm_threshold=1e-6,
+            verbose=0,
+            enable_group_variance_regularization=True,
+            group_variance_lambda=1.0,
+            group_variance_indices=[(0, 4), (4, 6)],
+        )
+
+        def identity_model(x_batch, *params):
+            # Zero residuals so the loss is purely the variance penalty.
+            return jnp.zeros_like(x_batch)
+
+        phase = WarmupPhase(config, identity_model)
+        loss_fn = phase._create_loss_fn()
+
+        params = jnp.array([1.0, 2.0, 3.0, 4.0, 10.0, 20.0])
+        x_batch = jnp.zeros(5)
+        y_batch = jnp.zeros(5)
+
+        loss = loss_fn(params, x_batch, y_batch)
+
+        # Group (0,4): [1,2,3,4] -> population variance 1.25
+        # Group (4,6): [10,20]   -> population variance 25.0
+        # With the clamp bug, the trailing group's window shifts into the
+        # first group, giving a variance far below the correct 25.0.
+        expected = 1.25 + 25.0
+        assert float(loss) == pytest.approx(expected, rel=1e-5)
+
 
 class TestGaussNewtonPhase:
     """Tests for GaussNewtonPhase class."""
