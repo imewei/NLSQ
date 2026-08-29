@@ -286,15 +286,27 @@ class AdaptiveHybridStreamingOptimizer:
         once Phase 1 has run, silently freezing best_params_global at
         wherever Phase 1 left it.
 
-        Skipped entirely when residual weighting is enabled: Phase 1's
-        weighted loss (sum(w*r^2)/sum(w)) is not convertible to unweighted
-        SSR by a simple n_points scale, and Phase 2 never applies residual
+        Skipped when residual weighting is actually in effect (config
+        requests it AND weights were actually set): Phase 1's weighted loss
+        (sum(w*r^2)/sum(w)) is not convertible to unweighted SSR by a
+        simple n_points scale, and Phase 2 never applies residual
         weighting (it's a Phase-1-only feature), so a weighted Phase 1 loss
         is not comparable to Phase 2's cost at all. Silently storing an
         incomparable number here would be worse than leaving the tracker
         alone for Phase 2 (or a prior fit's None/inf) to set.
+
+        Gating on the raw config flag alone (instead of also checking
+        whether weights were actually set) meant that when weighting was
+        requested but self._residual_weights_jax was still None,
+        _setup_residual_weights already fell back to plain unweighted MSE
+        for the loss itself, yet this function still skipped updating
+        best_params_global for the entirety of Phase 1 -- matching the
+        effective-weighting check already used at the loss call site.
         """
-        if self.config.enable_residual_weighting:
+        if (
+            self.config.enable_residual_weighting
+            and self._residual_weights_jax is not None
+        ):
             return
         ssr_equivalent = float(loss_value) * n_points
         if ssr_equivalent < self.best_cost_global:
@@ -4305,6 +4317,15 @@ class AdaptiveHybridStreamingOptimizer:
         # Reset alongside best_params_global/best_cost_global above (after
         # validation, not before) for the same reason.
         self._fit_callback = callback
+
+        # _padded_cache self-invalidates on a content-fingerprint mismatch
+        # (see _get_padded_data/_content_fingerprint), but that fingerprint
+        # is shape + first/last/sum/sum-of-squares, not a full hash -- an
+        # accidental collision between two distinct datasets on the same
+        # instance is vanishingly unlikely but not impossible. Clear it
+        # explicitly here too, same as clear_cache() does, rather than
+        # relying solely on the fingerprint for a new fit() call.
+        self._padded_cache = None
 
         # ============================================================
         # Phase 0: Setup Normalization

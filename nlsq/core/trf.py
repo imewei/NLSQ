@@ -133,9 +133,8 @@ logger = get_logger("trf")
 # Initialize GPU settings safely
 initialize_gpu_safely()
 
-# Import dataclasses for SVDCache
 from dataclasses import dataclass
-from typing import Any, NamedTuple
+from typing import Any
 
 from nlsq.caching.unified_cache import get_global_cache
 from nlsq.callbacks import StopOptimization
@@ -170,45 +169,6 @@ from nlsq.core.trf_jit import TrustRegionJITFunctions
 from nlsq.result import OptimizeResult
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.utils.diagnostics import OptimizationDiagnostics
-
-
-class SVDCache(NamedTuple):
-    """Cache SVD decomposition across inner loop iterations when Jacobian unchanged.
-
-    This cache stores the SVD components (U, s, V) along with the scaled Jacobian
-    J_h to avoid redundant SVD computations during inner loop iterations where
-    the step is rejected and parameters remain unchanged.
-
-    Attributes
-    ----------
-    U : jnp.ndarray
-        Left singular vectors (m x k), where m is residuals and k = min(m, n).
-    s : jnp.ndarray
-        Singular values (k,).
-    V : jnp.ndarray
-        Right singular vectors (n x k), where n is parameters.
-    J_h : jnp.ndarray
-        Scaled Jacobian in "hat" space (m x n).
-    x_hash : int
-        Hash of parameter vector for cache validation. Cache is valid only
-        when the current parameter hash matches this value.
-
-    Notes
-    -----
-    The cache is valid only when `x_hash` matches the current parameter vector's hash.
-    When a step is rejected (actual_reduction <= 0), the parameters don't change,
-    so the SVD can be reused. When a step is accepted, the cache must be invalidated.
-
-    The expected speedup from SVD caching is 20-40% on problems with frequent step
-    rejections, as SVD computation is O(mn^2) and dominates iteration time.
-    """
-
-    U: jnp.ndarray
-    s: jnp.ndarray
-    V: jnp.ndarray
-    J_h: jnp.ndarray
-    x_hash: int
-
 
 # =====================================================================
 # TRF Configuration Dataclasses (US4 - Parameter Objects)

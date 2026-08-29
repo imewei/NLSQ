@@ -90,6 +90,37 @@ class TestCurveFitMultistart:
         assert abs(popt[1] - true_params[1]) < 0.3
         assert abs(popt[2] - true_params[2]) < 0.3
 
+    def test_method_multi_start_literal_routes_like_multistart_true(self):
+        """curve_fit(..., method='multi-start') must route to multi-start,
+        not fall through to standard TRF.
+
+        Regression test: method='multi-start' is a documented Literal value
+        on curve_fit()'s own signature, but routing only checked the
+        separate `multistart` bool flag -- method='multi-start' alone fell
+        through to TRF, which rejects it with an unrelated "method must be
+        'trf' or 'lm'" error.
+        """
+        from nlsq import curve_fit
+
+        xdata, ydata, _true_params = generate_test_data(n_points=200)
+
+        result = curve_fit(
+            exponential_model,
+            xdata,
+            ydata,
+            p0=[1.0, 0.1, 0.0],
+            bounds=([0, 0, -1], [10, 5, 5]),
+            method="multi-start",
+            n_starts=3,
+        )
+
+        assert (
+            hasattr(result, "multistart_diagnostics")
+            or "multistart_diagnostics" in result
+        )
+        popt = result.popt if hasattr(result, "popt") else result[0]
+        assert len(popt) == 3
+
     def test_n_starts_override(self):
         """Test that curve_fit(..., multistart=True, n_starts=20) overrides default n_starts."""
         from nlsq import curve_fit

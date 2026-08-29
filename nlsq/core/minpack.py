@@ -2893,8 +2893,16 @@ def curve_fit(
         # If bounds is None and method='cmaes', we could warn, but for 'auto'
         # we just fall through to standard path
 
-    # Handle multi-start optimization
-    if multistart and n_starts is not None and n_starts > 0:
+    # Handle multi-start optimization. method="multi-start" is a documented
+    # Literal value on this function's own signature but was only ever
+    # routed here via the separate `multistart` bool flag -- passing
+    # method="multi-start" alone fell through to standard TRF, which rejects
+    # it with an unrelated "method must be 'trf' or 'lm'" error.
+    if (
+        (multistart or method == "multi-start")
+        and n_starts is not None
+        and n_starts > 0
+    ):
         return _run_multistart_optimization(
             f,
             xdata,

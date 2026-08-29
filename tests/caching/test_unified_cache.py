@@ -96,6 +96,32 @@ class TestUnifiedCacheKeyGeneration:
             "static_argnums should be reflected in cache key"
         )
 
+    def test_cache_key_includes_donate_argnums(self):
+        """Cache keys must include donate_argnums.
+
+        Regression test: get_or_compile() actually compiles with
+        donate_argnums, but the cache key ignored it entirely -- two calls
+        differing only in donate_argnums would collide and reuse a
+        compiled function that donates the wrong buffers.
+        """
+        from nlsq.caching.unified_cache import UnifiedCache
+
+        cache = UnifiedCache()
+
+        def test_func(x, n):
+            return x**n
+
+        x = jnp.array([1.0, 2.0])
+
+        key_no_donate = cache._generate_cache_key(test_func, (x, 2), {}, ())
+        key_donate = cache._generate_cache_key(
+            test_func, (x, 2), {}, (), donate_argnums=(0,)
+        )
+
+        assert key_no_donate != key_donate, (
+            "donate_argnums should be reflected in cache key"
+        )
+
 
 class TestUnifiedCacheStatistics:
     """Test cache statistics tracking (hits, misses, compile_time_ms)."""

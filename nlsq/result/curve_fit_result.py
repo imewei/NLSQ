@@ -861,9 +861,14 @@ class CurveFitResult(OptimizeResult):
         print(f"Message           : {self.message}")
         print(f"Iterations        : {self.nfev if hasattr(self, 'nfev') else 'N/A'}")
         print(f"Final cost        : {self.cost if hasattr(self, 'cost') else 'N/A'}")
-        print(
-            f"Optimality        : {self.optimality if hasattr(self, 'optimality') else 'N/A':.6e}",
-        )
+        # self.optimality is None for CMA-ES results and absent entirely for
+        # hybrid-streaming/multistart results -- applying the ':.6e' numeric
+        # format spec to either (None, or the 'N/A' string fallback) raised
+        # TypeError, so .summary() crashed for those result kinds. Format
+        # only when there's an actual finite value to format.
+        optimality = getattr(self, "optimality", None)
+        optimality_str = f"{optimality:.6e}" if optimality is not None else "N/A"
+        print(f"Optimality        : {optimality_str}")
 
         # Diagnostics summary (if available)
         if self.diagnostics is not None:
