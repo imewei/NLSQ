@@ -17,8 +17,17 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def app_state() -> AppState:
-    """Create a fresh AppState instance for testing."""
+def app_state(qtbot: QtBot) -> AppState:
+    """Create a fresh AppState instance for testing.
+
+    Depends on qtbot (not just used by it) so pytest-qt's QApplication
+    exists before AppState is constructed -- AppState is a QObject with
+    Qt Signals, and constructing one with no live QApplication crashes the
+    worker process outright rather than raising a catchable exception. This
+    only manifests on a xdist worker that hasn't already created a
+    QApplication via some other GUI test, which is why it went unnoticed
+    until this module ran in relative isolation on CI.
+    """
     from nlsq.gui_qt.app_state import AppState
 
     return AppState()
