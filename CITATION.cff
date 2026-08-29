@@ -30,8 +30,8 @@ keywords:
   - machine-learning
   - scientific-computing
 license: MIT
-version: 0.7.1
-date-released: 2026-08-06
+version: 0.7.3
+date-released: 2026-08-29
 references:
   - type: article
     authors:
