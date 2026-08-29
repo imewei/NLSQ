@@ -294,8 +294,9 @@ ifeq ($(PLATFORM),linux)
 	@# Validate GPU supports CUDA 13 (SM >= 7.5)
 	@SM_VERSION=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.'); \
 	SM_DISPLAY=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1); \
-	if [ -z "$$SM_VERSION" ]; then \
-		echo "$(RED)Error: Could not detect GPU$(RESET)"; \
+	if ! echo "$$SM_VERSION" | grep -qE '^[0-9]+$$'; then \
+		echo "$(RED)Error: Could not detect GPU (nvidia-smi failed: $${SM_VERSION:-no output})$(RESET)"; \
+		echo "Run 'nvidia-smi' to check driver/GPU state."; \
 		exit 1; \
 	elif [ "$$SM_VERSION" -lt 75 ]; then \
 		echo "$(RED)Error: GPU SM $$SM_DISPLAY does not support CUDA 13$(RESET)"; \
@@ -355,8 +356,9 @@ ifeq ($(PLATFORM),linux)
 	@# Validate GPU supports CUDA 12 (SM >= 5.2)
 	@SM_VERSION=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.'); \
 	SM_DISPLAY=$$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1); \
-	if [ -z "$$SM_VERSION" ]; then \
-		echo "$(RED)Error: Could not detect GPU$(RESET)"; \
+	if ! echo "$$SM_VERSION" | grep -qE '^[0-9]+$$'; then \
+		echo "$(RED)Error: Could not detect GPU (nvidia-smi failed: $${SM_VERSION:-no output})$(RESET)"; \
+		echo "Run 'nvidia-smi' to check driver/GPU state."; \
 		exit 1; \
 	elif [ "$$SM_VERSION" -lt 52 ]; then \
 		echo "$(RED)Error: GPU SM $$SM_DISPLAY too old$(RESET)"; \
