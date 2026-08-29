@@ -192,8 +192,6 @@ class TestBackwardCompatibility:
             # Streaming configuration
             chunk_size=10000,
             loop_strategy="auto",
-            # Other settings
-            enable_multi_device=False,
         )
 
         # All existing parameters should be accessible

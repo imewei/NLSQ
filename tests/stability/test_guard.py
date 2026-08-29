@@ -23,11 +23,9 @@ _jax_config = JAXConfig()
 import jax.numpy as jnp
 
 from nlsq.caching.memory_manager import MemoryManager
-from nlsq.caching.smart_cache import SmartCache, cached_function
 from nlsq.precision.algorithm_selector import AlgorithmSelector
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.stability.recovery import OptimizationRecovery
-from nlsq.stability.robust_decomposition import RobustDecomposition
 from nlsq.utils.diagnostics import ConvergenceMonitor
 from nlsq.utils.validators import InputValidator
 
@@ -320,69 +318,6 @@ class TestMemoryManager(unittest.TestCase):
             pass
 
 
-class TestSmartCache(unittest.TestCase):
-    """Test smart caching functionality."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.cache = SmartCache(max_memory_items=10, disk_cache_enabled=False)
-
-    def test_cache_key_generation(self):
-        """Test cache key generation."""
-        # Test with arrays
-        arr1 = np.array([1, 2, 3])
-        arr2 = np.array([1, 2, 3])
-        key1 = self.cache.cache_key(arr1, param=5)
-        key2 = self.cache.cache_key(arr2, param=5)
-        self.assertEqual(key1, key2)  # Same content = same key
-
-        # Different content = different key
-        arr3 = np.array([1, 2, 4])
-        key3 = self.cache.cache_key(arr3, param=5)
-        self.assertNotEqual(key1, key3)
-
-    def test_cache_set_get(self):
-        """Test cache set and get operations."""
-        key = "test_key"
-        value = np.array([1, 2, 3])
-
-        # Set value
-        self.cache.set(key, value)
-
-        # Get value
-        retrieved = self.cache.get(key)
-        self.assertTrue(np.array_equal(value, retrieved))
-
-        # Miss for non-existent key
-        miss = self.cache.get("nonexistent")
-        self.assertIsNone(miss)
-
-    def test_cached_function_decorator(self):
-        """Test cached function decorator."""
-        call_count = 0
-
-        @cached_function(cache=self.cache)
-        def expensive_func(x):
-            nonlocal call_count
-            call_count += 1
-            return x**2
-
-        # First call - compute
-        result1 = expensive_func(5)
-        self.assertEqual(result1, 25)
-        self.assertEqual(call_count, 1)
-
-        # Second call - from cache
-        result2 = expensive_func(5)
-        self.assertEqual(result2, 25)
-        self.assertEqual(call_count, 1)  # Not incremented
-
-        # Different argument - compute again
-        result3 = expensive_func(6)
-        self.assertEqual(result3, 36)
-        self.assertEqual(call_count, 2)
-
-
 class TestConvergenceMonitor(unittest.TestCase):
     """Test convergence monitoring."""
 
@@ -419,64 +354,6 @@ class TestConvergenceMonitor(unittest.TestCase):
 
         is_diverging, _score = self.monitor.detect_divergence()
         self.assertTrue(is_diverging)
-
-
-class TestRobustDecomposition(unittest.TestCase):
-    """Test robust matrix decomposition."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.decomp = RobustDecomposition()
-
-    def test_svd_fallback(self):
-        """Test SVD with fallback."""
-        # Create test matrix
-        A = jnp.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
-
-        U, s, Vt = self.decomp.svd(A)
-
-        # Verify SVD properties
-        self.assertTrue(jnp.all(jnp.isfinite(U)))
-        self.assertTrue(jnp.all(jnp.isfinite(s)))
-        self.assertTrue(jnp.all(jnp.isfinite(Vt)))
-        self.assertTrue(jnp.all(s >= 0))  # Singular values non-negative
-
-        # Verify reconstruction
-        A_reconstructed = U @ jnp.diag(s) @ Vt
-        self.assertTrue(jnp.allclose(A, A_reconstructed, atol=1e-10))
-
-    def test_qr_fallback(self):
-        """Test QR decomposition with fallback."""
-        # Create test matrix
-        A = jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
-
-        Q, R = self.decomp.qr(A)
-
-        # Verify QR properties
-        self.assertTrue(jnp.all(jnp.isfinite(Q)))
-        self.assertTrue(jnp.all(jnp.isfinite(R)))
-
-        # Q should be orthogonal
-        QtQ = Q.T @ Q
-        self.assertTrue(jnp.allclose(QtQ, jnp.eye(2), atol=1e-10))
-
-        # Verify reconstruction
-        A_reconstructed = Q @ R
-        self.assertTrue(jnp.allclose(A, A_reconstructed, atol=1e-10))
-
-    def test_cholesky_fallback(self):
-        """Test Cholesky decomposition with fallback."""
-        # Create positive definite matrix
-        A = jnp.array([[4.0, 2.0], [2.0, 3.0]])
-
-        L = self.decomp.cholesky(A)
-
-        # Verify Cholesky properties
-        self.assertTrue(jnp.all(jnp.isfinite(L)))
-
-        # Verify reconstruction
-        A_reconstructed = L @ L.T
-        self.assertTrue(jnp.allclose(A, A_reconstructed, atol=1e-10))
 
 
 class TestIntegration(unittest.TestCase):

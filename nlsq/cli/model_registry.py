@@ -35,6 +35,7 @@ Example Usage
 >>> poly3 = registry.get_model("poly", {"type": "polynomial", "degree": 3})
 """
 
+import difflib
 import importlib.util
 import inspect
 import logging
@@ -674,7 +675,7 @@ class ModelRegistry:
         return model
 
     def _suggest_similar_model(self, name: str, available: list[str]) -> str:
-        """Suggest a similar model name based on Levenshtein-like matching.
+        """Suggest a similar model name based on fuzzy matching.
 
         Parameters
         ----------
@@ -688,29 +689,7 @@ class ModelRegistry:
         str
             A suggestion message.
         """
-        # Simple substring matching for suggestions
-        name_lower = name.lower()
-        suggestions = [
-            model_name
-            for model_name in available
-            if name_lower in model_name.lower() or model_name.lower() in name_lower
-        ]
-
-        # Also check for common typos (character difference)
-        if not suggestions:
-            for model_name in available:
-                if len(name) == len(model_name):
-                    diff_count = sum(
-                        1 for a, b in zip(name, model_name, strict=False) if a != b
-                    )
-                    if diff_count <= 2:
-                        suggestions.append(model_name)
-                elif abs(len(name) - len(model_name)) <= 2:
-                    # Allow length difference of up to 2
-                    shorter = name if len(name) < len(model_name) else model_name
-                    longer = model_name if len(name) < len(model_name) else name
-                    if shorter in longer:
-                        suggestions.append(model_name)
+        suggestions = difflib.get_close_matches(name, available, cutoff=0.5)
 
         if suggestions:
             return f"Did you mean: {', '.join(suggestions)}?"

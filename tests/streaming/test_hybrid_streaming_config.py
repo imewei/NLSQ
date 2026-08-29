@@ -47,9 +47,6 @@ class TestHybridStreamingConfigDefaults:
         assert config.checkpoint_frequency == 100
         assert config.validate_numerics is True
 
-        # Multi-device defaults
-        assert config.enable_multi_device is False
-
         # Callback defaults
         assert config.callback_frequency == 10
 
@@ -185,7 +182,6 @@ class TestHybridStreamingConfigParameterRanges:
             max_warmup_iterations=300,
             warmup_learning_rate=0.01,
             chunk_size=5000,
-            enable_multi_device=True,
         )
 
         assert config.normalize is False
@@ -194,4 +190,3 @@ class TestHybridStreamingConfigParameterRanges:
         assert config.max_warmup_iterations == 300
         assert config.warmup_learning_rate == 0.01
         assert config.chunk_size == 5000
-        assert config.enable_multi_device is True

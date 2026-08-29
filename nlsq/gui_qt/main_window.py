@@ -572,9 +572,8 @@ class MainWindow(QMainWindow):
         self._autosave.stop()
         self._autosave.clear_recovery()
 
-        # Clean up disk cache directory created by SmartCache — skip if a
-        # fit thread may still be running/finishing, to avoid deleting the
-        # cache out from under it.
+        # Clean up disk cache directory — skip if a fit thread may still be
+        # running/finishing, to avoid deleting the cache out from under it.
         if not getattr(self._app_state.state, "fit_running", False):
             self._cleanup_cache()
 
@@ -586,10 +585,5 @@ class MainWindow(QMainWindow):
         """Remove the .nlsq_cache directory on clean shutdown."""
         import shutil
 
-        from nlsq.caching.smart_cache import clear_all_caches, get_global_cache
-
-        cache_dir = get_global_cache().cache_dir
-        clear_all_caches()
-        # Remove the directory itself (clear_all_caches only deletes files)
-        if os.path.isdir(cache_dir):
-            shutil.rmtree(cache_dir, ignore_errors=True)
+        if os.path.isdir(".nlsq_cache"):
+            shutil.rmtree(".nlsq_cache", ignore_errors=True)

@@ -3831,10 +3831,7 @@ class CurveFit:
         bounds: tuple | None = None,
         sigma: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray, int, int, np.ndarray | None, np.ndarray | None]:
-        """Preprocess input data with optional feature flag routing.
-
-        Routes to either the new DataPreprocessor component or the original
-        inline methods based on the NLSQ_PREPROCESSOR_IMPL feature flag.
+        """Preprocess input data.
 
         Parameters
         ----------
@@ -3868,43 +3865,10 @@ class CurveFit:
         omit_mask : np.ndarray | None
             Boolean mask (over the ORIGINAL pre-omit length) used to filter
             rows, so a caller-supplied data_mask can be realigned the same
-            way. None when nan_policy != 'omit' or the new-DataPreprocessor
-            route was used (it doesn't expose this mask).
+            way. None when nan_policy != 'omit'.
         """
-        # Check feature flag for new implementation
-        from nlsq.core.feature_flags import get_feature_flags
-
-        flags = get_feature_flags()
-
-        if flags.should_use_new("preprocessor"):
-            # Use new DataPreprocessor component
-            from nlsq.core.orchestration import DataPreprocessor
-
-            preprocessor = DataPreprocessor()
-            data = preprocessor.preprocess(
-                f=f,
-                xdata=xdata,
-                ydata=ydata,
-                sigma=sigma,
-                check_finite=check_finite,
-                nan_policy=nan_policy,
-            )
-
-            # Convert JAX arrays back to numpy for compatibility with rest of pipeline
-            xdata = np.asarray(data.xdata)
-            ydata = np.asarray(data.ydata)
-            sigma = np.asarray(data.sigma) if data.sigma is not None else None
-            m = data.n_points
-            xdims = xdata.ndim
-
-            # DataPreprocessor doesn't expose the pre-omit valid-row mask, so
-            # a caller-supplied data_mask can't be re-aligned on this route.
-            return xdata, ydata, m, xdims, sigma, None
-
-        # Original implementation (old code path)
-        # Defer finiteness raising when nan_policy handles it instead (mirrors
-        # DataPreprocessor.preprocess's effective_check_finite): 'omit' filters
-        # invalid rows below, 'propagate' intentionally keeps NaN/Inf.
+        # Defer finiteness raising when nan_policy handles it instead:
+        # 'omit' filters invalid rows below, 'propagate' intentionally keeps NaN/Inf.
         effective_check_finite = check_finite and nan_policy not in (
             "omit",
             "propagate",
@@ -3952,10 +3916,6 @@ class CurveFit:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
         """Drop rows with non-finite x/y (or a non-finite 1D sigma entry).
 
-        Legacy-path counterpart to DataPreprocessor._handle_nan_omit, used
-        when the NLSQ_PREPROCESSOR_IMPL feature flag routes to the original
-        (default) code path rather than the new DataPreprocessor component.
-
         Parameters
         ----------
         xdata, ydata : np.ndarray
@@ -3963,8 +3923,7 @@ class CurveFit:
         sigma : np.ndarray | None
             1D sigma is filtered alongside xdata/ydata (rows with a
             non-finite sigma entry are also dropped). A 2D covariance-matrix
-            sigma is row/column-extracted to match the same mask (matches
-            DataPreprocessor._handle_nan_omit's handling of 2D sigma).
+            sigma is row/column-extracted to match the same mask.
         xdims : int
             xdata.ndim, to select row-wise vs column-wise masking.
 
@@ -4176,24 +4135,6 @@ class CurveFit:
         if data_mask is not None and omit_mask is not None:
             if len(data_mask) == len(omit_mask) and len(data_mask) != m:
                 data_mask = np.asarray(data_mask)[omit_mask]
-        elif (
-            data_mask is not None
-            and kwargs.get("nan_policy", "raise") == "omit"
-            and len(data_mask) != m
-        ):
-            # omit_mask is None here because the gated new-DataPreprocessor
-            # route was used (NLSQ_PREPROCESSOR_IMPL='new'/rollout>0) --
-            # it doesn't expose the pre-omit mask needed to realign
-            # data_mask, unlike the default legacy path above. Fail with a
-            # clear, actionable error instead of the generic length
-            # mismatch _setup_data_mask_and_padding would otherwise raise.
-            raise NotImplementedError(
-                "Combining an explicit data_mask with nan_policy='omit' is "
-                "not supported on the NLSQ_PREPROCESSOR_IMPL='new' code "
-                "path (it cannot realign data_mask after omitting rows). "
-                "Use the default preprocessor implementation, or omit one "
-                "of data_mask / nan_policy='omit'.",
-            )
 
         # Step 8: Select optimization method (on cleaned data)
         method = self._select_optimization_method(
@@ -4303,8 +4244,7 @@ class CurveFit:
             )
 
         nan_policy = kwargs.pop("nan_policy", "raise")
-        # Defer finiteness raising when 'omit' handles it instead (mirrors
-        # DataPreprocessor.preprocess's effective_check_finite).
+        # Defer finiteness raising when 'omit' handles it instead.
         effective_check_finite = check_finite and nan_policy not in (
             "omit",
             "propagate",

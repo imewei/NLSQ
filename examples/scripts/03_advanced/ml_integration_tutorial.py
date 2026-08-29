@@ -872,11 +872,10 @@ plt.close()
 #     return jnp.std(energy) < threshold
 #
 # # 5. Profile and optimize
-# # Use MemoryPool for repeated fitting
-# from nlsq import MemoryPool
-# with MemoryPool() as pool:
-#     for data in datasets:
-#         popt, _ = cf.curve_fit(model, *data)
+# # Reuse the CurveFit instance across repeated fits to amortize JIT compilation
+# cf = CurveFit()
+# for data in datasets:
+#     popt, _ = cf.curve_fit(model, *data)
 # ```
 #
 # ### Next Steps

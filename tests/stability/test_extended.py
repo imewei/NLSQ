@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Extended tests for stability modules to improve test coverage."""
 
-import tempfile
 import unittest
 
 import jax.numpy as jnp
@@ -14,17 +13,9 @@ from nlsq.caching.memory_manager import (
     get_memory_manager,
     get_memory_stats,
 )
-from nlsq.caching.smart_cache import (
-    SmartCache,
-    cached_function,
-    clear_all_caches,
-    get_global_cache,
-    get_jit_cache,
-)
 from nlsq.precision.algorithm_selector import AlgorithmSelector
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.stability.recovery import OptimizationRecovery
-from nlsq.stability.robust_decomposition import RobustDecomposition
 from nlsq.utils.diagnostics import ConvergenceMonitor, OptimizationDiagnostics
 from nlsq.utils.validators import InputValidator
 
@@ -370,119 +361,6 @@ class TestMemoryManagerExtended(unittest.TestCase):
         # Result is a tuple (bool, str)
         self.assertIsInstance(result, tuple)
         self.assertIsInstance(result[0], bool)
-
-
-class TestRobustDecompositionExtended(unittest.TestCase):
-    """Extended tests for RobustDecomposition."""
-
-    def test_fallback_chain(self):
-        """Test decomposition fallback chain."""
-        decomp = RobustDecomposition()
-
-        # Test with well-conditioned matrix
-        A = jnp.array([[4.0, 2.0], [2.0, 3.0]])
-        result = decomp.cholesky(A)
-        # Result is a tuple (L, info_dict)
-        if isinstance(result, tuple):
-            L, info = result
-            self.assertTrue(info.get("success", False))
-        else:
-            # Just L returned
-            L = result
-            self.assertIsNotNone(L)
-
-        # Verify decomposition
-        A_reconstructed = L @ L.T
-        self.assertTrue(jnp.allclose(A, A_reconstructed, atol=1e-10))
-
-        # Test QR decomposition
-        A = jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
-        result = decomp.qr(A)
-        # QR returns Q, R (not info)
-        Q, R = result
-        self.assertEqual(Q.shape, (3, 2))
-        self.assertEqual(R.shape, (2, 2))
-
-    def test_robust_decomp_function(self):
-        """Test the convenience function."""
-        from nlsq.stability.robust_decomposition import RobustDecomposition
-
-        decomp = RobustDecomposition()
-        A = jnp.array([[1.0, 0.5], [0.5, 1.0]])
-        result = decomp.cholesky(A)
-        self.assertIsNotNone(result)
-
-
-class TestSmartCacheExtended(unittest.TestCase):
-    """Extended tests for SmartCache."""
-
-    def setUp(self):
-        """Create temp directory for cache tests."""
-        self.temp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        """Clean up temp directory."""
-        import shutil
-
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_cache_operations(self):
-        """Test cache operations."""
-        cache = SmartCache(
-            cache_dir=self.temp_dir, max_memory_items=10, disk_cache_enabled=True
-        )
-
-        # Test key generation
-        key = cache.cache_key("test", 1, 2, 3)
-        self.assertIsInstance(key, str)
-
-        # Test set and get
-        cache.set(key, {"result": 42})
-        value = cache.get(key)
-        self.assertEqual(value["result"], 42)
-
-        # Test cache stats
-        stats = cache.get_stats()
-        self.assertIn("memory_hits", stats)
-
-        # Test cache clearing - clear method might not exist
-        # Try clear_all method
-        if hasattr(cache, "clear_all"):
-            cache.clear_all()
-        elif hasattr(cache, "clear_memory_cache"):
-            cache.clear_memory_cache()
-        # Check that cache operations work
-        self.assertIsNotNone(cache)
-
-    def test_global_caches(self):
-        """Test global cache instances."""
-        global_cache = get_global_cache()
-        self.assertIsInstance(global_cache, SmartCache)
-
-        jit_cache = get_jit_cache()
-        # JIT cache might be a custom class
-        self.assertIsNotNone(jit_cache)
-
-        # Test clear all
-        clear_all_caches()
-
-    def test_decorators(self):
-        """Test cache decorators."""
-
-        @cached_function
-        def expensive_func(x, y):
-            return x + y
-
-        # Test that function is callable
-        self.assertTrue(callable(expensive_func))
-
-        # Test basic functionality
-        try:
-            result = expensive_func(1, 2)
-            self.assertEqual(result, 3)
-        except:
-            # Decorator might modify function signature
-            pass
 
 
 if __name__ == "__main__":

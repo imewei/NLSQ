@@ -287,26 +287,6 @@ class TestAbsentFeaturesFailLoudly:
         y = 2.0 * x + 1.0
         return model, x, y
 
-    def test_resume_from_checkpoint_raises(self):
-        optimizer = AdaptiveHybridStreamingOptimizer(
-            HybridStreamingConfig(resume_from_checkpoint="/tmp/does-not-matter.h5"),
-        )
-        model, x, y = self._model_and_data()
-        with pytest.raises(NotImplementedError, match="resume_from_checkpoint"):
-            optimizer.fit(
-                data_source=(x, y), func=model, p0=jnp.array([1.0, 1.0]), verbose=0
-            )
-
-    def test_enable_multi_device_raises(self):
-        optimizer = AdaptiveHybridStreamingOptimizer(
-            HybridStreamingConfig(enable_multi_device=True),
-        )
-        model, x, y = self._model_and_data()
-        with pytest.raises(NotImplementedError, match="enable_multi_device"):
-            optimizer.fit(
-                data_source=(x, y), func=model, p0=jnp.array([1.0, 1.0]), verbose=0
-            )
-
     def test_cg_param_threshold_exceeded_raises(self):
         config = HybridStreamingConfig(cg_param_threshold=3)
         optimizer = AdaptiveHybridStreamingOptimizer(config)

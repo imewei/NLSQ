@@ -162,10 +162,6 @@ from nlsq.constants import (
     INITIAL_LEVENBERG_MARQUARDT_LAMBDA,
 )
 
-# Logging support
-# Optimizer base class
-from nlsq.core.optimizer_base import TrustRegionOptimizerBase
-
 # Profiling support
 from nlsq.core.profiler import NullProfiler, TRFProfiler
 
@@ -414,7 +410,7 @@ TR_BOUNDARY_THRESHOLD = 0.95  # Threshold for checking if step is close to bound
 SQRT_EXPONENT = 0.5  # Exponent for square root in scaling (v**0.5)
 
 
-class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
+class TrustRegionReflective(TrustRegionJITFunctions):
     """Trust Region Reflective algorithm for bounded least squares optimization.
 
     Implements the TRF algorithm with variable scaling to handle parameter bounds.
@@ -434,7 +430,8 @@ class TrustRegionReflective(TrustRegionJITFunctions, TrustRegionOptimizerBase):
             Enable numerical stability checks and fixes
         """
         TrustRegionJITFunctions.__init__(self)
-        TrustRegionOptimizerBase.__init__(self, name="trf")
+        self.name = "trf"
+        self.logger = get_logger(f"optimizer.{self.name}")
         self.cJIT = CommonJIT()
 
         # Initialize unified cache for JIT compilation tracking

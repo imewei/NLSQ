@@ -90,6 +90,7 @@ class CLIError(Exception):
         message: str,
         context: dict[str, Any] | None = None,
         suggestion: str | None = None,
+        **named_context: Any,
     ):
         """Initialize CLIError.
 
@@ -101,9 +102,18 @@ class CLIError(Exception):
             Additional context information for debugging.
         suggestion : str, optional
             Actionable suggestion for resolving the error.
+        **named_context
+            Extra keyword arguments (e.g. ``file_path=``, ``model_name=``)
+            merged into ``context`` — subclasses accept these without
+            needing their own ``__init__``.
         """
         self.message = message
-        self.context = context or {}
+        merged = {**(context or {}), **named_context}
+        # Stringify Path values (e.g. config_file=, file_path=) so context
+        # stays JSON-serializable, matching the old per-subclass behavior.
+        self.context = {
+            k: str(v) if isinstance(v, Path) else v for k, v in merged.items()
+        }
         self.suggestion = suggestion
         super().__init__(self._format_message())
 
@@ -139,44 +149,18 @@ class ConfigError(CLIError):
     - Configuration values are invalid
     - Configuration file does not exist
 
+    Accepts the same keyword arguments as `CLIError`, plus any named
+    extras (e.g. ``config_file=``, ``key=``) which are merged into
+    `context`.
+
     Examples
     --------
     >>> raise ConfigError(
     ...     "Missing required key 'data.input_file'",
-    ...     context={"config_file": "workflow.yaml"},
+    ...     config_file="workflow.yaml",
     ...     suggestion="Add 'input_file' under the 'data' section"
     ... )
     """
-
-    def __init__(
-        self,
-        message: str,
-        config_file: str | Path | None = None,
-        key: str | None = None,
-        context: dict[str, Any] | None = None,
-        suggestion: str | None = None,
-    ):
-        """Initialize ConfigError.
-
-        Parameters
-        ----------
-        message : str
-            Human-readable error message.
-        config_file : str or Path, optional
-            Path to the configuration file.
-        key : str, optional
-            The configuration key that caused the error.
-        context : dict, optional
-            Additional context information.
-        suggestion : str, optional
-            Actionable suggestion for resolving the error.
-        """
-        ctx = context or {}
-        if config_file is not None:
-            ctx["config_file"] = str(config_file)
-        if key is not None:
-            ctx["key"] = key
-        super().__init__(message, context=ctx, suggestion=suggestion)
 
 
 class DataLoadError(CLIError):
@@ -189,6 +173,10 @@ class DataLoadError(CLIError):
     - Required columns are missing
     - Data contains invalid values (NaN/Inf when not allowed)
 
+    Accepts the same keyword arguments as `CLIError`, plus any named
+    extras (e.g. ``file_path=``, ``file_format=``) which are merged into
+    `context`.
+
     Examples
     --------
     >>> raise DataLoadError(
@@ -198,36 +186,6 @@ class DataLoadError(CLIError):
     ...     suggestion="Use one of the available columns: x, y, sigma"
     ... )
     """
-
-    def __init__(
-        self,
-        message: str,
-        file_path: str | Path | None = None,
-        file_format: str | None = None,
-        context: dict[str, Any] | None = None,
-        suggestion: str | None = None,
-    ):
-        """Initialize DataLoadError.
-
-        Parameters
-        ----------
-        message : str
-            Human-readable error message.
-        file_path : str or Path, optional
-            Path to the data file.
-        file_format : str, optional
-            Expected or detected file format.
-        context : dict, optional
-            Additional context information.
-        suggestion : str, optional
-            Actionable suggestion for resolving the error.
-        """
-        ctx = context or {}
-        if file_path is not None:
-            ctx["file_path"] = str(file_path)
-        if file_format is not None:
-            ctx["file_format"] = file_format
-        super().__init__(message, context=ctx, suggestion=suggestion)
 
 
 class ModelError(CLIError):
@@ -240,6 +198,10 @@ class ModelError(CLIError):
     - Model function signature is invalid
     - Polynomial degree is invalid
 
+    Accepts the same keyword arguments as `CLIError`, plus any named
+    extras (e.g. ``model_name=``, ``model_type=``) which are merged into
+    `context`.
+
     Examples
     --------
     >>> raise ModelError(
@@ -249,36 +211,6 @@ class ModelError(CLIError):
     ...     suggestion="Did you mean 'exponential_decay'?"
     ... )
     """
-
-    def __init__(
-        self,
-        message: str,
-        model_name: str | None = None,
-        model_type: str | None = None,
-        context: dict[str, Any] | None = None,
-        suggestion: str | None = None,
-    ):
-        """Initialize ModelError.
-
-        Parameters
-        ----------
-        message : str
-            Human-readable error message.
-        model_name : str, optional
-            Name of the model that caused the error.
-        model_type : str, optional
-            Type of model (builtin, custom, polynomial).
-        context : dict, optional
-            Additional context information.
-        suggestion : str, optional
-            Actionable suggestion for resolving the error.
-        """
-        ctx = context or {}
-        if model_name is not None:
-            ctx["model_name"] = model_name
-        if model_type is not None:
-            ctx["model_type"] = model_type
-        super().__init__(message, context=ctx, suggestion=suggestion)
 
 
 class FitError(CLIError):
@@ -290,6 +222,9 @@ class FitError(CLIError):
     - Fit produces invalid results (NaN/Inf)
     - Maximum iterations exceeded
 
+    Accepts the same keyword arguments as `CLIError`, plus any named
+    extras (e.g. ``model_name=``) which are merged into `context`.
+
     Examples
     --------
     >>> raise FitError(
@@ -298,31 +233,6 @@ class FitError(CLIError):
     ...     suggestion="Try different initial parameters or relax tolerances"
     ... )
     """
-
-    def __init__(
-        self,
-        message: str,
-        model_name: str | None = None,
-        context: dict[str, Any] | None = None,
-        suggestion: str | None = None,
-    ):
-        """Initialize FitError.
-
-        Parameters
-        ----------
-        message : str
-            Human-readable error message.
-        model_name : str, optional
-            Name of the model being fitted.
-        context : dict, optional
-            Additional context information (iterations, cost, etc.).
-        suggestion : str, optional
-            Actionable suggestion for resolving the error.
-        """
-        ctx = context or {}
-        if model_name is not None:
-            ctx["model_name"] = model_name
-        super().__init__(message, context=ctx, suggestion=suggestion)
 
 
 # =============================================================================
@@ -467,29 +377,9 @@ class CLILogger:
         }
         self.logger.setLevel(level_map[self._verbosity])
 
-    def debug(self, message: str, **kwargs: Any) -> None:
-        """Log debug message."""
-        self.logger.debug(message, extra=kwargs)
-
-    def info(self, message: str, **kwargs: Any) -> None:
-        """Log info message."""
-        self.logger.info(message, extra=kwargs)
-
-    def warning(self, message: str, **kwargs: Any) -> None:
-        """Log warning message."""
-        self.logger.warning(message, extra=kwargs)
-
-    def error(self, message: str, **kwargs: Any) -> None:
-        """Log error message."""
-        self.logger.error(message, extra=kwargs)
-
-    def critical(self, message: str, **kwargs: Any) -> None:
-        """Log critical message."""
-        self.logger.critical(message, extra=kwargs)
-
-    def exception(self, message: str, **kwargs: Any) -> None:
-        """Log exception with traceback."""
-        self.logger.exception(message, extra=kwargs)
+    def __getattr__(self, name: str) -> Any:
+        """Delegate log calls (debug/info/warning/error/...) to the wrapped Logger."""
+        return getattr(self.logger, name)
 
 
 # Global logger instance

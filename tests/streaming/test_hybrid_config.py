@@ -122,17 +122,10 @@ class TestHybridStreamingConfigDefaults:
         assert config.enable_checkpoints is True
         assert config.checkpoint_frequency == 100
         assert config.checkpoint_dir is None
-        assert config.resume_from_checkpoint is None
         assert config.validate_numerics is True
         assert config.enable_fault_tolerance is True
         assert config.max_retries_per_batch == 2
         assert config.min_success_rate == 0.5
-
-    def test_default_multi_device(self):
-        """Test default multi-device settings."""
-        config = HybridStreamingConfig()
-
-        assert config.enable_multi_device is False
 
     def test_default_progress(self):
         """Test default progress monitoring settings."""

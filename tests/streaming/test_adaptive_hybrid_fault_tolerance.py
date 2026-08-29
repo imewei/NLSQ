@@ -90,14 +90,11 @@ class TestFaultToleranceCheckpoints:
                     assert jtr.shape == (2,)  # n_params
 
     def test_checkpoint_resume_from_any_phase(self):
-        """resume_from_checkpoint is documented but fit() never actually
-        resumes from a saved checkpoint (it always starts from p0);
-        checkpoints are write-only. This test previously "passed" only
-        because that silent no-op made run 2 just an independent full fit
-        from the same p0 as run 1, which coincidentally converges to a
-        similar answer -- it never validated resume behavior. fit() now
-        raises NotImplementedError instead of silently ignoring the setting;
-        assert that instead.
+        """Checkpoints are write-only from fit() -- there is no automatic
+        resume knob. Resuming requires manually loading the checkpoint via
+        _load_checkpoint() before calling fit() again. This test verifies
+        that a checkpoint file written mid-run captures a loadable phase
+        and parameter state.
         """
         config = HybridStreamingConfig(
             normalize=True,
@@ -135,14 +132,8 @@ class TestFaultToleranceCheckpoints:
                 saved_phase = int(f["phase_state/current_phase"][()])
                 saved_params = jnp.array(f["phase_state/normalized_params"])
 
-            # Create new optimizer configured to resume from checkpoint
-            config2 = config
-            config2.resume_from_checkpoint = str(latest_checkpoint)
-            optimizer2 = AdaptiveHybridStreamingOptimizer(config2)
-
-            # fit() must refuse rather than silently starting over from p0
-            with pytest.raises(NotImplementedError, match="resume_from_checkpoint"):
-                optimizer2.fit((x_data, y_data), model, p0, verbose=0)
+            assert saved_phase >= 0
+            assert saved_params.shape == p0.shape
 
     def test_best_parameter_tracking_across_phases(self):
         """Test best parameters are tracked across all phases."""
@@ -349,10 +340,10 @@ class TestFaultToleranceIntegration:
     """Integration tests for complete fault tolerance system."""
 
     def test_checkpoint_and_resume_preserves_best_params(self):
-        """resume_from_checkpoint is not implemented (see
-        test_checkpoint_resume_from_any_phase for why the old version of
-        this test passed vacuously); fit() now raises instead of silently
-        re-running from p0.
+        """Verify a checkpoint file is written during a run and is a
+        non-empty, loadable HDF5 file. There is no automatic resume knob --
+        resuming requires manually loading the checkpoint via
+        _load_checkpoint() before calling fit() again.
         """
         config = HybridStreamingConfig(
             normalize=True,
@@ -381,20 +372,12 @@ class TestFaultToleranceIntegration:
                 (x_data, y_data), model, p0, bounds=bounds, verbose=0
             )
 
-            # Get checkpoint. Assert (not `if len(checkpoints) > 0:`) --
-            # the NotImplementedError below fires before fit() ever touches
-            # the checkpoint file, so a guarded-but-skipped body here would
-            # silently pass without exercising the refusal at all, exactly
-            # the vacuous-pass failure mode this test's docstring says it fixes.
+            # Get checkpoint and verify it is a loadable, non-empty file.
             checkpoints = sorted(Path(tmpdir).glob("checkpoint_*.h5"))
             assert len(checkpoints) > 0
 
-            # Configure to resume from checkpoint -- fit() must refuse
-            # rather than silently starting over from p0
-            config.resume_from_checkpoint = str(checkpoints[-1])
-            optimizer2 = AdaptiveHybridStreamingOptimizer(config)
-            with pytest.raises(NotImplementedError, match="resume_from_checkpoint"):
-                optimizer2.fit((x_data, y_data), model, p0, bounds=bounds, verbose=0)
+            with h5py.File(checkpoints[-1], "r") as f:
+                assert "phase_state" in f
 
     def test_validation_with_checkpoints(self):
         """Test NaN/Inf validation works with checkpoint save/resume."""

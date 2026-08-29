@@ -56,7 +56,6 @@ _MODULE_ALIASES = {
     # The old nlsq.utils.diagnostics module still exists for optimization monitoring
     "nlsq.hybrid_streaming_config": "nlsq.streaming.hybrid_config",
     "nlsq.large_dataset": "nlsq.streaming.large_dataset",
-    "nlsq.optimizer_base": "nlsq.core.optimizer_base",
     "nlsq.logging": "nlsq.utils.logging",
     "nlsq.parameter_estimation": "nlsq.precision.parameter_estimation",
     "nlsq.workflow": "nlsq.core.workflow",
@@ -192,7 +191,6 @@ nitpick_ignore = [
     ("py:class", "default=False"),
     ("py:class", "default="),
     # Base class references
-    ("py:class", "nlsq.optimizer_base.TrustRegionOptimizerBase"),
     ("py:class", "nlsq.workflow.OptimizationGoal"),
     ("py:class", "nlsq.types.CheckpointInfo"),
     ("py:class", "nlsq.types.AggregateStats"),
@@ -311,7 +309,6 @@ nitpick_ignore += [
     ("py:class", "OptimizationError"),
     ("py:class", "nlsq.trf.TrustRegionJITFunctions"),
     ("py:class", "nlsq.ParameterNormalizer"),
-    ("py:class", "nlsq.optimizer_base.OptimizerBase"),
     ("py:class", "nlsq.large_dataset.LDMemoryConfig"),
     ("py:class", "nlsq.LargeDatasetHandler"),
     ("py:class", "nlsq.large_dataset.DataChunker"),
