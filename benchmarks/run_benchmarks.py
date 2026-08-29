@@ -24,9 +24,10 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add benchmark directory to path for imports
+# Add benchmark directory and repo root to path for imports
 benchmark_dir = Path(__file__).parent
 sys.path.insert(0, str(benchmark_dir))
+sys.path.insert(0, str(benchmark_dir.parent))
 
 from benchmark_suite import (
     BenchmarkConfig,
