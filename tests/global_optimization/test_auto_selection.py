@@ -142,6 +142,28 @@ class TestAutoGlobalMethodSelection:
         )
         assert method == "multi-start"
 
+    @pytest.mark.skipif(not is_evosax_available(), reason="evosax not installed")
+    def test_infinite_bound_never_selects_cmaes(self):
+        """An infinite bound dominates max_range/min_range (ratio=inf),
+        which would otherwise make 'auto' actively PREFER cmaes for
+        exactly the one case it can't handle -- transform_to_bounds
+        computes lb + (ub-lb)*sigmoid(x), which is NaN/inf when a bound
+        is +/-inf. 'auto' must fall back to multi-start instead (which
+        has no such requirement; bound inference handles it).
+        """
+        from nlsq.global_optimization.method_selector import MethodSelector
+
+        selector = MethodSelector()
+
+        # One tightly-scaled finite param + one unbounded param: old code's
+        # ratio = inf / 2e-3 = inf > threshold -> selected "cmaes".
+        method = selector.select(
+            requested_method="auto",
+            lower_bounds=np.array([0.0, -1e-3]),
+            upper_bounds=np.array([np.inf, 1e-3]),
+        )
+        assert method == "multi-start"
+
 
 class TestAutoGlobalFitIntegration:
     """Integration tests for auto_global workflow through fit() API."""

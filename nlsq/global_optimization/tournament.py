@@ -473,14 +473,41 @@ class TournamentSelector:
         if not isinstance(top_m, int) or isinstance(top_m, bool) or top_m < 1:
             raise ValueError(f"top_m must be a positive integer, got {top_m}")
 
-        # Get survivors with finite cumulative loss
+        # cumulative_losses starts at 0.0 for every candidate, which is
+        # finite -- so a candidate that was never actually evaluated (e.g.
+        # data_batch_iterator yielded zero batches) would otherwise look
+        # identical to a genuine zero-loss winner, or even outrank a
+        # candidate that WAS scored. Two gates close both gaps:
+        #   1. `evaluated` (eligibility): required whenever a real
+        #      selection among more candidates than top_m was possible
+        #      (selection_needed) -- otherwise an unevaluated candidate's
+        #      default 0.0 loss is indistinguishable from a genuine winner.
+        #      Skipped when top_m already covers every candidate (e.g. a
+        #      single-candidate tournament) -- there every candidate is
+        #      returned regardless, so nothing to gate.
+        #   2. `effective_losses` (ranking): once *any* candidate has real
+        #      evaluation data, an eligible-but-unevaluated survivor (the
+        #      selection_needed=False case above) must still never rank
+        #      ahead of one that was actually scored.
+        was_evaluated = self.evaluation_counts > 0
+        any_evaluated = bool(np.any(was_evaluated))
+
+        selection_needed = self.n_candidates > top_m
+        evaluated = was_evaluated if selection_needed else True
+
+        effective_losses = (
+            np.where(was_evaluated, self.cumulative_losses, np.inf)
+            if any_evaluated
+            else self.cumulative_losses
+        )
+
         valid_indices = np.where(
-            self.survival_mask & np.isfinite(self.cumulative_losses),
+            self.survival_mask & np.isfinite(effective_losses) & evaluated,
         )[0]
 
         if len(valid_indices) == 0:
-            # Fall back to any surviving candidate
-            valid_indices = np.where(self.survival_mask)[0]
+            # Fall back to any surviving, evaluated candidate
+            valid_indices = np.where(self.survival_mask & evaluated)[0]
             if len(valid_indices) == 0:
                 # No survivors at all (every candidate produced a
                 # non-finite loss every round) -- raise rather than
@@ -497,8 +524,8 @@ class TournamentSelector:
                 self.logger.warning(msg)
                 raise RuntimeError(msg)
 
-        # Sort by cumulative loss
-        losses = self.cumulative_losses[valid_indices]
+        # Sort by (evaluation-aware) loss
+        losses = effective_losses[valid_indices]
         sorted_order = np.argsort(losses)
 
         # Return top M

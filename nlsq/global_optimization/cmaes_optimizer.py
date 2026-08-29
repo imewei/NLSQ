@@ -39,6 +39,13 @@ __all__ = ["CMAESOptimizer", "CMAESPreempted"]
 
 logger = logging.getLogger(__name__)
 
+# BIPOP exploratory-restart sampling half-range, in unbounded (sigmoid)
+# space. +-2.0 (sigmoid(2)~=0.88) permanently excludes the outer ~12% of
+# each bound from ever being an explore-restart center; +-4.6
+# (sigmoid(4.6)~=0.99) recovers ~11 of those 12 points, leaving only the
+# outer ~1% unreachable.
+_BIPOP_EXPLORE_RANGE = 4.6
+
 
 class CMAESPreempted(SystemExit):
     """Raised when a preemption signal (SIGTERM/SIGUSR1) is caught after a
@@ -48,6 +55,27 @@ class CMAESPreempted(SystemExit):
     def __init__(self, generation: int) -> None:
         super().__init__(75)
         self.generation = generation
+
+
+def _reject_stale_checkpoint(
+    start_gen: int,
+    max_generations: int,
+    checkpoint_path: Path,
+) -> None:
+    """Reject a checkpoint whose generation exceeds `max_generations`.
+
+    Equality is the legitimate already-done resume (a completed run's
+    generation_counter == max_generations exactly); only strictly-greater
+    means the caller lowered max_generations since the checkpoint was
+    written, which would otherwise silently return a stale result.
+    """
+    if start_gen > max_generations:
+        raise ValueError(
+            f"Checkpoint at {checkpoint_path} is already at generation "
+            f"{start_gen}, past this run's max_generations={max_generations}. "
+            "Raise max_generations to resume past it, or use a different "
+            "run_id/checkpoint_dir to start fresh.",
+        )
 
 
 def _create_fitness_function(  # noqa: C901
@@ -247,6 +275,68 @@ def _create_fitness_function(  # noqa: C901
     return fitness_population_batched
 
 
+def _require_finite_bounds(lower_bounds: jax.Array, upper_bounds: jax.Array) -> None:
+    """Raise ``ValueError`` unless every bound -- and every range -- is finite.
+
+    ``transform_to_bounds`` computes ``lb + (ub - lb) * sigmoid(x)``: any
+    non-finite bound (or a finite-but-overflowing range, e.g.
+    ``lb=-1e308``/``ub=1e308``) turns every candidate's bounded parameters
+    into NaN/inf, so CMA-ES would silently search a NaN fitness landscape
+    forever. ``MethodSelector``'s scale-ratio heuristic can even prefer
+    ``"cmaes"`` for a partially-unbounded problem (an infinite range
+    dominates the ratio), so this must be enforced here -- the one place
+    every CMA-ES entry point (direct API use, ``method="cmaes"``, and
+    MethodSelector-selected ``"auto"``) funnels through -- not re-derived
+    per caller.
+    """
+    finite = (
+        jnp.isfinite(lower_bounds)
+        & jnp.isfinite(upper_bounds)
+        & jnp.isfinite(upper_bounds - lower_bounds)
+    )
+    if not bool(jnp.all(finite)):
+        raise ValueError(
+            "CMA-ES requires every parameter to have a finite lower AND "
+            "upper bound (no +/-inf, and no overflowing range). Got "
+            f"lower={np.asarray(lower_bounds)}, upper={np.asarray(upper_bounds)}.",
+        )
+
+
+def _finite_fitness_spread(fitness: jax.Array) -> float:
+    """BIPOP stagnation spread: max - min over finite fitness values only.
+
+    A single diverging candidate (fitness = inf, assigned by the fitness
+    function on NaN/Inf residuals) would otherwise make max(fitness) inf
+    and the spread inf forever, permanently masking real stagnation in the
+    rest of the population. Falls back to 0.0 ("stagnant") if every
+    candidate in the generation failed.
+    """
+    finite_fitness = fitness[jnp.isfinite(fitness)]
+    if finite_fitness.size == 0:
+        return 0.0
+    return float(jnp.max(finite_fitness) - jnp.min(finite_fitness))
+
+
+def _warn_if_never_finite(best_fitness: float, generations: int) -> None:
+    """Log a warning if CMA-ES never found a finite fitness in the whole run.
+
+    If every candidate evaluated across the whole run (all generations, all
+    BIPOP restarts) produced a non-finite fitness -- typically the model
+    itself is NaN/Inf everywhere in the (now bounds-validated finite)
+    search region, e.g. a sqrt/log of a value that goes negative across the
+    whole box -- ``best_params`` is an arbitrary, unconverged point, not a
+    real optimum. Surface that instead of returning a normal-looking result
+    built on it silently.
+    """
+    if not np.isfinite(best_fitness):
+        logger.warning(
+            f"CMA-ES never found a finite fitness across {generations} "
+            "generation(s) -- best_params is unconverged/arbitrary, not "
+            "a genuine optimum. Check that the model function produces "
+            "finite output across the full parameter bounds.",
+        )
+
+
 class CMAESOptimizer:
     """CMA-ES global optimizer with NLSQ refinement using evosax.
 
@@ -363,6 +453,28 @@ class CMAESOptimizer:
         ------
         ValueError
             If bounds are not provided (required for CMA-ES).
+
+        Notes
+        -----
+        Checkpointing (``checkpoint_dir``, ``restart_strategy="none"`` only)
+        has two known limitations, neither of which corrupts a checkpoint,
+        that a wrapping HPC job script should account for:
+
+        - No cross-process locking on ``(checkpoint_dir, run_id)``. Two
+          concurrent runs sharing the same pair (e.g. an accidental
+          duplicate job submission) will race saving/loading the same
+          file. Ensure your scheduler cannot submit the same run_id twice
+          concurrently.
+        - SIGTERM/SIGUSR1 preemption is only observed between generations
+          (after ``ask``/fitness/``tell`` for the current generation
+          completes), not mid-generation. If the scheduler's SIGKILL grace
+          period is shorter than one generation's wall-clock time
+          (dominated by the fitness function, e.g. large streaming
+          evaluations), the process can be killed before the preemption
+          checkpoint is written. Give the job a grace period longer than
+          the worst-case single-generation time, or lower
+          ``checkpoint_interval`` as a partial mitigation (periodic saves
+          still apply even when the preemption signal itself is missed).
         """
         # Validate bounds
         if bounds is None:
@@ -404,6 +516,8 @@ class CMAESOptimizer:
                 lower_bounds = jnp.full(n_params_hint, lower_bounds)
             if upper_bounds.ndim == 0:
                 upper_bounds = jnp.full(n_params_hint, upper_bounds)
+
+        _require_finite_bounds(lower_bounds, upper_bounds)
         sigma_jax = jnp.asarray(sigma) if sigma is not None else None
 
         n_params = len(lower_bounds)
@@ -517,6 +631,7 @@ class CMAESOptimizer:
             f"best_fitness={float(best_fitness):.6e}, "
             f"wall_time={diagnostics.wall_time:.2f}s",
         )
+        _warn_if_never_finite(diagnostics.best_fitness, generations)
 
         # NLSQ refinement phase for proper pcov estimation
         if self.config.refine_with_nlsq:
@@ -804,6 +919,9 @@ class CMAESOptimizer:
                 best_fitness = jnp.asarray(loaded.best_fitness)
                 diagnostics.fitness_history = list(loaded.fitness_history)
                 start_gen = loaded.generation_counter
+                _reject_stale_checkpoint(
+                    start_gen, self.config.max_generations, checkpoint_path
+                )
                 logger.info(
                     f"Resumed CMA-ES from checkpoint at generation {start_gen} "
                     f"({checkpoint_path})",
@@ -1012,8 +1130,8 @@ class CMAESOptimizer:
                 # Record fitness history
                 diagnostics.fitness_history.append(float(run_best_fitness))
 
-                # Check for stagnation
-                fitness_spread = float(jnp.max(fitness) - jnp.min(fitness))
+                # Check for stagnation.
+                fitness_spread = _finite_fitness_spread(fitness)
                 if restarter.check_stagnation(fitness_spread):
                     stagnation_counter += 1
                 else:
@@ -1101,8 +1219,8 @@ class CMAESOptimizer:
                 initial_solution = jax.random.uniform(
                     explore_key,
                     shape=(n_params,),
-                    minval=-2.0,
-                    maxval=2.0,
+                    minval=-_BIPOP_EXPLORE_RANGE,
+                    maxval=_BIPOP_EXPLORE_RANGE,
                 )
             else:
                 initial_solution = original_solution

@@ -377,6 +377,60 @@ class TestTournamentSelectorEdgeCases:
 
         assert len(best_candidates) <= 3
 
+    def test_zero_batches_raises_instead_of_fabricating_winner(self):
+        """When a real selection among multiple candidates was possible
+        but the batch iterator yields nothing, get_top_candidates must
+        raise -- not return an unevaluated candidate with its default
+        cumulative_losses of 0.0 as if it had genuinely won.
+        """
+        n_candidates = 5
+        candidates = np.random.randn(n_candidates, 2)
+
+        config = GlobalOptimizationConfig(
+            n_starts=n_candidates,
+            elimination_rounds=2,
+            elimination_fraction=0.5,
+            batches_per_round=2,
+        )
+        selector = TournamentSelector(candidates=candidates, config=config)
+
+        def model(x, a, b):
+            return a * x + b
+
+        def empty_batch_generator():
+            return
+            yield  # pragma: no cover -- makes this a generator function
+
+        with pytest.raises(RuntimeError, match="no valid survivors"):
+            selector.run_tournament(
+                data_batch_iterator=empty_batch_generator(),
+                model=model,
+                top_m=1,
+            )
+
+    def test_unevaluated_candidate_never_outranks_evaluated_one(self):
+        """get_top_candidates(top_m) with top_m >= n_candidates still must
+        not let an unevaluated survivor's default 0.0 loss rank ahead of a
+        genuinely-scored one, even though every candidate ends up returned
+        either way (top_m covers all of them, so nothing gets excluded --
+        only the ORDER is at risk).
+        """
+        candidates = np.array([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]])
+        config = GlobalOptimizationConfig(n_starts=3, elimination_rounds=0)
+        selector = TournamentSelector(candidates=candidates, config=config)
+
+        # Candidate 0 was genuinely scored with a real, positive loss.
+        # Candidates 1 and 2 were never evaluated (evaluation_counts stays
+        # 0), so their cumulative_losses default of 0.0 must not make them
+        # look better than candidate 0's real loss of 5.0.
+        selector.cumulative_losses[0] = 5.0
+        selector.evaluation_counts[0] = 1
+
+        best = selector.get_top_candidates(top_m=3)
+
+        assert len(best) == 1
+        np.testing.assert_array_equal(best[0], candidates[0])
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -9,6 +9,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -350,6 +351,42 @@ class TestCMAESOptimizerEdgeCases:
         with pytest.raises((ValueError, TypeError)):
             optimizer.fit(model, x, y, bounds=None)
 
+    def test_rejects_infinite_bounds(self) -> None:
+        """CMA-ES rejects a non-finite bound instead of silently NaN-ing
+        the whole fitness landscape (transform_to_bounds computes
+        lb + (ub-lb)*sigmoid(x), which is NaN/inf when a bound is +/-inf).
+        """
+        from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        def model(x, a, b):
+            return a * x + b
+
+        x = jnp.linspace(0, 5, 20)
+        y = 2.0 * x + 1.0
+
+        optimizer = CMAESOptimizer()
+
+        with pytest.raises(ValueError, match="finite"):
+            optimizer.fit(model, x, y, bounds=([-np.inf, 0.0], [10.0, 10.0]))
+
+    def test_rejects_overflowing_bound_range(self) -> None:
+        """Individually-finite bounds whose range overflows to inf on
+        subtraction (ub - lb) hit the same NaN failure mode as an
+        explicit +/-inf bound and must be rejected the same way.
+        """
+        from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        def model(x, a, b):
+            return a * x + b
+
+        x = jnp.linspace(0, 5, 20)
+        y = 2.0 * x + 1.0
+
+        optimizer = CMAESOptimizer()
+
+        with pytest.raises(ValueError, match="finite"):
+            optimizer.fit(model, x, y, bounds=([-1e308, 0.0], [1e308, 10.0]))
+
 
 class TestCMAESOptimizerSeed:
     """Tests for reproducibility with seeds."""
@@ -469,6 +506,61 @@ class TestCMAESOptimizerBIPOP:
         # Should converge to correct answer
         popt = result["popt"]
         np.testing.assert_allclose(popt[0], 2.5, rtol=0.1)
+
+
+class TestBIPOPStagnationSpread:
+    """Tests for _finite_fitness_spread, the BIPOP stagnation-spread helper."""
+
+    def test_ignores_non_finite_candidates(self) -> None:
+        """A single non-finite candidate must not make the spread inf and
+        permanently mask stagnation in the rest of the population.
+        """
+        from nlsq.global_optimization.cmaes_optimizer import (
+            _finite_fitness_spread,
+        )
+
+        fitness = jnp.array([1.0, 2.0, jnp.inf, 3.0])
+        assert _finite_fitness_spread(fitness) == 2.0
+
+    def test_all_non_finite_falls_back_to_zero(self) -> None:
+        """If every candidate in a generation is non-finite, the spread
+        falls back to 0.0 (treated as stagnant) instead of NaN/crashing.
+        """
+        from nlsq.global_optimization.cmaes_optimizer import (
+            _finite_fitness_spread,
+        )
+
+        fitness = jnp.array([jnp.inf, jnp.inf, jnp.nan])
+        assert _finite_fitness_spread(fitness) == 0.0
+
+    def test_all_finite_matches_plain_max_minus_min(self) -> None:
+        """No non-finite entries: behaves like the original max - min."""
+        from nlsq.global_optimization.cmaes_optimizer import (
+            _finite_fitness_spread,
+        )
+
+        fitness = jnp.array([1.0, 5.0, 3.0])
+        assert _finite_fitness_spread(fitness) == 4.0
+
+
+class TestBIPOPExploreRange:
+    """Regression test for the BIPOP exploratory-restart sampling range."""
+
+    def test_covers_at_least_97_percent_of_bounded_domain(self) -> None:
+        """The old range (+-2.0) covered sigmoid(2)-sigmoid(-2) ~= 76% of
+        the bounded domain, permanently excluding the outer ~12% on each
+        side from ever being an explore-restart center. Assert the range
+        actually used covers at least 97% (matching the +-4.6 fix) --
+        this would fail if the range were ever reverted to +-2.0.
+        """
+        from nlsq.global_optimization.cmaes_optimizer import (
+            _BIPOP_EXPLORE_RANGE,
+        )
+
+        coverage = float(
+            jax.nn.sigmoid(_BIPOP_EXPLORE_RANGE) - jax.nn.sigmoid(-_BIPOP_EXPLORE_RANGE)
+        )
+        assert coverage >= 0.97
 
 
 class TestCMAESDiagnostics:

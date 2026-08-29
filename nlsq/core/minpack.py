@@ -321,6 +321,17 @@ def _is_auto_p0(p0: object) -> bool:
     return isinstance(p0, str) and p0 == "auto"
 
 
+def _infer_n_features(xdata: np.ndarray) -> int:
+    """Number of independent variables in xdata: 1 for a plain 1D array,
+    or xdata.shape[1] for the (n_points, n_features) 2D convention
+    InputValidator._validate_and_convert_arrays already uses (e.g. a 2D
+    surface fit). Feeds MemoryBudget.compute()/MemoryBudgetSelector.select()
+    the real feature count so their data_gb estimate isn't silently
+    1/n_features too small.
+    """
+    return xdata.shape[1] if xdata.ndim == 2 else 1
+
+
 def fit(  # noqa: C901
     f: ModelFunction,
     xdata: ArrayLike,
@@ -438,6 +449,7 @@ def fit(  # noqa: C901
     xdata_arr = np.asarray(xdata)
     ydata_arr = np.asarray(ydata)
     n_points = len(ydata_arr)
+    n_features = _infer_n_features(xdata_arr)
 
     # Handle empty data
     if n_points == 0:
@@ -526,6 +538,7 @@ def fit(  # noqa: C901
             budget = MemoryBudget.compute(
                 n_points=n_points,
                 n_params=n_params,
+                n_features=n_features,
                 memory_limit_gb=memory_limit_gb,
             )
             _logger.info(
@@ -538,6 +551,7 @@ def fit(  # noqa: C901
             _strategy, config = selector.select(
                 n_points=n_points,
                 n_params=n_params,
+                n_features=n_features,
                 memory_limit_gb=memory_limit_gb,
                 goal=goal_enum,
                 budget=budget,
@@ -651,6 +665,31 @@ def fit(  # noqa: C901
     )
 
 
+def _check_finite_for_streaming(
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    check_finite: bool,
+) -> None:
+    """Validate xdata/ydata for NaN/Inf before an AdaptiveHybridStreamingOptimizer
+    call. That optimizer has no check_finite parameter and its 4-phase
+    pipeline never validates raw input itself (unlike LargeDatasetFitter/
+    curve_fit(), which do) -- without this, a NaN/Inf silently runs to a
+    bogus success=True result (parameters stuck at p0, NaN std errors)
+    instead of the documented check_finite=True behavior. Shared by every
+    reachable caller that constructs that optimizer directly, so a new
+    caller can't reintroduce the gap by copy-pasting the construction
+    without the check.
+    """
+    if not check_finite:
+        return
+    if not np.all(np.isfinite(xdata)):
+        n_bad = int(np.sum(~np.isfinite(xdata)))
+        raise ValueError(f"xdata contains {n_bad} NaN or Inf values")
+    if not np.all(np.isfinite(ydata)):
+        n_bad = int(np.sum(~np.isfinite(ydata)))
+        raise ValueError(f"ydata contains {n_bad} NaN or Inf values")
+
+
 def _fit_with_config(
     f: ModelFunction,
     xdata: np.ndarray,
@@ -701,7 +740,11 @@ def _fit_with_config(
 
     if isinstance(config, HybridStreamingConfig):
         # Streaming optimization path
+        import dataclasses
+
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+
+        _check_finite_for_streaming(xdata, ydata, check_finite)
 
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
@@ -720,6 +763,17 @@ def _fit_with_config(
             if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
             else None
         )
+
+        # AdaptiveHybridStreamingOptimizer.fit() has no gtol/ftol/xtol
+        # parameters -- its single convergence knob is
+        # config.gauss_newton_tol, set at construction time. Without this,
+        # the goal-derived (or user-supplied) gtol computed into kwargs
+        # above is silently dropped for this route -- matching the
+        # gauss_newton_tol=kwargs.get("gtol", ...) treatment
+        # _fit_global_multistart's streaming branch already applies.
+        # ftol/xtol have no streaming equivalent to map to.
+        if "gtol" in kwargs:
+            config = dataclasses.replace(config, gauss_newton_tol=kwargs["gtol"])
 
         optimizer = AdaptiveHybridStreamingOptimizer(config=config)
         result_dict = optimizer.fit(
@@ -1234,10 +1288,13 @@ def _fit_with_auto_global(
     # FR-000: Select memory strategy with detailed logging
     selector = MemoryBudgetSelector(safety_factor=0.75)
 
+    n_features = _infer_n_features(xdata)
+
     # Compute memory budget for logging
     budget = MemoryBudget.compute(
         n_points=n_points,
         n_params=n_params,
+        n_features=n_features,
         memory_limit_gb=memory_limit_gb,
     )
     _logger.info(
@@ -1250,6 +1307,7 @@ def _fit_with_auto_global(
     strategy, memory_config = selector.select(
         n_points=n_points,
         n_params=n_params,
+        n_features=n_features,
         memory_limit_gb=memory_limit_gb,
         goal=goal,
         budget=budget,
@@ -1342,6 +1400,7 @@ def _fit_with_auto_global(
         strategy=strategy,
         memory_config=memory_config,
         n_starts=n_starts,
+        workflow_name=_workflow_name,
         **kwargs,
     )
 
@@ -1517,8 +1576,12 @@ def _fit_global_cmaes(
                 if checkpoint_interval is not None
                 else cmaes_config.checkpoint_interval
             ),
-            run_id=run_id,
-            model_id=model_id,
+            # Same None-preserves-existing-value treatment as
+            # checkpoint_interval above -- don't wipe a pre-built config's
+            # own run_id/model_id when the caller overrides checkpoint_dir
+            # alone.
+            run_id=run_id if run_id is not None else cmaes_config.run_id,
+            model_id=(model_id if model_id is not None else cmaes_config.model_id),
         )
 
     # Budget-derived chunk size (HybridStreamingConfig.chunk_size for
@@ -1600,6 +1663,7 @@ def _fit_global_multistart(
     strategy: str,
     n_starts: int,
     memory_config: LDMemoryConfig | HybridStreamingConfig | None = None,
+    workflow_name: str = "auto_global",
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run multi-start optimization with memory-aware strategy.
@@ -1615,13 +1679,18 @@ def _fit_global_multistart(
         a hardcoded default.
     n_starts : int
         Number of multi-start runs.
+    workflow_name : str
+        The caller's actual `workflow=` value ('hpc' or 'auto_global') --
+        used only for accurate warning/error text below, since this
+        function is reached from both entry points.
     """
     if kwargs.pop("_hpc_checkpoint_dir", None) is not None:
         warnings.warn(
-            "workflow='hpc': checkpoint_dir was provided, but this route "
-            "(non-CMA-ES) does not support checkpoint/crash-recovery yet "
-            "-- no checkpoint file will be written. Only the CMA-ES route "
-            "(restart_strategy='none') supports checkpointing currently.",
+            f"workflow='{workflow_name}': checkpoint_dir was provided, but "
+            "this route (non-CMA-ES) does not support checkpoint/crash-"
+            "recovery yet -- no checkpoint file will be written. Only the "
+            "CMA-ES route (restart_strategy='none') supports checkpointing "
+            "currently.",
             UserWarning,
             stacklevel=2,
         )
@@ -1652,11 +1721,11 @@ def _fit_global_multistart(
         # already applied to _curve_fit_auto_memory's chunked strategy.
         if sigma is not None:
             raise NotImplementedError(
-                "workflow='auto_global' chunked multi-start strategy does "
-                "not support the 'sigma' parameter yet (chunking splits the "
-                "data and sigma is not sliced consistently across chunks). "
-                "Use a memory_limit_gb override that avoids the chunked "
-                "strategy, or omit sigma.",
+                f"workflow='{workflow_name}' chunked multi-start strategy "
+                "does not support the 'sigma' parameter yet (chunking "
+                "splits the data and sigma is not sliced consistently "
+                "across chunks). Use a memory_limit_gb override that "
+                "avoids the chunked strategy, or omit sigma.",
             )
 
         # Chunked processing with multi-start
@@ -1697,8 +1766,8 @@ def _fit_global_multistart(
         # treating a failed chunked fit as a normal result.
         if not result.get("success", True):
             raise RuntimeError(
-                "workflow='auto_global' chunked multi-start fit failed: "
-                f"{result.get('message', 'unknown error')}",
+                f"workflow='{workflow_name}' chunked multi-start fit "
+                f"failed: {result.get('message', 'unknown error')}",
             )
         if not isinstance(result, CurveFitResult):
             result = CurveFitResult(result)
@@ -1709,6 +1778,8 @@ def _fit_global_multistart(
     # Streaming with multi-start (FR-004)
     from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+    _check_finite_for_streaming(xdata, ydata, check_finite)
 
     # Prepare p0
     if p0 is None or _is_auto_p0(p0):
