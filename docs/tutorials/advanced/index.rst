@@ -23,8 +23,6 @@ What You'll Learn
 
 - NLSQ's internal architecture and design patterns
 - How to use core API classes directly
-- Factory functions and dependency injection
-- The v0.6.4 orchestration component system
 - Performance tuning and profiling
 - Creating custom optimizers and extensions
 
@@ -34,8 +32,6 @@ What You'll Learn
 
    architecture/index
    core_apis/index
-   factories_di/index
-   orchestration/index
    custom_workflows/index
    performance/index
    stability/index
@@ -61,26 +57,18 @@ Learning Path
      - CurveFit, LeastSquares, TRF classes
      - 45 min
    * - 3
-     - :doc:`factories_di/index`
-     - Factory functions, protocols, dependency injection
-     - 30 min
-   * - 4
-     - :doc:`orchestration/index`
-     - v0.6.4 decomposed components
-     - 45 min
-   * - 5
      - :doc:`custom_workflows/index`
      - Build your own optimization pipelines
      - 45 min
-   * - 6
+   * - 4
      - :doc:`performance/index`
      - JIT caching, memory management, profiling
      - 30 min
-   * - 7
+   * - 5
      - :doc:`stability/index`
      - Numerical guards, SVD fallback, recovery
      - 30 min
-   * - 8
+   * - 6
      - :doc:`extension/index`
      - Custom protocols, plugins, testing
      - 30 min
@@ -129,24 +117,6 @@ Import Patterns
    # Core classes
    from nlsq.core.least_squares import LeastSquares
    from nlsq.core.trf import TrustRegionReflective
-
-   # Factories
-   from nlsq.core.factories import create_optimizer, configure_curve_fit
-
-   # Orchestration (v0.6.4+)
-   from nlsq.core.orchestration import (
-       DataPreprocessor,
-       OptimizationSelector,
-       CovarianceComputer,
-       StreamingCoordinator,
-   )
-
-   # Protocols
-   from nlsq.interfaces import (
-       OptimizerProtocol,
-       CurveFitProtocol,
-       CacheProtocol,
-   )
 
    # Facades
    from nlsq.facades import (

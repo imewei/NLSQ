@@ -1,10 +1,9 @@
 """Shared per-object identity helper for closure-aware cache-key hashing.
 
-Used by compilation_cache.py, smart_cache.py, core.py, and unified_cache.py
-to distinguish two closures that share source text but capture different
-values (e.g. two closures built by the same factory) - without this, a
-source-text-only hash lets the second closure silently reuse the first's
-cached compiled function / result.
+Used by unified_cache.py to distinguish two closures that share source text
+but capture different values (e.g. two closures built by the same factory) -
+without this, a source-text-only hash lets the second closure silently reuse
+the first's cached compiled function / result.
 """
 
 import itertools

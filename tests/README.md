@@ -119,7 +119,6 @@ test_validators.py          - Input validation (46 tests, 77% coverage)
 test_init.py                - Main API (29 tests, 86% coverage)
 test_logging.py             - Logging system
 test_caching.py             - Caching infrastructure
-test_smart_cache.py         - Smart cache optimization
 test_common_jax.py          - JAX utilities
 test_common_scipy.py        - SciPy compatibility
 ```

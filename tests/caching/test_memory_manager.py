@@ -12,6 +12,7 @@ Tests intelligent memory management including:
 import unittest
 from unittest.mock import patch
 
+import jax.numpy as jnp
 import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -665,6 +666,93 @@ class TestPropertyBasedMemoryManager(unittest.TestCase):
         chunk_size = strategy["chunk_size"]
         n_chunks = strategy["n_chunks"]
         self.assertGreaterEqual(chunk_size * n_chunks, n_points)
+
+
+class TestAdaptiveSafetyFactor(unittest.TestCase):
+    """Test adaptive safety factor reduction from 1.2 -> 1.05."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.manager = MemoryManager(safety_factor=1.2)
+
+    def test_initial_safety_factor(self):
+        """Test initial safety factor is 1.2."""
+        self.assertEqual(self.manager.safety_factor, 1.2)
+
+    def test_adaptive_reduction_after_warmup(self):
+        """Test safety factor reduces to ~1.05 after successful runs."""
+        manager = MemoryManager(safety_factor=1.2, enable_adaptive_safety=True)
+
+        # Simulate successful memory allocations
+        for _ in range(15):
+            with manager.memory_guard(bytes_needed=1000000):
+                # Simulate using less memory than predicted (typical case)
+                pass
+
+        # After warmup (10 runs), safety factor should start reducing
+        telemetry = manager.get_safety_telemetry()
+        self.assertGreater(telemetry["telemetry_entries"], 10)
+
+        # Safety factor should have reduced from initial 1.2
+        self.assertLess(manager.safety_factor, 1.2)
+        # But not below minimum of 1.05
+        self.assertGreaterEqual(manager.safety_factor, 1.05)
+
+    def test_safety_factor_in_memory_prediction(self):
+        """Test safety factor is applied in memory predictions."""
+        memory_with_safety = self.manager.predict_memory_requirement(
+            n_points=1000, n_params=5, algorithm="trf", dtype=jnp.float64
+        )
+
+        manager_no_safety = MemoryManager(safety_factor=1.0)
+        memory_no_safety = manager_no_safety.predict_memory_requirement(
+            n_points=1000, n_params=5, algorithm="trf", dtype=jnp.float64
+        )
+
+        # With safety factor should be larger
+        self.assertGreater(memory_with_safety, memory_no_safety)
+        # Should be approximately 1.2x larger
+        ratio = memory_with_safety / memory_no_safety
+        self.assertAlmostEqual(ratio, 1.2, delta=0.01)
+
+
+class TestMemoryUsageReduction(unittest.TestCase):
+    """Test 10-20% peak memory reduction on standard fits."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.manager_original = MemoryManager(safety_factor=1.2)
+        self.manager_optimized = MemoryManager(safety_factor=1.05)
+
+    def test_memory_reduction_with_adaptive_safety(self):
+        """Test memory usage reduces by 10-20% with adaptive safety factor."""
+        n_points = 10000
+        n_params = 10
+
+        memory_original = self.manager_original.predict_memory_requirement(
+            n_points=n_points, n_params=n_params, algorithm="trf"
+        )
+        memory_optimized = self.manager_optimized.predict_memory_requirement(
+            n_points=n_points, n_params=n_params, algorithm="trf"
+        )
+
+        reduction = (memory_original - memory_optimized) / memory_original
+        # With safety factor 1.2 -> 1.05, expect ~12.5% reduction
+        self.assertGreater(reduction, 0.10)  # At least 10%
+        self.assertLess(reduction, 0.20)  # No more than 20%
+
+
+class TestGlobalMemoryManagerIntegration(unittest.TestCase):
+    """Integration test for the global MemoryManager singleton."""
+
+    def test_global_memory_manager_integration(self):
+        """Test global memory manager can be used across optimization runs."""
+        manager = get_memory_manager()
+        self.assertIsInstance(manager, MemoryManager)
+
+        # Should return same instance
+        manager2 = get_memory_manager()
+        self.assertIs(manager, manager2)
 
 
 if __name__ == "__main__":

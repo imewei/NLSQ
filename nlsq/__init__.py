@@ -169,10 +169,6 @@ _LAZY_MODULES: dict[str, str] = {
     "clear_memory_pool": "nlsq.caching.memory_manager",
     "get_memory_manager": "nlsq.caching.memory_manager",
     "get_memory_stats": "nlsq.caching.memory_manager",
-    "MemoryPool": "nlsq.caching.memory_pool",
-    "TRFMemoryPool": "nlsq.caching.memory_pool",
-    "clear_global_pool": "nlsq.caching.memory_pool",
-    "get_global_pool": "nlsq.caching.memory_pool",
     # Fallback & Recovery
     "FallbackOrchestrator": "nlsq.stability.fallback",
     "FallbackResult": "nlsq.stability.fallback",
@@ -193,9 +189,6 @@ _LAZY_MODULES: dict[str, str] = {
     "BoundsInference": "nlsq.precision.bound_inference",
     "infer_bounds": "nlsq.precision.bound_inference",
     "merge_bounds": "nlsq.precision.bound_inference",
-    # Robust Decomposition
-    "RobustDecomposition": "nlsq.stability.robust_decomposition",
-    "robust_decomp": "nlsq.stability.robust_decomposition",
     # Parameter Normalizer
     "ParameterNormalizer": "nlsq.precision.parameter_normalizer",
     # Stability
@@ -215,17 +208,11 @@ _LAZY_MODULES: dict[str, str] = {
     "memory_context": "nlsq.config",
     "set_memory_limits": "nlsq.config",
     # Caching
-    "SmartCache": "nlsq.caching.smart_cache",
-    "cached_function": "nlsq.caching.smart_cache",
-    "cached_jacobian": "nlsq.caching.smart_cache",
-    "clear_all_caches": "nlsq.caching.smart_cache",
-    "get_global_cache": "nlsq.caching.smart_cache",
-    "get_jit_cache": "nlsq.caching.smart_cache",
-    # Compilation Cache
-    "CompilationCache": "nlsq.caching.compilation_cache",
-    "cached_jit": "nlsq.caching.compilation_cache",
-    "clear_compilation_cache": "nlsq.caching.compilation_cache",
-    "get_global_compilation_cache": "nlsq.caching.compilation_cache",
+    "cached_jit": "nlsq.caching.unified_cache",
+    "clear_cache": "nlsq.caching.unified_cache",
+    "get_cache_stats": "nlsq.caching.unified_cache",
+    "get_global_cache": "nlsq.caching.unified_cache",
+    "UnifiedCache": "nlsq.caching.unified_cache",
     # Validators
     "InputValidator": "nlsq.utils.validators",
     # Model Health Diagnostics
@@ -309,7 +296,6 @@ __all__ = [
     "BoundsInference",
     "CallbackBase",
     "CallbackChain",
-    "CompilationCache",
     "ConvergenceMonitor",
     "CurveFit",
     "DefenseLayerTelemetry",
@@ -329,7 +315,6 @@ __all__ = [
     "MemoryBudgetSelector",
     "MemoryConfig",
     "MemoryManager",
-    "MemoryPool",
     "MultiStartOrchestrator",
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
@@ -343,23 +328,17 @@ __all__ = [
     "ProfilerVisualization",
     "ProfilingDashboard",
     "ProgressBar",
-    "RobustDecomposition",
-    "SmartCache",
     "SparseJacobianComputer",
     "SparseOptimizer",
     "StopOptimization",
-    "TRFMemoryPool",
     "TournamentSelector",
+    "UnifiedCache",
     "__version__",
     "apply_automatic_fixes",
     "auto_select_algorithm",
-    "cached_function",
-    "cached_jacobian",
     "cached_jit",
     "check_problem_stability",
-    "clear_all_caches",
-    "clear_compilation_cache",
-    "clear_global_pool",
+    "clear_cache",
     "clear_memory_pool",
     "clear_profiling_data",
     "configure_for_large_datasets",
@@ -373,12 +352,10 @@ __all__ = [
     "fit",
     "fit_large_dataset",
     "functions",
+    "get_cache_stats",
     "get_defense_telemetry",
     "get_global_cache",
-    "get_global_compilation_cache",
-    "get_global_pool",
     "get_global_profiler",
-    "get_jit_cache",
     "get_large_dataset_config",
     "get_memory_config",
     "get_memory_manager",
@@ -388,7 +365,6 @@ __all__ = [
     "memory_context",
     "merge_bounds",
     "reset_defense_telemetry",
-    "robust_decomp",
     "set_memory_limits",
 ]
 
@@ -905,6 +881,13 @@ def curve_fit_large(
         for key in list(kwargs.keys()):
             if hasattr(HybridStreamingConfig, key):
                 config_overrides[key] = kwargs.pop(key)
+
+        if kwargs:
+            raise TypeError(
+                "Unrecognized keyword argument(s) for method="
+                f"'hybrid_streaming': {sorted(kwargs)}. These are not "
+                "HybridStreamingConfig fields.",
+            )
 
         config = (
             HybridStreamingConfig(**config_overrides)

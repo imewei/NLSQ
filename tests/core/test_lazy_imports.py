@@ -117,7 +117,6 @@ class TestLazyImportCategories:
         import nlsq
 
         assert hasattr(nlsq, "MemoryManager")
-        assert hasattr(nlsq, "MemoryPool")
         assert hasattr(nlsq, "get_memory_manager")
 
     def test_workflow_imports(self) -> None:

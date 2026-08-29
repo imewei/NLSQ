@@ -108,8 +108,8 @@ def load_latest_checkpoint(checkpoint_dir: str) -> dict | None:
     if not checkpoints:
         return None
 
-    # Sort by name (which includes iteration number)
-    latest = sorted(checkpoints)[-1]
+    # Latest by name (which includes iteration number)
+    latest = max(checkpoints)
 
     with open(latest) as f:
         checkpoint_data = json.load(f)

@@ -96,6 +96,5 @@ Benefits
 See Also
 --------
 
-- :doc:`orchestration` - Orchestration components
 - :doc:`global_optimization` - Global optimization methods
 - :doc:`/tutorials/advanced/architecture/index` - Architecture overview

@@ -14,7 +14,6 @@ Plots are saved to the figures/ directory instead of displayed inline.
 #
 # This notebook demonstrates NLSQ's advanced performance optimization features:
 #
-# - **MemoryPool**: Pre-allocated memory buffers for zero-allocation optimization iterations
 # - **SparseJacobian**: Exploit sparsity patterns for 10-100x memory reduction
 # - **AdaptiveHybridStreamingOptimizer**: Process huge datasets with streaming
 #
@@ -62,194 +61,17 @@ print(f"JAX devices: {jax.devices()}")
 from nlsq import (
     AdaptiveHybridStreamingOptimizer,
     HybridStreamingConfig,
-    # Memory Pool
-    MemoryPool,
     # Sparse Jacobian
     SparseJacobianComputer,
     SparseOptimizer,
-    TRFMemoryPool,
-    clear_global_pool,
     detect_jacobian_sparsity,
-    get_global_pool,
 )
 
 print("✅ Advanced features imported successfully")
 
 
 # ======================================================================
-# ## 1. MemoryPool - Zero-Allocation Optimization
-#
-# The MemoryPool pre-allocates and reuses array buffers to eliminate allocation overhead during optimization iterations. This is critical for:
-#
-# - **Low-latency applications**: Minimize GC pauses
-# - **Repeated fits**: Amortize allocation costs
-# - **Memory-constrained systems**: Predictable memory usage
-#
-# ### How It Works
-#
-# 1. Pre-allocate buffers for common shapes
-# 2. Reuse buffers instead of creating new arrays
-# 3. Track allocation statistics
-# 4. Automatic cleanup with context managers
-# ======================================================================
-
-
-def demo_memory_pool_basics():
-    """Demonstrate basic MemoryPool usage."""
-    print("=" * 70)
-    print("MEMORY POOL BASICS")
-    print("=" * 70)
-
-    # Create memory pool with statistics tracking
-    pool = MemoryPool(max_pool_size=10, enable_stats=True)
-
-    print("\n--- Allocating arrays from pool ---")
-
-    # First allocation - creates new array
-    arr1 = pool.allocate((1000, 10), dtype=jnp.float64)
-    print(f"First allocation: shape={arr1.shape}, dtype={arr1.dtype}")
-    stats1 = pool.get_stats()
-    print(f"  Stats: allocations={stats1['allocations']}, reuses={stats1['reuses']}")
-
-    # Release back to pool
-    pool.release(arr1)
-    print("\nReleased array back to pool")
-
-    # Second allocation - reuses from pool!
-    arr2 = pool.allocate((1000, 10), dtype=jnp.float64)
-    print(f"\nSecond allocation: shape={arr2.shape}")
-    stats2 = pool.get_stats()
-    print(f"  Stats: allocations={stats2['allocations']}, reuses={stats2['reuses']}")
-    print(f"  ✅ Reuse rate: {stats2['reuse_rate']:.1%}")
-
-    # Allocate different shape - new allocation
-    arr3 = pool.allocate((500, 5), dtype=jnp.float64)
-    print(f"\nDifferent shape: shape={arr3.shape}")
-    stats3 = pool.get_stats()
-    print(f"  Stats: allocations={stats3['allocations']}, reuses={stats3['reuses']}")
-
-    # Show pool contents
-    print(f"\nPool sizes: {stats3['pool_sizes']}")
-    print(f"Currently allocated: {stats3['currently_allocated']}")
-    print(f"Peak memory: {stats3['peak_memory'] / 1024**2:.2f} MB")
-
-    # Clean up
-    pool.clear()
-    print("\n✅ Memory pool demo complete")
-
-
-# Run demo
-demo_memory_pool_basics()
-
-
-# ======================================================================
-# ### Performance Comparison: With vs Without Memory Pool
-# ======================================================================
-
-
-def benchmark_memory_pool_performance():
-    """Compare performance with and without memory pool."""
-    print("=" * 70)
-    print("MEMORY POOL PERFORMANCE COMPARISON")
-    print("=" * 70)
-
-    shape = (1000, 10) if QUICK else (10000, 50)
-    n_iterations = 10 if QUICK else 100
-
-    # Without pool - create new arrays each time
-    print(f"\nWithout MemoryPool ({n_iterations} iterations)...")
-    start = time.time()
-
-    for i in range(n_iterations):
-        arr = jnp.zeros(shape, dtype=jnp.float64)
-        # Simulate some work
-        _ = arr + 1.0
-
-    time_without = time.time() - start
-    print(f"  Time: {time_without:.3f}s")
-
-    # With pool - reuse arrays
-    print(f"\nWith MemoryPool ({n_iterations} iterations)...")
-    pool = MemoryPool(max_pool_size=5, enable_stats=True)
-    start = time.time()
-
-    for i in range(n_iterations):
-        arr = pool.allocate(shape, dtype=jnp.float64)
-        # Simulate some work
-        _ = arr + 1.0
-        pool.release(arr)
-
-    time_with = time.time() - start
-    stats = pool.get_stats()
-
-    print(f"  Time: {time_with:.3f}s")
-    print(f"  Reuse rate: {stats['reuse_rate']:.1%}")
-    print(f"  Allocations: {stats['allocations']}, Reuses: {stats['reuses']}")
-
-    # Calculate speedup
-    speedup = time_without / time_with
-    print(f"\n✅ Speedup: {speedup:.2f}x faster with MemoryPool!")
-
-    # Memory savings
-    memory_per_array = np.prod(shape) * 8 / 1024**2  # MB
-    memory_without = memory_per_array * n_iterations
-    memory_with = memory_per_array * stats["allocations"]
-
-    print("\nMemory allocation overhead:")
-    print(f"  Without pool: {memory_without:.1f} MB allocated")
-    print(f"  With pool: {memory_with:.1f} MB allocated")
-    print(f"  Reduction: {(1 - memory_with / memory_without) * 100:.1f}%")
-
-    pool.clear()
-
-
-# Run benchmark
-benchmark_memory_pool_performance()
-
-
-# ======================================================================
-# ### Using MemoryPool as Context Manager
-# ======================================================================
-
-
-def demo_memory_pool_context_manager():
-    """Demonstrate context manager usage for automatic cleanup."""
-    print("=" * 70)
-    print("MEMORY POOL CONTEXT MANAGER")
-    print("=" * 70)
-
-    print("\nUsing MemoryPool with context manager...")
-
-    with MemoryPool(max_pool_size=10, enable_stats=True) as pool:
-        # Allocate some arrays
-        arrays = []
-        for i in range(3 if QUICK else 5):
-            arr = pool.allocate((100, 10))
-            arrays.append(arr)
-
-        print(f"Allocated {len(arrays)} arrays")
-        stats = pool.get_stats()
-        print(
-            f"Pool stats: allocations={stats['allocations']}, currently_allocated={stats['currently_allocated']}"
-        )
-
-        # Release some back
-        for arr in arrays[:3]:
-            pool.release(arr)
-
-        stats = pool.get_stats()
-        print(f"After releasing 3: currently_allocated={stats['currently_allocated']}")
-
-    # Pool is automatically cleared on exit
-    print("\n✅ Pool automatically cleaned up on context exit")
-
-
-# Run demo
-demo_memory_pool_context_manager()
-
-
-# ======================================================================
-# ## 2. SparseJacobian - Exploiting Sparsity for Memory Efficiency
+# ## 1. SparseJacobian - Exploiting Sparsity for Memory Efficiency
 #
 # Many curve fitting problems have **sparse Jacobians** where each data point only depends on a subset of parameters. The `SparseJacobianComputer` exploits this structure for:
 #
@@ -528,7 +350,7 @@ demo_sparse_jacobian_fitting()
 
 
 # ======================================================================
-# ## 3. Adaptive Hybrid Streaming - Huge Dataset Size
+# ## 2. Adaptive Hybrid Streaming - Huge Dataset Size
 #
 # The adaptive hybrid streaming optimizer processes data in chunks while
 # providing L-BFGS warmup and Gauss-Newton refinement.
@@ -582,14 +404,14 @@ else:
 
 
 # ======================================================================
-# ## 4. Combined Example: All Features Together
+# ## 3. Combined Example: All Features Together
 #
-# Let's demonstrate how to combine all three advanced features for maximum performance on a large, sparse problem.
+# Let's demonstrate how to combine sparse Jacobians with streaming for maximum performance on a large, sparse problem.
 # ======================================================================
 
 
 def demo_combined_optimization():
-    """Combine MemoryPool, SparseJacobian, and smart chunking."""
+    """Combine SparseJacobian and smart chunking."""
     print("=" * 70)
     print("COMBINED OPTIMIZATION DEMO")
     print("=" * 70)
@@ -652,37 +474,8 @@ def demo_combined_optimization():
     print(f"  Sparse: {memory_info['sparse_gb'] * 1024:.1f} MB")
     print(f"  Reduction: {memory_info['reduction_factor']:.1f}x")
 
-    # Step 2: Use memory pool for allocations
-    print("\n--- Step 2: Memory Pool Setup ---")
-    pool = MemoryPool(max_pool_size=20, enable_stats=True)
-
-    # Simulate multiple optimization iterations with pooled memory
-    n_iters = 3 if QUICK else 10
-    print(f"Running {n_iters} simulated iterations with memory pool...")
-
-    for i in range(n_iters):
-        # Allocate temporary arrays from pool
-        chunk_size = min(1000 if QUICK else 5000, n_points)
-        jacobian_chunk = pool.allocate((chunk_size, n_params))
-        residuals = pool.allocate((chunk_size,))
-
-        # Simulate computation
-        _ = jacobian_chunk * 2.0
-        _ = residuals + 1.0
-
-        # Return to pool
-        pool.release(jacobian_chunk)
-        pool.release(residuals)
-
-    pool_stats = pool.get_stats()
-    print("Memory pool stats:")
-    print(f"  Allocations: {pool_stats['allocations']}")
-    print(f"  Reuses: {pool_stats['reuses']}")
-    print(f"  Reuse rate: {pool_stats['reuse_rate']:.1%}")
-    print(f"  Peak memory: {pool_stats['peak_memory'] / 1024**2:.1f} MB")
-
-    # Step 3: Fit with standard NLSQ (for comparison)
-    print("\n--- Step 3: Fitting ---")
+    # Step 2: Fit with standard NLSQ (for comparison)
+    print("\n--- Step 2: Fitting ---")
     print("Using standard NLSQ curve fitting...")
 
     # Initial guess (slightly off)
@@ -768,14 +561,9 @@ def demo_combined_optimization():
     print(
         f"\n✓ Sparse Jacobian: {sparsity:.1%} sparsity, {memory_info['reduction_factor']:.1f}x memory reduction"
     )
-    print(
-        f"✓ Memory Pool: {pool_stats['reuse_rate']:.1%} reuse rate, minimized allocations"
-    )
     print(f"✓ Fit Quality: {np.max(rel_errors):.2%} max error on {n_params} parameters")
     print(f"✓ Performance: {fit_time:.2f}s for {n_points:,} points")
     print("\n🎯 All optimizations working together for maximum performance!")
-
-    pool.clear()
 
 
 if not QUICK:
@@ -783,21 +571,9 @@ if not QUICK:
 
 
 # ======================================================================
-# ## 5. Best Practices and Recommendations
+# ## 4. Best Practices and Recommendations
 #
 # ### When to Use Each Feature
-#
-# #### MemoryPool
-# ✅ **Use when:**
-# - Fitting the same model many times
-# - Optimization has many iterations
-# - Low-latency requirements
-# - Memory allocation is a bottleneck
-#
-# ❌ **Don't use when:**
-# - Single fit operations
-# - Variable array sizes
-# - Memory is abundant
 #
 # #### SparseJacobian
 # ✅ **Use when:**
@@ -840,14 +616,6 @@ if not QUICK:
 # popt, pcov = cf.curve_fit(func, x, y, p0)
 # ```
 #
-# **Large problems (10K-1M points):**
-# ```python
-# from nlsq import CurveFit, MemoryPool
-# with MemoryPool(enable_stats=True) as pool:
-#     cf = CurveFit()
-#     popt, pcov = cf.curve_fit(func, x, y, p0)
-# ```
-#
 # **Very large sparse problems:**
 # ```python
 # from nlsq import SparseJacobianComputer, SparseOptimizer
@@ -870,11 +638,6 @@ if not QUICK:
 # ## Summary
 #
 # This notebook demonstrated NLSQ's advanced performance optimization features:
-#
-# ✅ **MemoryPool**
-# - Pre-allocated buffers for zero-allocation iterations
-# - Typical speedup: 2-5x for repeated operations
-# - Memory allocation reduction: 90-99%
 #
 # ✅ **SparseJacobian**
 # - Exploit sparsity patterns in Jacobian matrices

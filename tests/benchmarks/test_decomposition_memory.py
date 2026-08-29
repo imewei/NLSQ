@@ -145,33 +145,6 @@ class TestDecompositionMemory:
             size_ratio = sizes[-1] / sizes[0]
             print(f"  Memory ratio: {ratio:.1f}x for {size_ratio:.0f}x data")
 
-    def test_component_memory_isolation(self) -> None:
-        """Verify extracted components don't share unexpected state."""
-        from nlsq.core.orchestration import CovarianceComputer, DataPreprocessor
-
-        rng = np.random.default_rng(42)
-        x = np.linspace(0, 4, 10000)
-        y = 2.5 * np.exp(-1.3 * x) + rng.normal(0, 0.1, 10000)
-
-        # Create multiple instances
-        preprocessors = [DataPreprocessor() for _ in range(5)]
-        covariance_computers = [CovarianceComputer() for _ in range(5)]
-
-        # Use each instance - DataPreprocessor.preprocess requires (f, xdata, ydata)
-        for prep in preprocessors:
-            prep.preprocess(exponential_model, x, y)
-
-        # Verify no shared mutable state
-        # Each instance should work independently
-        for i, prep in enumerate(preprocessors):
-            result = prep.preprocess(exponential_model, x, y)
-            assert result is not None, f"Preprocessor {i} failed"
-
-        # Clean up
-        del preprocessors
-        del covariance_computers
-        gc.collect()
-
 
 # =============================================================================
 # Import Memory Tests

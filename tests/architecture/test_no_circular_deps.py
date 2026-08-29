@@ -15,7 +15,6 @@ from tests.architecture.utils import detect_circular_deps
 PACKAGES = [
     "nlsq",
     "nlsq.result",
-    "nlsq.interfaces",
     "nlsq.core",
     "nlsq.streaming",
     "nlsq.global_optimization",

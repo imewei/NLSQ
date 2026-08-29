@@ -204,10 +204,6 @@ class HybridStreamingConfig:
     validate_numerics : bool, default=True
         Enable NaN/Inf validation at gradient, parameter, and loss computation points.
 
-    enable_multi_device : bool, default=False
-        Enable multi-GPU/TPU parallelism for Jacobian computation.
-        Uses JAX pmap for data-parallel computation across devices.
-
     callback_frequency : int, default=10
         Call progress callback every N iterations (if callback provided).
 
@@ -389,14 +385,10 @@ class HybridStreamingConfig:
     enable_checkpoints: bool = True
     checkpoint_frequency: int = 100
     checkpoint_dir: str | None = None
-    resume_from_checkpoint: str | None = None
     validate_numerics: bool = True
     enable_fault_tolerance: bool = True
     max_retries_per_batch: int = 2
     min_success_rate: float = 0.5
-
-    # Multi-device support
-    enable_multi_device: bool = False
 
     # Progress monitoring
     callback_frequency: int = 10

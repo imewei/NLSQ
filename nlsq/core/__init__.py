@@ -6,7 +6,6 @@ This subpackage contains the core optimization algorithms:
 - least_squares: LeastSquares class for optimization orchestration
 - trf: Trust Region Reflective algorithm
 - _optimize: OptimizeResult and OptimizeWarning
-- optimizer_base: Base classes for optimizers
 - sparse_jacobian: Sparse Jacobian computation
 - functions: Model function utilities
 - loss_functions: Loss function implementations

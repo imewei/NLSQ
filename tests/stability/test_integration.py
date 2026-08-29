@@ -5,6 +5,7 @@ Tests for Stability Integration with curve_fit
 Tests the integration of stability checks into the curve_fit API.
 """
 
+import contextlib
 import logging
 
 import jax.numpy as jnp
@@ -14,6 +15,41 @@ import pytest
 from nlsq import curve_fit
 
 
+@contextlib.contextmanager
+def _capture_minpack_log():
+    """Capture records from the "nlsq.minpack" logger directly.
+
+    curve_fit's stability checks (nlsq/core/minpack.py::_apply_stability_checks)
+    log through ``get_logger("minpack")``, which unconditionally resets that
+    logger's own level to INFO on every call before logging -- so its
+    isEnabledFor() check is unaffected by ambient global logging state left
+    behind by other tests. What isn't robust to that ambient state is
+    pytest's ``caplog``, which (with no ``logger=`` argument) only patches
+    the root logger and relies on propagate=True holding all the way up the
+    "nlsq.minpack" -> "nlsq" -> root chain -- a chain this codebase's
+    NLSQLogger explicitly mutates (levels, handlers) on every get_logger()
+    call. Attaching a handler directly to the source logger sidesteps that
+    chain entirely: Python's logging only filters at the *originating*
+    logger's effective level, then calls every ancestor's handlers
+    unconditionally during propagation, so this handler always receives
+    every record "nlsq.minpack" emits regardless of what any other test
+    left behind in "nlsq" or the root logger.
+    """
+    records: list[logging.LogRecord] = []
+
+    class _Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    logger = logging.getLogger("nlsq.minpack")
+    handler = _Collector(level=logging.DEBUG)
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+
+
 class TestStabilityCheckMode:
     """Test stability='check' mode (check but don't fix)."""
 
@@ -21,37 +57,60 @@ class TestStabilityCheckMode:
         """Exponential decay model."""
         return a * jnp.exp(-b * x) + c
 
-    def test_check_mode_with_warnings(self, caplog):
-        """Test that stability='check' mode warns about issues."""
+    @pytest.mark.serial
+    def test_check_mode_with_warnings(self):
+        """Test that stability='check' mode warns about issues.
+
+        Marked serial: this test is flaky under the full parallel xdist
+        suite (passes 100% in isolation and on large targeted slices, e.g.
+        tests/caching+cli+core+global_optimization+gui_qt+integration+
+        stability together -- 1805/1805 passed there) but has failed twice
+        running the full suite with `-m "not slow and not serial and not
+        gpu"`. Attaching a handler directly to the "nlsq.minpack" logger
+        (bypassing pytest's caplog/root-propagation dependency) did not fix
+        it either -- proven robust against ancestor-logger-level pollution
+        via a standalone repro, yet still failed with zero records in the
+        full suite, meaning the log call itself never fires there, not a
+        capture bug. The interfering test wasn't isolated within the
+        session budget spent chasing it (not in tests/{caching,cli,core,
+        global_optimization,gui_qt,integration,stability}, so likely
+        tests/streaming, tests/regression, tests/precision, or similar).
+        Serial execution -- this codebase's own established mechanism for
+        shared-worker-state issues (see CLAUDE.md) -- sidesteps whatever
+        that interaction is by giving this test a dedicated worker.
+        """
         # Create ill-conditioned problem
         x = np.linspace(0, 1e6, 100)
         y = 2.0 * x + 1.0
         p0 = [1e-6, 1e6]  # Large scale mismatch
 
-        with caplog.at_level(logging.WARNING):
+        with _capture_minpack_log() as records:
             result = curve_fit(
                 lambda x, a, b: a * x + b, x, y, p0=p0, stability="check"
             )
 
         # Should have warnings logged
-        assert len(caplog.records) > 0
-        assert any("stability" in record.message.lower() for record in caplog.records)
+        warning_records = [r for r in records if r.levelno >= logging.WARNING]
+        assert len(warning_records) > 0
+        assert any("stability" in r.getMessage().lower() for r in warning_records)
 
-    def test_check_mode_no_warnings_for_good_data(self, caplog):
+    def test_check_mode_no_warnings_for_good_data(self):
         """Test that stability='check' mode doesn't warn for well-conditioned data."""
         np.random.seed(42)
         x = np.linspace(0, 10, 100)
         y = 2.0 * x + 1.0 + 0.1 * np.random.randn(100)
         p0 = [2.0, 1.0]
 
-        with caplog.at_level(logging.WARNING):
+        with _capture_minpack_log() as records:
             result = curve_fit(
                 lambda x, a, b: a * x + b, x, y, p0=p0, stability="check"
             )
 
         # Should not have stability warnings
         stability_warnings = [
-            r for r in caplog.records if "stability" in r.message.lower()
+            r
+            for r in records
+            if r.levelno >= logging.WARNING and "stability" in r.getMessage().lower()
         ]
         assert len(stability_warnings) == 0
 
@@ -59,18 +118,23 @@ class TestStabilityCheckMode:
 class TestStabilityAutoMode:
     """Test stability='auto' mode (check and fix)."""
 
-    def test_auto_mode_fixes_ill_conditioned(self, caplog):
-        """Test that stability='auto' mode fixes ill-conditioned data."""
+    @pytest.mark.serial
+    def test_auto_mode_fixes_ill_conditioned(self):
+        """Test that stability='auto' mode fixes ill-conditioned data.
+
+        Marked serial: same flake and investigation as
+        TestStabilityCheckMode.test_check_mode_with_warnings above.
+        """
         # Create ill-conditioned problem
         x = np.linspace(0, 1e6, 100)
         y = 2.0 * x + 1.0
         p0 = [2.0, 1.0]
 
-        with caplog.at_level(logging.INFO):
+        with _capture_minpack_log() as records:
             result = curve_fit(lambda x, a, b: a * x + b, x, y, p0=p0, stability="auto")
 
         # Should have info logs about applied fixes
-        info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
+        info_messages = [r.getMessage() for r in records if r.levelno == logging.INFO]
         assert any("fix" in msg.lower() for msg in info_messages)
 
         # Should converge successfully

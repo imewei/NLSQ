@@ -38,7 +38,6 @@ Tools for fitting very large datasets (10M+ points):
 
    nlsq.large_dataset
    nlsq.memory_manager
-   nlsq.memory_pool
    large_datasets_api
 
 Adaptive Hybrid Streaming (v0.3.0+)
@@ -69,27 +68,6 @@ optima in problems with multiple local minima:
    nlsq.global_optimization
    nlsq.global_optimization.config
    nlsq.global_optimization.sampling
-
-Core Factories (v0.4.3+)
-------------------------
-
-Factory functions for creating optimizers and configurations:
-
-.. toctree::
-   :maxdepth: 2
-
-   nlsq.core.factories
-   nlsq.core.adapters
-
-Orchestration Components (v0.6.4+)
-----------------------------------
-
-Decomposed curve fitting components for modular testing and customization:
-
-.. toctree::
-   :maxdepth: 2
-
-   nlsq.core.orchestration
 
 Facades (v0.6.4+)
 -----------------
@@ -148,17 +126,6 @@ New features added in version 0.1.1:
    nlsq.bound_inference
    nlsq.parameter_estimation
 
-Interfaces & Protocols (v0.4.2+)
----------------------------------
-
-Protocol definitions for dependency injection:
-
-.. toctree::
-   :maxdepth: 2
-
-   nlsq.interfaces
-   nlsq.core.adapters
-
 Algorithms & Optimization
 --------------------------
 
@@ -170,11 +137,9 @@ Low-level optimization algorithms:
    nlsq.trf
    nlsq.core.trf_jit
    nlsq.core.profiler
-   nlsq.optimizer_base
    nlsq.algorithm_selector
    nlsq.loss_functions
    nlsq.sparse_jacobian
-   nlsq.robust_decomposition
    nlsq.svd_fallback
 
 Utilities & Infrastructure
@@ -192,8 +157,6 @@ Support modules for configuration, caching, and diagnostics:
    nlsq.utils.diagnostics
    nlsq.caching
    nlsq.unified_cache
-   nlsq.compilation_cache
-   nlsq.smart_cache
    nlsq.logging
    nlsq.error_messages
    nlsq.constants
@@ -248,7 +211,6 @@ Complete Module Listing
 **Large Dataset Modules**:
 - :doc:`nlsq.large_dataset` - Chunked fitting for large data
 - :doc:`nlsq.memory_manager` - Intelligent memory management (NEW in v0.1.1)
-- :doc:`nlsq.memory_pool` - Memory pool allocation (NEW in v0.3.0-beta.2)
 - :doc:`large_datasets_api` - Comprehensive large dataset guide
 
 **Adaptive Hybrid Streaming Modules** (NEW in v0.3.0+):
@@ -258,13 +220,6 @@ Complete Module Listing
 - :doc:`nlsq.streaming.telemetry` - Defense layer telemetry (NEW in v0.4.2)
 - :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v0.4.2)
 - :doc:`nlsq.streaming.phases` - Phase classes (WarmupPhase, GaussNewtonPhase, etc.) (NEW in v0.4.3)
-
-**Interfaces & Protocols** (NEW in v0.4.2):
-- :doc:`nlsq.interfaces` - Protocol definitions for dependency injection
-- :doc:`nlsq.core.adapters` - Protocol adapters (CurveFitAdapter) (NEW in v0.4.3)
-
-**Orchestration Components** (NEW in v0.6.4):
-- :doc:`nlsq.core.orchestration` - DataPreprocessor, OptimizationSelector, CovarianceComputer, StreamingCoordinator
 
 **Facades** (NEW in v0.6.4):
 - :doc:`nlsq.facades` - OptimizationFacade, StabilityFacade, DiagnosticsFacade
@@ -289,16 +244,12 @@ Complete Module Listing
 - :doc:`nlsq.utils.diagnostics` - Convergence monitoring (ConvergenceMonitor, OptimizationDiagnostics)
 - :doc:`nlsq.caching` - JIT and result caching
 - :doc:`nlsq.unified_cache` - Unified compilation cache (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.compilation_cache` - Legacy compilation cache
-- :doc:`nlsq.smart_cache` - Smart adaptive caching
 - :doc:`nlsq.logging` - Logging and debugging
 - :doc:`nlsq.error_messages` - Standardized error messages (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.constants` - Numerical constants (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.types` - Type definitions (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.result` - Result containers (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.loss_functions` - Robust loss functions
-- :doc:`nlsq.optimizer_base` - Base optimizer classes
-- :doc:`nlsq.robust_decomposition` - Robust matrix decomposition (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.svd_fallback` - SVD fallback strategies (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.sparse_jacobian` - Sparse Jacobian support (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.common_jax` - JAX utilities

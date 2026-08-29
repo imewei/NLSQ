@@ -373,6 +373,4 @@ class TestDefenseLayerTelemetryThreadSafety:
             t.join()
 
         assert telemetry.layer1_warm_start_triggers == n_threads * calls_per_thread
-        assert (
-            len(telemetry.get_recent_events(n=10_000)) == n_threads * calls_per_thread
-        )
+        assert len(telemetry._event_log) == n_threads * calls_per_thread

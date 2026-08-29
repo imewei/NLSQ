@@ -12,7 +12,6 @@ import os
 import sys
 
 __all__: list[str] = [
-    "BasePlot",
     "FitPlotWidget",
     "HistogramPlotWidget",
     "LiveCostPlot",
@@ -77,10 +76,6 @@ def __getattr__(name: str):
     """Lazy import plot widgets to avoid importing Qt dependencies at module load time."""
     _configure_pyqtgraph()
 
-    if name == "BasePlot":
-        from nlsq.gui_qt.plots.base_plot import BasePlotWidget
-
-        return BasePlotWidget
     if name in {"LiveCostPlot", "LiveCostPlotWidget"}:
         from nlsq.gui_qt.plots.live_cost_plot import LiveCostPlotWidget
 

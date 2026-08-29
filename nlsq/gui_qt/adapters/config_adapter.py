@@ -129,7 +129,6 @@ def _parse_hybrid_streaming_section(
     state.chunk_size = hs.get("chunk_size", state.chunk_size)
     state.enable_checkpoints = hs.get("enable_checkpoints", state.enable_checkpoints)
     state.checkpoint_dir = hs.get("checkpoint_dir", state.checkpoint_dir)
-    state.enable_multi_device = hs.get("enable_multi_device", state.enable_multi_device)
 
     if "defense_layers" in hs:
         _parse_defense_layers(hs["defense_layers"], state)

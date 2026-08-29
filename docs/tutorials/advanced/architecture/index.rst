@@ -8,7 +8,6 @@ and extend the library for custom needs.
    :maxdepth: 1
 
    overview
-   optimization_pipeline
    jax_patterns
 
 Chapter Overview
@@ -16,9 +15,6 @@ Chapter Overview
 
 **Overview** (10 min)
    Package structure and module organization.
-
-**Optimization Pipeline** (10 min)
-   How data flows through curve_fit → LeastSquares → TRF.
 
 **JAX Patterns** (10 min)
    JIT compilation, autodiff, and GPU acceleration patterns.
@@ -32,11 +28,7 @@ Package Structure
    ├── core/           # Core optimization algorithms
    │   ├── minpack.py         # fit(), curve_fit(), CurveFit
    │   ├── least_squares.py   # LeastSquares orchestrator
-   │   ├── trf.py             # Trust Region Reflective
-   │   ├── factories.py       # Factory functions
-   │   ├── orchestration/     # Decomposed components (v0.6.4)
-   │   └── adapters/          # Protocol adapters
-   ├── interfaces/     # Protocol definitions (DI)
+   │   └── trf.py             # Trust Region Reflective
    ├── streaming/      # Large dataset handling
    ├── caching/        # Performance optimization
    ├── stability/      # Numerical stability

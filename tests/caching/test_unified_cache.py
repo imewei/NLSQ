@@ -242,6 +242,40 @@ class TestUnifiedCacheBehavior:
         # Both should be in cache
         assert len(cache._cache) >= 2, "Both functions should be cached separately"
 
+    def test_factory_closures_do_not_collide(self):
+        """Two closures from the same factory share __module__/__name__/co_code
+        but capture different values -- the cache must compile each separately,
+        not silently serve the first closure's compiled function for the second."""
+        from nlsq.caching.unified_cache import UnifiedCache
+
+        def make_model(scale):
+            def model(x):
+                return scale * x
+
+            return model
+
+        m1 = make_model(1.0)
+        m2 = make_model(2.0)
+
+        # Sanity: they genuinely share the collision-prone attributes.
+        assert m1.__code__.co_code == m2.__code__.co_code
+        assert m1.__name__ == m2.__name__
+        assert m1.__module__ == m2.__module__
+
+        cache = UnifiedCache(enable_stats=True)
+        x = jnp.array([1.0, 2.0, 3.0])
+
+        key1 = cache._generate_cache_key(m1, (x,), {}, ())
+        key2 = cache._generate_cache_key(m2, (x,), {}, ())
+        assert key1 != key2, "Closures capturing different values must not collide"
+
+        c1 = cache.get_or_compile(m1, (x,), {}, ())
+        c2 = cache.get_or_compile(m2, (x,), {}, ())
+
+        assert jnp.allclose(c1(x), 1.0 * x)
+        assert jnp.allclose(c2(x), 2.0 * x)
+        assert len(cache._cache) >= 2
+
 
 class TestUnifiedCacheIntegration:
     """Integration tests for unified cache with actual curve fitting."""

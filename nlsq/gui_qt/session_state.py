@@ -87,8 +87,6 @@ class SessionState:
         Whether to enable checkpointing.
     checkpoint_dir : str or None
         Directory for checkpoint files.
-    enable_multi_device : bool
-        Whether to enable multi-device (multi-GPU) mode.
     defense_preset : str or None
         Defense layer preset for hybrid streaming.
     preset : str
@@ -155,9 +153,6 @@ class SessionState:
     # Checkpointing
     enable_checkpoints: bool = False
     checkpoint_dir: str | None = None
-
-    # HPC settings
-    enable_multi_device: bool = False
 
     # Defense layer settings
     defense_preset: str | None = None
@@ -233,7 +228,6 @@ class SessionState:
             max_warmup_iterations=self.max_warmup_iterations,
             enable_checkpoints=self.enable_checkpoints,
             checkpoint_dir=self.checkpoint_dir,
-            enable_multi_device=self.enable_multi_device,
             defense_preset=self.defense_preset,
             layer1_enabled=self.layer1_enabled,
             layer1_threshold=self.layer1_threshold,
@@ -399,9 +393,6 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
     state.enable_checkpoints = defaults.enable_checkpoints
     state.checkpoint_dir = defaults.checkpoint_dir
 
-    # Reset HPC settings
-    state.enable_multi_device = defaults.enable_multi_device
-
     # Reset defense layers
     state.defense_preset = defaults.defense_preset
     state.layer1_enabled = defaults.layer1_enabled
@@ -498,7 +489,6 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
             "chunk_size": state.chunk_size,
             "enable_checkpoints": state.enable_checkpoints,
             "checkpoint_dir": state.checkpoint_dir,
-            "enable_multi_device": state.enable_multi_device,
             "defense_layers": {
                 "preset": state.defense_preset,
                 "layer1_warm_start": {

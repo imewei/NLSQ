@@ -30,7 +30,7 @@ Choose Your Path
       :link-type: doc
 
       Design custom optimization pipelines using NLSQ's API layer.
-      Covers architecture, protocols, orchestration components.
+      Covers architecture, protocols, and performance tuning.
 
       **~5 hours** | Requires Python experience
 

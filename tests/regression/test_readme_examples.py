@@ -291,37 +291,6 @@ def test_diagnostics_monitoring():
     print("✅ Diagnostics & Monitoring example passed")
 
 
-def test_caching_system():
-    """Test Caching System example."""
-    print("\nTesting Caching System example...")
-    np.random.seed(42)  # Ensure deterministic test results
-    from nlsq import SmartCache, curve_fit
-
-    # Sample data
-    x1 = np.linspace(0, 10, 50)
-    y1 = 2.0 * np.exp(-0.5 * x1) + np.random.randn(50) * 0.05
-    x2 = np.linspace(0, 10, 50)
-    y2 = 2.2 * np.exp(-0.4 * x2) + np.random.randn(50) * 0.05
-
-    # Configure caching
-    cache = SmartCache(max_memory_items=1000, disk_cache_enabled=True)
-
-    # Define fit function (caching happens at the JIT level)
-    def exponential(x, a, b):
-        return a * jnp.exp(-b * x)
-
-    # First fit - compiles function
-    _popt1, _pcov1 = curve_fit(exponential, x1, y1, p0=[1.0, 0.1])
-
-    # Second fit - reuses JIT compilation from first fit
-    _popt2, _pcov2 = curve_fit(exponential, x2, y2, p0=[1.2, 0.15])
-
-    # Check cache statistics
-    stats = cache.get_stats()
-    print(f"Cache hit rate: {stats['hit_rate']:.1%}")
-    print("✅ Caching System example passed")
-
-
 def test_optimization_recovery():
     """Test Optimization Recovery example."""
     print("\nTesting Optimization Recovery example...")
@@ -393,7 +362,6 @@ def main():
         test_memory_management,
         test_algorithm_selection,
         test_diagnostics_monitoring,
-        test_caching_system,
         test_optimization_recovery,
         test_input_validation,
     ]

@@ -226,9 +226,7 @@ NLSQ is organized into well-separated layers (~74,000 lines):
 │  │   CHUNKED/STREAMING   ├── LHS/Sobol/Halton    │   0: Normalization       │
 │  └── Memory-based auto   └── Sampling            │   1: L-BFGS warmup       │
 │                                                  │   2: Gauss-Newton        │
-│  Orchestration (v0.6.4)                          └── 3: Denormalization     │
-│  ├── DataPreprocessor    ├── OptimizationSel.                               │
-│  ├── CovarianceComputer  └── StreamingCoord.                                │
+│                                                  └── 3: Denormalization     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                          CORE OPTIMIZATION ENGINE                           │
 │  curve_fit() ─→ CurveFit ─→ LeastSquares ─→ TrustRegionReflective           │
@@ -240,16 +238,16 @@ NLSQ is organized into well-separated layers (~74,000 lines):
 │                          SUPPORT SUBSYSTEMS                                 │
 │  stability/           precision/          caching/          diagnostics/    │
 │  ├── NumericalGuard   ├── AlgorithmSel.   ├── UnifiedCache  ├── Identifiab. │
-│  ├── SVD fallback     ├── ParamNormalizer  ├── SmartCache    ├── GradientMon │
-│  └── Recovery         └── BoundsInfer.    └── MemoryMgr     └── PluginSys.  │
+│  ├── SVD fallback     ├── ParamNormalizer └── MemoryMgr     ├── GradientMon │
+│  └── Recovery         └── BoundsInfer.                      └── PluginSys.  │
 │  facades/ (v0.6.4)                                                          │
 │  ├── OptimizationFacade  ├── StabilityFacade  └── DiagnosticsFacade         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                            INFRASTRUCTURE                                   │
-│  interfaces/ (Protocols)     config.py (Singleton)    Security              │
-│  ├── OptimizerProtocol       ├── JAXConfig            ├── safe_serialize    │
-│  ├── CurveFitProtocol        ├── MemoryConfig         ├── model_validation  │
-│  └── CacheProtocol           └── LargeDatasetConfig   └── resource_limits   │
+│  config.py (Singleton)              Security                               │
+│  ├── JAXConfig                      ├── safe_serialize                     │
+│  ├── MemoryConfig                   ├── model_validation                   │
+│  └── LargeDatasetConfig             └── resource_limits                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                         JAX RUNTIME (≥0.8.0)                                │
 │  x64 enabled │ JIT compilation │ Autodiff │ GPU/TPU backend (optional)      │
