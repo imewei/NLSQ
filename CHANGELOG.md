@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.3] - 2026-08-28
+## [0.7.3] - 2026-08-29
 
 ### Added
 - `CMAESOptimizer` (with `restart_strategy="none"`) supports checkpoint/
@@ -45,6 +45,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `workflow_runner.py`/`model_registry.py`/`result_exporter.py`); and assorted
   correctness/robustness fixes across the benchmark and notebook-conversion
   scripts (async-timing bugs, zero-division guards, sandbox path resolution).
+- **`core/`** (three-brain review, 12 bugs): outer-loop termination used
+  `nfev == max_nfev`, which could hang on a fractional `max_nfev`; the
+  inner-loop iteration-limit guard clobbered a legitimate termination
+  status; the LM damping alpha was never seeded, so the CG/lsmr
+  trust-region solvers never regularized ill-conditioned/rank-deficient
+  Jacobians; `auto_bounds=True` was a no-op when `p0=None`;
+  `method='cmaes'` dropped optimizer kwargs (ftol/xtol/max_nfev/...); the
+  `p0="auto"` sentinel was miscounted as `n_params=1` at several call
+  sites (now centralized via `_is_auto_p0()`); a caller-supplied
+  `data_mask` wasn't padding-extended; a streaming chunk-size floor could
+  defeat its own memory budget; trust-region solver auto-selection ran
+  for `method='lm'`, which has none; `create_optimizer(diagnostics=True)`/
+  `configure_curve_fit(enable_diagnostics=True)` never forwarded the
+  diagnostics config; `FeatureFlags.with_override` discarded
+  falsy-but-valid override values; `workflow='auto'`/`'auto_global'`
+  computed memory budget/strategy selection with `n_features=1`
+  regardless of `xdata`'s real shape; the `HybridStreamingConfig` route
+  dropped goal-derived/user `gtol` and skipped NaN/Inf validation
+  (`check_finite`).
+- **`global_optimization/`** (three-brain review, 7 bugs): `CMAESOptimizer.fit()`
+  produced a NaN fitness landscape on infinite/overflowing bounds instead
+  of failing loudly (now rejected up front, and `MethodSelector`'s
+  `"auto"` heuristic no longer selects `cmaes` for unbounded parameters);
+  BIPOP stagnation detection was permanently masked by a single divergent
+  candidate; BIPOP's exploratory-restart sampling silently excluded the
+  outer ~24% of each parameter's bound; `TournamentSelector.get_top_candidates`
+  could rank an unevaluated candidate's default zero loss above a
+  genuinely-scored one; `workflow='hpc'`'s checkpoint warnings/errors
+  always named the wrong workflow; overriding `checkpoint_dir` on a
+  pre-built `CMAESConfig` crashed its own run_id/model_id validation;
+  resuming a checkpoint with `max_generations` below its saved generation
+  counter silently no-opped instead of raising.
+- **`streaming/`** (three-brain review, 15 bugs): `_retry_failed_chunk`
+  fit against the raw zero-padded chunk instead of the trimmed valid
+  slice; the SVD Gauss-Newton solve amplified null-space noise by up to
+  ~1e10x on rank-deficient/ill-conditioned systems instead of zeroing it;
+  `ChunkBufferPool` crashed on multi-feature `xdata`; the final `pcov`
+  used a crude proxy instead of the GLS covariance already accumulated
+  during fitting; `enable_residual_weighting=True` crashed with a cryptic
+  JAX trace error; JTJ recompute after an accepted GN step ignored the
+  scan-based fast path; 4 validators silently passed NaN;
+  `calculate_optimal_chunk_size(0, ...)` divided by zero; the
+  model-validation cache key could collide across closures with
+  identical bytecode but different captured values (now uses
+  `closure_serial()`); the ill-conditioned-covariance fallback trusted a
+  numerically meaningless matrix inversion instead of gating on
+  condition number.
+- `benchmarks/run_benchmarks.py` didn't add the repo root to `sys.path`,
+  breaking the documented `python benchmarks/run_benchmarks.py`
+  invocation with `ModuleNotFoundError`.
+
+### Removed
+- Repo-wide dead-code audit (ponytail-audit, 88 files, -17372/+105 lines):
+  removed the never-called shadow DI pipeline (`orchestration/`'s
+  `DataPreprocessor`/`OptimizationSelector`/`CovarianceComputer`/
+  `StreamingCoordinator`, its feature-flag gating, `interfaces/`,
+  `CurveFitAdapter`, `factories.py`), consolidated the caching stack onto
+  `unified_cache.py` (removed `smart_cache.py`/`compilation_cache.py`/
+  `core.py` and their compat shims), removed unreachable multi-device
+  streaming code and the `enable_multi_device`/`resume_from_checkpoint`
+  config knobs, `RobustDecomposition`, `MemoryPool`/`TRFMemoryPool`,
+  `BasePlotWidget`, and flattened the `OptimizerBase` ->
+  `TrustRegionOptimizerBase` hierarchy. `curve_fit(method="hybrid_streaming")`
+  and `fit()`'s kwargs filters now raise `TypeError` on unrecognized
+  keywords instead of silently swallowing them.
 
 ## [0.7.2] - 2026-08-26
 

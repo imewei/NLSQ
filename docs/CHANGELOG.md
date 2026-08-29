@@ -2,13 +2,18 @@
 
 ## Unreleased
 
-## v0.7.3 (2026-08-28)
+## v0.7.3 (2026-08-29)
 - Fixed a duplicated `[0.7.2]` heading in the root `CHANGELOG.md`, added
   missing entries for #22/#23, and fixed README's `workflow="hpc"` example
   (`checkpoint_dir` alone now raises -- `run_id`/`model_id`/`seed` are
   required together).
 - Three-brain (Codex + Agy) review of `docs/`: fixed 26 stale/fictional API
   examples across 17 files.
+- Removed ~27 API stub pages and two full tutorial sections documenting
+  the `orchestration/`/`interfaces/`/`factories_di`/`smart_cache`/etc.
+  modules deleted by the ponytail-audit dead-code removal (#32), and
+  fixed every toctree/link that pointed at them (`sphinx-build -b html`
+  clean, zero new warnings).
 
 ## v0.7.2 (2026-08-26)
 - Synced the Optimization Pipeline and Package Overview docs with the current module layout
