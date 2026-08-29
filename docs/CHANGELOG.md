@@ -1,6 +1,17 @@
 # Documentation Changelog
 
 ## Unreleased
+- `/dev-suite:docs update --full` pass: AST-based public-API docstring scan
+  (0 real gaps -- all 64 flagged symbols were nested closures, not public
+  API) and an automodule/autoclass coverage cross-check against every
+  `nlsq/` module found one real gap -- `CMAESPreempted` (exported from
+  `nlsq.global_optimization` for the v0.7.3 checkpoint/resume feature) had
+  no API reference entry. Added a Checkpoint/Resume subsection with a
+  runnable example plus the `autoclass` entry to
+  `docs/api/nlsq.global_optimization.rst`. README, CHANGELOG cross-refs,
+  and the rest of the API reference were confirmed already in sync (no
+  stale references to modules removed by the ponytail-audit PR); full
+  `sphinx-build -W --keep-going` stays warning-free.
 
 ## v0.7.3 (2026-08-29)
 - Fixed a duplicated `[0.7.2]` heading in the root `CHANGELOG.md`, added
