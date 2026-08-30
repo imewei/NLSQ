@@ -25,6 +25,9 @@
   modules deleted by the ponytail-audit dead-code removal (#32), and
   fixed every toctree/link that pointed at them (`sphinx-build -b html`
   clean, zero new warnings).
+- Six-agent full-codebase review (PR #37) follow-up: dropped
+  `docs/developer/architecture.rst`'s reference to the deleted
+  `OptimizeResultV2` class (#37).
 
 ## v0.7.2 (2026-08-26)
 - Synced the Optimization Pipeline and Package Overview docs with the current module layout
