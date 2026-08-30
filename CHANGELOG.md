@@ -95,8 +95,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `benchmarks/run_benchmarks.py` didn't add the repo root to `sys.path`,
   breaking the documented `python benchmarks/run_benchmarks.py`
   invocation with `ModuleNotFoundError`.
+- **Security -- `cli/model_validation.py`** (six-agent review, 3 rounds):
+  the AST allowlist/denylist had further bypasses beyond the original RCE
+  fix -- frame introspection (`_getframe`, `f_globals`/`f_back`/`f_locals`/
+  `f_code`, and the `gi_frame`/`cr_frame`/`ag_frame`/`tb_frame`
+  generator/coroutine/traceback variants, all reaching the same
+  `f_builtins` primitive), `types`/`sys` imports (plain and aliased), the
+  `type()` builtin, `setattr`/`delattr`/`hasattr`, `open(..., "r+")` and
+  other write-capable modes, `str.format()`/`format_map()` (defeats the
+  literal-substring dunder scan when built via concatenation),
+  `pkgutil.resolve_name`, `timeit`/`asyncio` code-exec entry points, and
+  `pathlib.Path` write/destructive methods (`write_text`/`write_bytes`/
+  `unlink`/`rmdir`/`rename`/`replace`/`chmod`/`touch`/`symlink_to`/
+  `hardlink_to`). `config.py`'s `run_config -o/--output` could escape the
+  working directory via an absolute path or `..` (`Path.__truediv__`
+  discards the left operand for an absolute right operand); now routed
+  through `validate_path()`.
+- **`core/`** (six-agent review, RCE + 4 critical bugs): `compute_sparse_jacobian`
+  sliced tuple/list `xdata` (2D fitting) as a container instead of
+  per-coordinate, giving chunk 0 the full unsliced coordinates and later
+  chunks an empty tuple; `_fit_global_cmaes` (`workflow='auto_global'`,
+  `method='cmaes'`) forwarded `timeit`/`return_eval`/`full_output`
+  unfiltered into the internal refinement `curve_fit()` call, which
+  returned a tuple instead of a `CurveFitResult` and was silently
+  swallowed as a numerical failure (`pcov=inf`, `success=True`);
+  `validate_security_constraints` (array-size/Jacobian-overflow DoS
+  limits, bounds/parameter range checks) was only reachable when
+  `enable_stability=True`, which both `CurveFit` and the public
+  `curve_fit()` wrapper default to `False` -- these checks were dead code
+  on the default drop-in-scipy-replacement path and now run
+  unconditionally; `method='multi-start'` (a documented `Literal` on
+  `curve_fit()`'s own signature) fell through to TRF because routing only
+  checked the separate `multistart` bool flag.
+- **`streaming/`** (six-agent review, 5 bugs): Phase 1's warmup MSE loss
+  was compared directly against Phase 2's SSR-based global best without
+  unit conversion, so refinement essentially never updated the global
+  best beyond a few points; a rejected first Gauss-Newton iteration
+  (`prev_cost` still `inf`) fell back to `cost_before_step = new_cost`,
+  spuriously reporting convergence after one rejected step; a
+  successfully retried chunk was silently dropped from the combined fit
+  once precision-weighted accumulation had started; 4 failure paths
+  returned `pcov=np.eye(n)` instead of the documented all-`inf` "not
+  estimated" convention; `_create_chunk_result` used the zero-padded
+  chunk instead of the trimmed valid slice for `n_points`/debug stats.
+- **`global_optimization/`** (six-agent review): `latin_hypercube_sample`
+  split `n_dims+1` keys and reused one key as both an offset key and a
+  permutation key, breaking dimension independence for `n_dims >= 2`;
+  `WarmupPhase`'s duplicate warmup-loss implementation used an unpadded
+  `dynamic_slice` for group-variance regularization (the sibling
+  implementation already had this fix, never propagated).
+- **`result/`, `utils/`** (six-agent review): `prediction_interval()`
+  computed a constant standard error ignoring x-dependence instead of the
+  Jacobian-based approach `confidence_band()` already used; `summary()`
+  crashed on CMA-ES/hybrid-streaming/multistart results (`':.6e'` format
+  spec applied to `None`/`'N/A'`); `safe_serialize` left NaN/Inf inside
+  ndarrays as non-standard raw JSON tokens while scalars were already
+  sanitized, and an unrecognized `__nlsq_type__` tag silently degraded to
+  a plain dict instead of raising; `caching/unified_cache.py`'s cache key
+  never incorporated `donate_argnums`, letting two calls differing only
+  in it collide and reuse a compiled function that donates the wrong
+  buffers.
+- **`gui_qt/`** (six-agent review, 5 bugs): `AppState` never invalidated
+  `fit_result` when data/model changed after a completed fit, or when a
+  fit was re-run without a data/model change, letting Export/Results
+  silently pair mismatched data; the Data Loading page never listened for
+  `data_changed`, hiding restored session-recovery data; autosave restore
+  never cross-validated `xdata`/`ydata`/`sigma` lengths; the JSON export's
+  parameter block (value/uncertainty/ci_lower/ci_upper) wasn't NaN/Inf-
+  sanitized while the statistics block was, and could emit invalid JSON
+  for a deliberately `+inf`-uncertainty (singular-covariance) result.
+- **build/CI**: `nvidia-smi` printing "No devices were found" to stdout
+  (not stderr) crashed the GPU-check/CUDA-install Makefile targets'
+  `SM_VERSION` arithmetic compare instead of hitting the GPU-not-detected
+  path; Qt's default `xcb` platform plugin aborts (`SIGABRT`) on any Linux
+  host without an X/Wayland server the instant a `QApplication` is
+  created -- `make test*`/`make verify*` and CI now auto-export
+  `QT_QPA_PLATFORM=offscreen` when neither `DISPLAY` nor
+  `WAYLAND_DISPLAY` is set.
 
 ### Removed
+- Deleted `OptimizeResultV2` (a 90-line frozen dataclass never
+  constructed anywhere) and the now-dead `SolverLiteral`/
+  `OptimizeResultDict` type aliases and `HasShape`/`SupportsFloat`
+  protocols; tightened `MethodLiteral` from a comment-only `str` alias to
+  the real `Literal` `curve_fit()` already used, closing a type-checking
+  gap where `fit(method="bogus")` passed mypy. Removed `gui_qt`'s dead
+  `export_adapter.py` module (zero callers, zero test coverage) and
+  `core/trf.py`'s `SVDCache` (a `NamedTuple` documented as giving a
+  "20-40% speedup" that was never instantiated) and a duplicate dead
+  `OptimizationDiagnostics` class in `utils/error_messages.py`. Every
+  other "dead code" candidate the six-agent review flagged (`facades/`,
+  `diagnostics/plugin.py`, the CG Gauss-Newton solver stack, superseded
+  `common_scipy.py` functions, `sparse_jacobian`'s `SparseOptimizer`,
+  `memory_manager`'s array pooling, `parameter_estimation.py`'s pattern
+  detection) was independently re-verified against `tests/` and found to
+  have real coverage or documented public API -- not removed.
 - Repo-wide dead-code audit (ponytail-audit, 88 files, -17372/+105 lines):
   removed the never-called shadow DI pipeline (`orchestration/`'s
   `DataPreprocessor`/`OptimizationSelector`/`CovarianceComputer`/
