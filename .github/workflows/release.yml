@@ -64,6 +64,9 @@ jobs:
       PYTEST_XDIST_WORKERS: "2"
       # Override pyproject.toml addopts (-q conflicts with -v, hiding CI failures).
       PYTEST_ADDOPTS: "-ra --strict-markers --strict-config --durations=10"
+      # Without this, Qt widget construction in gui_qt tests aborts (SIGABRT)
+      # on headless CI -- ci.yml sets this per-OS, release.yml was missing it.
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v5
 
