@@ -117,7 +117,7 @@ dependencies = [
     "pyyaml>=6.0.3",          # YAML configuration file support (tested on 6.0.3)
 
     # Global optimization
-    "evosax>=0.2.0,<0.3.0",   # JAX-based CMA-ES with built-in BIPOP restart conditions
+    "evosax>=0.2.0",          # JAX-based CMA-ES with built-in BIPOP restart conditions
 
     # Qt GUI (native desktop application) -- shipped in the default install;
     # README documents `pip install nlsq` as "GUI included".

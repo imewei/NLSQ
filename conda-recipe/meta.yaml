@@ -6,9 +6,8 @@ package:
   version: {{ version }}
 
 source:
-  url: https://files.pythonhosted.org/packages/source/n/nlsq/nlsq-{{ version }}.tar.gz
-  # sha256: TODO fill from `sha256sum dist/nlsq-{{ version }}.tar.gz` after PyPI publish
-  sha256: 2450145a29cdd1f33de6fa250f759fb0d6d4e79f90fc830f367695a59e36d136
+  url: https://files.pythonhosted.org/packages/40/d0/f4ffff00017f6e992e5fac537526bb18db5484440617a2240d46335c2681/nlsq-{{ version }}.tar.gz
+  sha256: b564c8eba774d89b2446f9e79434501b2a5029e9c92fb7622c8c2661218ac13b
 
 build:
   number: 0

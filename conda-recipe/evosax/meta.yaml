@@ -1,13 +1,13 @@
 {% set name = "evosax" %}
-{% set version = "0.2.0" %}
+{% set version = "0.3.1" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  url: https://files.pythonhosted.org/packages/61/1f/93fc7c5db0f71f7fc7b47586c83ad6d865528c5a98f36707796fb3ebf2d9/evosax-{{ version }}.tar.gz
-  sha256: 7fefc9be3ea3f18a8346bd473a34d722723644a6096609b6ec9030e9fa4ebdd6
+  url: https://files.pythonhosted.org/packages/65/2d/3408839c2151b576ffa2fd53cb1e80ab335b6845f0bc9248884dfc79524c/evosax-{{ version }}.tar.gz
+  sha256: 38609f64704b48921b500b2d4729779beacd82eb39749978fe8e6db790a790dc
 
 build:
   number: 0
@@ -40,9 +40,7 @@ about:
   summary: Evolution Strategies in JAX
   license: Apache-2.0
   license_family: APACHE
-  # evosax 0.2.0's sdist ships no LICENSE file (verified: absent from the
-  # tarball); license_file omitted rather than pointed at a path that
-  # doesn't exist.
+  license_file: LICENSE
   doc_url: https://github.com/RobertTLange/evosax
   dev_url: https://github.com/RobertTLange/evosax
 
