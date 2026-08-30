@@ -679,11 +679,18 @@ class ExportPage(QWidget):
                     if pcov is not None:
                         with contextlib.suppress(Exception):
                             uncert = float(np.sqrt(pcov[i, i]))
+                    ci_lower = value - t_val * uncert
+                    ci_upper = value + t_val * uncert
+                    # NLSQ deliberately reports +inf uncertainty for a
+                    # singular covariance, which makes ci_lower/ci_upper
+                    # +/-inf too. json.dumps emits non-standard NaN/Infinity
+                    # tokens for non-finite floats -- normalize to null here
+                    # the same way the statistics block below already does.
                     params[name] = {
-                        "value": value,
-                        "uncertainty": uncert,
-                        "ci_lower": value - t_val * uncert,
-                        "ci_upper": value + t_val * uncert,
+                        "value": value if np.isfinite(value) else None,
+                        "uncertainty": uncert if np.isfinite(uncert) else None,
+                        "ci_lower": ci_lower if np.isfinite(ci_lower) else None,
+                        "ci_upper": ci_upper if np.isfinite(ci_upper) else None,
                     }
                 data["parameters"] = params
 

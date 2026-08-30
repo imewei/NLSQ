@@ -36,6 +36,22 @@ else
 endif
 
 # ===================
+# Headless Qt (GUI tests)
+# ===================
+# Linux boxes with no X server (CI runners, SSH sessions, containers) hit an
+# immediate SIGABRT the instant a QApplication is created, because Qt's
+# default "xcb" platform plugin requires a display (see
+# .github/workflows/ci.yml for the matching CI-side fix). Force the offscreen
+# platform only when no display is actually available, so real desktop use
+# (Linux with X11/Wayland, macOS, Windows) is untouched.
+ifeq ($(PLATFORM),linux)
+    HAS_DISPLAY := $(shell [ -n "$$DISPLAY$$WAYLAND_DISPLAY" ] && echo 1)
+    ifndef HAS_DISPLAY
+        export QT_QPA_PLATFORM := offscreen
+    endif
+endif
+
+# ===================
 # Package manager detection (prioritize uv > conda/mamba > pip)
 # ===================
 UV_AVAILABLE := $(shell command -v uv 2>/dev/null)

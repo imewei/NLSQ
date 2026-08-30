@@ -105,6 +105,41 @@ class TestSparseJacobianComputer(unittest.TestCase):
         # Linear function should have no sparsity
         self.assertLess(sparsity, 0.1)
 
+    def test_compute_sparse_jacobian_2d_tuple_xdata_chunking(self):
+        """compute_sparse_jacobian must slice each coordinate array of a
+        tuple/list xdata (2D fitting), not the outer tuple/list itself.
+
+        Regression test: slicing the container directly returned the whole
+        (X, Y) pair unchanged for chunk 0 (since a 2-tuple sliced [0:10000]
+        returns the tuple as-is) and an empty tuple for later chunks, while
+        y_chunk/mask_chunk were correctly sliced -- a length mismatch that
+        this jac_func asserts against.
+        """
+        n_data = 25
+        chunk_size = 10  # forces 3 chunks: [0:10), [10:20), [20:25)
+        x_coord = np.linspace(0, 1, n_data)
+        y_coord = np.linspace(1, 2, n_data)
+        xdata = (x_coord, y_coord)
+        ydata = np.ones(n_data)
+        params = np.array([1.0, 2.0])
+
+        def jac_func(_params, x_chunk, y_chunk, _mask_chunk, _aux):
+            cx, cy = x_chunk
+            n = len(y_chunk)
+            assert len(cx) == n and len(cy) == n, (
+                f"x-coordinate chunk lengths ({len(cx)}, {len(cy)}) "
+                f"!= y chunk length {n}"
+            )
+            J = np.zeros((n, 2))
+            J[:, 0] = np.asarray(cx)
+            J[:, 1] = np.asarray(cy)
+            return J
+
+        J_sparse = self.computer.compute_sparse_jacobian(
+            jac_func, params, xdata, ydata, chunk_size=chunk_size
+        )
+        self.assertEqual(J_sparse.shape, (n_data, 2))
+
     def test_sparse_vs_dense_jacobian(self):
         """Compare sparse and dense Jacobian computation."""
 

@@ -185,6 +185,252 @@ def model(x, a):
         assert not result.is_valid
         assert any("ctypes" in v for v in result.violations)
 
+    def test_aliased_importlib_import_module_blocked(self, tmp_path: Path):
+        """Aliasing importlib.import_module must not bypass detection.
+
+        Regression test for a sandbox-escape hole: aliasing the imported
+        symbol (`as im`) rebinds it to a name absent from DANGEROUS_PATTERNS,
+        so only checking the module root let this through undetected.
+        """
+        model_file = tmp_path / "malicious_importlib_alias.py"
+        model_file.write_text("""
+from importlib import import_module as im
+
+def model(x, a):
+    im("subprocess").run(["echo", "pwned"])
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("importlib" in v.lower() for v in result.violations)
+
+    def test_aliased_builtins_eval_blocked(self, tmp_path: Path):
+        """Aliasing builtins.eval must not bypass detection."""
+        model_file = tmp_path / "malicious_builtins_alias.py"
+        model_file.write_text("""
+from builtins import eval as ev
+
+def model(x, a):
+    ev("__import__('os').system('pwned')")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("builtins" in v.lower() for v in result.violations)
+
+    def test_bare_dunder_import_blocked(self, tmp_path: Path):
+        """Bare __import__() (no explicit import statement) must be blocked."""
+        model_file = tmp_path / "malicious_dunder_import.py"
+        model_file.write_text("""
+def model(x, a):
+    __import__("os").system("pwned")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("__import__" in v for v in result.violations)
+
+    def test_dotted_submodule_import_blocked(self, tmp_path: Path):
+        """`import os.path as p` must be blocked via the module root."""
+        model_file = tmp_path / "malicious_dotted_import.py"
+        model_file.write_text("""
+import os.path as p
+
+def model(x, a):
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("os.path" in v for v in result.violations)
+
+    def test_generator_frame_builtins_blocked(self, tmp_path: Path):
+        """gi_frame/f_builtins must be blocked: reaches exec() via a generator
+        frame instead of a name-based check on exec/eval/__builtins__ itself."""
+        model_file = tmp_path / "malicious_gi_frame.py"
+        model_file.write_text("""
+def model(x, a):
+    gen = (i for i in [1])
+    b = gen.gi_frame.f_builtins
+    b["exec"]("import os; os.system('pwned')")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("gi_frame" in v for v in result.violations)
+        assert any("f_builtins" in v for v in result.violations)
+
+    def test_pkgutil_resolve_name_blocked(self, tmp_path: Path):
+        """pkgutil.resolve_name resolves a dotted string path without an import."""
+        model_file = tmp_path / "malicious_pkgutil.py"
+        model_file.write_text("""
+import pkgutil
+
+def model(x, a):
+    pkgutil.resolve_name("posix:system")("pwned")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("pkgutil" in v.lower() for v in result.violations)
+
+    def test_aliased_pkgutil_resolve_name_blocked(self, tmp_path: Path):
+        """Aliasing pkgutil.resolve_name must not bypass detection -- this is
+        the actual bypass shape the `resolve_name` DANGEROUS_PATTERNS entry
+        exists for; a bare `import pkgutil` block alone wouldn't catch this."""
+        model_file = tmp_path / "malicious_pkgutil_alias.py"
+        model_file.write_text("""
+from pkgutil import resolve_name as r
+
+def model(x, a):
+    r("posix:system")("pwned")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("resolve_name" in v for v in result.violations)
+
+    def test_timeit_code_string_blocked(self, tmp_path: Path):
+        """timeit.timeit() executes an arbitrary code string."""
+        model_file = tmp_path / "malicious_timeit.py"
+        model_file.write_text("""
+import timeit
+
+def model(x, a):
+    timeit.timeit("import os; os.system('pwned')", number=1)
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("timeit" in v.lower() for v in result.violations)
+
+    def test_pathlib_write_text_blocked(self, tmp_path: Path):
+        """Path.write_text() must be blocked: mutates files via a pathlib
+        method call instead of a name-based check on open()/os/shutil."""
+        model_file = tmp_path / "malicious_pathlib_write.py"
+        model_file.write_text("""
+from pathlib import Path
+
+def model(x, a):
+    Path("/tmp/pwned.txt").write_text("arbitrary write")
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("write_text" in v for v in result.violations)
+
+    @pytest.mark.parametrize(
+        ("source", "expected_substring"),
+        [
+            pytest.param(
+                "from pathlib import Path\n\ndef model(x, a):\n"
+                '    Path("/tmp/p.txt").write_bytes(b"pwned")\n    return a * x\n',
+                "write_bytes",
+                id="pathlib-write_bytes",
+            ),
+            pytest.param(
+                "import asyncio\n\ndef model(x, a):\n    return a * x\n",
+                "asyncio",
+                id="asyncio-module-import",
+            ),
+            pytest.param(
+                "import asyncio\n\nasync def model(x, a):\n"
+                '    await asyncio.create_subprocess_shell("echo pwned")\n'
+                "    return a * x\n",
+                "create_subprocess_shell",
+                id="asyncio-create_subprocess_shell",
+            ),
+            pytest.param(
+                "import asyncio\n\nasync def model(x, a):\n"
+                '    await asyncio.create_subprocess_exec("echo", "pwned")\n'
+                "    return a * x\n",
+                "create_subprocess_exec",
+                id="asyncio-create_subprocess_exec",
+            ),
+            pytest.param(
+                "import sys\n\ndef model(x, a):\n"
+                "    tb = sys.exc_info()[2]\n"
+                '    tb.tb_frame.f_builtins["exec"]("pwned")\n'
+                "    return a * x\n",
+                "tb_frame",
+                id="traceback-tb_frame",
+            ),
+        ],
+    )
+    def test_remaining_denylist_entries_blocked(
+        self,
+        tmp_path: Path,
+        source: str,
+        expected_substring: str,
+    ):
+        """Every denylist entry added in this bypass-closing pass must be
+        independently pinned -- closes a coverage gap where 5 of 11 new
+        entries (tb_frame, create_subprocess_shell/exec, write_bytes,
+        asyncio) had no dedicated test despite being claimed as fixed."""
+        model_file = tmp_path / "malicious_remaining.py"
+        model_file.write_text(source)
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any(expected_substring in v for v in result.violations)
+
+    def test_coroutine_frame_builtins_blocked(self, tmp_path: Path):
+        """cr_frame/f_builtins: same technique as gi_frame, via a coroutine
+        object instead of a generator. Not covered by banning asyncio, since
+        cr_frame is a built-in coroutine-object attribute."""
+        model_file = tmp_path / "malicious_cr_frame.py"
+        model_file.write_text("""
+async def _coro():
+    pass
+
+def model(x, a):
+    c = _coro()
+    b = c.cr_frame.f_builtins
+    b["exec"]("import os; os.system('pwned')")
+    c.close()
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("cr_frame" in v for v in result.violations)
+
+    def test_pathlib_unlink_blocked(self, tmp_path: Path):
+        """Path.unlink() deletes files -- same bypass class as write_text,
+        adjacent destructive pathlib method not covered by the open() check."""
+        model_file = tmp_path / "malicious_pathlib_unlink.py"
+        model_file.write_text("""
+from pathlib import Path
+
+def model(x, a):
+    Path("/tmp/important.txt").unlink()
+    return a * x
+""")
+
+        result = validate_model(model_file)
+
+        assert not result.is_valid
+        assert any("unlink" in v for v in result.violations)
+
     def test_trusted_bypasses_validation(self, tmp_path: Path):
         """trusted=True should bypass validation."""
         model_file = tmp_path / "malicious_but_trusted.py"

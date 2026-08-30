@@ -453,6 +453,49 @@ def test_summary_with_none_pcov_does_not_crash():
     assert "p0" in output
 
 
+def test_summary_with_none_optimality_does_not_crash():
+    """summary() must not crash when optimality is None (CMA-ES results)
+    or absent entirely (hybrid-streaming/multistart results).
+
+    Regression test: the ':.6e' numeric format spec was applied to the
+    result of `self.optimality if hasattr(self, 'optimality') else 'N/A'`
+    -- both branches raise TypeError under that format spec (None doesn't
+    support '.6e', and neither does the 'N/A' string fallback).
+    """
+    import sys
+    from io import StringIO
+
+    from nlsq.result import OptimizeResult
+
+    def model(x, a, b):
+        return a * x + b
+
+    x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    y = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
+
+    result = CurveFitResult(OptimizeResult())
+    result["x"] = np.array([2.0, 0.0])
+    result["pcov"] = np.eye(2)
+    result["model"] = model
+    result["xdata"] = x
+    result["ydata"] = y
+    result["success"] = True
+    result["message"] = "test"
+    result["nfev"] = 1
+    result["cost"] = 0.0
+    result["optimality"] = None  # e.g. a CMA-ES result
+
+    old_stdout = sys.stdout
+    sys.stdout = buffer = StringIO()
+    try:
+        result.summary()  # Should not raise
+        output = buffer.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    assert "Optimality        : N/A" in output
+
+
 def test_missing_model_in_result():
     """Test behavior when model is not stored in result."""
     from nlsq.result import OptimizeResult

@@ -278,6 +278,9 @@ class GaussNewtonPhase:
         new_cost = float(
             final_residual_sum_sq,
         )  # guard: used after loop; set to initial cost
+        initial_cost = (
+            new_cost  # true pre-loop SSR, for the rejected-first-step fallback below
+        )
 
         # Gauss-Newton loop
         for iteration in range(self.config.gauss_newton_max_iterations):
@@ -317,8 +320,13 @@ class GaussNewtonPhase:
                 best_tracker["best_cost_global"] = new_cost
                 best_tracker["best_params_global"] = new_params
 
-            # Accept step if cost decreased
-            cost_before_step = prev_cost if jnp.isfinite(prev_cost) else new_cost
+            # Accept step if cost decreased. On the first iteration
+            # (prev_cost still inf), a rejected step must fall back to the
+            # true pre-loop SSR, not new_cost itself -- falling back to
+            # new_cost makes cost_change (computed below) exactly zero,
+            # which spuriously signals convergence after one rejected step
+            # with zero real progress.
+            cost_before_step = prev_cost if jnp.isfinite(prev_cost) else initial_cost
 
             if actual_reduction > 0:
                 current_params = new_params

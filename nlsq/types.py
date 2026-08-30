@@ -15,7 +15,7 @@ imported without JAX being available.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Protocol, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict
 
 import numpy as np
 
@@ -103,41 +103,25 @@ LossFunction: TypeAlias = Callable[[FloatArray], FloatArray]
 BoundsTuple: TypeAlias = tuple[ArrayLike, ArrayLike]
 
 # =============================================================================
-# Result types
-# =============================================================================
-
-# Optimization result dictionary with parameters and diagnostics.
-#
-# Common fields:
-#     - x: Optimized parameters
-#     - success: Whether optimization converged
-#     - message: Optimization status message
-#     - fun: Final residual values (optional)
-#     - jac: Final Jacobian (optional)
-#     - cost: Final cost function value
-#     - optimality: Final gradient norm
-#     - nfev: Number of function evaluations
-#     - njev: Number of Jacobian evaluations (optional)
-OptimizeResultDict: TypeAlias = dict[str, Any]
-
-# =============================================================================
 # Configuration types
 # =============================================================================
 
-# Optimization method name.
+# Optimization method name, as accepted by curve_fit()'s `method` parameter
+# (nlsq/core/minpack.py) -- this is the top-level workflow/global-method
+# selector, not the classical scipy trust-region sub-method. fit() forwards
+# its own `method` argument straight into curve_fit()'s `method`, so the two
+# must share this exact Literal (previously `str`, which let an invalid
+# value like method="bogus" type-check silently).
 #
 # Options:
-#     - "trf": Trust Region Reflective (default, supports bounds)
-#     - "dogbox": Dogleg algorithm for box-constrained problems
-#     - "lm": Levenberg-Marquardt (unconstrained only, faster)
-MethodLiteral: TypeAlias = str  # "trf" | "dogbox" | "lm"
-
-# Linear solver for trust region subproblems.
-#
-# Options:
-#     - "exact": Direct solver using SVD (default, more accurate)
-#     - "lsmr": Iterative solver (faster for large problems)
-SolverLiteral: TypeAlias = str  # "exact" | "lsmr"
+#     - "auto": Automatic selection (default)
+#     - "cmaes": CMA-ES global optimization
+#     - "multi-start": Multi-start local optimization
+#     - "trf": Trust Region Reflective (local, supports bounds)
+#     - "hybrid_streaming": Adaptive hybrid streaming optimizer
+MethodLiteral: TypeAlias = Literal[
+    "auto", "cmaes", "multi-start", "trf", "hybrid_streaming"
+]
 
 
 # =============================================================================
@@ -199,28 +183,6 @@ class StreamingDiagnostics(TypedDict, total=False):
     checkpoint_save_time: float  # Total time spent saving checkpoints
 
 
-# =============================================================================
-# Protocols for structural typing
-# =============================================================================
-
-
-class HasShape(Protocol):
-    """Protocol for objects with a shape attribute."""
-
-    @property
-    def shape(self) -> tuple[int, ...]:
-        """Shape of the array."""
-        ...
-
-
-class SupportsFloat(Protocol):
-    """Protocol for objects that can be converted to float."""
-
-    def __float__(self) -> float:
-        """Convert to float."""
-        ...
-
-
 # Re-export commonly used types from dependencies
 __all__ = [
     "AggregateStats",
@@ -232,18 +194,13 @@ __all__ = [
     "CheckpointInfo",
     "CommonError",
     "FloatArray",
-    # Protocols
-    "HasShape",
     "JAXArray",
     "JacobianFunction",
     "LossFunction",
-    # Method/solver literals
+    # Method literal
     "MethodLiteral",
     # Function types
     "ModelFunction",
-    "OptimizeResultDict",
-    "SolverLiteral",
     # Streaming diagnostics
     "StreamingDiagnostics",
-    "SupportsFloat",
 ]

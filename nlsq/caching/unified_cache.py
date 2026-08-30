@@ -209,10 +209,12 @@ class UnifiedCache:
         args: tuple,
         kwargs: dict,
         static_argnums: tuple[int, ...],
+        donate_argnums: tuple[int, ...] = (),
     ) -> str:
         """Generate cache key from function and arguments (shape-relaxed).
 
-        Cache key structure: (func_hash, static_argnums, dtype_rank_signatures)
+        Cache key structure:
+        (func_hash, static_argnums, donate_argnums, dtype_rank_signatures)
 
         This enables cache hits across different array sizes with same dtype/rank,
         reducing compilation overhead by 2-5x.
@@ -227,6 +229,12 @@ class UnifiedCache:
             Keyword arguments
         static_argnums : tuple of int
             Indices of static arguments
+        donate_argnums : tuple of int, default=()
+            Indices of arguments to donate for memory efficiency. Must be
+            part of the key: get_or_compile() actually compiles with this,
+            and two calls differing only in donate_argnums would otherwise
+            collide and reuse a compiled function that donates the wrong
+            buffers.
 
         Returns
         -------
@@ -239,8 +247,9 @@ class UnifiedCache:
         func_hash = self._get_function_hash(func)
         key_parts.append(f"func:{func_hash}")
 
-        # 2. Static argnums
+        # 2. Static/donate argnums
         key_parts.append(f"static:{static_argnums}")
+        key_parts.append(f"donate:{donate_argnums}")
 
         # 3. Array signatures (shape-relaxed: dtype + rank only)
         for i, arg in enumerate(args):
@@ -298,7 +307,9 @@ class UnifiedCache:
             JIT-compiled function (from cache or newly compiled)
         """
         # Generate cache key (pure computation, no shared state)
-        cache_key = self._generate_cache_key(func, args, kwargs, static_argnums)
+        cache_key = self._generate_cache_key(
+            func, args, kwargs, static_argnums, donate_argnums
+        )
 
         # Check cache under lock; record miss stats in the same acquisition
         with self._lock:

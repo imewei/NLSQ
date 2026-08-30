@@ -63,3 +63,36 @@ class TestGenerateJsonNonFiniteStatistics:
 
         assert data["statistics"]["r_squared"] == 1.0
         assert data["statistics"]["rmse"] == 0.0
+
+
+class TestGenerateJsonNonFiniteParameters:
+    """_generate_json()'s parameters block must normalize non-finite
+    value/uncertainty/ci_lower/ci_upper to `null` too -- NLSQ deliberately
+    reports +inf uncertainty for a singular covariance, which the
+    statistics block a few lines below already sanitized but the
+    parameters block did not."""
+
+    def test_singular_covariance_emits_null_not_infinity_token(self, app_state, qtbot):
+        from nlsq.gui_qt.pages.export import ExportPage
+
+        xdata = np.array([1.0, 2.0, 3.0, 4.0])
+        ydata = np.array([2.0, 4.0, 6.0, 8.0])
+        app_state.set_data(xdata, ydata)
+        app_state.set_model("custom", model_func=lambda x, a: a * x)
+        result = FakeFitResult([2.0])
+        result.pcov = np.array([[np.inf]])
+        app_state.set_fit_result(result)
+
+        page = ExportPage(app_state)
+        qtbot.addWidget(page)
+
+        json_str = page._generate_json()
+
+        assert "Infinity" not in json_str
+        assert "NaN" not in json_str
+        data = json.loads(json_str)
+        param = next(iter(data["parameters"].values()))
+        assert param["uncertainty"] is None
+        assert param["ci_lower"] is None
+        assert param["ci_upper"] is None
+        assert param["value"] == 2.0

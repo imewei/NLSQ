@@ -181,8 +181,18 @@ class SparseJacobianComputer:
             start = chunk_idx * chunk_size
             end = min((chunk_idx + 1) * chunk_size, n_data)
 
-            # Compute dense Jacobian for chunk
-            x_chunk = xdata[start:end] if hasattr(xdata, "__getitem__") else xdata
+            # Compute dense Jacobian for chunk. Multi-dimensional xdata (e.g.
+            # [X, Y] for 2D fitting) must have each coordinate array sliced
+            # individually -- slicing the outer tuple/list itself returns the
+            # whole container unchanged (or empty once start exceeds its
+            # length), pairing unsliced/empty coordinates with sliced
+            # y_chunk/mask_chunk.
+            if isinstance(xdata, list | tuple):
+                x_chunk = [coord[start:end] for coord in xdata]
+            elif hasattr(xdata, "__getitem__"):
+                x_chunk = xdata[start:end]
+            else:
+                x_chunk = xdata
             y_chunk = ydata[start:end]
             mask_chunk = data_mask[start:end]
 

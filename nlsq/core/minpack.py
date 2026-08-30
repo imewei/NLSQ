@@ -1618,6 +1618,20 @@ def _fit_global_cmaes(
 
     optimizer = CMAESOptimizer(config=cmaes_config)
 
+    # timeit/return_eval/full_output would flow through **kwargs into
+    # _nlsq_refinement's internal curve_fit() call and make it return a
+    # plain tuple instead of a CurveFitResult; _nlsq_refinement then does
+    # result.x/result.pcov on that tuple, which raises AttributeError,
+    # silently swallowed by a broad except there and falling back to the
+    # unrefined CMA-ES point estimate (pcov=inf) while this function still
+    # reports success=True below. Mirrors the same filter already applied
+    # in the standalone method='cmaes' entry point above.
+    extra_kwargs = {
+        k: v
+        for k, v in kwargs.items()
+        if k not in ("timeit", "return_eval", "full_output")
+    }
+
     result_dict = optimizer.fit(
         f=f,
         xdata=xdata,
@@ -1629,7 +1643,7 @@ def _fit_global_cmaes(
         # its **kwargs flows through to _nlsq_refinement's curve_fit() call,
         # which does accept it -- forward it there instead of dropping it.
         absolute_sigma=absolute_sigma,
-        **kwargs,
+        **extra_kwargs,
     )
 
     # Convert to CurveFitResult
@@ -2879,8 +2893,16 @@ def curve_fit(
         # If bounds is None and method='cmaes', we could warn, but for 'auto'
         # we just fall through to standard path
 
-    # Handle multi-start optimization
-    if multistart and n_starts is not None and n_starts > 0:
+    # Handle multi-start optimization. method="multi-start" is a documented
+    # Literal value on this function's own signature but was only ever
+    # routed here via the separate `multistart` bool flag -- passing
+    # method="multi-start" alone fell through to standard TRF, which rejects
+    # it with an unrelated "method must be 'trf' or 'lm'" error.
+    if (
+        (multistart or method == "multi-start")
+        and n_starts is not None
+        and n_starts > 0
+    ):
         return _run_multistart_optimization(
             f,
             xdata,
@@ -3658,6 +3680,33 @@ class CurveFit:
         ydata : np.ndarray
             Cleaned Y data
         """
+        # Security constraints (array-size/Jacobian-overflow DoS limits,
+        # bounds/parameter range checks) must run regardless of
+        # enable_stability -- self.enable_stability defaults to False on
+        # both CurveFit and the public curve_fit() wrapper, and these
+        # checks were previously only reachable through the full
+        # validate_curve_fit_inputs() pipeline gated behind it, making them
+        # dead code on the default "drop-in scipy.optimize.curve_fit
+        # replacement" path.
+        security_validator = getattr(self, "validator", None) or InputValidator(
+            fast_mode=True,
+        )
+        n_params = security_validator._estimate_n_params(f, p0)
+        security_errors, security_warnings = (
+            security_validator.validate_security_constraints(
+                len(ydata),
+                n_params,
+                bounds,
+                p0,
+            )
+        )
+        if security_errors:
+            error_msg = f"Input validation failed: {'; '.join(security_errors)}"
+            self.logger.error("Input validation failed", error=error_msg)
+            raise ValueError(error_msg)
+        for warning in security_warnings:
+            self.logger.warning("Input validation warning", warning=warning)
+
         if self.enable_stability:
             try:
                 errors, warnings_list, xdata_clean, ydata_clean = (

@@ -109,6 +109,95 @@ class TestRetryFailedChunkUsesValidLength:
         assert len(call_args.args[1]) == len(x_chunk)
 
 
+class TestRetryFailedChunkFeedsAccumulator:
+    """Important: a successfully retried chunk must not be silently
+    dropped once precision-weighted accumulation (_accum_information) has
+    started.
+
+    Regression test: _retry_failed_chunk used to return an ad-hoc
+    EMA-blended params array that the caller only adopted when
+    self._accum_information was still None (i.e. only the very first
+    chunk) -- every later retry's fit was thrown away entirely, never
+    reaching _update_parameters_convergence. The fix returns the raw
+    popt_chunk plus its covariance (via chunk_result["pcov_chunk"]) so the
+    caller can route it through the same accumulator every other
+    successful chunk uses.
+    """
+
+    def test_retry_returns_raw_popt_and_pcov_for_accumulation(self):
+        fitter = LargeDatasetFitter()
+        expected_popt = np.array([2.5, 1.5])
+        expected_pcov = np.diag([0.01, 0.02])
+        fitter.curve_fit.curve_fit = MagicMock(
+            return_value=(expected_popt, expected_pcov),
+        )
+
+        x_chunk = np.linspace(0, 1, 20)
+        y_chunk = 2.5 * x_chunk + 1.5
+
+        def model(x, a, b):
+            return a * x + b
+
+        chunk_result, returned_params = fitter._retry_failed_chunk(
+            f=model,
+            x_chunk=x_chunk,
+            y_chunk=y_chunk,
+            chunk_idx=1,
+            chunk_start_time=0.0,
+            chunk_times=[],
+            current_params=np.array([1.0, 1.0]),
+            initial_error=RuntimeError("initial fit failed"),
+            bounds=(-np.inf, np.inf),
+            method="trf",
+            solver="auto",
+        )
+
+        # Raw popt_chunk, not an EMA blend with current_params -- the
+        # caller now does the (precision-weighted) blending itself.
+        np.testing.assert_array_equal(returned_params, expected_popt)
+        assert "pcov_chunk" in chunk_result
+        np.testing.assert_array_equal(chunk_result["pcov_chunk"], expected_pcov)
+
+    def test_retry_success_after_accumulation_started_updates_accumulator(self):
+        """Exercises the "accumulate into an already-started _accum_information"
+        branch directly on _update_parameters_convergence (not through the
+        _retry_failed_chunk call site itself, which every other test in this
+        class covers only up to the return value): a retry succeeding AFTER
+        _accum_information is already non-None must fold into it, not be
+        dropped or overwrite it."""
+        fitter = LargeDatasetFitter()
+        fitter._accum_information = np.array([[4.0, 0.0], [0.0, 2.0]])
+        fitter._accum_info_vector = np.array([8.0, 4.0])  # theta=[2,2] so far
+        prior_information = fitter._accum_information.copy()
+
+        retry_popt = np.array([2.5, 1.5])
+        retry_pcov = np.diag([0.01, 0.02])
+
+        current_params, _history, _metric, _stop = (
+            fitter._update_parameters_convergence(
+                current_params=np.array([2.0, 2.0]),
+                popt_chunk=retry_popt,
+                pcov_chunk=retry_pcov,
+                param_history=[np.array([2.0, 2.0])],
+                convergence_metric=1.0,
+                chunk_idx=1,
+                n_chunks=2,
+            )
+        )
+
+        # Accumulator must have grown by this chunk's precision contribution.
+        assert not np.allclose(fitter._accum_information, prior_information)
+        expected_prec = np.linalg.inv(retry_pcov)
+        np.testing.assert_allclose(
+            fitter._accum_information,
+            prior_information + expected_prec,
+        )
+        # Combined estimate must differ from both the prior and the raw retry
+        # popt -- proof it was actually blended, not overwritten or dropped.
+        assert not np.allclose(current_params, [2.0, 2.0])
+        assert not np.allclose(current_params, retry_popt)
+
+
 class TestSVDPseudoInverseNullSpaceHandling:
     """Critical: the SVD Gauss-Newton solve floored small singular values to
     s_threshold and divided by that floor instead of zeroing their inverse

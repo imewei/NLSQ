@@ -96,23 +96,52 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "__base__",
         "mro",
         # Frame introspection (non-dunder equivalents of __globals__/__code__
-        # that reach the same objects via sys._getframe() / traceback frames)
+        # that reach the same objects via sys._getframe() / traceback frames /
+        # generator frames)
         "_getframe",
         "f_globals",
         "f_back",
         "f_locals",
         "f_code",
+        "f_builtins",
+        "gi_frame",
+        "tb_frame",
+        # Coroutine/async-generator frame introspection -- same technique as
+        # gi_frame/tb_frame above, reached via a coroutine or async generator
+        # object (e.g. `c = coro(); c.cr_frame.f_builtins["exec"](...)`)
+        # instead of a plain generator or traceback. Not covered by banning
+        # `asyncio`: these are built-in coroutine-object attributes, not
+        # asyncio symbols, so they're reachable without importing asyncio.
+        "cr_frame",
+        "ag_frame",
         # Interactive debugger (can execute arbitrary code interactively)
         "breakpoint",
         # sys.modules dict-access bypass: reaches already-imported os/subprocess
         # etc. without a literal `import os` this visitor would otherwise catch
         "modules",
         # String-based getattr equivalents (operator.attrgetter/methodcaller,
-        # pydoc.locate) resolve dotted names at runtime, bypassing the
-        # Attribute/Name checks above
+        # pydoc.locate, pkgutil.resolve_name) resolve dotted names at runtime,
+        # bypassing the Attribute/Name checks above
         "attrgetter",
         "methodcaller",
         "locate",
+        "resolve_name",
+        # asyncio subprocess spawners (bypass the subprocess/Popen name check)
+        "create_subprocess_shell",
+        "create_subprocess_exec",
+        # pathlib file-mutation methods (bypass the open()-write-mode check;
+        # no open()/os/shutil call needed to delete, rename, or repermission
+        # a file through a Path object)
+        "write_text",
+        "write_bytes",
+        "unlink",
+        "rmdir",
+        "rename",
+        "replace",
+        "chmod",
+        "touch",
+        "symlink_to",
+        "hardlink_to",
     },
 )
 
@@ -133,6 +162,12 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "cffi",
         "multiprocessing",
         "concurrent",
+        # Sandbox-escape via aliased symbol import: `from importlib import
+        # import_module as im; im("subprocess")` or `from builtins import
+        # eval as ev` previously bypassed detection entirely because only
+        # the module root (not the imported symbol) was checked.
+        "importlib",
+        "builtins",
         # Bytecode/function construction — bypasses exec/eval detection by
         # building and running arbitrary code objects directly
         "types",
@@ -152,6 +187,11 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         # String-based getattr equivalents
         "operator",
         "pydoc",
+        "pkgutil",
+        # timeit.timeit()/asyncio.create_subprocess_*() execute arbitrary code
+        # strings / spawn processes without tripping exec/subprocess checks
+        "timeit",
+        "asyncio",
     },
 )
 
@@ -288,17 +328,30 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """Check for dangerous module imports."""
         for alias in node.names:
             module_root = alias.name.split(".")[0]
-            if module_root in DANGEROUS_MODULES:
+            if module_root in DANGEROUS_MODULES or module_root in DANGEROUS_PATTERNS:
                 self.violations.append(f"Dangerous import: import {alias.name}")
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
-        """Check for dangerous from...import statements."""
-        if node.module:
-            module_root = node.module.split(".")[0]
-            if module_root in DANGEROUS_MODULES:
+        """Check for dangerous from...import statements.
+
+        Checks both the source module and each imported symbol name, since
+        `from importlib import import_module as im` or `from builtins import
+        eval as ev` rebind the dangerous symbol to a clean-looking alias --
+        checking the module alone lets the aliased name evade every later
+        Name/Attribute/Call check in this visitor.
+        """
+        module_root = node.module.split(".")[0] if node.module else None
+        if module_root and (
+            module_root in DANGEROUS_MODULES or module_root in DANGEROUS_PATTERNS
+        ):
+            self.violations.append(
+                f"Dangerous import: from {node.module} import ...",
+            )
+        for alias in node.names:
+            if alias.name in DANGEROUS_PATTERNS or alias.name in DANGEROUS_MODULES:
                 self.violations.append(
-                    f"Dangerous import: from {node.module} import ...",
+                    f"Dangerous import: from {node.module} import {alias.name}",
                 )
         self.generic_visit(node)
 
