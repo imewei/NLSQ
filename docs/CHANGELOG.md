@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.7.4 (2026-08-30)
+- No documentation content changes; version-output examples bumped to match
+  the 0.7.4 release.
+
 ## v0.7.3 (2026-08-29)
 - `/dev-suite:docs update --full` pass: AST-based public-API docstring scan
   (0 real gaps -- all 64 flagged symbols were nested closures, not public

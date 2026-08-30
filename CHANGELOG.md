@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-08-30
+
+### Changed
+- `evosax` dependency cap raised: `>=0.2.0,<0.3.0` -> `>=0.2.0` (pyproject.toml,
+  conda-recipe/meta.yaml). Verified evosax 0.3.1 keeps the CMA_ES/State surface
+  NLSQ touches; all cmaes/checkpoint tests pass.
+- `conda-recipe/evosax/meta.yaml` recipe bumped 0.2.0 -> 0.3.1.
+
 ## [0.7.3] - 2026-08-29
 
 ### Added
