@@ -31,7 +31,7 @@ For bugs or feature requests:
 .. code-block:: text
 
    **Environment:**
-   - NLSQ version: 0.7.4
+   - NLSQ version: 0.7.5
    - Python: 3.12.0
    - OS: Ubuntu 22.04
    - JAX backend: gpu

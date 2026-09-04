@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.7.5 (2026-09-04)
+- No documentation content changes; version-output examples bumped to match
+  the 0.7.5 release.
+
 ## v0.7.4 (2026-08-30)
 - No documentation content changes; version-output examples bumped to match
   the 0.7.4 release.

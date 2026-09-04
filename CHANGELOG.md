@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-09-04
+
 ### Fixed
 - CLI `r_squared` and `rmse` were computed from the optimizer's `fun` vector,
   which is the *sigma-weighted* residual `(model - ydata)/sigma` whenever a
