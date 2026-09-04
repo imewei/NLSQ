@@ -33,17 +33,26 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.stability.guard import (
+    NumericalStabilityGuard,
+    detect_collinearity,
+    estimate_condition_number,
+)
 
-# Memory-intensive: these allocate up to 8.4M-element float64 arrays, well over
-# the 100K-element threshold that requires serial execution (CLAUDE.md).
-pytestmark = [pytest.mark.serial, pytest.mark.stability]
+pytestmark = pytest.mark.stability
+
+# `serial` is applied per-test rather than module-wide: it is required for the
+# large-array tests (CLAUDE.md, >100K elements) but the coverage job runs
+# -m "not slow and not serial", so marking the whole module would drop every
+# test here from the coverage report and leave the new guard.py lines unhit.
+_serial = pytest.mark.serial
 
 
 def _well_conditioned(shape, seed=0):
     return jnp.asarray(np.random.default_rng(seed).normal(size=shape))
 
 
+@_serial
 class TestTallSkinnyConditionNumber:
     """A tall-skinny Jacobian must not be mistaken for an ill-conditioned one."""
 
@@ -104,6 +113,7 @@ class TestTallSkinnyConditionNumber:
 class TestWideAndSquareConditionNumber:
     """The wide (m < n) path had the identical blowup, transposed."""
 
+    @_serial
     def test_wide_jacobian_is_not_falsely_regularized(self):
         """A wide Jacobian must not OOM into a spurious `inf`.
 
@@ -158,6 +168,31 @@ class TestSvdFailureIsNotIllConditioning:
         assert issues["is_ill_conditioned"] is False
         assert issues["regularized"] is False
         np.testing.assert_array_equal(np.asarray(J_fixed), np.asarray(J))
+
+
+class TestFallbacksAreAnnounced:
+    """Failed measurements must not return their fallback value silently."""
+
+    def test_estimate_condition_number_warns_on_failure(self, monkeypatch):
+        def _boom(*_args, **_kwargs):
+            raise np.linalg.LinAlgError("simulated")
+
+        monkeypatch.setattr(np.linalg, "cond", _boom)
+
+        with pytest.warns(UserWarning, match="Could not estimate condition number"):
+            assert estimate_condition_number(np.linspace(0.0, 1.0, 10)) == np.inf
+
+    def test_detect_collinearity_warns_on_failure(self, monkeypatch):
+        def _boom(*_args, **_kwargs):
+            raise ValueError("simulated")
+
+        monkeypatch.setattr(np, "corrcoef", _boom)
+
+        with pytest.warns(UserWarning, match="Could not compute correlation matrix"):
+            has_collinearity, pairs = detect_collinearity(np.ones((10, 2)))
+
+        assert has_collinearity is False
+        assert pairs == []
 
 
 if __name__ == "__main__":
