@@ -199,6 +199,20 @@ Your complete navigation guide:
    - AdaptiveHybridStreamingOptimizer (huge datasets)
    - **Time**: 40-50 min | **Level**: ●●● Advanced
 
+5. **Batch Fitting Many Datasets** (`batch_fitting_many_datasets.py`, script only)
+   - Hundreds of small datasets from Python, without `nlsq batch` YAML files
+   - Reusing one `CurveFit` instance (~14-18x over per-call `curve_fit`)
+   - `jax.vmap` over a single compiled solver (~600-800x), with covariance
+   - Ragged datasets via zero-weighted padding
+   - **Time**: 15-20 min | **Level**: ●●● Advanced
+
+6. **Batch Fitting With Optimistix** (`batch_fitting_optimistix.py`, script only)
+   - Optimistix `LevenbergMarquardt` vs a hand-written vmapped solver
+   - Why adaptive termination buys nothing under `vmap` (batch pays the max steps)
+   - Robustness: fixed-lambda Gauss-Newton returns NaN from a 20x-wrong p0
+   - The hybrid: fast solver first, Optimistix only on the rows it lost
+   - **Time**: 15-20 min | **Level**: ●●● Advanced
+
 ---
 
 ### 03. Advanced Topics (Advanced)

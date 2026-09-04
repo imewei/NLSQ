@@ -220,6 +220,21 @@ echo -e "${GREEN}Summary saved to: output/batch_summary.json${NC}"
 echo ""
 
 # ==============================================================================
+# Demo 13: Aggregating batch results
+# ==============================================================================
+echo -e "${YELLOW}============================================================${NC}"
+echo -e "${YELLOW}Demo 13: Aggregating Batch Results Into One Table${NC}"
+echo -e "${YELLOW}============================================================${NC}"
+echo ""
+echo "The batch summary carries counts and failures, not fitted parameters."
+echo "Command: python aggregate_batch_results.py output --summary output/batch_summary.json --csv output/batch_parameters.csv"
+echo ""
+python aggregate_batch_results.py output --summary output/batch_summary.json --csv output/batch_parameters.csv
+echo ""
+echo -e "${GREEN}Parameter table saved to: output/batch_parameters.csv${NC}"
+echo ""
+
+# ==============================================================================
 # Summary
 # ==============================================================================
 echo -e "${BLUE}============================================================${NC}"
@@ -239,6 +254,7 @@ echo "  - nlsq fit --output   : Override output file path"
 echo "  - nlsq fit --stdout   : Output results to stdout"
 echo "  - nlsq batch          : Execute parallel batch fitting"
 echo "  - nlsq batch --summary: Generate aggregate summary"
+echo "  - aggregate_batch_results.py : Collect batch results into a table"
 echo ""
 echo "Data Formats Demonstrated:"
 echo "  - CSV with header"

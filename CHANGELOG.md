@@ -19,6 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   residuals. Unweighted workflows are unaffected. `CurveFitResult.r_squared`
   already handled this correctly; only the CLI export path re-derived it.
 
+### Added
+- `optimistix>=0.1.0` added to core dependencies (and `conda-recipe/meta.yaml`);
+  it and its transitive deps (`equinox`, `lineax`, `jaxtyping`,
+  `wadler-lindig`) are all available on conda-forge. Pure addition to
+  `uv.lock` -- no existing pin moved.
+- `examples/scripts/02_core_tutorials/batch_fitting_optimistix.py` -- Optimistix
+  `LevenbergMarquardt` vs a hand-written vmapped Gauss-Newton for batch fitting:
+  ~1.5x slower at a matched step budget, adaptive termination gains nothing
+  under `vmap` (the batch pays the slowest member's step count), but it
+  converges on all 500 datasets from a 20x-wrong `p0` where the fixed-lambda
+  solver returns NaN on every one. Includes the fast-then-rescue hybrid.
+- `examples/scripts/10_cli-commands/aggregate_batch_results.py` -- collects the
+  per-workflow JSON files an `nlsq batch` run produces into a single parameter
+  table (optionally CSV); the batch summary carries only counts and failures.
+- `examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py` -- fitting
+  many small datasets from Python without YAML: reusing one `CurveFit` instance
+  (~14-18x over per-call `curve_fit`) and a `jax.vmap`ed solver (~600-800x),
+  including covariance and ragged datasets via zero-weighted padding.
+
 ## [0.7.4] - 2026-08-30
 
 ### Changed
