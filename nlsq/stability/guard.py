@@ -386,7 +386,19 @@ class NumericalStabilityGuard:
         condition_number = np.inf
         min_sv_cached = None  # Cache min singular value (avoid recomputation)
         try:
-            svd_vals = jnp.linalg.svdvals(J)
+            # Tall-skinny Jacobians (the common curve-fitting shape: many data
+            # points, few parameters) go through the R factor of a QR
+            # decomposition instead of a direct SVD. J = QR with Q orthonormal,
+            # so R has exactly the singular values of J, but R is (n, n) while
+            # XLA's svdvals on an (m, n) input allocates an m x m workspace --
+            # 11.5 TB for a (1_200_000, 7) Jacobian, which raises
+            # RESOURCE_EXHAUSTED and drops a well-conditioned matrix into the
+            # `except` branch below as condition_number = inf. QR keeps the
+            # workspace O(m * n) and the result is bit-identical for m > n.
+            if J.shape[0] > J.shape[1]:
+                svd_vals = jnp.linalg.svdvals(jnp.linalg.qr(J, mode="r"))
+            else:
+                svd_vals = jnp.linalg.svdvals(J)
 
             # Handle empty or invalid SVD
             if len(svd_vals) == 0:

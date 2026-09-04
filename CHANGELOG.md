@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `NumericalStabilityGuard.check_and_fix_jacobian` reported well-conditioned
+  tall-skinny Jacobians as ill-conditioned and silently regularized them. The
+  SVD skip guard bounds the *element* count (`max_jacobian_elements_for_svd`,
+  10M), but XLA's `svdvals` on an `(m, n)` input allocates an `m x m`
+  workspace, so a `(1_200_000, 7)` Jacobian -- 8.4M elements, under the skip
+  threshold -- requested ~11.5 TB and raised `RESOURCE_EXHAUSTED`. The
+  exception was caught, the condition number fell back to `inf`, and the
+  `condition_number > condition_threshold` branch then diagonal-regularized a
+  matrix whose true condition number was ~1.003. The failure band was bounded
+  on both sides: a *larger* Jacobian crossed the 10M-element threshold, skipped
+  the SVD, and behaved correctly. For `m > n` the singular values now come from
+  the `R` factor of a QR decomposition (`J = QR` with orthonormal `Q`, so `R`
+  carries exactly the singular values of `J`) which keeps the workspace
+  `O(m * n)`. Genuinely rank-deficient Jacobians -- e.g. the all-zero column
+  left by pinning a parameter to a zero-width bound -- are still detected and
+  regularized as before.
+
 ## [0.7.5] - 2026-09-04
 
 ### Fixed
