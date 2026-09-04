@@ -138,7 +138,7 @@ JAX backend, GPU info, and available builtin models.
 
    NLSQ Information
    ================
-   Version: 0.7.5
+   Version: 0.7.6
    Python: 3.12.0
    JAX: 0.8.2
    Device: cuda:0 (NVIDIA RTX 4090)

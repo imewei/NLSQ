@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-09-04
+
 ### Fixed
 - `NumericalStabilityGuard.check_and_fix_jacobian` reported well-conditioned
   Jacobians as ill-conditioned and silently regularized them. The SVD skip
