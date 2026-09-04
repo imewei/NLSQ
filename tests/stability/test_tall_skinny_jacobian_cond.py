@@ -17,9 +17,16 @@ Historical context:
   entirely and behaved correctly, so a larger Jacobian worked while a smaller
   one did not.
 
-  Resolution: for ``m > n`` the singular values are taken from the ``R`` factor
-  of a QR decomposition. ``J = QR`` with orthonormal ``Q``, so ``R`` carries
-  exactly the singular values of ``J`` while the workspace stays ``O(m * n)``.
+  Resolution: the singular values are taken from the ``R`` factor of a QR
+  decomposition. ``J = QR`` with orthonormal ``Q``, so ``R`` carries exactly
+  the singular values of ``J`` while the workspace stays ``O(m * n)``. Wide
+  Jacobians are transposed first -- they hit the identical blowup (a
+  ``(7, 300_000)`` input asks for 720 GB) and singular values are invariant
+  under transposition.
+
+  Backend note: the OOM is CPU-only. cuSOLVER handles these shapes, so on a
+  GPU host the pre-fix code passes these tests; CI runs CPU-only, where it
+  does not.
 """
 
 import jax.numpy as jnp
@@ -27,6 +34,10 @@ import numpy as np
 import pytest
 
 from nlsq.stability.guard import NumericalStabilityGuard
+
+# Memory-intensive: these allocate up to 8.4M-element float64 arrays, well over
+# the 100K-element threshold that requires serial execution (CLAUDE.md).
+pytestmark = [pytest.mark.serial, pytest.mark.stability]
 
 
 def _well_conditioned(shape, seed=0):
@@ -38,7 +49,11 @@ class TestTallSkinnyConditionNumber:
 
     @pytest.mark.parametrize("shape", [(50_000, 7), (200_000, 12)])
     def test_matches_direct_svd(self, shape):
-        """QR-derived singular values agree with a direct SVD."""
+        """QR-derived singular values agree with a direct SVD.
+
+        Only the (200_000, 12) case reproduces the historical CPU OOM; the
+        (50_000, 7) case is a plain QR-vs-SVD correctness check.
+        """
         J = _well_conditioned(shape)
         guard = NumericalStabilityGuard()
 
@@ -84,6 +99,65 @@ class TestTallSkinnyConditionNumber:
 
         assert not np.isfinite(issues["condition_number"])
         assert issues["regularized"] is True
+
+
+class TestWideAndSquareConditionNumber:
+    """The wide (m < n) path had the identical blowup, transposed."""
+
+    def test_wide_jacobian_is_not_falsely_regularized(self):
+        """A wide Jacobian must not OOM into a spurious `inf`.
+
+        ``svdvals`` on a ``(7, 300_000)`` input asks for 720 GB on the CPU
+        backend -- 2.1M elements, under ``max_jacobian_elements_for_svd`` -- so
+        this reaches the SVD path and used to fail exactly like the tall case.
+        """
+        guard = NumericalStabilityGuard()
+        J = _well_conditioned((7, 300_000))
+        assert J.size < guard.max_jacobian_elements_for_svd
+
+        J_fixed, issues = guard.check_and_fix_jacobian(J)
+
+        assert issues["svd_skipped"] is False
+        assert issues["svd_failed"] is False
+        assert np.isfinite(issues["condition_number"])
+        assert issues["regularized"] is False
+        np.testing.assert_array_equal(np.asarray(J_fixed), np.asarray(J))
+
+    @pytest.mark.parametrize("shape", [(9, 9), (5, 40)])
+    def test_square_and_wide_match_direct_svd(self, shape):
+        """Pins the m >= n orientation choice against an accidental flip."""
+        J = _well_conditioned(shape)
+        guard = NumericalStabilityGuard()
+
+        _, issues = guard.check_and_fix_jacobian(J)
+
+        sv = np.linalg.svd(np.asarray(J), compute_uv=False)
+        assert issues["condition_number"] == pytest.approx(
+            float(sv[0] / sv[-1]), rel=1e-5
+        )
+
+
+class TestSvdFailureIsNotIllConditioning:
+    """A failed measurement must not masquerade as a measured `inf`."""
+
+    def test_svd_failure_does_not_regularize(self, monkeypatch):
+        """An exception in the SVD must leave J untouched, not perturb it."""
+        guard = NumericalStabilityGuard()
+        J = _well_conditioned((2_000, 7))
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError("RESOURCE_EXHAUSTED: simulated")
+
+        monkeypatch.setattr(jnp.linalg, "qr", _boom)
+
+        with pytest.warns(UserWarning, match="Could not compute SVD"):
+            J_fixed, issues = guard.check_and_fix_jacobian(J)
+
+        assert issues["svd_failed"] is True
+        assert issues["condition_number"] is None
+        assert issues["is_ill_conditioned"] is False
+        assert issues["regularized"] is False
+        np.testing.assert_array_equal(np.asarray(J_fixed), np.asarray(J))
 
 
 if __name__ == "__main__":

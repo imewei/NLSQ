@@ -766,6 +766,7 @@ class LeastSquares:
                     or issues.get("has_inf")
                     or issues.get("is_ill_conditioned")
                     or issues.get("regularized")
+                    or issues.get("svd_failed")
                 )
                 if has_problem:
                     self.logger.warning(

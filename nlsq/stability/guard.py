@@ -348,6 +348,7 @@ class NumericalStabilityGuard:
                 "condition_number": None,
                 "regularized": False,
                 "svd_skipped": True,
+                "svd_failed": False,
                 "reason": f"Jacobian too large ({n_elements:,} > {self.max_jacobian_elements_for_svd:,} elements)",
             }
             return J_fixed, issues
@@ -380,32 +381,41 @@ class NumericalStabilityGuard:
                 "condition_number": np.inf,
                 "regularized": True,
                 "svd_skipped": False,
+                "svd_failed": False,
             }
 
         # Compute singular values for condition number
-        condition_number = np.inf
+        condition_number: float | None = np.inf
+        svd_failed = False  # "we could not measure" -- distinct from "cond is inf"
         min_sv_cached = None  # Cache min singular value (avoid recomputation)
         try:
-            # Tall-skinny Jacobians (the common curve-fitting shape: many data
-            # points, few parameters) go through the R factor of a QR
-            # decomposition instead of a direct SVD. J = QR with Q orthonormal,
-            # so R has exactly the singular values of J, but R is (n, n) while
-            # XLA's svdvals on an (m, n) input allocates an m x m workspace --
-            # 11.5 TB for a (1_200_000, 7) Jacobian, which raises
-            # RESOURCE_EXHAUSTED and drops a well-conditioned matrix into the
-            # `except` branch below as condition_number = inf. QR keeps the
-            # workspace O(m * n) and the result is bit-identical for m > n.
-            if J.shape[0] > J.shape[1]:
-                svd_vals = jnp.linalg.svdvals(jnp.linalg.qr(J, mode="r"))
-            else:
-                svd_vals = jnp.linalg.svdvals(J)
+            # Singular values come from the R factor of a QR decomposition
+            # rather than from a direct SVD of J. J = QR with orthonormal Q, so
+            # R carries exactly the singular values of J (to floating-point
+            # round-off), but R is (k, k) with k = min(m, n) while XLA's
+            # svdvals on an (m, n) input allocates an m x m workspace. On the
+            # CPU backend that is 11.5 TB for a (1_200_000, 7) Jacobian -- the
+            # common curve-fitting shape -- which raises RESOURCE_EXHAUSTED,
+            # lands in the `except` below, and used to report a perfectly
+            # conditioned matrix as inf. Transposing first covers wide
+            # Jacobians, which blow up identically (a (7, 300_000) input asks
+            # for 720 GB); singular values are invariant under transposition.
+            A = J if m >= n else J.T
+            svd_vals = jnp.linalg.svdvals(jnp.linalg.qr(A, mode="r"))
 
-            # Handle empty or invalid SVD
+            # Handle empty or invalid SVD. Currently unreachable (a zero-size
+            # Jacobian is caught by the all-zeros branch above), but return the
+            # full key set so a caller reading .get("regularized") can't
+            # silently read None as False if that ordering ever changes.
             if len(svd_vals) == 0:
                 return J, {
-                    "has_nan": False,
-                    "has_inf": False,
+                    "has_nan": has_nan,
+                    "has_inf": has_inf,
+                    "is_ill_conditioned": True,
                     "condition_number": np.inf,
+                    "regularized": False,
+                    "svd_skipped": False,
+                    "svd_failed": False,
                 }
 
             # svdvals returns sorted descending, use direct indexing O(1)
@@ -419,15 +429,23 @@ class NumericalStabilityGuard:
                 condition_number = float(max_sv / min_sv_cached)
 
         except Exception as e:
+            # A failed measurement is not evidence of ill-conditioning. Keeping
+            # condition_number = inf here would trip the regularization branch
+            # below and silently perturb a Jacobian whose conditioning was
+            # never actually measured, so report the failure instead.
             warnings.warn(f"Could not compute SVD for condition number: {e}")
-            condition_number = np.inf
+            svd_failed = True
+            condition_number = None
 
         # Apply fixes based on condition number
         regularized = False
         k = min(m, n)  # Diagonal size
         diag_indices = jnp.arange(k)
 
-        if condition_number > self.condition_threshold:
+        is_ill_conditioned = (
+            condition_number is not None and condition_number > self.condition_threshold
+        )
+        if is_ill_conditioned:
             warnings.warn(
                 f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})",
             )
@@ -444,10 +462,11 @@ class NumericalStabilityGuard:
         issues = {
             "has_nan": has_nan,
             "has_inf": has_inf,
-            "is_ill_conditioned": condition_number > self.condition_threshold,
+            "is_ill_conditioned": is_ill_conditioned,
             "condition_number": condition_number,
             "regularized": regularized,
             "svd_skipped": False,
+            "svd_failed": svd_failed,
         }
         return J, issues
 
@@ -776,8 +795,10 @@ def estimate_condition_number(xdata: np.ndarray) -> float:
     try:
         cond = np.linalg.cond(X)
         return float(cond)
-    except (np.linalg.LinAlgError, ValueError):
-        # If computation fails, return infinity
+    except (np.linalg.LinAlgError, ValueError) as e:
+        # Signal the failure: an unannounced inf is indistinguishable from a
+        # measured inf, and callers escalate severity on it.
+        warnings.warn(f"Could not estimate condition number: {e}")
         return np.inf
 
 
@@ -872,7 +893,8 @@ def detect_collinearity(
     # Compute correlation matrix
     try:
         corr_matrix = np.corrcoef(xdata, rowvar=False)
-    except (ValueError, np.linalg.LinAlgError):
+    except (ValueError, np.linalg.LinAlgError) as e:
+        warnings.warn(f"Could not compute correlation matrix: {e}")
         return False, []
 
     # Find highly correlated pairs - vectorized (10-50x faster than nested loop)
