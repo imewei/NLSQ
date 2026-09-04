@@ -101,7 +101,13 @@ def fit_loop(x, Y, p0):
 # Pattern 2: one vmapped solver over every dataset
 # =============================================================================
 def residual(p, x, y, w):
-    """Weighted residual. w=0 masks a padded point out of the fit."""
+    """Weighted residual. w=0 masks a padded point out of the fit.
+
+    `w` is used here as a 0/1 mask. Passing w = 1/sigma also works and weights
+    the fit, but note the covariance below then follows scipy's
+    `absolute_sigma=False` convention: the standard errors come out rescaled by
+    the reduced chi-square rather than absolute.
+    """
     return (model(x, *p) - y) * w
 
 
@@ -118,7 +124,10 @@ def gauss_newton(p0, x, y, w, n_iter=30, lam=1e-3):
         r = residual(p, x, y, w)
         J = jax.jacobian(residual)(p, x, y, w)
         JTJ = J.T @ J
-        damped = JTJ + lam * jnp.diag(jnp.diag(JTJ)) + 1e-12 * jnp.eye(p.size)
+        # The ridge floor is scaled to the problem: an absolute 1e-12 is ~1e-15
+        # relative to this JTJ (trace/n is O(100)) and so does nothing at all.
+        floor = 1e-12 * jnp.trace(JTJ) / p.size
+        damped = JTJ + lam * jnp.diag(jnp.diag(JTJ)) + floor * jnp.eye(p.size)
         return p + jnp.linalg.solve(damped, -J.T @ r), None
 
     p, _ = jax.lax.scan(step, p0, None, length=n_iter)
@@ -127,7 +136,9 @@ def gauss_newton(p0, x, y, w, n_iter=30, lam=1e-3):
     r = residual(p, x, y, w)
     J = jax.jacobian(residual)(p, x, y, w)
     dof = jnp.maximum(jnp.sum(w > 0) - p.size, 1)
-    pcov = jnp.linalg.inv(J.T @ J) * (r @ r) / dof
+    # pinv, not inv: a rank-deficient JTJ makes inv return silent all-NaN
+    # under jit, with no exception to notice.
+    pcov = jnp.linalg.pinv(J.T @ J) * (r @ r) / dof
     return p, jnp.sqrt(jnp.diag(pcov)), jnp.linalg.norm(J.T @ r)
 
 

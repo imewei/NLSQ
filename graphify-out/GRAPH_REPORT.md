@@ -1,7 +1,7 @@
 # Graph Report - NLSQ  (2026-09-03)
 
 ## Corpus Check
-- 455 files · ~700,599 words
+- 455 files · ~700,748 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c36ead2c`
+- Built from commit: `98c80359`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -118,7 +118,7 @@
 - nlsq/global_optimization/__init__.py
 - Any
 - DiagnosticsFacade
-- TestValidateEnumValue
+- estimate_p0_linear
 - safe_dumps
 - MemoryEstimator
 - adaptive_hybrid.py
@@ -205,7 +205,7 @@
 - fixture
 - ProgressBar
 - TestCondition1NormAccuracy
-- ndarray
+- estimate_p0_exponential_growth
 - utils/test_validators.py
 - test_no_circular_deps.py
 - aggregate_batch_results.py
@@ -256,9 +256,9 @@
 - biology_models.py
 - TestTelemetryCircularBuffer
 - device.py
-- TestFeatureCombinations
+- TestDifficultOptimizationProblems
 - batch_fitting_many_datasets.py
-- TestNumericalStabilityGuardEdgeCases
+- TestFeatureCombinations
 - test_decomposition_performance.py
 - .__init__
 - TestValidateLrScheduleConfig
@@ -304,13 +304,13 @@
 - NLSQ API Reference (modules)
 - TestGradientCorrectness
 - test_performance_regression.py
-- TestLinearFunction
+- in_bounds_jax
 - TestEdgeCases
 - nlsq.fit
 - TestValidatorsCoverage
 - TestLossFunctionsJAX
 - TestInitializeTRFState
-- TestNumericalStabilityEdgeCases
+- TestXPCSDivergenceRegression
 - CMAESOptimizer
 - test_validators_edge_cases.py
 - TestPendingThreadsDeferred
@@ -337,7 +337,7 @@
 - TestModuleImports
 - Any
 - TestCheckIsfinite
-- .jac
+- test_trf_internal_helpers.py
 - TestSnapshotForFit
 - auto_select_algorithm
 - TestBenchmarkProblems
@@ -378,7 +378,7 @@
 - TestCMAESConfigWithChunking
 - TestImportIntegration
 - TestPlatformGuard
-- TestPowerLaw
+- TestNumericalEdgeCases
 - TestDefaultLossFunc
 - TestSVDNoBounds
 - TestConjugateGradientSolve
@@ -409,7 +409,7 @@
 - TestGPUNameSanitization
 - .get_summary_statistics
 - .test_method_selector_fallback_logs_info
-- TestSigmoid
+- TestValidateGradientClip
 - .test_all_functions_work_with_auto_p0
 - AuditLogger
 - TestConfigValidation
@@ -427,7 +427,7 @@
 - TestGNResult
 - .format
 - SecurityError
-- ExponentialFittingProblem
+- LossFunctionMixin
 - notebook_utils API reference
 - ._validate
 - test_commands.py
@@ -435,7 +435,7 @@
 - OptimizationConfig
 - nlsq.diagnostics (docs)
 - nlsq.streaming.phases (docs)
-- clear_plugin_registry
+- TestGaussian
 - .verbosity
 - StrategyFactory
 - TestSolveTrSubproblemCGBounds
@@ -590,11 +590,11 @@ Nodes (92): ParameterSensitivityAnalyzer, ndarray, Analyze parameter sensitivity
 
 ### Community 6 - ".register"
 Cohesion: 0.02
-Nodes (86): Any, ndarray, Run plugin analysis. Parameters ---------- jacobian : np.ndarray Jacobian…, Register a diagnostic plugin. Parameters ---------- plugin : DiagnosticPlugin…, Unregister a plugin by name. Parameters ---------- name : str Name of the…, Get a plugin by name. Parameters ---------- name : str Name of the plugin to…, Unregister all plugins. Primarily for testing purposes. Example ------- >>>…, Execute all registered plugins with exception isolation. This function runs… (+78 more)
+Nodes (91): Any, ndarray, Run plugin analysis. Parameters ---------- jacobian : np.ndarray Jacobian…, Register a diagnostic plugin. Parameters ---------- plugin : DiagnosticPlugin…, Unregister a plugin by name. Parameters ---------- name : str Name of the…, Get a plugin by name. Parameters ---------- name : str Name of the plugin to…, Unregister all plugins. Primarily for testing purposes. Example ------- >>>…, Execute all registered plugins with exception isolation. This function runs… (+83 more)
 
 ### Community 7 - ".curve_fit"
 Cohesion: 0.01
-Nodes (104): example_3_diagnostic_analysis(), example_4_comparison(), Example 4: Compare old vs new error messages., Example 3: Using diagnostic information programmatically., Use non-linear least squares to fit a function, f, to data. Assumes ``ydata =…, Test curve_fit with different methods., Test curve_fit with max function evaluations., curve_fit(..., stability='auto') used to silently rescale xdata/ydata to [0, 1]… (+96 more)
+Nodes (95): example_3_diagnostic_analysis(), example_4_comparison(), Example 4: Compare old vs new error messages., Example 3: Using diagnostic information programmatically., Use non-linear least squares to fit a function, f, to data. Assumes ``ydata =…, Test curve_fit with different methods., Test curve_fit with max function evaluations., curve_fit(..., stability='auto') used to silently rescale xdata/ydata to [0, 1]… (+87 more)
 
 ### Community 8 - "LeastSquares"
 Cohesion: 0.02
@@ -605,8 +605,8 @@ Cohesion: 0.01
 Nodes (129): NormalizedModelWrapper, ParameterNormalizer, ndarray, Parameter normalization for improved optimization convergence. This module…, Initialize parameter normalizer. Parameters ---------- p0 : array_like Initial…, Scale factors from |p0| magnitudes, clamped away from zero. Shared by the 'p0'…, Compute scaling factors and offsets based on strategy., Compute denormalization Jacobian analytically. For our scaling operations, the… (+121 more)
 
 ### Community 10 - "common_jax.py"
-Cohesion: 0.09
-Nodes (30): CL_scaling_vector_jax(), in_bounds_jax(), intersect_trust_region_jax(), make_strictly_feasible_jax(), minimize_quadratic_1d_jax(), phi_and_derivative_jax(), jit, ndarray (+22 more)
+Cohesion: 0.12
+Nodes (25): check_termination_jax(), CL_scaling_vector_jax(), intersect_trust_region_jax(), make_strictly_feasible_jax(), minimize_quadratic_1d_jax(), phi_and_derivative_jax(), jit, ndarray (+17 more)
 
 ### Community 11 - "IdentifiabilityAnalyzer"
 Cohesion: 0.02
@@ -873,8 +873,8 @@ Cohesion: 0.06
 Nodes (31): ExportPage, ndarray, QWidget, Create the export options panel., Create the code preview panel., Connect button signals., Handle export session bundle., Handle copy JSON to clipboard. (+23 more)
 
 ### Community 78 - "stability/test_integration.py"
-Cohesion: 0.03
-Nodes (43): _capture_minpack_log(), serial, Tests for Stability Integration with curve_fit…, Test stability='auto' mode (check and fix)., Test that stability='auto' mode fixes ill-conditioned data. Marked serial: same…, Test that stability='auto' mode fixes NaN data., Test that stability='auto' mode fixes Inf data., Test that stability='auto' mode fixes parameter scale mismatches. (+35 more)
+Cohesion: 0.04
+Nodes (35): _capture_minpack_log(), serial, Tests for Stability Integration with curve_fit…, Test stability='auto' mode (check and fix)., Test that stability='auto' mode fixes ill-conditioned data. Marked serial: same…, Test that stability='auto' mode fixes NaN data., Test that stability='auto' mode fixes Inf data., Test that stability='auto' mode fixes parameter scale mismatches. (+27 more)
 
 ### Community 79 - "ResidualsPlotWidget"
 Cohesion: 0.09
@@ -885,8 +885,8 @@ Cohesion: 0.09
 Nodes (15): OptimizeWarning, UserWarning, Optimization warning types for NLSQ. This module provides the OptimizeWarning…, Warning class for optimization-related issues. This warning is raised when non-…, Tests for OptimizeWarning class., Test that OptimizeWarning is a UserWarning subclass., Test that OptimizeWarning can be raised., Test that OptimizeWarning can be caught as UserWarning. (+7 more)
 
 ### Community 81 - "TrustRegionReflective"
-Cohesion: 0.10
-Nodes (25): check_termination_jax(), JIT-compiled termination check (replaces common_scipy.check_termination).…, print_header_nonlinear(), Print column headers for nonlinear optimization progress display., Any, ndarray, Invoke user callback with proper exception handling. This helper extracts…, Initialize bounds-specific state for TRF algorithm. This helper extracts bounds… (+17 more)
+Cohesion: 0.07
+Nodes (38): print_header_nonlinear(), Print column headers for nonlinear optimization progress display., Any, ndarray, Invoke user callback with proper exception handling. This helper extracts…, Initialize bounds-specific state for TRF algorithm. This helper extracts bounds…, Solve trust region subproblem with bounds. This helper extracts bounds…, Evaluate inner loop for bounds optimization. This helper extracts the inner… (+30 more)
 
 ### Community 82 - "PerformanceProfiler"
 Cohesion: 0.06
@@ -968,9 +968,9 @@ Nodes (15): Any, ndarray, Try next method in sequence., Add random perturbation 
 Cohesion: 0.07
 Nodes (25): DiagnosticsFacade, Any, Facade for diagnostics components with lazy loading. This facade breaks the…, Get the DiagnosticLevel enum. Returns ------- type[DiagnosticLevel] The…, Get the DiagnosticsConfig class. Returns ------- type[DiagnosticsConfig] The…, Get the ConvergenceMonitor class. Returns ------- type[ConvergenceMonitor] The…, Create a DiagnosticsConfig instance. Parameters ---------- **kwargs Keyword…, Create a ConvergenceMonitor instance. Parameters ---------- window_size : int… (+17 more)
 
-### Community 103 - "TestValidateEnumValue"
-Cohesion: 0.20
-Nodes (6): Tests for validate_enum_value function., Test with valid enum value., Test with invalid enum value., Test that error message includes valid options., Test that validation is case-sensitive., TestValidateEnumValue
+### Community 103 - "estimate_p0_linear"
+Cohesion: 0.10
+Nodes (18): estimate_p0_gaussian(), estimate_p0_linear(), estimate_p0_lorentzian(), estimate_p0_power_law(), estimate_p0_sigmoid(), ndarray, Estimate initial parameters for linear function. Uses ordinary least squares to…, Estimate initial parameters for Gaussian function. Strategy: - Amplitude: peak… (+10 more)
 
 ### Community 104 - "safe_dumps"
 Cohesion: 0.08
@@ -1061,8 +1061,8 @@ Cohesion: 0.05
 Nodes (31): Deserialize bytes to object using JSON. This is a secure alternative to…, safe_loads(), Test nested list serialization., Test empty dict serialization., Test simple dict serialization., Test nested dict serialization., Test dict containing lists serialization., Test tuple is converted to tuple (not list). (+23 more)
 
 ### Community 126 - "functions.py"
-Cohesion: 0.06
-Nodes (42): ArrayReturn, exponential_decay(), Converted from nlsq_interactive_tutorial.ipynb This script was automatically…, Exponential decay model: y = a * exp(-b*x) + c Parameters: a: Amplitude b:…, gaussian(), multi_peak_model(), Converted from spectroscopy_peaks.ipynb This script was automatically generated…, Gaussian peak profile. Parameters ---------- x : array_like Energy/wavelength… (+34 more)
+Cohesion: 0.05
+Nodes (46): ArrayReturn, exponential_decay(), Converted from nlsq_interactive_tutorial.ipynb This script was automatically…, Exponential decay model: y = a * exp(-b*x) + c Parameters: a: Amplitude b:…, gaussian(), multi_peak_model(), Converted from spectroscopy_peaks.ipynb This script was automatically generated…, Gaussian peak profile. Parameters ---------- x : array_like Energy/wavelength… (+38 more)
 
 ### Community 127 - "JAXConfig"
 Cohesion: 0.05
@@ -1162,7 +1162,7 @@ Nodes (14): Tests for safe mathematical operations., Set up test fixtures., Test
 
 ### Community 151 - "TestProfilingDashboard"
 Cohesion: 0.08
-Nodes (13): Test ProfilingDashboard class., Test dashboard initialization., Test adding profiles to dashboard., Test adding duplicate profile., Test removing profiles from dashboard., Test removing profile that doesn't exist., Test comparison report with no profiles., Test comparison report generation. (+5 more)
+Nodes (14): Test ProfilingDashboard class., Test dashboard initialization., Test adding profiles to dashboard., Test adding duplicate profile., Test removing profiles from dashboard., Test removing profile that doesn't exist., Test comparison report with no profiles., Test comparison report generation. (+6 more)
 
 ### Community 152 - "exponential_decay"
 Cohesion: 0.10
@@ -1171,10 +1171,6 @@ Nodes (11): exponential_decay(), slow, Exponential decay model., Test that succe
 ### Community 153 - "TestValidateCurveFitParameters"
 Cohesion: 0.08
 Nodes (14): Tests for parameter validation (p0, bounds, sigma)., Set up test fixtures., Test validation with valid initial parameters., Test error when p0 has wrong number of parameters., Test error when p0 contains NaN., Test validation with valid bounds., Test error when bounds has wrong length., Test error when lower bounds >= upper bounds. (+6 more)
-
-### Community 154 - "BroydenTridiagonal"
-Cohesion: 0.21
-Nodes (3): Check memory requirements and adjust solver if needed. Parameters ---------- m…, BroydenTridiagonal, SparseMixin
 
 ### Community 155 - "ModelValidationResult"
 Cohesion: 0.06
@@ -1217,8 +1213,8 @@ Cohesion: 0.15
 Nodes (11): BoundsInference, Infer reasonable parameter bounds from data characteristics. This class…, Initialize bounds inference., Test handling of zero initial guess., Test BoundsInference class., Test BoundsInference initialization., Test basic bounds inference., Test that positive p0 enforces positivity. (+3 more)
 
 ### Community 165 - "TestProfilerVisualization"
-Cohesion: 0.09
-Nodes (14): skipif, Test distribution plot with insufficient data., Test HTML report generation., Test HTML report saved to file., Test CSV export with no data., Test ProfilerVisualization class., Test comprehensive comparison plots., Test visualization initialization. (+6 more)
+Cohesion: 0.10
+Nodes (13): skipif, Test distribution plot with insufficient data., Test HTML report generation., Test HTML report saved to file., Test CSV export with no data., Test ProfilerVisualization class., Test visualization initialization., Test timing series plot. (+5 more)
 
 ### Community 166 - "test_common_scipy_edge_cases.py"
 Cohesion: 0.13
@@ -1312,9 +1308,9 @@ Nodes (14): ProgressBar, Ensure progress bar is closed on deletion., Ensure file
 Cohesion: 0.18
 Nodes (9): ndarray, Tests for condition number estimation accuracy., Test estimation for well-conditioned matrix., Test estimation for moderately conditioned matrix., Test estimation for ill-conditioned matrix., Test estimation for rectangular matrix., Test estimation for singular matrix., 1-norm condition estimation without full SVD. Uses ||A||_1 * ||A^{-1}||_1 ≈… (+1 more)
 
-### Community 190 - "ndarray"
-Cohesion: 0.10
-Nodes (20): estimate_p0_exponential_growth(), estimate_p0_gaussian(), estimate_p0_lorentzian(), estimate_p0_power_law(), estimate_p0_sigmoid(), ndarray, Estimate initial parameters for exponential growth. Similar to decay but…, Estimate initial parameters for Gaussian function. Strategy: - Amplitude: peak… (+12 more)
+### Community 190 - "estimate_p0_exponential_growth"
+Cohesion: 0.15
+Nodes (9): estimate_p0_exponential_growth(), Estimate initial parameters for exponential growth. Similar to decay but…, Test exponential growth function and utilities., Test basic exponential growth evaluation., Test exponential growth at x=0., Test exponential growth with negative x (decay behavior)., Test exponential growth parameter estimation., Test exponential growth estimation with noise. (+1 more)
 
 ### Community 191 - "utils/test_validators.py"
 Cohesion: 0.14
@@ -1329,8 +1325,8 @@ Cohesion: 0.22
 Nodes (15): load_results(), main(), parameter_names(), parse_args(), print_table(), Any, Namespace, Path (+7 more)
 
 ### Community 194 - "jacobian_mode_selector"
-Cohesion: 0.14
-Nodes (12): jacobian_mode_selector(), Select Jacobian automatic differentiation mode based on problem dimensions.…, Test debug logging of Jacobian mode selection., Test that mode selection is logged in debug mode., Test automatic Jacobian mode selection based on problem dimensions., Test jacrev selection when n_params > n_residuals (tall Jacobian)., Test jacfwd selection when n_params <= n_residuals (wide Jacobian)., Test manual override to force jacfwd mode. (+4 more)
+Cohesion: 0.09
+Nodes (21): jacobian_mode_selector(), Select Jacobian automatic differentiation mode based on problem dimensions.…, cleanup_env(), fixture, Tests for Jacobian automatic mode selection (jacfwd vs jacrev). This module…, Test debug logging of Jacobian mode selection., Test that mode selection is logged in debug mode., Test that jacfwd and jacrev give identical results within tolerance. (+13 more)
 
 ### Community 195 - ".select_algorithm"
 Cohesion: 0.11
@@ -1434,7 +1430,7 @@ Nodes (16): base_visualization_config(), Any, fixture, ndarray, Tests for CLI vi
 
 ### Community 220 - ".least_squares"
 Cohesion: 0.11
-Nodes (15): CallbackFunction, Any, ArrayLike, BoundsTuple, MethodLiteral, Process optimization result and log convergence. Parameters ---------- result :…, Solve nonlinear least squares problem using JAX-accelerated algorithms. This…, Create stability wrapper functions for residuals and Jacobian. NOTE: Stability… (+7 more)
+Nodes (14): CallbackFunction, Any, ArrayLike, BoundsTuple, MethodLiteral, Process optimization result and log convergence. Parameters ---------- result :…, Solve nonlinear least squares problem using JAX-accelerated algorithms. This…, Check memory requirements and adjust solver if needed. Parameters ---------- m… (+6 more)
 
 ### Community 221 - "TestMaxJacobianElementsForSVD"
 Cohesion: 0.12
@@ -1469,8 +1465,8 @@ Cohesion: 0.15
 Nodes (7): Regression tests for dict-key round-trip bugs found by three-brain review., bool dict keys must survive a save/load cycle (bool is an int subclass)., A literal string key that looks like an internal marker must not be…, Key types with no restore path must fail loudly, not silently produce an…, A plain dict that happens to use the reserved '__nlsq_type__' key must be…, An unrecognized __nlsq_type__ value must fail loud, not silently degrade into a…, TestDictKeyRoundTrip
 
 ### Community 229 - "get_jacobian_mode"
-Cohesion: 0.11
-Nodes (17): get_jacobian_mode(), Get Jacobian mode from configuration sources. Configuration precedence (highest…, cleanup_env(), fixture, Tests for Jacobian automatic mode selection (jacfwd vs jacrev). This module…, Test configuration precedence: function param > env var > config file > auto., Test that function parameter has highest precedence., Test that environment variable overrides config file. (+9 more)
+Cohesion: 0.21
+Nodes (8): get_jacobian_mode(), Get Jacobian mode from configuration sources. Configuration precedence (highest…, Test configuration precedence: function param > env var > config file > auto., Test that function parameter has highest precedence., Test that environment variable overrides config file., Test that config file overrides auto-default., Test auto-default when no configuration is provided., TestConfigurationPrecedence
 
 ### Community 230 - "TestLossFunctionsJITBasic"
 Cohesion: 0.11
@@ -1516,17 +1512,17 @@ Nodes (9): Tests for Phase 3 optimizations (Task Group 9). Tests cover: - Teleme
 Cohesion: 0.18
 Nodes (15): check_plugin_conflicts(), get_device_info(), get_gpu_info(), get_recommended_package(), get_system_cuda_version(), _is_accelerator_device(), _print_gpu_warning(), GPU detection and warning utilities (System CUDA version). This module provides… (+7 more)
 
-### Community 241 - "TestFeatureCombinations"
+### Community 241 - "TestDifficultOptimizationProblems"
 Cohesion: 0.04
-Nodes (31): Phase 3 Integration Tests ========================== Comprehensive integration…, Test all Phase 3 features working together., Exponential decay model., Test edge cases and boundary conditions., Test with single parameter model., Gaussian distribution., Test with many parameters (polynomial)., Test with very small dataset. (+23 more)
+Nodes (32): Phase 3 Integration Tests ========================== Comprehensive integration…, Test with challenging optimization scenarios., Test with ill-conditioned data (large x range)., Test with NaN and Inf values in data., Test with extreme parameter scale mismatches., Test with constant (zero variance) data., Test with very high noise levels., Test with highly collinear predictors. (+24 more)
 
 ### Community 242 - "batch_fitting_many_datasets.py"
 Cohesion: 0.19
-Nodes (14): fit_batched(), fit_loop(), gauss_newton(), main(), make_datasets(), model(), Batch Fitting Many Small Datasets From Python (No YAML) `nlsq batch` runs one…, Weighted residual. w=0 masks a padded point out of the fit. (+6 more)
+Nodes (14): fit_batched(), fit_loop(), gauss_newton(), main(), make_datasets(), model(), Batch Fitting Many Small Datasets From Python (No YAML) `nlsq batch` runs one…, Weighted residual. w=0 masks a padded point out of the fit. `w` is used here as… (+6 more)
 
-### Community 243 - "TestNumericalStabilityGuardEdgeCases"
-Cohesion: 0.12
-Nodes (9): Edge case tests for NumericalStabilityGuard., Set up test fixtures., Test with empty Jacobian (edge case)., Test with 1x1 Jacobian., Test with tall Jacobian (m >> n)., Test with wide Jacobian (m << n)., Test Jacobian with both NaN and Inf., Test handling of subnormal (denormalized) numbers. (+1 more)
+### Community 243 - "TestFeatureCombinations"
+Cohesion: 0.13
+Nodes (8): Test different combinations of Phase 3 features., Test with only auto_bounds enabled., Test with only stability enabled., Test with only fallback enabled., Test auto_bounds + stability (no fallback)., Test auto_bounds + fallback (no stability)., Test stability + fallback (no auto_bounds)., TestFeatureCombinations
 
 ### Community 244 - "test_decomposition_performance.py"
 Cohesion: 0.17
@@ -1708,9 +1704,9 @@ Nodes (5): Test that JAX gradients are correct., Test gradient of linear functio
 Cohesion: 0.19
 Nodes (11): load_baseline(), measure_cold_jit(), measure_hot_path(), slow, Performance regression tests with baseline comparison. This module implements…, Load performance baseline for current platform., Measure cold JIT compilation time., Measure hot path (cached JIT) time. (+3 more)
 
-### Community 289 - "TestLinearFunction"
-Cohesion: 0.25
-Nodes (5): Tests for linear function., Test linear function with automatic p0 estimation., Test linear function with manual p0., Test linear.estimate_p0() method directly., TestLinearFunction
+### Community 289 - "in_bounds_jax"
+Cohesion: 0.22
+Nodes (7): in_bounds_jax(), JIT-compiled bounds check (replaces common_scipy.in_bounds). Returns a JAX…, in_bounds(), Check if a point lies within bounds., Unit tests for JIT-compiled bounds helper functions in common_jax.py. Tests…, Test in_bounds_jax matches NumPy version., TestInBoundsJax
 
 ### Community 290 - "TestEdgeCases"
 Cohesion: 0.25
@@ -1732,9 +1728,9 @@ Nodes (7): JAX-specific tests for loss functions., Set up test fixtures., Test t
 Cohesion: 0.17
 Nodes (7): Test that gradient is computed correctly., Test that cost function is computed correctly., Test the _initialize_trf_state helper method., Test basic state initialization without loss function., Test state initialization with Jacobian-based scaling., Test that Delta is set to 1.0 when initial guess is zero., TestInitializeTRFState
 
-### Community 295 - "TestNumericalStabilityEdgeCases"
-Cohesion: 0.17
-Nodes (7): Test numerical stability in edge cases., Test fitting with very small residuals (near-perfect fit)., Test fitting with large parameter values., Test fitting with small parameter values., Test with parameters of very different scales., Test exponential decay with challenging initial conditions., TestNumericalStabilityEdgeCases
+### Community 295 - "TestXPCSDivergenceRegression"
+Cohesion: 0.14
+Nodes (8): Regression tests for XPCS divergence issue (commit 8028a03). This test class…, XPCS intensity autocorrelation function g2(tau). This is the standard model for…, Test XPCS fitting works without stability mode (baseline)., Test XPCS fitting with stability='auto' and rescale_data=False. This is the…, Test XPCS fitting with stability='auto' and rescale_data=True (default). This…, Test that large XPCS datasets don't suffer from SVD overhead. For datasets >…, Test XPCS fitting recovers from poor initial guess with stability mode., TestXPCSDivergenceRegression
 
 ### Community 296 - "CMAESOptimizer"
 Cohesion: 0.21
@@ -1836,9 +1832,9 @@ Nodes (5): Any, ndarray, Check for improvement and stop if patience exceeded., C
 Cohesion: 0.17
 Nodes (7): Tests for numerical validation., Test with all finite values., Test with NaN values., Test with Inf values., Test with negative Inf values., Test with empty array., TestCheckIsfinite
 
-### Community 322 - ".jac"
-Cohesion: 0.09
-Nodes (27): SimpleNamespace, MonkeyPatch, Additional fast branch tests for trf helpers., Test convergence criteria returns tuple (status, g_norm) per OPT-8., test_check_convergence_criteria_hits(), test_evaluate_step_acceptance_accepts_step(), test_evaluate_step_acceptance_handles_nonfinite(), test_solve_trust_region_subproblem_sparse_branch() (+19 more)
+### Community 322 - "test_trf_internal_helpers.py"
+Cohesion: 0.29
+Nodes (12): SimpleNamespace, _make_optimizer(), MonkeyPatch, unit, Fast unit tests for TRF helper branches without heavy JAX usage., test_check_convergence_criteria_branches(), test_evaluate_step_acceptance_accepts(), test_evaluate_step_acceptance_nonfinite_rejects() (+4 more)
 
 ### Community 323 - "TestSnapshotForFit"
 Cohesion: 0.26
@@ -1992,9 +1988,9 @@ Nodes (5): Test import-time behavior., Verify check_gpu_availability called on n
 Cohesion: 0.20
 Nodes (6): Test that GPU functions exit early on non-Linux platforms., check_gpu_availability must return False on macOS without calling subprocess., check_gpu_availability must return False on Windows without calling subprocess., get_recommended_package must return None on macOS without calling subprocess., get_recommended_package must return None on Windows without calling subprocess., TestPlatformGuard
 
-### Community 363 - "TestPowerLaw"
-Cohesion: 0.25
-Nodes (5): Tests for power_law function., Test power_law with automatic p0 estimation., Test power_law.estimate_p0() method., Test power_law with b=1 (linear case)., TestPowerLaw
+### Community 363 - "TestNumericalEdgeCases"
+Cohesion: 0.17
+Nodes (7): Test numerical edge cases and stability., Test linear function handles infinity gracefully., Test exponential decay doesn't overflow with large negative x., Test exponential decay handles underflow (returns asymptote)., Test functions handle empty arrays., Test functions with very small values., TestNumericalEdgeCases
 
 ### Community 364 - "TestDefaultLossFunc"
 Cohesion: 0.20
@@ -2013,8 +2009,8 @@ Cohesion: 0.20
 Nodes (6): Tests for numerical stability of JIT functions., Test with large Jacobian matrix., Test with ill-conditioned Jacobian., Test with zero Jacobian., Test with very small values., TestNumericalStability
 
 ### Community 368 - "solve_with_cholesky_fallback"
-Cohesion: 0.04
-Nodes (39): Solve linear system Ax = b using Cholesky with eigenvalue fallback. This…, solve_with_cholesky_fallback(), Edge case tests for nlsq.stability.guard module. Tests numerical stability…, Test that solve_with_cholesky_fallback is JIT-compatible., Tests for NumericalStabilityGuard initialization., Test default initialization values., Test custom max_jacobian_elements_for_svd., Test that JIT functions are created. (+31 more)
+Cohesion: 0.03
+Nodes (48): Solve linear system Ax = b using Cholesky with eigenvalue fallback. This…, solve_with_cholesky_fallback(), Edge case tests for nlsq.stability.guard module. Tests numerical stability…, Test that solve_with_cholesky_fallback is JIT-compatible., Tests for NumericalStabilityGuard initialization., Test default initialization values., Test custom max_jacobian_elements_for_svd., Test that JIT functions are created. (+40 more)
 
 ### Community 369 - ".run"
 Cohesion: 0.25
@@ -2112,9 +2108,9 @@ Nodes (5): Test GPU name handling with edge cases., Ensure tests exercise the fu
 Cohesion: 0.33
 Nodes (3): Estimate convergence rate. Returns ------- rate : float or None Convergence…, Get summary statistics for the optimization. Returns ------- stats : dict…, Generate human-readable optimization report. Parameters ---------- verbose :…
 
-### Community 394 - "TestSigmoid"
-Cohesion: 0.33
-Nodes (4): Tests for sigmoid function., Test sigmoid with automatic p0 estimation., Test sigmoid.estimate_p0() method., TestSigmoid
+### Community 394 - "TestValidateGradientClip"
+Cohesion: 0.20
+Nodes (6): Tests for validate_gradient_clip function., Test None value (no clipping)., Test valid positive clip value., Test zero clip value., Test negative clip value., TestValidateGradientClip
 
 ### Community 395 - ".test_all_functions_work_with_auto_p0"
 Cohesion: 0.33
@@ -2184,6 +2180,10 @@ Nodes (3): LogRecord, Format log record as JSON. Parameters ---------- record : 
 Cohesion: 0.40
 Nodes (4): Exception, Validate code and raise SecurityError if unsafe. Parameters ---------- code :…, Exception raised when unsafe code is detected., SecurityError
 
+### Community 412 - "LossFunctionMixin"
+Cohesion: 0.20
+Nodes (4): cubic_soft_l1(), ExponentialFittingProblem, LossFunctionMixin, Provide data and function for exponential fitting in the form y = a + exp(b *…
+
 ### Community 413 - "notebook_utils API reference"
 Cohesion: 0.52
 Nodes (7): notebook_utils API reference, IPythonDisplayImportTransformer, MatplotlibInlineTransformer, NotebookTransformer, PltShowReplacementTransformer, ProcessingTracker, TransformationPipeline
@@ -2212,9 +2212,9 @@ Nodes (18): DiagnosticPlugin / PluginRegistry, DiagnosticsConfig, GradientMonito
 Cohesion: 0.47
 Nodes (6): nlsq.streaming.phases (docs), nlsq.streaming.phases, CheckpointManager, GaussNewtonPhase, PhaseOrchestrator, WarmupPhase
 
-### Community 420 - "clear_plugin_registry"
-Cohesion: 0.40
-Nodes (5): clear_plugin_registry(), default_config(), fixture, Create default diagnostics configuration with verbose and warnings disabled., Clear the plugin registry before and after each test.
+### Community 420 - "TestGaussian"
+Cohesion: 0.25
+Nodes (5): Tests for gaussian function., Test gaussian with automatic p0 estimation., Test gaussian.estimate_p0() method., Test that gaussian correctly identifies peak position., TestGaussian
 
 ### Community 421 - ".verbosity"
 Cohesion: 0.50
@@ -2253,8 +2253,8 @@ Cohesion: 0.25
 Nodes (5): Tests for nlsq module exports., Test that fit function is exported from nlsq., Test that global optimization classes are exported., Test that curve_fit accepts multi-start parameters., TestAPIExports
 
 ### Community 436 - "test_numerical_correctness.py"
-Cohesion: 0.06
-Nodes (22): Scientific computing tests for numerical correctness. These tests validate: -…, Test exponential decay fit with noise., Test that JIT-compiled fits match non-JIT results., Test that JIT compilation doesn't change the result., Test JIT with various data sizes., Test vmap produces correct batched results., Test that vmapped linear matches loop over individual calls., Test vmap over multiple datasets. (+14 more)
+Cohesion: 0.07
+Nodes (18): Scientific computing tests for numerical correctness. These tests validate: -…, Test exponential decay fit with noise., Test vmap produces correct batched results., Test that vmapped linear matches loop over individual calls., Test vmap over multiple datasets., Test curve fitting against known analytical solutions., Test exact recovery of linear parameters (no noise)., Test result reproducibility. (+10 more)
 
 ### Community 438 - "custom_model_template.py"
 Cohesion: 0.09
@@ -2346,7 +2346,7 @@ Nodes (4): Test ProfileContext manager., Test that context manager returns metri
 
 ### Community 507 - "linear"
 Cohesion: 0.05
-Nodes (29): estimate_p0_linear(), linear(), Estimate initial parameters for linear function. Uses ordinary least squares to…, Linear function: y = a*x + b Parameters ---------- x : array_like Independent…, Test linear function and its utilities., Test numerical edge cases and stability., Test linear function handles infinity gracefully., Test exponential decay doesn't overflow with large negative x. (+21 more)
+Nodes (31): linear(), Linear function: y = a*x + b Parameters ---------- x : array_like Independent…, Test linear function and its utilities., Test basic linear function evaluation., Test linear function with zero slope (constant)., Test linear function with negative slope., Test linear function with large values., Test linear function with JAX array. (+23 more)
 
 ### Community 510 - "TestIntegration"
 Cohesion: 0.50

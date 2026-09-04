@@ -94,7 +94,10 @@ def gauss_newton(p0, x, y, n_iter, lam=1e-3):
         r = residual(p, x, y)
         J = jax.jacobian(residual)(p, x, y)
         JTJ = J.T @ J
-        damped = JTJ + lam * jnp.diag(jnp.diag(JTJ)) + 1e-12 * jnp.eye(p.size)
+        # Ridge floor scaled to the problem; an absolute 1e-12 is ~1e-15
+        # relative to this JTJ and therefore does nothing.
+        floor = 1e-12 * jnp.trace(JTJ) / p.size
+        damped = JTJ + lam * jnp.diag(jnp.diag(JTJ)) + floor * jnp.eye(p.size)
         return p + jnp.linalg.solve(damped, -J.T @ r), None
 
     p, _ = jax.lax.scan(step, p0, None, length=n_iter)

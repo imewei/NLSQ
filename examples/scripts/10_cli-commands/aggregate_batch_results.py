@@ -24,6 +24,7 @@ import argparse
 import csv
 import inspect
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -74,8 +75,14 @@ def parameter_names(model_id: str, n_params: int) -> list[str]:
         names = list(inspect.signature(model).parameters)[1 : n_params + 1]
         if len(names) == n_params:
             return names
-    except Exception:
-        pass
+    except Exception as exc:
+        # Say why. A custom model is expected to land here, but so does a
+        # typo'd builtin name, and silently printing p0..pN makes those two
+        # look identical.
+        print(
+            f"note: could not resolve '{model_id}' ({exc}); using generic names",
+            file=sys.stderr,
+        )
     return [f"p{i}" for i in range(n_params)]
 
 

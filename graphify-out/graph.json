@@ -870,7 +870,7 @@
       "label": "gauss_newton()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L108",
+      "source_location": "L114",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_gauss_newton",
@@ -882,7 +882,7 @@
       "label": "fit_batched()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L137",
+      "source_location": "L148",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_fit_batched",
@@ -894,7 +894,7 @@
       "label": "main()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L149",
+      "source_location": "L160",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_main",
@@ -947,7 +947,7 @@
       "norm_label": "fit each dataset with the full nlsq optimizer. the instance is what makes this..."
     },
     {
-      "label": "Weighted residual. w=0 masks a padded point out of the fit.",
+      "label": "Weighted residual. w=0 masks a padded point out of the fit. `w` is used here as\u2026",
       "file_type": "rationale",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
       "source_location": "L104",
@@ -955,15 +955,15 @@
       "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_104",
       "community": 242,
       "community_name": "batch_fitting_many_datasets.py",
-      "norm_label": "weighted residual. w=0 masks a padded point out of the fit."
+      "norm_label": "weighted residual. w=0 masks a padded point out of the fit. `w` is used here as..."
     },
     {
       "label": "Levenberg-damped Gauss-Newton over a fixed iteration count. A fixed `lax.scan`\u2026",
       "file_type": "rationale",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L109",
+      "source_location": "L115",
       "_origin": "ast",
-      "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_109",
+      "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_115",
       "community": 242,
       "community_name": "batch_fitting_many_datasets.py",
       "norm_label": "levenberg-damped gauss-newton over a fixed iteration count. a fixed `lax.scan`..."
@@ -972,9 +972,9 @@
       "label": "Fit every dataset in one compiled call.",
       "file_type": "rationale",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L138",
+      "source_location": "L149",
       "_origin": "ast",
-      "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_138",
+      "id": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_149",
       "community": 242,
       "community_name": "batch_fitting_many_datasets.py",
       "norm_label": "fit every dataset in one compiled call."
@@ -1054,7 +1054,7 @@
       "label": "make_gn()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L104",
+      "source_location": "L107",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_make_gn",
@@ -1066,7 +1066,7 @@
       "label": "optx_residual()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L113",
+      "source_location": "L116",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_optx_residual",
@@ -1078,7 +1078,7 @@
       "label": "optx_fit()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L119",
+      "source_location": "L122",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_optx_fit",
@@ -1090,7 +1090,7 @@
       "label": "make_optx()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L133",
+      "source_location": "L136",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_make_optx",
@@ -1102,7 +1102,7 @@
       "label": "count_failures()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L139",
+      "source_location": "L142",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_count_failures",
@@ -1114,7 +1114,7 @@
       "label": "measure()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L159",
+      "source_location": "L162",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_measure",
@@ -1126,7 +1126,7 @@
       "label": "main()",
       "file_type": "code",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L179",
+      "source_location": "L182",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_main",
@@ -1171,9 +1171,9 @@
       "label": "Optimistix calls the residual as f(params, args).",
       "file_type": "rationale",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L114",
+      "source_location": "L117",
       "_origin": "ast",
-      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_114",
+      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_117",
       "community": 143,
       "community_name": "batch_fitting_optimistix.py",
       "norm_label": "optimistix calls the residual as f(params, args)."
@@ -1182,9 +1182,9 @@
       "label": "Solve one dataset. `throw=False` is required under vmap: the default raises a\u2026",
       "file_type": "rationale",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L120",
+      "source_location": "L123",
       "_origin": "ast",
-      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_120",
+      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_123",
       "community": 143,
       "community_name": "batch_fitting_optimistix.py",
       "norm_label": "solve one dataset. `throw=false` is required under vmap: the default raises a..."
@@ -1193,9 +1193,9 @@
       "label": "Flag datasets the solver did not actually fit. Testing for NaN is not enough.\u2026",
       "file_type": "rationale",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L140",
+      "source_location": "L143",
       "_origin": "ast",
-      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_140",
+      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_143",
       "community": 143,
       "community_name": "batch_fitting_optimistix.py",
       "norm_label": "flag datasets the solver did not actually fit. testing for nan is not enough...."
@@ -1204,9 +1204,9 @@
       "label": "Time a solver after compiling it on the real shapes.",
       "file_type": "rationale",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L160",
+      "source_location": "L163",
       "_origin": "ast",
-      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_160",
+      "id": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_163",
       "community": 143,
       "community_name": "batch_fitting_optimistix.py",
       "norm_label": "time a solver after compiling it on the real shapes."
@@ -6656,7 +6656,7 @@
       "label": "parse_args()",
       "file_type": "code",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L31",
+      "source_location": "L32",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_10_cli_commands_aggregate_batch_results_parse_args",
@@ -6679,7 +6679,7 @@
       "label": "parameter_names()",
       "file_type": "code",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L60",
+      "source_location": "L61",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_10_cli_commands_aggregate_batch_results_parameter_names",
@@ -6691,7 +6691,7 @@
       "label": "load_results()",
       "file_type": "code",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L82",
+      "source_location": "L89",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_10_cli_commands_aggregate_batch_results_load_results",
@@ -6725,7 +6725,7 @@
       "label": "print_table()",
       "file_type": "code",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L104",
+      "source_location": "L111",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_10_cli_commands_aggregate_batch_results_print_table",
@@ -6737,7 +6737,7 @@
       "label": "write_csv()",
       "file_type": "code",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L125",
+      "source_location": "L132",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_10_cli_commands_aggregate_batch_results_write_csv",
@@ -6749,7 +6749,7 @@
       "label": "report_failures()",
       "file_type": "code",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L151",
+      "source_location": "L158",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_10_cli_commands_aggregate_batch_results_report_failures",
@@ -6761,7 +6761,7 @@
       "label": "main()",
       "file_type": "code",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L170",
+      "source_location": "L177",
       "_callable": true,
       "_origin": "ast",
       "id": "examples_scripts_10_cli_commands_aggregate_batch_results_main",
@@ -6784,9 +6784,9 @@
       "label": "Recover parameter names from the model signature, or fall back to p0..pN. The\u2026",
       "file_type": "rationale",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L61",
+      "source_location": "L62",
       "_origin": "ast",
-      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_61",
+      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_62",
       "community": 193,
       "community_name": "aggregate_batch_results.py",
       "norm_label": "recover parameter names from the model signature, or fall back to p0..pn. the..."
@@ -6795,9 +6795,9 @@
       "label": "Load per-workflow result files, sorted by filename for a stable table.",
       "file_type": "rationale",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L83",
+      "source_location": "L90",
       "_origin": "ast",
-      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_83",
+      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_90",
       "community": 193,
       "community_name": "aggregate_batch_results.py",
       "norm_label": "load per-workflow result files, sorted by filename for a stable table."
@@ -6806,9 +6806,9 @@
       "label": "Print one row per workflow; returns the parameter names used.",
       "file_type": "rationale",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L105",
+      "source_location": "L112",
       "_origin": "ast",
-      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_105",
+      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_112",
       "community": 193,
       "community_name": "aggregate_batch_results.py",
       "norm_label": "print one row per workflow; returns the parameter names used."
@@ -6817,9 +6817,9 @@
       "label": "Successful fits leave a result file; failed ones only appear in the summary.",
       "file_type": "rationale",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L152",
+      "source_location": "L159",
       "_origin": "ast",
-      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_152",
+      "id": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_159",
       "community": 193,
       "community_name": "aggregate_batch_results.py",
       "norm_label": "successful fits leave a result file; failed ones only appear in the summary."
@@ -13576,8 +13576,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_common_jax_check_termination_jax",
-      "community": 81,
-      "community_name": "TrustRegionReflective",
+      "community": 10,
+      "community_name": "common_jax.py",
       "norm_label": "check_termination_jax()"
     },
     {
@@ -13600,8 +13600,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_common_jax_in_bounds_jax",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "in_bounds_jax()"
     },
     {
@@ -13802,8 +13802,8 @@
       "source_location": "L743",
       "_origin": "ast",
       "id": "nlsq_common_jax_rationale_743",
-      "community": 81,
-      "community_name": "TrustRegionReflective",
+      "community": 10,
+      "community_name": "common_jax.py",
       "norm_label": "jit-compiled termination check (replaces common_scipy.check_termination)...."
     },
     {
@@ -13824,8 +13824,8 @@
       "source_location": "L813",
       "_origin": "ast",
       "id": "nlsq_common_jax_rationale_813",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "jit-compiled bounds check (replaces common_scipy.in_bounds). returns a jax..."
     },
     {
@@ -13974,8 +13974,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_common_scipy_in_bounds",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "in_bounds()"
     },
     {
@@ -14182,8 +14182,8 @@
       "source_location": "L352",
       "_origin": "ast",
       "id": "nlsq_common_scipy_rationale_352",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "check if a point lies within bounds."
     },
     {
@@ -15167,8 +15167,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_core_functions_fittablefunction_estimate_p0",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": ".estimate_p0()"
     },
     {
@@ -15178,8 +15178,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "nlsq_core_functions_py_ndarray",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "ndarray"
     },
     {
@@ -15189,8 +15189,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "parameterlist",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "parameterlist"
     },
     {
@@ -15248,8 +15248,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_core_functions_estimate_p0_linear",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate_p0_linear()"
     },
     {
@@ -15321,7 +15321,7 @@
       "_origin": "ast",
       "id": "nlsq_core_functions_estimate_p0_exponential_growth",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "estimate_p0_exponential_growth()"
     },
     {
@@ -15344,8 +15344,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_core_functions_estimate_p0_gaussian",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate_p0_gaussian()"
     },
     {
@@ -15368,8 +15368,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_core_functions_estimate_p0_lorentzian",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate_p0_lorentzian()"
     },
     {
@@ -15392,8 +15392,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_core_functions_estimate_p0_sigmoid",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate_p0_sigmoid()"
     },
     {
@@ -15416,8 +15416,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_core_functions_estimate_p0_power_law",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate_p0_power_law()"
     },
     {
@@ -15472,8 +15472,8 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "nlsq_core_functions_rationale_65",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate initial parameters from data."
     },
     {
@@ -15516,8 +15516,8 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "nlsq_core_functions_rationale_123",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate initial parameters for linear function. uses ordinary least squares to..."
     },
     {
@@ -15583,7 +15583,7 @@
       "_origin": "ast",
       "id": "nlsq_core_functions_rationale_335",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "estimate initial parameters for exponential growth. similar to decay but..."
     },
     {
@@ -15604,8 +15604,8 @@
       "source_location": "L432",
       "_origin": "ast",
       "id": "nlsq_core_functions_rationale_432",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate initial parameters for gaussian function. strategy: - amplitude: peak..."
     },
     {
@@ -15626,8 +15626,8 @@
       "source_location": "L536",
       "_origin": "ast",
       "id": "nlsq_core_functions_rationale_536",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate initial parameters for lorentzian function. strategy: - amplitude:..."
     },
     {
@@ -15648,8 +15648,8 @@
       "source_location": "L640",
       "_origin": "ast",
       "id": "nlsq_core_functions_rationale_640",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate initial parameters for sigmoid function. strategy: - l: range of y..."
     },
     {
@@ -15670,8 +15670,8 @@
       "source_location": "L738",
       "_origin": "ast",
       "id": "nlsq_core_functions_rationale_738",
-      "community": 190,
-      "community_name": "ndarray",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "estimate initial parameters for power law. uses log-log linear regression:..."
     },
     {
@@ -15885,8 +15885,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "nlsq_core_least_squares_leastsquares_check_memory_and_adjust_solver",
-      "community": 154,
-      "community_name": "BroydenTridiagonal",
+      "community": 220,
+      "community_name": ".least_squares",
       "norm_label": "._check_memory_and_adjust_solver()"
     },
     {
@@ -16200,8 +16200,8 @@
       "source_location": "L852",
       "_origin": "ast",
       "id": "nlsq_core_least_squares_rationale_852",
-      "community": 154,
-      "community_name": "BroydenTridiagonal",
+      "community": 220,
+      "community_name": ".least_squares",
       "norm_label": "check memory requirements and adjust solver if needed. parameters ---------- m..."
     },
     {
@@ -67918,8 +67918,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_common_jax",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "test_common_jax.py"
     },
     {
@@ -68076,8 +68076,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_core_test_common_jax_testinboundsjax",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "testinboundsjax"
     },
     {
@@ -68088,8 +68088,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_common_jax_testinboundsjax_test_inside",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": ".test_inside()"
     },
     {
@@ -68100,8 +68100,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_common_jax_testinboundsjax_test_outside_upper",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": ".test_outside_upper()"
     },
     {
@@ -68112,8 +68112,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_common_jax_testinboundsjax_test_outside_lower",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": ".test_outside_lower()"
     },
     {
@@ -68124,8 +68124,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_common_jax_testinboundsjax_test_on_boundary",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": ".test_on_boundary()"
     },
     {
@@ -68136,8 +68136,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_common_jax_testinboundsjax_test_scalar",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": ".test_scalar()"
     },
     {
@@ -68148,8 +68148,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_common_jax_testinboundsjax_test_infinite_bounds",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": ".test_infinite_bounds()"
     },
     {
@@ -68303,8 +68303,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_common_jax_rationale_1",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "unit tests for jit-compiled bounds helper functions in common_jax.py. tests..."
     },
     {
@@ -68424,8 +68424,8 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "tests_core_test_common_jax_rationale_86",
-      "community": 10,
-      "community_name": "common_jax.py",
+      "community": 289,
+      "community_name": "in_bounds_jax",
       "norm_label": "test in_bounds_jax matches numpy version."
     },
     {
@@ -75104,8 +75104,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testlinearfunction",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "testlinearfunction"
     },
     {
@@ -75116,8 +75116,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testlinearfunction_test_linear_auto_p0",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_linear_auto_p0()"
     },
     {
@@ -75128,8 +75128,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testlinearfunction_test_linear_manual_p0",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_linear_manual_p0()"
     },
     {
@@ -75140,8 +75140,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testlinearfunction_test_linear_estimate_p0_method",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_linear_estimate_p0_method()"
     },
     {
@@ -75227,8 +75227,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testgaussian",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": "testgaussian"
     },
     {
@@ -75239,8 +75239,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testgaussian_test_gaussian_auto_p0",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": ".test_gaussian_auto_p0()"
     },
     {
@@ -75251,8 +75251,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testgaussian_test_gaussian_estimate_p0",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": ".test_gaussian_estimate_p0()"
     },
     {
@@ -75263,8 +75263,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testgaussian_test_gaussian_peak_detection",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": ".test_gaussian_peak_detection()"
     },
     {
@@ -75276,8 +75276,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testsigmoid",
-      "community": 394,
-      "community_name": "TestSigmoid",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "testsigmoid"
     },
     {
@@ -75288,8 +75288,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testsigmoid_test_sigmoid_auto_p0",
-      "community": 394,
-      "community_name": "TestSigmoid",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": ".test_sigmoid_auto_p0()"
     },
     {
@@ -75300,8 +75300,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testsigmoid_test_sigmoid_estimate_p0",
-      "community": 394,
-      "community_name": "TestSigmoid",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": ".test_sigmoid_estimate_p0()"
     },
     {
@@ -75313,8 +75313,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testpowerlaw",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "testpowerlaw"
     },
     {
@@ -75325,8 +75325,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testpowerlaw_test_power_law_auto_p0",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": ".test_power_law_auto_p0()"
     },
     {
@@ -75337,8 +75337,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testpowerlaw_test_power_law_estimate_p0",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": ".test_power_law_estimate_p0()"
     },
     {
@@ -75349,8 +75349,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_testpowerlaw_test_power_law_linear_case",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": ".test_power_law_linear_case()"
     },
     {
@@ -75578,8 +75578,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_19",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "tests for linear function."
     },
     {
@@ -75589,8 +75589,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_22",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test linear function with automatic p0 estimation."
     },
     {
@@ -75600,8 +75600,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_43",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test linear function with manual p0."
     },
     {
@@ -75611,8 +75611,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_53",
-      "community": 289,
-      "community_name": "TestLinearFunction",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test linear.estimate_p0() method directly."
     },
     {
@@ -75688,8 +75688,8 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_138",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": "tests for gaussian function."
     },
     {
@@ -75699,8 +75699,8 @@
       "source_location": "L141",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_141",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": "test gaussian with automatic p0 estimation."
     },
     {
@@ -75710,8 +75710,8 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_161",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": "test gaussian.estimate_p0() method."
     },
     {
@@ -75721,8 +75721,8 @@
       "source_location": "L174",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_174",
-      "community": 126,
-      "community_name": "functions.py",
+      "community": 420,
+      "community_name": "TestGaussian",
       "norm_label": "test that gaussian correctly identifies peak position."
     },
     {
@@ -75732,8 +75732,8 @@
       "source_location": "L185",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_185",
-      "community": 394,
-      "community_name": "TestSigmoid",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "tests for sigmoid function."
     },
     {
@@ -75743,8 +75743,8 @@
       "source_location": "L188",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_188",
-      "community": 394,
-      "community_name": "TestSigmoid",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "test sigmoid with automatic p0 estimation."
     },
     {
@@ -75754,8 +75754,8 @@
       "source_location": "L208",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_208",
-      "community": 394,
-      "community_name": "TestSigmoid",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "test sigmoid.estimate_p0() method."
     },
     {
@@ -75765,8 +75765,8 @@
       "source_location": "L221",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_221",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "tests for power_law function."
     },
     {
@@ -75776,8 +75776,8 @@
       "source_location": "L224",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_224",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "test power_law with automatic p0 estimation."
     },
     {
@@ -75787,8 +75787,8 @@
       "source_location": "L243",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_243",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "test power_law.estimate_p0() method."
     },
     {
@@ -75798,8 +75798,8 @@
       "source_location": "L254",
       "_origin": "ast",
       "id": "tests_core_test_functions_rationale_254",
-      "community": 363,
-      "community_name": "TestPowerLaw",
+      "community": 126,
+      "community_name": "functions.py",
       "norm_label": "test power_law with b=1 (linear case)."
     },
     {
@@ -76082,8 +76082,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testlinearfunction_test_estimate_p0_linear_basic",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": ".test_estimate_p0_linear_basic()"
     },
     {
@@ -76094,8 +76094,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testlinearfunction_test_estimate_p0_linear_noisy",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": ".test_estimate_p0_linear_noisy()"
     },
     {
@@ -76106,8 +76106,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testlinearfunction_test_estimate_p0_linear_constant",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": ".test_estimate_p0_linear_constant()"
     },
     {
@@ -76118,8 +76118,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testlinearfunction_test_estimate_p0_linear_single_point",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": ".test_estimate_p0_linear_single_point()"
     },
     {
@@ -76301,7 +76301,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testexponentialgrowth",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "testexponentialgrowth"
     },
     {
@@ -76313,7 +76313,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testexponentialgrowth_test_exponential_growth_basic",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": ".test_exponential_growth_basic()"
     },
     {
@@ -76325,7 +76325,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testexponentialgrowth_test_exponential_growth_at_zero",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": ".test_exponential_growth_at_zero()"
     },
     {
@@ -76337,7 +76337,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testexponentialgrowth_test_exponential_growth_negative_x",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": ".test_exponential_growth_negative_x()"
     },
     {
@@ -76349,7 +76349,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testexponentialgrowth_test_estimate_p0_exponential_growth_basic",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": ".test_estimate_p0_exponential_growth_basic()"
     },
     {
@@ -76361,7 +76361,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testexponentialgrowth_test_estimate_p0_exponential_growth_noisy",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": ".test_estimate_p0_exponential_growth_noisy()"
     },
     {
@@ -76373,8 +76373,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testnumericaledgecases",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": "testnumericaledgecases"
     },
     {
@@ -76385,8 +76385,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testnumericaledgecases_test_linear_with_inf",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": ".test_linear_with_inf()"
     },
     {
@@ -76397,8 +76397,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testnumericaledgecases_test_exponential_decay_overflow_protection",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": ".test_exponential_decay_overflow_protection()"
     },
     {
@@ -76409,8 +76409,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testnumericaledgecases_test_exponential_decay_underflow_protection",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": ".test_exponential_decay_underflow_protection()"
     },
     {
@@ -76421,8 +76421,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testnumericaledgecases_test_estimate_p0_with_nan",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": ".test_estimate_p0_with_nan()"
     },
     {
@@ -76433,8 +76433,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testnumericaledgecases_test_empty_array_handling",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": ".test_empty_array_handling()"
     },
     {
@@ -76445,8 +76445,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_testnumericaledgecases_test_very_small_values",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": ".test_very_small_values()"
     },
     {
@@ -76752,8 +76752,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_69",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "test linear parameter estimation."
     },
     {
@@ -76763,8 +76763,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_78",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "test linear parameter estimation with noisy data."
     },
     {
@@ -76774,8 +76774,8 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_88",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "test linear estimation with constant y (slope = 0)."
     },
     {
@@ -76785,8 +76785,8 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_97",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "test linear estimation with single point (fallback)."
     },
     {
@@ -76951,7 +76951,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_223",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "test exponential growth function and utilities."
     },
     {
@@ -76962,7 +76962,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_226",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "test basic exponential growth evaluation."
     },
     {
@@ -76973,7 +76973,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_233",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "test exponential growth at x=0."
     },
     {
@@ -76984,7 +76984,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_239",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "test exponential growth with negative x (decay behavior)."
     },
     {
@@ -76995,7 +76995,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_246",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "test exponential growth parameter estimation."
     },
     {
@@ -77006,7 +77006,7 @@
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_255",
       "community": 190,
-      "community_name": "ndarray",
+      "community_name": "estimate_p0_exponential_growth",
       "norm_label": "test exponential growth estimation with noise."
     },
     {
@@ -77016,8 +77016,8 @@
       "source_location": "L266",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_266",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": "test numerical edge cases and stability."
     },
     {
@@ -77027,8 +77027,8 @@
       "source_location": "L269",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_269",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": "test linear function handles infinity gracefully."
     },
     {
@@ -77038,8 +77038,8 @@
       "source_location": "L277",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_277",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": "test exponential decay doesn't overflow with large negative x."
     },
     {
@@ -77049,8 +77049,8 @@
       "source_location": "L284",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_284",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": "test exponential decay handles underflow (returns asymptote)."
     },
     {
@@ -77060,8 +77060,8 @@
       "source_location": "L290",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_290",
-      "community": 507,
-      "community_name": "linear",
+      "community": 103,
+      "community_name": "estimate_p0_linear",
       "norm_label": "test parameter estimation handles nan gracefully."
     },
     {
@@ -77071,8 +77071,8 @@
       "source_location": "L298",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_298",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": "test functions handle empty arrays."
     },
     {
@@ -77082,8 +77082,8 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "tests_core_test_functions_edge_cases_rationale_304",
-      "community": 507,
-      "community_name": "linear",
+      "community": 363,
+      "community_name": "TestNumericalEdgeCases",
       "norm_label": "test functions with very small values."
     },
     {
@@ -80019,7 +80019,7 @@
       "_origin": "ast",
       "id": "tests_core_test_least_squares_exponentialfittingproblem",
       "community": 412,
-      "community_name": "ExponentialFittingProblem",
+      "community_name": "LossFunctionMixin",
       "norm_label": "exponentialfittingproblem"
     },
     {
@@ -80031,7 +80031,7 @@
       "_origin": "ast",
       "id": "tests_core_test_least_squares_exponentialfittingproblem_init",
       "community": 412,
-      "community_name": "ExponentialFittingProblem",
+      "community_name": "LossFunctionMixin",
       "norm_label": ".__init__()"
     },
     {
@@ -80043,7 +80043,7 @@
       "_origin": "ast",
       "id": "tests_core_test_least_squares_exponentialfittingproblem_fun",
       "community": 412,
-      "community_name": "ExponentialFittingProblem",
+      "community_name": "LossFunctionMixin",
       "norm_label": ".fun()"
     },
     {
@@ -80054,8 +80054,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_least_squares_exponentialfittingproblem_jac",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": ".jac()"
     },
     {
@@ -80066,8 +80066,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_least_squares_cubic_soft_l1",
-      "community": 220,
-      "community_name": ".least_squares",
+      "community": 412,
+      "community_name": "LossFunctionMixin",
       "norm_label": "cubic_soft_l1()"
     },
     {
@@ -80514,8 +80514,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_core_test_least_squares_lossfunctionmixin",
-      "community": 220,
-      "community_name": ".least_squares",
+      "community": 412,
+      "community_name": "LossFunctionMixin",
       "norm_label": "lossfunctionmixin"
     },
     {
@@ -80526,8 +80526,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_least_squares_lossfunctionmixin_test_options",
-      "community": 220,
-      "community_name": ".least_squares",
+      "community": 412,
+      "community_name": "LossFunctionMixin",
       "norm_label": ".test_options()"
     },
     {
@@ -80538,8 +80538,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_least_squares_lossfunctionmixin_test_fun",
-      "community": 220,
-      "community_name": ".least_squares",
+      "community": 412,
+      "community_name": "LossFunctionMixin",
       "norm_label": ".test_fun()"
     },
     {
@@ -80550,8 +80550,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_least_squares_lossfunctionmixin_test_grad",
-      "community": 220,
-      "community_name": ".least_squares",
+      "community": 412,
+      "community_name": "LossFunctionMixin",
       "norm_label": ".test_grad()"
     },
     {
@@ -80562,8 +80562,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_least_squares_lossfunctionmixin_test_jac",
-      "community": 220,
-      "community_name": ".least_squares",
+      "community": 412,
+      "community_name": "LossFunctionMixin",
       "norm_label": ".test_jac()"
     },
     {
@@ -80575,7 +80575,7 @@
       "_origin": "ast",
       "id": "tests_core_test_least_squares_lossfunctionmixin_test_robustness",
       "community": 412,
-      "community_name": "ExponentialFittingProblem",
+      "community_name": "LossFunctionMixin",
       "norm_label": ".test_robustness()"
     },
     {
@@ -80671,7 +80671,7 @@
       "_origin": "ast",
       "id": "tests_core_test_least_squares_rationale_138",
       "community": 412,
-      "community_name": "ExponentialFittingProblem",
+      "community_name": "LossFunctionMixin",
       "norm_label": "provide data and function for exponential fitting in the form y = a + exp(b *..."
     },
     {
@@ -91006,8 +91006,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_trf_additional_branches.py"
     },
     {
@@ -91018,8 +91018,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches_test_check_convergence_criteria_hits",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_check_convergence_criteria_hits()"
     },
     {
@@ -91030,8 +91030,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches_test_solve_trust_region_subproblem_sparse_branch",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_solve_trust_region_subproblem_sparse_branch()"
     },
     {
@@ -91041,8 +91041,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches_py_monkeypatch",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "monkeypatch"
     },
     {
@@ -91053,8 +91053,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches_test_evaluate_step_acceptance_handles_nonfinite",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_evaluate_step_acceptance_handles_nonfinite()"
     },
     {
@@ -91065,8 +91065,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches_test_evaluate_step_acceptance_accepts_step",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_evaluate_step_acceptance_accepts_step()"
     },
     {
@@ -91076,8 +91076,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches_rationale_1",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "additional fast branch tests for trf helpers."
     },
     {
@@ -91087,8 +91087,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "tests_core_test_trf_additional_branches_rationale_13",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test convergence criteria returns tuple (status, g_norm) per opt-8."
     },
     {
@@ -92290,7 +92290,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_trf_internal_helpers.py"
     },
     {
@@ -92302,7 +92302,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_make_optimizer",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "_make_optimizer()"
     },
     {
@@ -92313,7 +92313,7 @@
       "_origin": "ast",
       "id": "simplenamespace",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "simplenamespace"
     },
     {
@@ -92324,7 +92324,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_py_unit",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "unit"
     },
     {
@@ -92336,7 +92336,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_test_check_convergence_criteria_branches",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_check_convergence_criteria_branches()"
     },
     {
@@ -92348,7 +92348,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_test_solve_trust_region_subproblem_branches",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_solve_trust_region_subproblem_branches()"
     },
     {
@@ -92360,7 +92360,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_test_evaluate_step_acceptance_accepts",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_evaluate_step_acceptance_accepts()"
     },
     {
@@ -92372,7 +92372,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_test_evaluate_step_acceptance_nonfinite_rejects",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_evaluate_step_acceptance_nonfinite_rejects()"
     },
     {
@@ -92384,7 +92384,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_test_evaluate_step_acceptance_with_loss_and_jac_scale",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_evaluate_step_acceptance_with_loss_and_jac_scale()"
     },
     {
@@ -92396,7 +92396,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_test_log_iteration_callback_converts_types",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_log_iteration_callback_converts_types()"
     },
     {
@@ -92407,7 +92407,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_py_monkeypatch",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "monkeypatch"
     },
     {
@@ -92419,7 +92419,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_test_null_profiler_noops",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "test_null_profiler_noops()"
     },
     {
@@ -92430,7 +92430,7 @@
       "_origin": "ast",
       "id": "tests_core_test_trf_internal_helpers_rationale_1",
       "community": 322,
-      "community_name": ".jac",
+      "community_name": "test_trf_internal_helpers.py",
       "norm_label": "fast unit tests for trf helper branches without heavy jax usage."
     },
     {
@@ -93969,8 +93969,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_trf_loss_function_edges",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_trf_loss_function_edges.py"
     },
     {
@@ -93980,8 +93980,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_core_test_trf_loss_function_edges_py_numerical",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "numerical"
     },
     {
@@ -93992,8 +93992,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_trf_loss_function_edges_test_trf_loss_function_cost_only_path",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_trf_loss_function_cost_only_path()"
     },
     {
@@ -94003,8 +94003,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_trf_loss_function_edges_rationale_1",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "fast tests for trf loss function paths."
     },
     {
@@ -94014,8 +94014,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "tests_core_test_trf_loss_function_edges_rationale_14",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "loss function should be used for cost_only and scaling branches."
     },
     {
@@ -94658,8 +94658,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_trf_step_rejection",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_trf_step_rejection.py"
     },
     {
@@ -94669,8 +94669,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_core_test_trf_step_rejection_py_numerical",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "numerical"
     },
     {
@@ -94681,8 +94681,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_core_test_trf_step_rejection_test_trf_step_rejection_on_nonfinite_residuals",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "test_trf_step_rejection_on_nonfinite_residuals()"
     },
     {
@@ -94692,8 +94692,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_core_test_trf_step_rejection_rationale_1",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "fast tests for trf step rejection paths."
     },
     {
@@ -94703,8 +94703,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "tests_core_test_trf_step_rejection_rationale_14",
-      "community": 322,
-      "community_name": ".jac",
+      "community": 81,
+      "community_name": "TrustRegionReflective",
       "norm_label": "non-finite residuals should reject the step and reduce trust radius."
     },
     {
@@ -95891,8 +95891,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_py_fixture",
-      "community": 420,
-      "community_name": "clear_plugin_registry",
+      "community": 2,
+      "community_name": "IdentifiabilityReport",
       "norm_label": "fixture"
     },
     {
@@ -95903,8 +95903,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_default_config",
-      "community": 420,
-      "community_name": "clear_plugin_registry",
+      "community": 2,
+      "community_name": "IdentifiabilityReport",
       "norm_label": "default_config()"
     },
     {
@@ -95915,8 +95915,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_clear_plugin_registry",
-      "community": 420,
-      "community_name": "clear_plugin_registry",
+      "community": 2,
+      "community_name": "IdentifiabilityReport",
       "norm_label": "clear_plugin_registry()"
     },
     {
@@ -95926,8 +95926,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_py_diagnostics",
-      "community": 2,
-      "community_name": "IdentifiabilityReport",
+      "community": 6,
+      "community_name": ".register",
       "norm_label": "diagnostics"
     },
     {
@@ -96097,8 +96097,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_testparametersatbounds",
-      "community": 2,
-      "community_name": "IdentifiabilityReport",
+      "community": 17,
+      "community_name": "DiagnosticsConfig",
       "norm_label": "testparametersatbounds"
     },
     {
@@ -96365,8 +96365,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_testedgecasestress",
-      "community": 2,
-      "community_name": "IdentifiabilityReport",
+      "community": 6,
+      "community_name": ".register",
       "norm_label": "testedgecasestress"
     },
     {
@@ -96377,8 +96377,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_testedgecasestress_test_large_singular_jacobian",
-      "community": 17,
-      "community_name": "DiagnosticsConfig",
+      "community": 6,
+      "community_name": ".register",
       "norm_label": ".test_large_singular_jacobian()"
     },
     {
@@ -96389,8 +96389,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_testedgecasestress_test_many_nan_values_in_sequence",
-      "community": 17,
-      "community_name": "DiagnosticsConfig",
+      "community": 6,
+      "community_name": ".register",
       "norm_label": ".test_many_nan_values_in_sequence()"
     },
     {
@@ -96423,8 +96423,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_rationale_51",
-      "community": 420,
-      "community_name": "clear_plugin_registry",
+      "community": 2,
+      "community_name": "IdentifiabilityReport",
       "norm_label": "create default diagnostics configuration with verbose and warnings disabled."
     },
     {
@@ -96434,8 +96434,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_rationale_57",
-      "community": 420,
-      "community_name": "clear_plugin_registry",
+      "community": 2,
+      "community_name": "IdentifiabilityReport",
       "norm_label": "clear the plugin registry before and after each test."
     },
     {
@@ -96588,8 +96588,8 @@
       "source_location": "L279",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_rationale_279",
-      "community": 2,
-      "community_name": "IdentifiabilityReport",
+      "community": 17,
+      "community_name": "DiagnosticsConfig",
       "norm_label": "tests for handling parameters at their bounds. note: this is typically tested..."
     },
     {
@@ -96830,8 +96830,8 @@
       "source_location": "L825",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_rationale_825",
-      "community": 2,
-      "community_name": "IdentifiabilityReport",
+      "community": 6,
+      "community_name": ".register",
       "norm_label": "stress tests for edge case handling."
     },
     {
@@ -96841,8 +96841,8 @@
       "source_location": "L828",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_rationale_828",
-      "community": 17,
-      "community_name": "DiagnosticsConfig",
+      "community": 6,
+      "community_name": ".register",
       "norm_label": "test handling of large singular jacobian."
     },
     {
@@ -96852,8 +96852,8 @@
       "source_location": "L843",
       "_origin": "ast",
       "id": "tests_diagnostics_test_edge_cases_rationale_843",
-      "community": 17,
-      "community_name": "DiagnosticsConfig",
+      "community": 6,
+      "community_name": ".register",
       "norm_label": "test gradient monitor with many nan values in sequence."
     },
     {
@@ -120654,8 +120654,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "test_jacobian_autoswitch.py"
     },
     {
@@ -120665,8 +120665,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_py_fixture",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "fixture"
     },
     {
@@ -120677,8 +120677,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_temp_config_dir",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "temp_config_dir()"
     },
     {
@@ -120689,8 +120689,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_cleanup_env",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "cleanup_env()"
     },
     {
@@ -120861,8 +120861,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_testnumericalaccuracy",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "testnumericalaccuracy"
     },
     {
@@ -120873,8 +120873,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_testnumericalaccuracy_test_jacfwd_jacrev_consistency",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": ".test_jacfwd_jacrev_consistency()"
     },
     {
@@ -120884,8 +120884,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_rationale_1",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "tests for jacobian automatic mode selection (jacfwd vs jacrev). this module..."
     },
     {
@@ -120895,8 +120895,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_rationale_23",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "create a temporary directory for config files."
     },
     {
@@ -120906,8 +120906,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_rationale_30",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "clean up environment variables after each test."
     },
     {
@@ -121060,8 +121060,8 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_rationale_196",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "test that jacfwd and jacrev give identical results within tolerance."
     },
     {
@@ -121071,8 +121071,8 @@
       "source_location": "L199",
       "_origin": "ast",
       "id": "tests_integration_test_jacobian_autoswitch_rationale_199",
-      "community": 229,
-      "community_name": "get_jacobian_mode",
+      "community": 194,
+      "community_name": "jacobian_mode_selector",
       "norm_label": "test that jacfwd and jacrev produce consistent jacobian results."
     },
     {
@@ -128634,7 +128634,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test_phase3_integration.py"
     },
     {
@@ -128647,7 +128647,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testallfeaturescomined",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "testallfeaturescomined"
     },
     {
@@ -128659,7 +128659,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testallfeaturescomined_exponential_decay",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".exponential_decay()"
     },
     {
@@ -128671,7 +128671,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testallfeaturescomined_gaussian",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".gaussian()"
     },
     {
@@ -128683,7 +128683,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testallfeaturescomined_logistic_growth",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".logistic_growth()"
     },
     {
@@ -128695,7 +128695,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testallfeaturescomined_test_all_features_enabled_exponential",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_all_features_enabled_exponential()"
     },
     {
@@ -128707,7 +128707,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testallfeaturescomined_test_all_features_enabled_gaussian",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_all_features_enabled_gaussian()"
     },
     {
@@ -128719,7 +128719,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testallfeaturescomined_test_all_features_enabled_logistic",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_all_features_enabled_logistic()"
     },
     {
@@ -128731,8 +128731,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "testdifficultoptimizationproblems"
     },
     {
@@ -128743,8 +128743,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems_test_ill_conditioned_data",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_ill_conditioned_data()"
     },
     {
@@ -128755,8 +128755,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems_test_nan_inf_data",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_nan_inf_data()"
     },
     {
@@ -128767,8 +128767,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems_test_extreme_parameter_scales",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_extreme_parameter_scales()"
     },
     {
@@ -128779,8 +128779,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems_test_constant_data",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_constant_data()"
     },
     {
@@ -128791,8 +128791,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems_test_high_noise_data",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_high_noise_data()"
     },
     {
@@ -128803,8 +128803,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems_test_collinear_predictors",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_collinear_predictors()"
     },
     {
@@ -128815,8 +128815,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testdifficultoptimizationproblems_test_poor_initial_guess_exponential",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_poor_initial_guess_exponential()"
     },
     {
@@ -128829,7 +128829,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testedgecases",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "testedgecases"
     },
     {
@@ -128841,7 +128841,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testedgecases_test_single_parameter",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_single_parameter()"
     },
     {
@@ -128853,7 +128853,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testedgecases_test_many_parameters",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_many_parameters()"
     },
     {
@@ -128865,7 +128865,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testedgecases_test_small_dataset",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_small_dataset()"
     },
     {
@@ -128877,7 +128877,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testedgecases_test_negative_data",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_negative_data()"
     },
     {
@@ -128889,7 +128889,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testedgecases_test_zero_crossing_data",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_zero_crossing_data()"
     },
     {
@@ -128902,7 +128902,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testrealworldscenarios",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "testrealworldscenarios"
     },
     {
@@ -128914,7 +128914,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testrealworldscenarios_test_radioactive_decay",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_radioactive_decay()"
     },
     {
@@ -128926,7 +128926,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testrealworldscenarios_test_enzyme_kinetics_michaelis_menten",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_enzyme_kinetics_michaelis_menten()"
     },
     {
@@ -128938,7 +128938,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testrealworldscenarios_test_arrhenius_equation",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_arrhenius_equation()"
     },
     {
@@ -128950,7 +128950,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testrealworldscenarios_test_power_law_scaling",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_power_law_scaling()"
     },
     {
@@ -128962,7 +128962,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testrealworldscenarios_test_damped_oscillation",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": ".test_damped_oscillation()"
     },
     {
@@ -128974,7 +128974,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "testfeaturecombinations"
     },
@@ -128986,7 +128986,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations_exponential_decay",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": ".exponential_decay()"
     },
@@ -128998,7 +128998,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations_test_only_auto_bounds",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": ".test_only_auto_bounds()"
     },
@@ -129010,7 +129010,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations_test_only_stability",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": ".test_only_stability()"
     },
@@ -129022,7 +129022,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations_test_only_fallback",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": ".test_only_fallback()"
     },
@@ -129034,7 +129034,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations_test_auto_bounds_plus_stability",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": ".test_auto_bounds_plus_stability()"
     },
@@ -129046,7 +129046,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations_test_auto_bounds_plus_fallback",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": ".test_auto_bounds_plus_fallback()"
     },
@@ -129058,7 +129058,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_testfeaturecombinations_test_stability_plus_fallback",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": ".test_stability_plus_fallback()"
     },
@@ -129070,7 +129070,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_1",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "phase 3 integration tests ========================== comprehensive integration..."
     },
     {
@@ -129081,7 +129081,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_21",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test all phase 3 features working together."
     },
     {
@@ -129092,7 +129092,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_24",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "exponential decay model."
     },
     {
@@ -129103,7 +129103,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_28",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "gaussian distribution."
     },
     {
@@ -129114,7 +129114,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_32",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "logistic growth model."
     },
     {
@@ -129125,7 +129125,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_36",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test all features enabled with exponential decay."
     },
     {
@@ -129136,7 +129136,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_58",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test all features enabled with gaussian."
     },
     {
@@ -129147,7 +129147,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_80",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test all features enabled with logistic growth."
     },
     {
@@ -129157,8 +129157,8 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_103",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with challenging optimization scenarios."
     },
     {
@@ -129168,8 +129168,8 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_106",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with ill-conditioned data (large x range)."
     },
     {
@@ -129179,8 +129179,8 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_127",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with nan and inf values in data."
     },
     {
@@ -129190,8 +129190,8 @@
       "source_location": "L150",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_150",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with extreme parameter scale mismatches."
     },
     {
@@ -129201,8 +129201,8 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_169",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with constant (zero variance) data."
     },
     {
@@ -129212,8 +129212,8 @@
       "source_location": "L188",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_188",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with very high noise levels."
     },
     {
@@ -129223,8 +129223,8 @@
       "source_location": "L208",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_208",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with highly collinear predictors."
     },
     {
@@ -129234,8 +129234,8 @@
       "source_location": "L234",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_234",
-      "community": 7,
-      "community_name": ".curve_fit",
+      "community": 241,
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test exponential with extremely poor initial guess."
     },
     {
@@ -129246,7 +129246,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_259",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test edge cases and boundary conditions."
     },
     {
@@ -129257,7 +129257,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_262",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with single parameter model."
     },
     {
@@ -129268,7 +129268,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_281",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with many parameters (polynomial)."
     },
     {
@@ -129279,7 +129279,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_307",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with very small dataset."
     },
     {
@@ -129290,7 +129290,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_325",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with all negative data."
     },
     {
@@ -129301,7 +129301,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_349",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with data that crosses zero."
     },
     {
@@ -129312,7 +129312,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_369",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test with realistic scientific models."
     },
     {
@@ -129323,7 +129323,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_372",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test radioactive decay (exponential)."
     },
     {
@@ -129334,7 +129334,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_395",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test michaelis-menten enzyme kinetics."
     },
     {
@@ -129345,7 +129345,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_418",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test arrhenius equation for reaction rates."
     },
     {
@@ -129356,7 +129356,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_443",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test power law scaling."
     },
     {
@@ -129367,7 +129367,7 @@
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_466",
       "community": 241,
-      "community_name": "TestFeatureCombinations",
+      "community_name": "TestDifficultOptimizationProblems",
       "norm_label": "test damped oscillation (decaying sine wave)."
     },
     {
@@ -129377,7 +129377,7 @@
       "source_location": "L496",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_496",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "test different combinations of phase 3 features."
     },
@@ -129388,7 +129388,7 @@
       "source_location": "L502",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_502",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "test with only auto_bounds enabled."
     },
@@ -129399,7 +129399,7 @@
       "source_location": "L518",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_518",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "test with only stability enabled."
     },
@@ -129410,7 +129410,7 @@
       "source_location": "L534",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_534",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "test with only fallback enabled."
     },
@@ -129421,7 +129421,7 @@
       "source_location": "L550",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_550",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "test auto_bounds + stability (no fallback)."
     },
@@ -129432,7 +129432,7 @@
       "source_location": "L567",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_567",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "test auto_bounds + fallback (no stability)."
     },
@@ -129443,7 +129443,7 @@
       "source_location": "L584",
       "_origin": "ast",
       "id": "tests_regression_test_phase3_integration_rationale_584",
-      "community": 241,
+      "community": 243,
       "community_name": "TestFeatureCombinations",
       "norm_label": "test stability + fallback (no auto_bounds)."
     },
@@ -130035,8 +130035,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testjitequivalence",
-      "community": 436,
-      "community_name": "test_numerical_correctness.py",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "testjitequivalence"
     },
     {
@@ -130047,8 +130047,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testjitequivalence_test_jit_produces_same_result",
-      "community": 436,
-      "community_name": "test_numerical_correctness.py",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_jit_produces_same_result()"
     },
     {
@@ -130059,8 +130059,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testjitequivalence_test_jit_with_different_data_sizes",
-      "community": 436,
-      "community_name": "test_numerical_correctness.py",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_jit_with_different_data_sizes()"
     },
     {
@@ -130146,8 +130146,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testnumericalstabilityedgecases",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "testnumericalstabilityedgecases"
     },
     {
@@ -130158,8 +130158,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testnumericalstabilityedgecases_test_very_small_residuals",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_very_small_residuals()"
     },
     {
@@ -130170,8 +130170,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testnumericalstabilityedgecases_test_large_parameter_values",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_large_parameter_values()"
     },
     {
@@ -130182,8 +130182,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testnumericalstabilityedgecases_test_small_parameter_values",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_small_parameter_values()"
     },
     {
@@ -130194,8 +130194,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testnumericalstabilityedgecases_test_mixed_scale_parameters",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_mixed_scale_parameters()"
     },
     {
@@ -130206,8 +130206,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_testnumericalstabilityedgecases_test_ill_conditioned_exponential",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": ".test_ill_conditioned_exponential()"
     },
     {
@@ -130440,8 +130440,8 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_134",
-      "community": 436,
-      "community_name": "test_numerical_correctness.py",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test that jit-compiled fits match non-jit results."
     },
     {
@@ -130451,8 +130451,8 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_137",
-      "community": 436,
-      "community_name": "test_numerical_correctness.py",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test that jit compilation doesn't change the result."
     },
     {
@@ -130462,8 +130462,8 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_151",
-      "community": 436,
-      "community_name": "test_numerical_correctness.py",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test jit with various data sizes."
     },
     {
@@ -130539,8 +130539,8 @@
       "source_location": "L269",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_269",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test numerical stability in edge cases."
     },
     {
@@ -130550,8 +130550,8 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_272",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test fitting with very small residuals (near-perfect fit)."
     },
     {
@@ -130561,8 +130561,8 @@
       "source_location": "L283",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_283",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test fitting with large parameter values."
     },
     {
@@ -130572,8 +130572,8 @@
       "source_location": "L296",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_296",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test fitting with small parameter values."
     },
     {
@@ -130583,8 +130583,8 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_309",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test with parameters of very different scales."
     },
     {
@@ -130594,8 +130594,8 @@
       "source_location": "L322",
       "_origin": "ast",
       "id": "tests_scientific_test_numerical_correctness_rationale_322",
-      "community": 295,
-      "community_name": "TestNumericalStabilityEdgeCases",
+      "community": 507,
+      "community_name": "linear",
       "norm_label": "test exponential decay with challenging initial conditions."
     },
     {
@@ -135174,8 +135174,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "testnumericalstabilityguardedgecases"
     },
     {
@@ -135186,8 +135186,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases_setup_method",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": ".setup_method()"
     },
     {
@@ -135198,8 +135198,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases_test_empty_jacobian",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": ".test_empty_jacobian()"
     },
     {
@@ -135210,8 +135210,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases_test_single_element_jacobian",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": ".test_single_element_jacobian()"
     },
     {
@@ -135222,8 +135222,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases_test_tall_jacobian",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": ".test_tall_jacobian()"
     },
     {
@@ -135234,8 +135234,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases_test_wide_jacobian",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": ".test_wide_jacobian()"
     },
     {
@@ -135246,8 +135246,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases_test_mixed_nan_inf_values",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": ".test_mixed_nan_inf_values()"
     },
     {
@@ -135258,8 +135258,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_testnumericalstabilityguardedgecases_test_subnormal_values",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": ".test_subnormal_values()"
     },
     {
@@ -135849,8 +135849,8 @@
       "source_location": "L410",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_410",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "edge case tests for numericalstabilityguard."
     },
     {
@@ -135860,8 +135860,8 @@
       "source_location": "L413",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_413",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "set up test fixtures."
     },
     {
@@ -135871,8 +135871,8 @@
       "source_location": "L417",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_417",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "test with empty jacobian (edge case)."
     },
     {
@@ -135882,8 +135882,8 @@
       "source_location": "L431",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_431",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "test with 1x1 jacobian."
     },
     {
@@ -135893,8 +135893,8 @@
       "source_location": "L438",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_438",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "test with tall jacobian (m >> n)."
     },
     {
@@ -135904,8 +135904,8 @@
       "source_location": "L448",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_448",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "test with wide jacobian (m << n)."
     },
     {
@@ -135915,8 +135915,8 @@
       "source_location": "L458",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_458",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "test jacobian with both nan and inf."
     },
     {
@@ -135926,8 +135926,8 @@
       "source_location": "L470",
       "_origin": "ast",
       "id": "tests_stability_test_guard_edge_cases_rationale_470",
-      "community": 243,
-      "community_name": "TestNumericalStabilityGuardEdgeCases",
+      "community": 368,
+      "community_name": "solve_with_cholesky_fallback",
       "norm_label": "test handling of subnormal (denormalized) numbers."
     },
     {
@@ -136259,8 +136259,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_stability_test_integration_testxpcsdivergenceregression",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "testxpcsdivergenceregression"
     },
     {
@@ -136271,8 +136271,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_integration_testxpcsdivergenceregression_g2_model",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": ".g2_model()"
     },
     {
@@ -136283,8 +136283,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_integration_testxpcsdivergenceregression_test_xpcs_convergence_without_stability",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": ".test_xpcs_convergence_without_stability()"
     },
     {
@@ -136295,8 +136295,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_integration_testxpcsdivergenceregression_test_xpcs_convergence_with_stability_rescale_false",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": ".test_xpcs_convergence_with_stability_rescale_false()"
     },
     {
@@ -136307,8 +136307,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_integration_testxpcsdivergenceregression_test_xpcs_convergence_with_stability_rescale_true",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": ".test_xpcs_convergence_with_stability_rescale_true()"
     },
     {
@@ -136319,8 +136319,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_integration_testxpcsdivergenceregression_test_xpcs_large_dataset_svd_skip",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": ".test_xpcs_large_dataset_svd_skip()"
     },
     {
@@ -136331,8 +136331,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_stability_test_integration_testxpcsdivergenceregression_test_xpcs_poor_initial_guess",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": ".test_xpcs_poor_initial_guess()"
     },
     {
@@ -136818,8 +136818,8 @@
       "source_location": "L294",
       "_origin": "ast",
       "id": "tests_stability_test_integration_rationale_294",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "regression tests for xpcs divergence issue (commit 8028a03). this test class..."
     },
     {
@@ -136829,8 +136829,8 @@
       "source_location": "L308",
       "_origin": "ast",
       "id": "tests_stability_test_integration_rationale_308",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "xpcs intensity autocorrelation function g2(tau). this is the standard model for..."
     },
     {
@@ -136840,8 +136840,8 @@
       "source_location": "L327",
       "_origin": "ast",
       "id": "tests_stability_test_integration_rationale_327",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "test xpcs fitting works without stability mode (baseline)."
     },
     {
@@ -136851,8 +136851,8 @@
       "source_location": "L344",
       "_origin": "ast",
       "id": "tests_stability_test_integration_rationale_344",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "test xpcs fitting with stability='auto' and rescale_data=false. this is the..."
     },
     {
@@ -136862,8 +136862,8 @@
       "source_location": "L373",
       "_origin": "ast",
       "id": "tests_stability_test_integration_rationale_373",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "test xpcs fitting with stability='auto' and rescale_data=true (default). this..."
     },
     {
@@ -136873,8 +136873,8 @@
       "source_location": "L402",
       "_origin": "ast",
       "id": "tests_stability_test_integration_rationale_402",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "test that large xpcs datasets don't suffer from svd overhead. for datasets >..."
     },
     {
@@ -136884,8 +136884,8 @@
       "source_location": "L433",
       "_origin": "ast",
       "id": "tests_stability_test_integration_rationale_433",
-      "community": 78,
-      "community_name": "stability/test_integration.py",
+      "community": 295,
+      "community_name": "TestXPCSDivergenceRegression",
       "norm_label": "test xpcs fitting recovers from poor initial guess with stability mode."
     },
     {
@@ -151937,8 +151937,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidateenumvalue",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": "testvalidateenumvalue"
     },
     {
@@ -151949,8 +151949,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidateenumvalue_test_valid_value",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": ".test_valid_value()"
     },
     {
@@ -151961,8 +151961,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidateenumvalue_test_invalid_value",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": ".test_invalid_value()"
     },
     {
@@ -151973,8 +151973,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidateenumvalue_test_error_includes_valid_options",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": ".test_error_includes_valid_options()"
     },
     {
@@ -151985,8 +151985,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidateenumvalue_test_case_sensitive",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": ".test_case_sensitive()"
     },
     {
@@ -152985,8 +152985,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidategradientclip",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": "testvalidategradientclip"
     },
     {
@@ -152997,8 +152997,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidategradientclip_test_none_value",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": ".test_none_value()"
     },
     {
@@ -153009,8 +153009,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidategradientclip_test_valid_positive",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": ".test_valid_positive()"
     },
     {
@@ -153021,8 +153021,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidategradientclip_test_zero_value",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": ".test_zero_value()"
     },
     {
@@ -153033,8 +153033,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_streaming_test_validators_testvalidategradientclip_test_negative_value",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": ".test_negative_value()"
     },
     {
@@ -153329,8 +153329,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_58",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": "tests for validate_enum_value function."
     },
     {
@@ -153340,8 +153340,8 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_61",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": "test with valid enum value."
     },
     {
@@ -153351,8 +153351,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_66",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": "test with invalid enum value."
     },
     {
@@ -153362,8 +153362,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_71",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": "test that error message includes valid options."
     },
     {
@@ -153373,8 +153373,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_76",
-      "community": 103,
-      "community_name": "TestValidateEnumValue",
+      "community": 115,
+      "community_name": "ConfigValidationError",
       "norm_label": "test that validation is case-sensitive."
     },
     {
@@ -154231,8 +154231,8 @@
       "source_location": "L666",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_666",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": "tests for validate_gradient_clip function."
     },
     {
@@ -154242,8 +154242,8 @@
       "source_location": "L669",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_669",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": "test none value (no clipping)."
     },
     {
@@ -154253,8 +154253,8 @@
       "source_location": "L673",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_673",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": "test valid positive clip value."
     },
     {
@@ -154264,8 +154264,8 @@
       "source_location": "L678",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_678",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": "test zero clip value."
     },
     {
@@ -154275,8 +154275,8 @@
       "source_location": "L683",
       "_origin": "ast",
       "id": "tests_streaming_test_validators_rationale_683",
-      "community": 115,
-      "community_name": "ConfigValidationError",
+      "community": 394,
+      "community_name": "TestValidateGradientClip",
       "norm_label": "test negative clip value."
     },
     {
@@ -161018,8 +161018,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_utils_test_profiler_visualization_testprofilingdashboard_test_plot_all_comparisons",
-      "community": 165,
-      "community_name": "TestProfilerVisualization",
+      "community": 151,
+      "community_name": "TestProfilingDashboard",
       "norm_label": ".test_plot_all_comparisons()"
     },
     {
@@ -161428,8 +161428,8 @@
       "source_location": "L288",
       "_origin": "ast",
       "id": "tests_utils_test_profiler_visualization_rationale_288",
-      "community": 165,
-      "community_name": "TestProfilerVisualization",
+      "community": 151,
+      "community_name": "TestProfilingDashboard",
       "norm_label": "test comprehensive comparison plots."
     },
     {
@@ -175230,7 +175230,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L137",
+      "source_location": "L148",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets",
@@ -175252,7 +175252,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L108",
+      "source_location": "L114",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets",
@@ -175263,7 +175263,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L149",
+      "source_location": "L160",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets",
@@ -175366,7 +175366,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L105",
+      "source_location": "L111",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_residual",
@@ -175378,7 +175378,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L151",
+      "source_location": "L162",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_main",
@@ -175401,7 +175401,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L159",
+      "source_location": "L170",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_main",
@@ -175424,7 +175424,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L127",
+      "source_location": "L136",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_gauss_newton",
@@ -175446,10 +175446,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L109",
+      "source_location": "L115",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_109",
+      "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_115",
       "target": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_gauss_newton",
       "confidence_score": 1.0
     },
@@ -175458,7 +175458,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L164",
+      "source_location": "L175",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_main",
@@ -175469,10 +175469,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py",
-      "source_location": "L138",
+      "source_location": "L149",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_138",
+      "source": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_rationale_149",
       "target": "examples_scripts_02_core_tutorials_batch_fitting_many_datasets_fit_batched",
       "confidence_score": 1.0
     },
@@ -175480,7 +175480,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L139",
+      "source_location": "L142",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix",
@@ -175513,7 +175513,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L179",
+      "source_location": "L182",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix",
@@ -175535,7 +175535,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L104",
+      "source_location": "L107",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix",
@@ -175546,7 +175546,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L133",
+      "source_location": "L136",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix",
@@ -175557,7 +175557,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L159",
+      "source_location": "L162",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix",
@@ -175579,7 +175579,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L119",
+      "source_location": "L122",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix",
@@ -175590,7 +175590,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L113",
+      "source_location": "L116",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix",
@@ -175624,7 +175624,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L116",
+      "source_location": "L119",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_optx_residual",
@@ -175659,7 +175659,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L188",
+      "source_location": "L191",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_main",
@@ -175694,7 +175694,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L101",
+      "source_location": "L104",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_gauss_newton",
@@ -175706,7 +175706,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L130",
+      "source_location": "L133",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_optx_fit",
@@ -175718,7 +175718,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L106",
+      "source_location": "L109",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_make_gn",
@@ -175730,7 +175730,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L191",
+      "source_location": "L194",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_main",
@@ -175742,7 +175742,7 @@
       "context": "argument",
       "confidence": "INFERRED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L128",
+      "source_location": "L131",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_optx_fit",
@@ -175753,10 +175753,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L114",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_114",
+      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_117",
       "target": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_optx_residual",
       "confidence_score": 1.0
     },
@@ -175765,7 +175765,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L135",
+      "source_location": "L138",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_make_optx",
@@ -175776,10 +175776,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L120",
+      "source_location": "L123",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_120",
+      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_123",
       "target": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_optx_fit",
       "confidence_score": 1.0
     },
@@ -175788,7 +175788,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L193",
+      "source_location": "L196",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_main",
@@ -175800,7 +175800,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L167",
+      "source_location": "L170",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_measure",
@@ -175811,10 +175811,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L140",
+      "source_location": "L143",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_140",
+      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_143",
       "target": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_count_failures",
       "confidence_score": 1.0
     },
@@ -175823,7 +175823,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L195",
+      "source_location": "L198",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_main",
@@ -175834,10 +175834,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py",
-      "source_location": "L160",
+      "source_location": "L163",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_160",
+      "source": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_rationale_163",
       "target": "examples_scripts_02_core_tutorials_batch_fitting_optimistix_measure",
       "confidence_score": 1.0
     },
@@ -185655,7 +185655,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L82",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185666,7 +185666,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L170",
+      "source_location": "L177",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185677,7 +185677,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L60",
+      "source_location": "L61",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185688,7 +185688,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L31",
+      "source_location": "L32",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185699,7 +185699,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L104",
+      "source_location": "L111",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185710,7 +185710,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L151",
+      "source_location": "L158",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185721,7 +185721,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L125",
+      "source_location": "L132",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185733,7 +185733,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L68",
+      "source_location": "L69",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results",
@@ -185756,7 +185756,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L171",
+      "source_location": "L178",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_main",
@@ -185768,7 +185768,7 @@
       "context": "return_type",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L31",
+      "source_location": "L32",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_parse_args",
@@ -185780,7 +185780,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L36",
+      "source_location": "L37",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_parse_args",
@@ -185792,7 +185792,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L70",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_parameter_names",
@@ -185804,7 +185804,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L107",
+      "source_location": "L114",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_print_table",
@@ -185815,10 +185815,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L61",
+      "source_location": "L62",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_61",
+      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_62",
       "target": "examples_scripts_10_cli_commands_aggregate_batch_results_parameter_names",
       "confidence_score": 1.0
     },
@@ -185827,7 +185827,7 @@
       "context": "generic_arg",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L82",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_load_results",
@@ -185839,7 +185839,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L82",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_load_results",
@@ -185851,7 +185851,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L179",
+      "source_location": "L186",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_main",
@@ -185862,10 +185862,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L83",
+      "source_location": "L90",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_83",
+      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_90",
       "target": "examples_scripts_10_cli_commands_aggregate_batch_results_load_results",
       "confidence_score": 1.0
     },
@@ -185874,7 +185874,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L151",
+      "source_location": "L158",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_report_failures",
@@ -185886,7 +185886,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L125",
+      "source_location": "L132",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_write_csv",
@@ -185898,7 +185898,7 @@
       "context": "generic_arg",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L104",
+      "source_location": "L111",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_print_table",
@@ -185910,7 +185910,7 @@
       "context": "generic_arg",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L125",
+      "source_location": "L132",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_write_csv",
@@ -185922,7 +185922,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L189",
+      "source_location": "L196",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_main",
@@ -185933,10 +185933,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L105",
+      "source_location": "L112",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_105",
+      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_112",
       "target": "examples_scripts_10_cli_commands_aggregate_batch_results_print_table",
       "confidence_score": 1.0
     },
@@ -185945,7 +185945,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L192",
+      "source_location": "L199",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_main",
@@ -185957,7 +185957,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L195",
+      "source_location": "L202",
       "weight": 1.0,
       "_origin": "ast",
       "source": "examples_scripts_10_cli_commands_aggregate_batch_results_main",
@@ -185968,10 +185968,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "examples/scripts/10_cli-commands/aggregate_batch_results.py",
-      "source_location": "L152",
+      "source_location": "L159",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_152",
+      "source": "examples_scripts_10_cli_commands_aggregate_batch_results_rationale_159",
       "target": "examples_scripts_10_cli_commands_aggregate_batch_results_report_failures",
       "confidence_score": 1.0
     },
@@ -482023,5 +482023,5 @@
       "source_file": "tests/cli/fixtures/sample_workflow.yaml"
     }
   ],
-  "built_at_commit": "c36ead2ccf9af8133b66ef0c9f6c3a9fcfeb542e"
+  "built_at_commit": "98c803598ed80a0432de6a3159b30028f2bd57d6"
 }

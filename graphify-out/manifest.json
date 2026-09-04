@@ -3090,18 +3090,18 @@
     "semantic_hash": ""
   },
   "examples/scripts/10_cli-commands/aggregate_batch_results.py": {
-    "mtime": 1788477318.4431572,
-    "ast_hash": "3219856696882a14b7db383481faaaf9",
+    "mtime": 1788492873.7225575,
+    "ast_hash": "1448ae7afb6b50e7515961cd4103d17e",
     "semantic_hash": ""
   },
   "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py": {
-    "mtime": 1788478547.5738227,
-    "ast_hash": "b4135dcf879f6f0df55dab9b2d07d730",
+    "mtime": 1788492867.755745,
+    "ast_hash": "f53a466c018ddd15a45038f9691d8878",
     "semantic_hash": ""
   },
   "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py": {
-    "mtime": 1788492555.3557632,
-    "ast_hash": "555375c142e8dd305f3cd3d937d376ab",
+    "mtime": 1788492867.755745,
+    "ast_hash": "3c43fbfec5390785f709d34bb6c8938d",
     "semantic_hash": ""
   }
 }
