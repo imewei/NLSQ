@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "nlsq/_version.py": {
-    "mtime": 1788124228.2796688,
-    "ast_hash": "d6d6786989d7c0b7640e4bdd59510c46",
+    "mtime": 1788492305.957248,
+    "ast_hash": "be7c08b794974f5698ca08f318f5f531",
     "semantic_hash": ""
   },
   "nlsq/common_scipy.py": {
@@ -495,13 +495,13 @@
     "semantic_hash": "a43f71db5dfc16c2414f2a13a848cfa6"
   },
   "nlsq/cli/workflow_runner.py": {
-    "mtime": 1787733343.442092,
-    "ast_hash": "c752912c1e51771a80fc2b636b4c8529",
+    "mtime": 1788492324.8014438,
+    "ast_hash": "36a98edcdce0daa43aa08be4367f9250",
     "semantic_hash": ""
   },
   "nlsq/cli/result_exporter.py": {
-    "mtime": 1786077251.7373338,
-    "ast_hash": "a1eca42d916fbc54ffb7ad1e8b96087b",
+    "mtime": 1788492645.8736384,
+    "ast_hash": "b096513f8240e6ff40b28390b84fc5be",
     "semantic_hash": ""
   },
   "nlsq/cli/data_loaders.py": {
@@ -1185,9 +1185,9 @@
     "semantic_hash": "327a3cd9b9b0c095429d52ab3d339645"
   },
   "tests/cli/test_result_exporter.py": {
-    "mtime": 1778306091.1797101,
-    "ast_hash": "04d3c2bc30e2e62289751223db5debe6",
-    "semantic_hash": "04d3c2bc30e2e62289751223db5debe6"
+    "mtime": 1788492658.059044,
+    "ast_hash": "25b61c96773f6d47e5e124efeccdd6cd",
+    "semantic_hash": ""
   },
   "tests/cli/test_visualization.py": {
     "mtime": 1787869063.0232644,
@@ -2835,8 +2835,8 @@
     "semantic_hash": "5d608249b71882ed91d03ca09425d737"
   },
   "examples/README.md": {
-    "mtime": 1788478603.3348608,
-    "ast_hash": "cc4af8bdc02372e0a6994241c14ac42b",
+    "mtime": 1788492600.9102073,
+    "ast_hash": "ed72126e17432878a4417b50da40d2d4",
     "semantic_hash": ""
   },
   "examples/notebooks/07_global_optimization/README.md": {
@@ -2865,8 +2865,8 @@
     "semantic_hash": ""
   },
   "examples/scripts/10_cli-commands/README.md": {
-    "mtime": 1788477354.176973,
-    "ast_hash": "6d1329cd935d8a225efa7b317010f2d9",
+    "mtime": 1788489242.2085905,
+    "ast_hash": "751de245dc78812cd92fc19b08c22508",
     "semantic_hash": ""
   },
   "examples/scripts/10_cli-commands/workflows/07_2d_surface_fit.yaml": {
@@ -2985,7 +2985,7 @@
     "semantic_hash": "94b672f9ef95cf9cd1dd2f8f344aced8"
   },
   "examples/scripts/10_cli-commands/run_all_demos.sh": {
-    "mtime": 1788477331.3650904,
+    "mtime": 1788489242.2085905,
     "ast_hash": "e2921106b9c5b78ef918948edc7f0439",
     "semantic_hash": ""
   },
@@ -3094,69 +3094,14 @@
     "ast_hash": "3219856696882a14b7db383481faaaf9",
     "semantic_hash": ""
   },
-  "examples/scripts/10_cli-commands/output/figures/batch_1_combined.pdf": {
-    "mtime": 1788477366.043913,
-    "ast_hash": "66219d4be036432dca9a9093d41c842a",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_1_histogram.pdf": {
-    "mtime": 1788477366.448911,
-    "ast_hash": "b5cfedd58142c9b63d8f64998fc9c6ab",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_2_combined.pdf": {
-    "mtime": 1788477366.0009131,
-    "ast_hash": "52044da712c1da1d1f25ebf758337424",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_2_histogram.pdf": {
-    "mtime": 1788477366.3729112,
-    "ast_hash": "43dabfc9497d9139c7f7e2b95fb56c8b",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_3_combined.pdf": {
-    "mtime": 1788477366.1379125,
-    "ast_hash": "6a020ace9cba686552332bc76aae1c04",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_3_histogram.pdf": {
-    "mtime": 1788477366.4589107,
-    "ast_hash": "e5b15b16b1350adacf2bd3fff0ab2afc",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_1_combined.png": {
-    "mtime": 1788477365.7919142,
-    "ast_hash": "4d12d33f631e69dda37c313b7b71fee6",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_1_histogram.png": {
-    "mtime": 1788477366.3279114,
-    "ast_hash": "a1988c77a980023415b689abcbcb1603",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_2_combined.png": {
-    "mtime": 1788477365.7619143,
-    "ast_hash": "ff134349e63677f9dc1f1dd779dda51e",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_2_histogram.png": {
-    "mtime": 1788477366.2589118,
-    "ast_hash": "324bba693525e7a94c04e8f0b10fe3e7",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_3_combined.png": {
-    "mtime": 1788477365.8509138,
-    "ast_hash": "95e94e7c29f0beaaa4f6ea06e8aaa736",
-    "semantic_hash": ""
-  },
-  "examples/scripts/10_cli-commands/output/figures/batch_3_histogram.png": {
-    "mtime": 1788477366.3619113,
-    "ast_hash": "566a82739b1740c67352dcdd96b32470",
-    "semantic_hash": ""
-  },
   "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py": {
     "mtime": 1788478547.5738227,
     "ast_hash": "b4135dcf879f6f0df55dab9b2d07d730",
+    "semantic_hash": ""
+  },
+  "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py": {
+    "mtime": 1788492555.3557632,
+    "ast_hash": "555375c142e8dd305f3cd3d937d376ab",
     "semantic_hash": ""
   }
 }

@@ -25,11 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `wadler-lindig`) are all available on conda-forge. Pure addition to
   `uv.lock` -- no existing pin moved.
 - `examples/scripts/02_core_tutorials/batch_fitting_optimistix.py` -- Optimistix
-  `LevenbergMarquardt` vs a hand-written vmapped Gauss-Newton for batch fitting:
-  ~1.5x slower at a matched step budget, adaptive termination gains nothing
-  under `vmap` (the batch pays the slowest member's step count), but it
-  converges on all 500 datasets from a 20x-wrong `p0` where the fixed-lambda
-  solver returns NaN on every one. Includes the fast-then-rescue hybrid.
+  `LevenbergMarquardt` vs a hand-written vmapped Gauss-Newton for batch fitting.
+  In float64 on 500 datasets x 100 points, Optimistix wins on both counts:
+  11.6 us/dataset against 21.9 us for the hand solver at 33 iterations and
+  65.0 us at 100 (it converges in a median of 8 steps and stops, where a fixed
+  `lax.scan` always pays its full budget), and it converges on all 500 datasets
+  from a 20x-wrong `p0` where the fixed-damping solver diverges on every one.
+  The example also documents two traps it hit while being written: a diverged
+  float64 fit overflows to large *finite* values rather than NaN, so a NaN-only
+  failure check reports a clean sweep on a batch that failed completely; and
+  because the script does not import nlsq it must enable `jax_enable_x64`
+  itself, since in float32 the requested `rtol=1e-8` is below eps and
+  Optimistix burns its full `max_steps` on every dataset and appears slower.
 - `examples/scripts/10_cli-commands/aggregate_batch_results.py` -- collects the
   per-workflow JSON files an `nlsq batch` run produces into a single parameter
   table (optionally CSV); the batch summary carries only counts and failures.

@@ -208,9 +208,9 @@ Your complete navigation guide:
 
 6. **Batch Fitting With Optimistix** (`batch_fitting_optimistix.py`, script only)
    - Optimistix `LevenbergMarquardt` vs a hand-written vmapped solver
-   - Why adaptive termination buys nothing under `vmap` (batch pays the max steps)
-   - Robustness: fixed-lambda Gauss-Newton returns NaN from a 20x-wrong p0
-   - The hybrid: fast solver first, Optimistix only on the rows it lost
+   - Optimistix wins on speed (11.6 vs 21.9-65.0 us/dataset) and on robustness
+   - Why a diverged float64 fit is finite, not NaN, and how to detect it
+   - The float32 trap: an unreachable `rtol` makes an adaptive solver look slow
    - **Time**: 15-20 min | **Level**: ●●● Advanced
 
 ---

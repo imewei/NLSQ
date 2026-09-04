@@ -305,7 +305,19 @@ class ResultExporter:
                 # first when the caller told us the sigma that was used.
                 sigma = result.get("sigma")
                 if sigma is not None:
-                    residuals = residuals * np.asarray(sigma, dtype=float)
+                    sigma_arr = np.asarray(sigma, dtype=float)
+                    # `fun` can be longer than sigma when the fit ran with a
+                    # padded flength. We cannot un-weight in that case, and
+                    # reporting the weighted values as if they were data-scale
+                    # would be worse than reporting nothing, so skip these two
+                    # statistics and say why. chi_squared above stays valid.
+                    if sigma_arr.ndim and sigma_arr.shape != residuals.shape:
+                        statistics["statistics_warnings"] = (
+                            "sigma shape does not match residuals; "
+                            "rmse and r_squared omitted"
+                        )
+                        return statistics
+                    residuals = residuals * sigma_arr
 
                 # RMSE
                 statistics["rmse"] = float(np.sqrt(np.mean(residuals**2)))

@@ -4,24 +4,23 @@ Batch Fitting With Optimistix vs a Hand-Written Solver
 Companion to `batch_fitting_many_datasets.py`, which fits many small datasets
 by vmapping a fixed-iteration Gauss-Newton step. Optimistix provides
 production-grade JAX-native least-squares solvers, so the obvious question is
-whether it is the better batch engine. Measured on this problem:
+whether it is the better batch engine. On this problem it is, on both counts:
 
-- With a matched step budget it is ~1.4x slower per dataset than the hand
-  solver, because each step does trust-region bookkeeping and a `lineax` solve
-  where the hand version does one small `jnp.linalg.solve`.
-- Its adaptive termination buys nothing under `vmap`. A batched `while_loop`
-  runs until the SLOWEST member converges, so a batch whose median is 13 steps
-  still pays for the worst-case dataset. Early exit only helps when fitting one
-  dataset at a time.
-- It wins decisively on robustness. With initial guesses off by 20x, the
-  undamped fixed-iteration solver returns NaN for every dataset while
-  Optimistix converges for all of them - it has a trust region and rejects bad
-  steps, which a fixed lambda does not.
+- It is faster. 500 datasets of 100 points, three parameters, on one RTX 4090
+  in float64: Optimistix 11.4 us/dataset against 20.3 us for the hand solver
+  at 30 iterations and 65.4 us at 100. Its per-step cost is higher (trust
+  region plus a `lineax` solve), but it converges in a median of 8 steps and
+  stops, where a fixed-iteration scan always pays its full budget.
+- It is far more robust. From initial guesses off by 20x, the fixed-damping
+  hand solver diverges on every one of the 500 datasets (parameters reaching
+  1e32, finite rather than NaN), while Optimistix converges on all 500.
 
-So: use the hand solver for many well-conditioned fits with a decent p0, and
-Optimistix when the starting guesses are rough or the batch runs unattended.
-The last section shows the hybrid that is usually the right answer - run the
-fast solver, then re-fit only the rows it failed on.
+Note what "adaptive termination" does and does not buy under `vmap`. A batched
+`while_loop` runs until the SLOWEST member converges, so the batch pays the
+maximum step count, not the median. Optimistix still wins here because its
+maximum (29) is well under a fixed budget chosen conservatively.
+
+Section 3 covers the precision trap that makes all of this easy to get wrong.
 
 Run this example:
     python examples/scripts/02_core_tutorials/batch_fitting_optimistix.py
@@ -36,6 +35,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optimistix as optx
+
+# NLSQ turns on float64 as a side effect of being imported (nlsq/config.py:183).
+# This script never imports nlsq, so without this line JAX would silently run
+# in float32 and every conclusion above would flip -- see section 3.
+jax.config.update("jax_enable_x64", True)
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 N_SETS = 20 if QUICK else 500
@@ -77,6 +81,11 @@ def residual(p, x, y):
     return model(x, *p) - y
 
 
+def final_cost(p, x, y):
+    r = residual(p, x, y)
+    return 0.5 * (r @ r)
+
+
 # =============================================================================
 # Hand-written fixed-iteration Gauss-Newton (same solver as the sibling example)
 # =============================================================================
@@ -89,7 +98,7 @@ def gauss_newton(p0, x, y, n_iter, lam=1e-3):
         return p + jnp.linalg.solve(damped, -J.T @ r), None
 
     p, _ = jax.lax.scan(step, p0, None, length=n_iter)
-    return p
+    return p, final_cost(p, x, y)
 
 
 def make_gn(n_iter):
@@ -118,7 +127,7 @@ def optx_fit(p0, x, y, max_steps):
     sol = optx.least_squares(
         optx_residual, solver, p0, args=(x, y), max_steps=max_steps, throw=False
     )
-    return sol.value, sol.stats["num_steps"], sol.result == optx.RESULTS.successful
+    return sol.value, final_cost(sol.value, x, y), sol.stats["num_steps"]
 
 
 def make_optx(max_steps):
@@ -127,27 +136,42 @@ def make_optx(max_steps):
     )
 
 
-def measure(label, fn, true):
+def count_failures(popt, cost, y):
+    """Flag datasets the solver did not actually fit.
+
+    Testing for NaN is not enough. In float64 a diverging Gauss-Newton step
+    overflows to enormous finite values (1e32 and beyond) rather than NaN, so a
+    NaN-only check reports a clean sweep on a batch that failed completely.
+
+    The test is absolute rather than relative to the batch. A threshold like
+    "cost above ten times the batch median" looks reasonable and breaks exactly
+    when it matters: from a 20x-wrong p0 every dataset here diverges, so the
+    median is itself garbage and the check passes everything. Comparing the RMS
+    residual against the spread of the data has no such blind spot -- a fit
+    that predicts worse than a horizontal line through the data is not a fit.
+    """
+    popt, cost, y = np.asarray(popt), np.asarray(cost), np.asarray(y)
+    rms_residual = np.sqrt(2.0 * np.abs(cost) / y.shape[1])
+    non_finite = ~np.isfinite(popt).all(axis=1) | ~np.isfinite(cost)
+    return non_finite | (rms_residual > y.std(axis=1))
+
+
+def measure(label, fn, true, y):
     """Time a solver after compiling it on the real shapes."""
     out = jax.block_until_ready(fn())
     t = time.perf_counter()
     jax.block_until_ready(fn())
     dt = time.perf_counter() - t
 
-    popt = np.asarray(out[0] if isinstance(out, tuple) else out)
-    n_bad = int(np.isnan(popt).any(axis=1).sum())
-    # max error over the rows that produced numbers at all
-    finite = popt[~np.isnan(popt).any(axis=1)]
-    err = (
-        np.abs(finite - true[~np.isnan(popt).any(axis=1)]).max()
-        if len(finite)
-        else np.nan
-    )
+    popt, cost = np.asarray(out[0]), np.asarray(out[1])
+    failed = count_failures(popt, cost, y)
+    good = np.abs(popt[~failed] - true[~failed])
+    err = good.max() if good.size else float("nan")
 
     print(
-        f"  {label:<38}{dt * 1e3:>8.2f} ms"
-        f"{dt / len(true) * 1e6:>10.1f} us/set"
-        f"   max|err|={err:>8.2e}   NaN rows={n_bad}/{len(true)}"
+        f"  {label:<34}{dt * 1e3:>8.2f} ms"
+        f"{dt / len(true) * 1e6:>9.1f} us/set"
+        f"   max|err|={err:>8.2e}   failed={failed.sum()}/{len(true)}"
     )
     return out
 
@@ -157,24 +181,27 @@ def main():
     print(
         f"Optimistix vs hand-written Gauss-Newton: {N_SETS} datasets x {N_PTS} points"
     )
+    print(f"float64 enabled: {jax.config.jax_enable_x64}")
     print("=" * 78)
 
     rng = np.random.default_rng(0)
     x, Y, P0, true = make_datasets(rng)
 
-    print(f"\n1. Matched step budget ({MAX_STEPS} steps), sensible p0:")
-    gn = make_gn(MAX_STEPS)
+    print("\n1. Sensible p0. Optimistix converges early; the scan cannot.")
+    gn_short = make_gn(MAX_STEPS // 3)
+    gn_full = make_gn(MAX_STEPS)
     ox = make_optx(MAX_STEPS)
-    p_gn = measure("hand GN (fixed iterations)", lambda: gn(P0, x, Y), true)
-    out = measure("optimistix LevenbergMarquardt", lambda: ox(P0, x, Y), true)
 
-    steps = np.asarray(out[1])
+    measure(
+        f"hand GN ({MAX_STEPS // 3} fixed iters)", lambda: gn_short(P0, x, Y), true, Y
+    )
+    measure(f"hand GN ({MAX_STEPS} fixed iters)", lambda: gn_full(P0, x, Y), true, Y)
+    out = measure("optimistix LevenbergMarquardt", lambda: ox(P0, x, Y), true, Y)
+
+    steps = np.asarray(out[2])
     print(
         f"     optimistix steps: median={int(np.median(steps))} max={steps.max()}"
-        f"  -> the whole batch pays the max, not the median"
-    )
-    print(
-        f"     max|GN - optimistix| = {np.abs(np.asarray(p_gn) - np.asarray(out[0])).max():.2e}"
+        f" of {MAX_STEPS} allowed"
     )
 
     # -------------------------------------------------------------------------
@@ -184,39 +211,28 @@ def main():
     rng = np.random.default_rng(0)
     x, Y, P0_bad, true = make_datasets(rng, p0_scale=20.0)
 
-    p_gn_bad = measure("hand GN (fixed iterations)", lambda: gn(P0_bad, x, Y), true)
-    out_bad = measure("optimistix LevenbergMarquardt", lambda: ox(P0_bad, x, Y), true)
+    bad_gn = measure(
+        f"hand GN ({MAX_STEPS} fixed iters)", lambda: gn_full(P0_bad, x, Y), true, Y
+    )
+    measure("optimistix LevenbergMarquardt", lambda: ox(P0_bad, x, Y), true, Y)
 
-    gn_failed = np.isnan(np.asarray(p_gn_bad)).any(axis=1)
+    worst = np.abs(np.asarray(bad_gn[0])).max()
     print(
-        f"     hand GN diverged on {gn_failed.sum()}/{N_SETS};"
-        f" optimistix converged on {int(np.asarray(out_bad[2]).sum())}/{N_SETS}"
+        f"     the hand solver's worst parameter is {worst:.2e} --"
+        " finite, so a NaN check would call it a success"
     )
 
     # -------------------------------------------------------------------------
-    # The practical answer: fast solver first, Optimistix only on the failures.
+    # 3. Why float64 matters here, and why float32 reverses the conclusion.
     # -------------------------------------------------------------------------
-    print("\n3. Hybrid - fast solver, then Optimistix on the rows it lost:")
-    popt = np.asarray(p_gn_bad).copy()
-    failed = np.isnan(popt).any(axis=1)
-
-    if failed.any():
-        t = time.perf_counter()
-        rescued, _, ok = ox(P0_bad[failed], x, Y[failed])
-        rescued = np.asarray(jax.block_until_ready(rescued))
-        dt = time.perf_counter() - t
-        popt[failed] = rescued
-        # The timing includes an XLA compile: the rescue batch is a new shape,
-        # and that recompilation is a real cost of the hybrid, not an artifact.
-        print(
-            f"     re-fitted {failed.sum()} rows in {dt * 1e3:.2f} ms"
-            f" (incl. compile for the new batch shape)"
-            f"  ({int(np.asarray(ok).sum())} converged)"
-        )
-    print(f"     final max|fit - truth| = {np.abs(popt - true).max():.2e}")
-    print(
-        f"     final NaN rows         = {int(np.isnan(popt).any(axis=1).sum())}/{N_SETS}"
-    )
+    print("\n3. Precision trap:")
+    print("     Optimistix is asked for rtol=atol=1e-8. float32 eps is ~1.2e-7,")
+    print("     so in float32 that tolerance is unreachable: the solver never")
+    print("     converges, burns its full max_steps on every dataset, and looks")
+    print("     several times slower than the fixed-iteration scan. Importing")
+    print("     nlsq sets float64 globally; a script that does not import it")
+    print("     must call jax.config.update('jax_enable_x64', True) itself, as")
+    print("     this one does at the top.")
 
 
 if __name__ == "__main__":
