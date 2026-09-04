@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- CLI `r_squared` and `rmse` were computed from the optimizer's `fun` vector,
+  which is the *sigma-weighted* residual `(model - ydata)/sigma` whenever a
+  workflow supplies a `sigma` column. Dividing that inflated `ss_res` against an
+  unweighted `ss_tot`, deflating `r_squared` by roughly `1/sigma**2` -- a good
+  fit on `sigma=0.15` data reported `r_squared=0.689` and `rmse=0.826` instead of
+  `0.993` and `0.124`. `WorkflowRunner` now passes `sigma` through to
+  `ResultExporter`, which un-weights the residuals before computing those two
+  statistics. `chi_squared` is unchanged: it is defined on the weighted
+  residuals. Unweighted workflows are unaffected. `CurveFitResult.r_squared`
+  already handled this correctly; only the CLI export path re-derived it.
+
+### Added
+- `optimistix>=0.1.0` added to core dependencies (and `conda-recipe/meta.yaml`);
+  it and its transitive deps (`equinox`, `lineax`, `jaxtyping`,
+  `wadler-lindig`) are all available on conda-forge. Pure addition to
+  `uv.lock` -- no existing pin moved.
+- `examples/scripts/02_core_tutorials/batch_fitting_optimistix.py` -- Optimistix
+  `LevenbergMarquardt` vs a hand-written vmapped Gauss-Newton for batch fitting.
+  In float64 on 500 datasets x 100 points, Optimistix wins on both counts:
+  11.6 us/dataset against 21.9 us for the hand solver at 33 iterations and
+  65.0 us at 100 (it converges in a median of 8 steps and stops, where a fixed
+  `lax.scan` always pays its full budget), and it converges on all 500 datasets
+  from a 20x-wrong `p0` where the fixed-damping solver diverges on every one.
+  The example also documents two traps it hit while being written: a diverged
+  float64 fit overflows to large *finite* values rather than NaN, so a NaN-only
+  failure check reports a clean sweep on a batch that failed completely; and
+  because the script does not import nlsq it must enable `jax_enable_x64`
+  itself, since in float32 the requested `rtol=1e-8` is below eps and
+  Optimistix burns its full `max_steps` on every dataset and appears slower.
+- `examples/scripts/10_cli-commands/aggregate_batch_results.py` -- collects the
+  per-workflow JSON files an `nlsq batch` run produces into a single parameter
+  table (optionally CSV); the batch summary carries only counts and failures.
+- `examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py` -- fitting
+  many small datasets from Python without YAML: reusing one `CurveFit` instance
+  (~14-18x over per-call `curve_fit`) and a `jax.vmap`ed solver (~600-800x),
+  including covariance and ragged datasets via zero-weighted padding.
+
 ## [0.7.4] - 2026-08-30
 
 ### Changed

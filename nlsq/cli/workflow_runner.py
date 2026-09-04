@@ -437,6 +437,11 @@ class WorkflowRunner:
                 # Store ydata for statistics calculation
                 result_dict["ydata"] = ydata.tolist()
 
+                # `fun` above is sigma-weighted; the exporter needs sigma to
+                # recover data-scale residuals for rmse and r_squared.
+                if sigma is not None:
+                    result_dict["sigma"] = np.asarray(sigma).tolist()
+
             return result_dict
 
         except ValueError as e:

@@ -247,6 +247,54 @@ class TestWorkflowRunner:
             },
         }
 
+    def test_workflow_execution_with_sigma_reaches_exporter_unweighted(self, tmp_path):
+        """End-to-end: a sigma column must not deflate the exported r_squared.
+
+        The unit test above injects "sigma" into a hand-built dict, so it stays
+        green even if WorkflowRunner stops forwarding sigma. Only a real run
+        proves the forwarding survives: without it the exporter divides a
+        sigma-weighted ss_res by an unweighted ss_tot and r_squared collapses
+        (for sigma=0.05 here, to far below zero).
+        """
+        from nlsq.cli.result_exporter import ResultExporter
+        from nlsq.cli.workflow_runner import WorkflowRunner
+
+        # Clean linear data with a tight, known sigma.
+        x = np.linspace(0, 5, 40)
+        y = 2.0 * x + 1.0 + np.random.default_rng(0).normal(0, 0.05, x.size)
+        sigma = np.full(x.size, 0.05)
+
+        data_file = tmp_path / "sigma_data.txt"
+        np.savetxt(data_file, np.column_stack([x, y, sigma]))
+        results_file = tmp_path / "sigma_results.json"
+
+        config = {
+            "metadata": {"workflow_name": "sigma_workflow"},
+            "data": {
+                "input_file": str(data_file),
+                "format": "ascii",
+                "columns": {"x": 0, "y": 1, "sigma": 2},
+            },
+            "model": {"type": "builtin", "name": "linear"},
+            "fitting": {"p0": "auto", "method": "trf"},
+            "export": {"results_file": str(results_file), "format": "json"},
+        }
+
+        runner = WorkflowRunner()
+        result = runner.run(config)
+
+        # The forwarding line in workflow_runner ran at all.
+        assert "sigma" in result
+
+        exporter = ResultExporter()
+        stats = exporter._calculate_statistics(result)
+
+        # A tight fit on clean linear data. Pre-fix this was ~1 - 400*(1-R2),
+        # i.e. hugely negative, so the bound only clears if un-weighting ran.
+        assert stats["r_squared"] > 0.9
+        # rmse is in data units, so it tracks sigma rather than 1.0.
+        assert stats["rmse"] < 0.5
+
     def test_workflow_execution_with_builtin_model(
         self, builtin_model_config, tmp_path
     ):
@@ -572,6 +620,85 @@ class TestCalculateStatisticsNonfinite:
         assert "chi_squared" in stats
         assert "r_squared" in stats
         assert "statistics_warnings" not in stats
+
+    def test_sigma_weighted_residuals_are_unweighted_for_r_squared(self):
+        """`fun` is sigma-weighted; rmse and r_squared must be in data units.
+
+        Without un-weighting, ss_res is inflated by 1/sigma**2 while ss_tot
+        stays in data units, which deflates r_squared (a good fit on sigma=0.15
+        data reported ~0.69 instead of ~0.99).
+        """
+        import numpy as np
+
+        from nlsq.cli.result_exporter import ResultExporter
+
+        y = np.array([1.0, 2.0, 3.0, 4.0])
+        raw_residuals = np.array([0.1, -0.1, 0.1, -0.1])
+        sigma = np.full(4, 0.15)
+
+        exporter = ResultExporter()
+        weighted = exporter._calculate_statistics(
+            {
+                "fun": (raw_residuals / sigma).tolist(),
+                "ydata": y.tolist(),
+                "sigma": sigma.tolist(),
+            }
+        )
+        unweighted = exporter._calculate_statistics(
+            {"fun": raw_residuals.tolist(), "ydata": y.tolist()}
+        )
+
+        # Weighting must not change the goodness-of-fit measures.
+        assert weighted["r_squared"] == pytest.approx(unweighted["r_squared"])
+        assert weighted["rmse"] == pytest.approx(unweighted["rmse"])
+        assert weighted["rmse"] == pytest.approx(0.1)
+
+        # Chi-squared, by contrast, is defined on the weighted residuals.
+        assert weighted["chi_squared"] == pytest.approx(
+            np.sum((raw_residuals / sigma) ** 2)
+        )
+
+    def test_sigma_shape_mismatch_omits_rmse_and_r_squared(self):
+        """A padded `fun` (flength) cannot be un-weighted by a shorter sigma.
+
+        Reporting the sigma-scaled values as if they were data-scale would be
+        worse than reporting nothing, so both are omitted with a warning.
+        chi_squared is still valid because it is defined on the weighted
+        residuals.
+        """
+        from nlsq.cli.result_exporter import ResultExporter
+
+        stats = ResultExporter()._calculate_statistics(
+            {
+                "fun": [0.1, -0.1, 0.1, -0.1],
+                "ydata": [1.0, 2.0, 3.0, 4.0],
+                "sigma": [0.15, 0.15],
+            }
+        )
+
+        assert "rmse" not in stats
+        assert "r_squared" not in stats
+        assert "chi_squared" in stats
+        assert "sigma shape" in stats["statistics_warnings"]
+
+    def test_scalar_sigma_is_broadcast_when_unweighting(self):
+        """A scalar sigma must un-weight identically to the equivalent vector."""
+        from nlsq.cli.result_exporter import ResultExporter
+
+        exporter = ResultExporter()
+        weighted = [0.1 / 0.15, -0.1 / 0.15, 0.1 / 0.15, -0.1 / 0.15]
+        ydata = [1.0, 2.0, 3.0, 4.0]
+
+        scalar = exporter._calculate_statistics(
+            {"fun": weighted, "ydata": ydata, "sigma": 0.15}
+        )
+        vector = exporter._calculate_statistics(
+            {"fun": weighted, "ydata": ydata, "sigma": [0.15] * 4}
+        )
+
+        assert scalar["rmse"] == pytest.approx(vector["rmse"])
+        assert scalar["r_squared"] == pytest.approx(vector["r_squared"])
+        assert scalar["rmse"] == pytest.approx(0.1)
 
     def test_inf_residuals_produce_warning_not_r_squared(self):
         """R-squared must not be computed when residuals are non-finite."""

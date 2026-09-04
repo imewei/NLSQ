@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "nlsq/_version.py": {
-    "mtime": 1788056125.7370594,
-    "ast_hash": "b38ea34a5877b810ceba600eca1dd115",
+    "mtime": 1788492305.957248,
+    "ast_hash": "be7c08b794974f5698ca08f318f5f531",
     "semantic_hash": ""
   },
   "nlsq/common_scipy.py": {
@@ -495,13 +495,13 @@
     "semantic_hash": "a43f71db5dfc16c2414f2a13a848cfa6"
   },
   "nlsq/cli/workflow_runner.py": {
-    "mtime": 1787733343.442092,
-    "ast_hash": "c752912c1e51771a80fc2b636b4c8529",
+    "mtime": 1788492324.8014438,
+    "ast_hash": "36a98edcdce0daa43aa08be4367f9250",
     "semantic_hash": ""
   },
   "nlsq/cli/result_exporter.py": {
-    "mtime": 1786077251.7373338,
-    "ast_hash": "a1eca42d916fbc54ffb7ad1e8b96087b",
+    "mtime": 1788492645.8736384,
+    "ast_hash": "b096513f8240e6ff40b28390b84fc5be",
     "semantic_hash": ""
   },
   "nlsq/cli/data_loaders.py": {
@@ -1185,9 +1185,9 @@
     "semantic_hash": "327a3cd9b9b0c095429d52ab3d339645"
   },
   "tests/cli/test_result_exporter.py": {
-    "mtime": 1778306091.1797101,
-    "ast_hash": "04d3c2bc30e2e62289751223db5debe6",
-    "semantic_hash": "04d3c2bc30e2e62289751223db5debe6"
+    "mtime": 1788492658.059044,
+    "ast_hash": "25b61c96773f6d47e5e124efeccdd6cd",
+    "semantic_hash": ""
   },
   "tests/cli/test_visualization.py": {
     "mtime": 1787869063.0232644,
@@ -2000,8 +2000,8 @@
     "semantic_hash": ""
   },
   "docs/CHANGELOG.md": {
-    "mtime": 1787995762.08069,
-    "ast_hash": "9e36ac083c527da1a70aa7a2f6684756",
+    "mtime": 1788112345.7879333,
+    "ast_hash": "9d72eac1bf31cdbdd80502d500471439",
     "semantic_hash": ""
   },
   "docs/requirements.txt": {
@@ -2155,8 +2155,8 @@
     "semantic_hash": "519ec9fa74b1e6a32e23354df9b6184e"
   },
   "docs/tutorials/routine/getting_started/installation.rst": {
-    "mtime": 1787955767.1082923,
-    "ast_hash": "972ee2631ffeb38613353594f37eb0f7",
+    "mtime": 1788112345.7889333,
+    "ast_hash": "fc3032cc6f5b834b211f86b721ffda63",
     "semantic_hash": ""
   },
   "docs/tutorials/routine/getting_started/index.rst": {
@@ -2195,8 +2195,8 @@
     "semantic_hash": "a67fe7e275056169576c1d006e1c1690"
   },
   "docs/tutorials/routine/troubleshooting/getting_help.rst": {
-    "mtime": 1787955767.1082923,
-    "ast_hash": "30fca8d378f8e96963fd8fd1797f9e29",
+    "mtime": 1788112345.7889333,
+    "ast_hash": "a267057775be33589df6fd68bc8e0803",
     "semantic_hash": ""
   },
   "docs/tutorials/routine/troubleshooting/index.rst": {
@@ -2350,8 +2350,8 @@
     "semantic_hash": ""
   },
   "docs/reference/cli.rst": {
-    "mtime": 1787955767.1082923,
-    "ast_hash": "6f49c2138c0012469c5e2e0b394a1851",
+    "mtime": 1788112345.7879333,
+    "ast_hash": "b6946270dbc270502dfc34c88bd9647c",
     "semantic_hash": ""
   },
   "docs/reference/large_data.rst": {
@@ -2835,9 +2835,9 @@
     "semantic_hash": "5d608249b71882ed91d03ca09425d737"
   },
   "examples/README.md": {
-    "mtime": 1787459854.2502139,
-    "ast_hash": "4b9408d69f2f0896502657810ed2edc9",
-    "semantic_hash": "4b9408d69f2f0896502657810ed2edc9"
+    "mtime": 1788492600.9102073,
+    "ast_hash": "ed72126e17432878a4417b50da40d2d4",
+    "semantic_hash": ""
   },
   "examples/notebooks/07_global_optimization/README.md": {
     "mtime": 1786019276.5558047,
@@ -2865,8 +2865,8 @@
     "semantic_hash": ""
   },
   "examples/scripts/10_cli-commands/README.md": {
-    "mtime": 1787869063.0222645,
-    "ast_hash": "60b637b46a0bdb70e5be9d310070005d",
+    "mtime": 1788489242.2085905,
+    "ast_hash": "751de245dc78812cd92fc19b08c22508",
     "semantic_hash": ""
   },
   "examples/scripts/10_cli-commands/workflows/07_2d_surface_fit.yaml": {
@@ -2985,9 +2985,9 @@
     "semantic_hash": "94b672f9ef95cf9cd1dd2f8f344aced8"
   },
   "examples/scripts/10_cli-commands/run_all_demos.sh": {
-    "mtime": 1766571482.683516,
-    "ast_hash": "40397c3aaf5203f99ce967d2a6da9d5b",
-    "semantic_hash": "40397c3aaf5203f99ce967d2a6da9d5b"
+    "mtime": 1788489242.2085905,
+    "ast_hash": "e2921106b9c5b78ef918948edc7f0439",
+    "semantic_hash": ""
   },
   "tests/cli/fixtures/results.json": {
     "mtime": 1766563561.3347328,
@@ -3087,6 +3087,21 @@
   "tests/streaming/test_streaming_pr30_regressions.py": {
     "mtime": 1788054030.6578207,
     "ast_hash": "737bcce2efa3a5d665e73987518cc0e9",
+    "semantic_hash": ""
+  },
+  "examples/scripts/10_cli-commands/aggregate_batch_results.py": {
+    "mtime": 1788492873.7225575,
+    "ast_hash": "1448ae7afb6b50e7515961cd4103d17e",
+    "semantic_hash": ""
+  },
+  "examples/scripts/02_core_tutorials/batch_fitting_many_datasets.py": {
+    "mtime": 1788492867.755745,
+    "ast_hash": "f53a466c018ddd15a45038f9691d8878",
+    "semantic_hash": ""
+  },
+  "examples/scripts/02_core_tutorials/batch_fitting_optimistix.py": {
+    "mtime": 1788492867.755745,
+    "ast_hash": "3c43fbfec5390785f709d34bb6c8938d",
     "semantic_hash": ""
   }
 }

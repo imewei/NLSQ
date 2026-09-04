@@ -15,6 +15,7 @@ cd examples/scripts/10_cli-commands
 10_cli-commands/
 ├── README.md                 # This file
 ├── run_all_demos.sh          # Master script running all demos
+├── aggregate_batch_results.py  # Collect batch results into one table
 ├── data/                     # Sample datasets
 │   ├── generate_sample_data.py
 │   ├── exponential_decay.csv
@@ -103,6 +104,34 @@ nlsq batch workflows/*.yaml --summary summary.json
 # Control parallelism
 nlsq batch workflows/*.yaml --workers 4
 ```
+
+Note that `--verbose` is a global flag, so it goes *before* the subcommand:
+`nlsq --verbose batch workflows/*.yaml`.
+
+The summary file records counts and failures only. Fitted parameters go to each
+workflow's own `export.results_file`; see `aggregate_batch_results.py` below for
+collecting them into one table.
+
+### `aggregate_batch_results.py`
+
+Collect the per-workflow result files a batch run produced into a single
+parameter table, optionally as CSV.
+
+```bash
+nlsq batch workflows/batch_example/*.yaml --summary output/batch_summary.json
+python aggregate_batch_results.py output --summary output/batch_summary.json --csv output/batch_parameters.csv
+```
+
+```text
+workflow              status                     a                 b                 c     R^2
+----------------------------------------------------------------------------------------------
+batch_exp_decay_1     success         5.58 +-0.0693    0.3954 +-0.0127    0.9781 +-0.0449   0.993
+batch_exp_decay_2     success        6.061 +-0.104     0.5344 +-0.0197     1.091 +-0.0446   0.988
+batch_exp_decay_3     success        6.547 +-0.111     0.5816 +-0.0204    0.9538 +-0.0431   0.989
+```
+
+Passing `--summary` also reports the workflows that failed, since those leave no
+result file of their own.
 
 ## Data Formats
 
@@ -321,7 +350,13 @@ Process multiple datasets with shared configuration:
 
 ```bash
 nlsq batch workflows/batch_example/*.yaml --summary output/batch_summary.json
+python aggregate_batch_results.py output --summary output/batch_summary.json
 ```
+
+Workflows run in parallel on a thread pool (not processes - JAX is not
+fork-safe on GPU). Give each workflow a distinct `export.results_file` and
+`visualization.filename_prefix`, or concurrent workflows will overwrite each
+other's output.
 
 ## Visualization
 
@@ -473,12 +508,32 @@ When using `nlsq batch --summary`, a JSON summary is generated:
 ```json
 {
   "total": 4,
-  "succeeded": 4,
-  "failed": 0,
-  "duration_seconds": 2.5,
-  "results": [...]
+  "succeeded": 3,
+  "failed": 1,
+  "duration_seconds": 4.07,
+  "start_time": "2026-09-03T18:12:02.723038",
+  "end_time": "2026-09-03T18:12:07.671942",
+  "max_workers": 3,
+  "failures": [
+    {
+      "workflow_path": "workflows/batch_workflow_bad.yaml",
+      "error": {
+        "type": "DataLoadError",
+        "message": "Data file not found: data/does_not_exist.csv",
+        "context": {"file_path": "data/does_not_exist.csv"},
+        "suggestion": "Check that the file path is correct and the file exists."
+      }
+    }
+  ],
+  "successes": [
+    {"workflow_path": "workflows/batch_workflow_1.yaml"}
+  ]
 }
 ```
+
+Note that `successes` carries workflow paths only - no parameters. Use
+`aggregate_batch_results.py` to build a parameter table from the individual
+result files.
 
 ## Troubleshooting
 
@@ -486,7 +541,8 @@ When using `nlsq batch --summary`, a JSON summary is generated:
 
 1. **"Model function not found"**: Ensure the function name in YAML matches the Python function exactly.
 
-2. **"Data file not found"**: Use relative paths from the workflow file location.
+2. **"Data file not found"**: Paths in the workflow are resolved relative to the
+   current working directory, not to the YAML file. Run from this directory.
 
 3. **"Convergence failed"**: Try:
    - Adjusting initial parameters (`p0`)

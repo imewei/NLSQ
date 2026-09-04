@@ -101,6 +101,7 @@ dependencies = [
     "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.9.1)
     "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.9.1)
     "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.7)
+    "optimistix>=0.1.0",      # JAX-native least-squares/root-finding solvers (tested on 0.1.0)
 
     # Visualization and monitoring
     "matplotlib>=3.10.0",     # Tested on 3.10.8

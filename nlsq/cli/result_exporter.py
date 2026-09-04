@@ -294,11 +294,33 @@ class ResultExporter:
                     "residuals contain non-finite values"
                 )
             else:
+                # Chi-squared is defined on the *weighted* residuals, which is
+                # exactly what the optimizer's `fun` vector holds.
+                statistics["chi_squared"] = float(np.sum(residuals**2))
+
+                # RMSE and R^2 are goodness-of-fit measures in data units, so
+                # they need the RAW residuals. With sigma weighting `fun` is
+                # (model - ydata)/sigma, and mixing that against an unweighted
+                # ss_tot deflates r_squared by roughly 1/sigma**2. Un-weight
+                # first when the caller told us the sigma that was used.
+                sigma = result.get("sigma")
+                if sigma is not None:
+                    sigma_arr = np.asarray(sigma, dtype=float)
+                    # `fun` can be longer than sigma when the fit ran with a
+                    # padded flength. We cannot un-weight in that case, and
+                    # reporting the weighted values as if they were data-scale
+                    # would be worse than reporting nothing, so skip these two
+                    # statistics and say why. chi_squared above stays valid.
+                    if sigma_arr.ndim and sigma_arr.shape != residuals.shape:
+                        statistics["statistics_warnings"] = (
+                            "sigma shape does not match residuals; "
+                            "rmse and r_squared omitted"
+                        )
+                        return statistics
+                    residuals = residuals * sigma_arr
+
                 # RMSE
                 statistics["rmse"] = float(np.sqrt(np.mean(residuals**2)))
-
-                # Chi-squared (sum of squared residuals)
-                statistics["chi_squared"] = float(np.sum(residuals**2))
 
                 # R-squared if ydata is available — gated here so NaN residuals
                 # don't silently produce a NaN r_squared outside the warning path.

@@ -33,6 +33,7 @@ requirements:
     - jax >=0.8.0
     - jaxlib >=0.8.0
     - optax >=0.2.6
+    - optimistix >=0.1.0
     # Visualization and monitoring
     - matplotlib-base >=3.10.0
     - psutil >=7.2.0
