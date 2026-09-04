@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- CLI `r_squared` and `rmse` were computed from the optimizer's `fun` vector,
+  which is the *sigma-weighted* residual `(model - ydata)/sigma` whenever a
+  workflow supplies a `sigma` column. Dividing that inflated `ss_res` against an
+  unweighted `ss_tot`, deflating `r_squared` by roughly `1/sigma**2` -- a good
+  fit on `sigma=0.15` data reported `r_squared=0.689` and `rmse=0.826` instead of
+  `0.993` and `0.124`. `WorkflowRunner` now passes `sigma` through to
+  `ResultExporter`, which un-weights the residuals before computing those two
+  statistics. `chi_squared` is unchanged: it is defined on the weighted
+  residuals. Unweighted workflows are unaffected. `CurveFitResult.r_squared`
+  already handled this correctly; only the CLI export path re-derived it.
+
 ## [0.7.4] - 2026-08-30
 
 ### Changed

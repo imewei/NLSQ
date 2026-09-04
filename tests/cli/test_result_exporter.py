@@ -573,6 +573,43 @@ class TestCalculateStatisticsNonfinite:
         assert "r_squared" in stats
         assert "statistics_warnings" not in stats
 
+    def test_sigma_weighted_residuals_are_unweighted_for_r_squared(self):
+        """`fun` is sigma-weighted; rmse and r_squared must be in data units.
+
+        Without un-weighting, ss_res is inflated by 1/sigma**2 while ss_tot
+        stays in data units, which deflates r_squared (a good fit on sigma=0.15
+        data reported ~0.69 instead of ~0.99).
+        """
+        import numpy as np
+
+        from nlsq.cli.result_exporter import ResultExporter
+
+        y = np.array([1.0, 2.0, 3.0, 4.0])
+        raw_residuals = np.array([0.1, -0.1, 0.1, -0.1])
+        sigma = np.full(4, 0.15)
+
+        exporter = ResultExporter()
+        weighted = exporter._calculate_statistics(
+            {
+                "fun": (raw_residuals / sigma).tolist(),
+                "ydata": y.tolist(),
+                "sigma": sigma.tolist(),
+            }
+        )
+        unweighted = exporter._calculate_statistics(
+            {"fun": raw_residuals.tolist(), "ydata": y.tolist()}
+        )
+
+        # Weighting must not change the goodness-of-fit measures.
+        assert weighted["r_squared"] == pytest.approx(unweighted["r_squared"])
+        assert weighted["rmse"] == pytest.approx(unweighted["rmse"])
+        assert weighted["rmse"] == pytest.approx(0.1)
+
+        # Chi-squared, by contrast, is defined on the weighted residuals.
+        assert weighted["chi_squared"] == pytest.approx(
+            np.sum((raw_residuals / sigma) ** 2)
+        )
+
     def test_inf_residuals_produce_warning_not_r_squared(self):
         """R-squared must not be computed when residuals are non-finite."""
         from nlsq.cli.result_exporter import ResultExporter

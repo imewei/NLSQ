@@ -294,11 +294,21 @@ class ResultExporter:
                     "residuals contain non-finite values"
                 )
             else:
+                # Chi-squared is defined on the *weighted* residuals, which is
+                # exactly what the optimizer's `fun` vector holds.
+                statistics["chi_squared"] = float(np.sum(residuals**2))
+
+                # RMSE and R^2 are goodness-of-fit measures in data units, so
+                # they need the RAW residuals. With sigma weighting `fun` is
+                # (model - ydata)/sigma, and mixing that against an unweighted
+                # ss_tot deflates r_squared by roughly 1/sigma**2. Un-weight
+                # first when the caller told us the sigma that was used.
+                sigma = result.get("sigma")
+                if sigma is not None:
+                    residuals = residuals * np.asarray(sigma, dtype=float)
+
                 # RMSE
                 statistics["rmse"] = float(np.sqrt(np.mean(residuals**2)))
-
-                # Chi-squared (sum of squared residuals)
-                statistics["chi_squared"] = float(np.sum(residuals**2))
 
                 # R-squared if ydata is available — gated here so NaN residuals
                 # don't silently produce a NaN r_squared outside the warning path.
