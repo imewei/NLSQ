@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `NumericalStabilityGuard.check_and_fix_jacobian` reported well-conditioned
+  Jacobians as ill-conditioned and silently regularized them. The SVD skip
+  guard bounds the *element* count (`max_jacobian_elements_for_svd`, 10M), but
+  XLA's `svdvals` on an `(m, n)` input allocates an `m x m` workspace, so a
+  `(1_200_000, 7)` Jacobian -- 8.4M elements, under the skip threshold --
+  requested ~11.5 TB and raised `RESOURCE_EXHAUSTED`. The exception was caught,
+  the condition number fell back to `inf`, and the
+  `condition_number > condition_threshold` branch then diagonal-regularized a
+  matrix whose true condition number was ~1.003. The failure band was bounded
+  on both sides: a *larger* Jacobian crossed the 10M-element threshold, skipped
+  the SVD, and behaved correctly. The singular values now come from the `R`
+  factor of a QR decomposition (`J = QR` with orthonormal `Q`, so `R` carries
+  exactly the singular values of `J` to floating-point round-off), which keeps
+  the workspace `O(m * n)`. Wide Jacobians are transposed first -- they hit the
+  identical blowup (a `(7, 300_000)` input asks for 720 GB) and singular values
+  are invariant under transposition. Genuinely rank-deficient Jacobians -- e.g.
+  the all-zero column left by pinning a parameter to a zero-width bound -- are
+  still detected and regularized as before.
+
+  The OOM is backend-dependent: cuSOLVER handles these shapes, so the bug is
+  reachable on the CPU backend (which CI uses) and not on GPU.
+- A failed condition-number measurement no longer masquerades as a measured
+  `inf`. Any exception from the singular-value computation set
+  `condition_number = inf`, which unconditionally tripped the regularization
+  branch and perturbed a Jacobian whose conditioning was never actually
+  measured. `check_and_fix_jacobian` now reports `condition_number = None` with
+  a new `svd_failed` flag in its issues dict and leaves the Jacobian untouched;
+  `LeastSquares` surfaces that flag in its warning. The issues dict is also key
+  -consistent across every return path, so a caller reading
+  `.get("regularized")` can no longer read a missing key as `False`.
+- `estimate_condition_number` and `detect_collinearity` returned their `inf` /
+  `(False, [])` fallbacks with no warning at all, making a failed computation
+  indistinguishable from a genuine measurement. Both now warn.
+
 ## [0.7.5] - 2026-09-04
 
 ### Fixed
