@@ -752,3 +752,42 @@ class TestMultiFeatureXdataJacobian:
         assert diag["phase_iterations"]["phase2"] > 0
         assert "failed" not in diag["gauss_newton_diagnostics"]["convergence_reason"]
         np.testing.assert_allclose(np.asarray(result["x"]), [2.0, 3.0], atol=1e-4)
+
+
+class TestMultiFeatureModelJacobian:
+    """Phase 2 Jacobians must feed the model a batched (1, k) row so models
+    indexing ``x[:, j]`` work; a bare (k,) row raised an IndexError."""
+
+    @staticmethod
+    def _setup():
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(chunk_size=8, normalize=False),
+        )
+
+        def model(x, a, b):
+            return a * x[:, 0] + b * x[:, 1]
+
+        x = jnp.stack([jnp.linspace(1.0, 3.0, 20), jnp.linspace(2.0, 0.5, 20)], axis=1)
+        y = 2.0 * x[:, 0] + 3.0 * x[:, 1]
+        optimizer._setup_normalization(model, jnp.array([1.0, 1.0]), None)
+        return optimizer, x, y
+
+    def test_jacobian_chunk_of_multifeature_model(self):
+        optimizer, x, _ = self._setup()
+        jac = optimizer._compute_jacobian_chunk(x, optimizer.normalized_params)
+        np.testing.assert_allclose(np.asarray(jac), np.asarray(x), atol=1e-10)
+
+    def test_jtj_accumulation_of_multifeature_model(self):
+        optimizer, x, y = self._setup()
+        params = optimizer.normalized_params
+        expected = np.asarray(x).T @ np.asarray(x)
+
+        jtj_scan, _, _ = optimizer._accumulate_jtj_jtr_scan(x, y, params)
+        np.testing.assert_allclose(np.asarray(jtj_scan), expected, rtol=1e-8)
+
+        jtj, jtr = jnp.zeros((2, 2)), jnp.zeros(2)
+        for i in range(0, 20, 8):
+            jtj, jtr, _ = optimizer._accumulate_jtj_jtr(
+                x[i : i + 8], y[i : i + 8], params, jtj, jtr
+            )
+        np.testing.assert_allclose(np.asarray(jtj), expected, rtol=1e-8)
