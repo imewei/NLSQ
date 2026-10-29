@@ -23,8 +23,9 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchored: bare `lib/` also matches nlsq/**/lib/ and would hide a source package.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -72,6 +73,7 @@ test-results.xml
 .test-runs/
 bandit*re*.json
 pip_audit_report.json
+requirements-audit.txt
 coverage_baseline.txt
 
 # ----------------------------------------------------------------------------
@@ -87,6 +89,17 @@ env.bak/
 venv.bak/
 .conda/
 conda-env/
+.uv-cache/
+
+# Never commit certificate or key material, or credential dumps.
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+*credentials.json
+*credentials.yaml
+*credentials.yml
 
 # ----------------------------------------------------------------------------
 # Dependency Management
@@ -140,6 +153,14 @@ docs/coverage_report.json
 
 # MkDocs
 /site
+
+# superpowers/ is scratch EXCEPT the plans and specs, which are the durable
+# design record. `docs/superpowers/*` rather than `docs/superpowers/` is
+# required: git will not descend into an excluded directory, so a negation
+# inside one never fires.
+docs/superpowers/*
+!docs/superpowers/plans/
+!docs/superpowers/specs/
 
 # ----------------------------------------------------------------------------
 # NLSQ Specific
@@ -221,6 +242,7 @@ dmypy.json
 .pytype/
 .ruff_cache/
 .pylint_cache/
+.quality-gate/
 
 # ----------------------------------------------------------------------------
 # IDEs & Editors
@@ -231,6 +253,8 @@ dmypy.json
 # VSCode
 .vscode/
 *.code-workspace
+pyrightconfig.json
+tempCodeRunnerFile.py
 
 # Spyder
 .spyderproject
@@ -270,8 +294,15 @@ dmypy.json
 .ultra-think/
 .ultracode/
 .abstra/
+.impeccable/
+.reports/
+.windsurf/
+.clinerules/
 agent-os/
-specs/
+# Anchored: bare `specs/` also matches docs/superpowers/specs/, which is tracked
+# alongside docs/superpowers/plans/ (see the Documentation section).
+/specs/
+three-brain-out/
 AGENTS.md
 CLAUDE.md
 GEMINI.md
@@ -280,22 +311,18 @@ GROK.md
 HERMES.md
 OPENROUTER.md
 codex.md
+/CONTEXT.md
+/PROGRESS.md
 .research-log.jsonl
+docs/.claude-progress.md
 
 # ----------------------------------------------------------------------------
 # Graphify (Knowledge Graph & Semantic Cache)
 # ----------------------------------------------------------------------------
-graphify-out/cache/
-graphify-out/.graphify_python
-graphify-out/.graphify_*.json
-graphify-out/.graphify_*.txt
-graphify-out/.obsidian/
-graphify-out/_COMMUNITY_*.md
-graphify-out/20*/
-three-brain-out/
-.graphify_*.json
-.graphify_*.txt
-_COMMUNITY_*.md
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/graph.html
+!graphify-out/graph.json
 
 # ----------------------------------------------------------------------------
 # Operating System
@@ -325,6 +352,7 @@ Desktop.ini
 *.orig
 *~
 tmp/
+_run_logs/
 
 # ----------------------------------------------------------------------------
 # Profiling
@@ -392,5 +420,11 @@ code_quality_fixes_summary.md
 
 # CLI demo output
 examples/scripts/10_cli-commands/output/
+# Template copies the `nlsq` CLI writes into the working directory (cli/main.py);
+# anchored so the tracked templates under nlsq/cli/templates/ are unaffected.
+/custom_model.py
+/workflow_config.yaml
+.scratch/
+node_modules/
 .worktrees/
 conda-bld/
