@@ -2715,7 +2715,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=7.2.0" },
     { name = "pyqtgraph", specifier = ">=0.14.0" },
     { name = "pyside6", specifier = ">=6.10.0" },
-    { name = "pytest", specifier = ">=9.0.0" },
+    { name = "pytest", specifier = ">=9.0.0,!=9.2.0" },
     { name = "pytest-benchmark", specifier = ">=5.2.3" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-qt", specifier = ">=4.5.0" },
