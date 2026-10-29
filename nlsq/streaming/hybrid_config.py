@@ -11,6 +11,7 @@ from typing import Literal
 from nlsq.streaming.validators import (
     validate_cg_config,
     validate_defense_layer_config,
+    validate_error_handling_config,
     validate_gauss_newton_config,
     validate_gradient_clip,
     validate_group_variance_config,
@@ -366,6 +367,9 @@ class HybridStreamingConfig:
     # - Emphasizing certain regions or groups of data
     # - Domain-specific weighting (e.g., group-dependent weights)
     # The weights are looked up using the first column of x_data as group index.
+    # NOTE: weighting applies ONLY to the Phase 1 L-BFGS warmup loss. Phase 2
+    # (Gauss-Newton) J^T J / J^T r and Phase 3 covariance are unweighted, so the
+    # final optimum is the unweighted least-squares solution.
     enable_residual_weighting: bool = False
     residual_weights: list[float] | None = None  # Per-group weights, shape (n_groups,)
 
@@ -512,6 +516,12 @@ class HybridStreamingConfig:
                 elimination_rounds=self.elimination_rounds,
                 batches_per_round=self.batches_per_round,
                 scale_factor=self.scale_factor,
+            )
+
+            validate_error_handling_config(
+                max_retries_per_batch=self.max_retries_per_batch,
+                min_success_rate=self.min_success_rate,
+                log_frequency=self.log_frequency,
             )
 
             # Validate gc_chunk_interval (FR-007)

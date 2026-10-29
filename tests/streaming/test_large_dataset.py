@@ -737,3 +737,119 @@ class TestBugFixRegressions(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestChunkedLinearMatchesFullBatch:
+    """Chunks used to be fitted with absolute_sigma=False, so each chunk's
+    covariance was scaled by its own residual variance and the precision-weighted
+    combination over-weighted low-residual chunks (chunked != full-batch even
+    for a linear model)."""
+
+    @staticmethod
+    def _fit(sigma=None, absolute_sigma=False):
+        from scipy.optimize import curve_fit as scipy_curve_fit
+
+        def lin(x, a, b):
+            return a + b * x
+
+        rng = np.random.default_rng(1)
+        n = 2000
+        x = np.linspace(0, 10, n)
+        # Heteroscedastic noise across chunks makes per-chunk variance scaling bite.
+        y = 1.0 + 0.5 * x + (0.05 + 0.1 * x) * rng.standard_normal(n)
+        kw = {} if sigma is None else {"sigma": sigma(x)}
+        ref, refcov = scipy_curve_fit(
+            lin, x, y, p0=[0.0, 0.0], absolute_sigma=absolute_sigma, **kw
+        )
+        cfg = LDMemoryConfig(
+            memory_limit_gb=1e-9, min_chunk_size=500, max_chunk_size=500
+        )
+        res = LargeDatasetFitter(config=cfg).fit(
+            lin, x, y, p0=[0.0, 0.0], absolute_sigma=absolute_sigma, **kw
+        )
+        assert res.get("n_chunks") == 4
+        return res, ref, refcov
+
+    def test_default_arguments(self):
+        res, ref, refcov = self._fit()
+        np.testing.assert_allclose(res.x, ref, rtol=1e-8)
+        np.testing.assert_allclose(res.pcov, refcov, rtol=1e-6)
+
+    @pytest.mark.parametrize("absolute_sigma", [False, True])
+    def test_with_sigma(self, absolute_sigma):
+        res, ref, refcov = self._fit(lambda x: 0.05 + 0.1 * x, absolute_sigma)
+        np.testing.assert_allclose(res.x, ref, rtol=1e-8)
+        np.testing.assert_allclose(res.pcov, refcov, rtol=1e-6)
+
+
+class TestChunkedCovarianceStabilityAndBounds:
+    """Pooled variance must not cancel catastrophically at large offsets, and
+    chunk combination must respect (and warn about) parameter bounds."""
+
+    @staticmethod
+    def _fitter():
+        cfg = LDMemoryConfig(min_chunk_size=10, max_chunk_size=10, use_streaming=False)
+        return LargeDatasetFitter(config=cfg)
+
+    @pytest.mark.parametrize("offset", [1e7, 1e8, 1e9])
+    def test_constant_model_variance_large_offset(self, offset):
+        def const(x, a):
+            return a + 0 * x
+
+        x = np.arange(60.0)
+        y = offset + np.random.default_rng(0).normal(0, 0.1, 60)
+        res = self._fitter().fit(const, x, y, p0=[offset])
+        np.testing.assert_allclose(res.pcov[0, 0], np.var(y, ddof=1) / 60, rtol=1e-5)
+
+    def test_bounds_respected_and_warned(self):
+        def lin(x, a, b):
+            return a * x + b
+
+        x = np.linspace(0, 2, 60)
+        y = 2 * x + np.random.default_rng(7).normal(0, 3, 60)
+        fitter = self._fitter()
+        fitter.logger = MagicMock()
+        res = fitter.fit(lin, x, y, p0=[1, 1], bounds=([0, 0], [10, 10]))
+        assert np.all(np.asarray(res.popt) >= 0)
+        assert np.all(np.asarray(res.popt) <= 10)
+        assert fitter.logger.warning.called
+        assert "bounds" in fitter.logger.warning.call_args_list[0][0][0]
+
+
+class TestFailedChunkHistory:
+    """A chunk whose retry also failed used to be folded into the parameter
+    history as a duplicate of the previous estimate."""
+
+    def test_failed_chunk_adds_no_history_entry(self):
+        def lin(x, a, b):
+            return a + b * x
+
+        x = np.linspace(0, 10, 2000)
+        y = 1 + 0.5 * x + 0.1 * np.random.default_rng(0).standard_normal(2000)
+        cfg = LDMemoryConfig(
+            memory_limit_gb=1e-9, min_chunk_size=500, max_chunk_size=500
+        )
+        fitter = LargeDatasetFitter(config=cfg)
+        real_fit = fitter.curve_fit.curve_fit
+        calls = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] in (3, 4):  # chunk 2 and its retry
+                raise RuntimeError("boom")
+            return real_fit(*args, **kwargs)
+
+        history_lengths = []
+        real_update = fitter._update_parameters_convergence
+
+        def spy(*args, **kwargs):
+            out = real_update(*args, **kwargs)
+            history_lengths.append(len(out[1]))
+            return out
+
+        fitter.curve_fit.curve_fit = flaky
+        fitter._update_parameters_convergence = spy
+        res = fitter.fit(lin, x, y, p0=[0.0, 0.0])
+
+        assert res.success
+        assert history_lengths == [1, 2, 3]  # 3 successful chunks, no duplicate

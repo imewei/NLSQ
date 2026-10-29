@@ -56,9 +56,31 @@ def validate_positive(value: float, param_name: str) -> None:
         If value is not positive.
     """
     # `value <= 0` is False for NaN (all IEEE-754 comparisons involving NaN
-    # are False), so a plain `<=` check silently lets NaN through.
-    if math.isnan(value) or value <= 0:
-        raise ConfigValidationError(f"{param_name} must be positive")
+    # are False), so a plain `<=` check silently lets NaN through. +inf passes
+    # `> 0` but is never a usable tolerance/step/count, so reject it too.
+    if math.isnan(value) or math.isinf(value) or value <= 0:
+        raise ConfigValidationError(f"{param_name} must be positive and finite")
+
+
+def validate_positive_int(value: float, param_name: str) -> None:
+    """Validate that value is a strictly positive integer count/size.
+
+    Accepts ints, numpy integers and integral floats (e.g. ``100.0``); rejects
+    bool, NaN/inf, non-integral values and values below 1.
+
+    Raises
+    ------
+    ConfigValidationError
+        If value is not a positive integer.
+    """
+    if (
+        isinstance(value, bool)
+        or math.isnan(value)
+        or math.isinf(value)
+        or value != int(value)
+        or value < 1
+    ):
+        raise ConfigValidationError(f"{param_name} must be positive and an integer")
 
 
 def validate_non_negative(value: float, param_name: str) -> None:
@@ -206,7 +228,7 @@ def validate_warmup_config(
         If any parameter is invalid.
     """
     validate_non_negative(warmup_iterations, "warmup_iterations")
-    validate_positive(max_warmup_iterations, "max_warmup_iterations")
+    validate_positive_int(max_warmup_iterations, "max_warmup_iterations")
     validate_positive(warmup_learning_rate, "warmup_learning_rate")
     validate_positive(loss_plateau_threshold, "loss_plateau_threshold")
     validate_positive(gradient_norm_threshold, "gradient_norm_threshold")
@@ -248,7 +270,7 @@ def validate_lbfgs_config(
     ConfigValidationError
         If any parameter is invalid.
     """
-    validate_positive(history_size, "lbfgs_history_size")
+    validate_positive_int(history_size, "lbfgs_history_size")
     validate_positive(initial_step_size, "lbfgs_initial_step_size")
     validate_lbfgs_line_search(line_search)
     validate_positive(exploration_step_size, "lbfgs_exploration_step_size")
@@ -280,7 +302,7 @@ def validate_gauss_newton_config(
     ConfigValidationError
         If any parameter is invalid.
     """
-    validate_positive(max_iterations, "gauss_newton_max_iterations")
+    validate_positive_int(max_iterations, "gauss_newton_max_iterations")
     validate_positive(tol, "gauss_newton_tol")
     validate_positive(trust_region_initial, "trust_region_initial")
     validate_non_negative(regularization_factor, "regularization_factor")
@@ -310,7 +332,7 @@ def validate_cg_config(
     ConfigValidationError
         If any parameter is invalid.
     """
-    validate_positive(max_iterations, "cg_max_iterations")
+    validate_positive_int(max_iterations, "cg_max_iterations")
     validate_positive(relative_tolerance, "cg_relative_tolerance")
     validate_positive(absolute_tolerance, "cg_absolute_tolerance")
     validate_positive(param_threshold, "cg_param_threshold")
@@ -391,9 +413,27 @@ def validate_streaming_config(
     ConfigValidationError
         If any parameter is invalid.
     """
-    validate_positive(chunk_size, "chunk_size")
-    validate_positive(checkpoint_frequency, "checkpoint_frequency")
-    validate_positive(callback_frequency, "callback_frequency")
+    validate_positive_int(chunk_size, "chunk_size")
+    validate_positive_int(checkpoint_frequency, "checkpoint_frequency")
+    validate_positive_int(callback_frequency, "callback_frequency")
+
+
+def validate_error_handling_config(
+    max_retries_per_batch: int,
+    min_success_rate: float,
+    log_frequency: int,
+) -> None:
+    """Validate batch-retry, success-rate and logging-frequency settings.
+
+    Raises
+    ------
+    ConfigValidationError
+        If retries are negative, the success rate is outside [0, 1], or
+        log_frequency is not a positive integer.
+    """
+    validate_non_negative(max_retries_per_batch, "max_retries_per_batch")
+    validate_range(min_success_rate, 0.0, 1.0, "min_success_rate")
+    validate_positive_int(log_frequency, "log_frequency")
 
 
 def validate_lr_schedule_config(
@@ -636,5 +676,5 @@ def validate_multistart_config(
         inclusive_max=False,
     )
     validate_non_negative(elimination_rounds, "elimination_rounds")
-    validate_positive(batches_per_round, "batches_per_round")
+    validate_positive_int(batches_per_round, "batches_per_round")
     validate_positive(scale_factor, "scale_factor")

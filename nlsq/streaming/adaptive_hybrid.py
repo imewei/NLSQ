@@ -528,7 +528,9 @@ class AdaptiveHybridStreamingOptimizer:
             """
 
             def model_at_point(p, x_single):
-                return normalized_model(x_single, *p)
+                # Model expects a batch axis (n, k): feed a 1-row batch so
+                # multi-feature x[:, j] indexing works, then drop the axis.
+                return jnp.atleast_1d(normalized_model(x_single[None], *p))[0]
 
             # jacrev computes gradient w.r.t. first argument (params)
             # vmap over x_chunk to get Jacobian row for each point
@@ -941,7 +943,7 @@ class AdaptiveHybridStreamingOptimizer:
             else:
 
                 def model_at_x(p, x_single):
-                    return normalized_model(x_single, *p)
+                    return jnp.atleast_1d(normalized_model(x_single[None], *p))[0]
 
                 J_chunk = jax.vmap(
                     lambda x: jax.jacrev(model_at_x, argnums=0)(params, x),
@@ -2418,7 +2420,7 @@ class AdaptiveHybridStreamingOptimizer:
         # Fallback: inline compilation (for backwards compatibility)
         # This path is slower due to repeated function tracing
         def model_at_x(p, x_single):
-            return self.normalized_model(x_single, *p)
+            return jnp.atleast_1d(self.normalized_model(x_single[None], *p))[0]
 
         jac_fn = jax.vmap(lambda x: jax.jacrev(model_at_x, argnums=0)(params, x))
         return jac_fn(x_chunk)

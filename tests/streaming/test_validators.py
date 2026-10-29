@@ -10,6 +10,7 @@ Coverage targets:
 - Composite validators: validate_warmup_config, validate_lbfgs_config, etc.
 """
 
+import numpy as np
 import pytest
 
 from nlsq.streaming.validators import (
@@ -926,3 +927,51 @@ class TestValidateMultistartConfig:
                 batches_per_round=50,
                 scale_factor=0,
             )
+
+
+class TestConfigHardening:
+    """inf / non-integral / out-of-range config values used to be accepted."""
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"chunk_size": 2.5},
+            {"chunk_size": float("inf")},
+            {"chunk_size": True},
+            {"gauss_newton_max_iterations": 0.5},
+            {"gauss_newton_tol": float("inf")},
+            {"trust_region_initial": float("inf")},
+            {"max_warmup_iterations": float("inf")},
+            {"max_retries_per_batch": -3},
+            {"min_success_rate": 5.0},
+            {"min_success_rate": float("nan")},
+            {"log_frequency": 0},
+        ],
+    )
+    def test_hybrid_config_rejects(self, kwargs):
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        with pytest.raises(ValueError):
+            HybridStreamingConfig(**kwargs)
+
+    def test_hybrid_config_accepts_integral_floats_and_numpy_ints(self):
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        cfg = HybridStreamingConfig(chunk_size=np.int64(100), log_frequency=2.0)
+        assert cfg.chunk_size == 100
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"min_chunk_size": 0, "max_chunk_size": 0},
+            {"safety_factor": -1.0},
+            {"streaming_batch_size": 0},
+            {"min_success_rate": float("nan")},
+            {"min_success_rate": 1.5},
+        ],
+    )
+    def test_ld_memory_config_rejects(self, kwargs):
+        from nlsq.streaming.large_dataset import LDMemoryConfig
+
+        with pytest.raises(ValueError):
+            LDMemoryConfig(**kwargs)
