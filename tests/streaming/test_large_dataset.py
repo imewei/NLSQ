@@ -853,3 +853,27 @@ class TestFailedChunkHistory:
 
         assert res.success
         assert history_lengths == [1, 2, 3]  # 3 successful chunks, no duplicate
+
+
+class TestPooledVarianceDegreesOfFreedom:
+    """n <= p leaves no residual dof: report inf like scipy, not an unscaled 1.0."""
+
+    @staticmethod
+    def _fitter(*, absolute_sigma, n):
+        fitter = LargeDatasetFitter()
+        fitter._absolute_sigma = absolute_sigma
+        fitter._accum_n = n
+        fitter._accum_information = np.eye(2)
+        return fitter
+
+    def test_no_dof_gives_inf_covariance(self, caplog):
+        fitter = self._fitter(absolute_sigma=False, n=2)
+        with caplog.at_level("WARNING"):
+            pcov = fitter._compute_covariance_from_history([], np.zeros(2))
+        assert np.all(np.isinf(pcov))
+        assert "inf" in caplog.text
+
+    def test_absolute_sigma_is_unscaled_even_without_dof(self):
+        fitter = self._fitter(absolute_sigma=True, n=2)
+        pcov = fitter._compute_covariance_from_history([], np.zeros(2))
+        np.testing.assert_allclose(pcov, np.eye(2))

@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
 from logging import Logger
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 import jax
 import numpy as np
@@ -87,6 +87,14 @@ def get_bucket_size(chunk_size: int) -> int:
     # Chunk exceeds largest bucket - return unchanged (will cause recompilation
     # but only for very large chunks which are less common)
     return chunk_size
+
+
+class _ChunkFit(NamedTuple):
+    """One usable chunk fit kept for the pooled residual variance."""
+
+    theta: np.ndarray
+    precision: np.ndarray  # C_k^-1, unscaled
+    ssr: float
 
 
 @dataclass(slots=True)
@@ -1055,8 +1063,12 @@ class LargeDatasetFitter:
 
         self.config = config
         self.logger = logger or get_logger(__name__)
-        # (theta_k, C_k^-1, SSR_k) per chunk; reset by each _fit_chunked run
-        self._accum_chunks: list = []
+        # Per-run chunk-combination state; (re)initialised by each _fit_chunked run.
+        self._accum_chunks: list[_ChunkFit] = []
+        self._accum_n = 0
+        self._accum_information: np.ndarray | None = None
+        self._accum_info_vector: np.ndarray | None = None
+        self._absolute_sigma = False
 
         # Multi-start configuration (Task Group 3)
         self.multistart = multistart
@@ -1981,8 +1993,8 @@ class LargeDatasetFitter:
             if chunk_ssr is not None:
                 # Kept per chunk (not folded into running totals) so the pooled
                 # SSR can use the subtraction-free form in _pooled_variance.
-                self._accum_chunks.append((popt_chunk.copy(), prec, chunk_ssr))
-                self._accum_n = getattr(self, "_accum_n", 0) + chunk_n
+                self._accum_chunks.append(_ChunkFit(popt_chunk.copy(), prec, chunk_ssr))
+                self._accum_n += chunk_n
 
         # Combined full-dataset estimate from all usable chunks so far.
         if self._accum_information is not None:
@@ -2349,15 +2361,23 @@ class LargeDatasetFitter:
         """Pooled residual variance ``SSR_total / (n - p)`` for ``pcov``.
 
         Matches ``curve_fit(absolute_sigma=False)`` semantics. Returns 1.0 when
-        the caller asked for ``absolute_sigma=True`` or no residual statistics
-        were accumulated (chunks are fitted unscaled, see
-        ``_update_parameters_convergence``).
+        the caller asked for ``absolute_sigma=True`` (chunks are fitted
+        unscaled, see ``_update_parameters_convergence``). Returns ``inf`` when
+        ``n <= p`` (no residual degrees of freedom, as SciPy does), after a
+        warning.
         """
-        n = getattr(self, "_accum_n", 0)
+        n = self._accum_n
         p = pcov.shape[0]
-        if getattr(self, "_absolute_sigma", True) or n <= p:
+        if self._absolute_sigma:
             return 1.0
+        if n <= p:
+            self.logger.warning(
+                f"Only {n} residual points for {p} parameters: the covariance "
+                "cannot be scaled by the residual variance and is reported as inf.",
+            )
+            return float("inf")
         # SSR_total(theta) = sum_k [SSR_k + (theta-theta_k)' H_k (theta-theta_k)]
+        # with H_k = C_k^-1 (the unscaled chunk precision)
         # is exact for linear models; every term is >= 0, unlike the expanded
         # form (sum theta_k' H_k theta_k - b' A^-1 b) which cancels
         # catastrophically when |theta| is large relative to its uncertainty.
@@ -2387,11 +2407,10 @@ class LargeDatasetFitter:
         chunk to be singular in the same direction) -- the realistic failure
         mode is instead a high condition number, which np.linalg.inv "solves"
         without error, returning finite but numerically meaningless entries.
-        A plain finiteness check (as used pre-fix) would silently accept that
-        confident-looking garbage, so this also gates on condition number,
-        mirroring the same 1e12 threshold and symmetrize step
-        NumericalStabilityGuard/`_chunk_precision` use for the analogous
-        per-chunk problem.
+        A plain finiteness check would silently accept that confident-looking
+        garbage, so this also gates on condition number, using the 1e12
+        threshold of NumericalStabilityGuard and the same symmetrize step as
+        ``_chunk_precision``.
 
         Args:
             param_history: List of parameter estimates from previous chunks
@@ -2400,7 +2419,7 @@ class LargeDatasetFitter:
         Returns:
             np.ndarray: Covariance matrix
         """
-        accum_information = getattr(self, "_accum_information", None)
+        accum_information = self._accum_information
         if accum_information is not None:
             singular_values = np.linalg.svd(accum_information, compute_uv=False)
             condition_number = (
@@ -2416,7 +2435,13 @@ class LargeDatasetFitter:
                 if pcov is not None:
                     pcov = 0.5 * (pcov + pcov.T)  # symmetrize
                     if np.all(np.isfinite(pcov)):
-                        return pcov * self._pooled_variance(pcov)
+                        scale = self._pooled_variance(pcov)
+                        # inf, not pcov * inf: exact zeros would become nan
+                        return (
+                            np.full_like(pcov, np.inf)
+                            if np.isinf(scale)
+                            else pcov * scale
+                        )
             self.logger.warning(
                 f"Accumulated information matrix is ill-conditioned or "
                 f"singular (condition number: {condition_number:.2e}); "
