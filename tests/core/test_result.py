@@ -287,6 +287,37 @@ def test_prediction_interval_varies_with_x_and_wider_than_confidence_band():
     assert np.all(pi_width > band_width)
 
 
+def test_intervals_with_2d_surface_xdata():
+    """Regression: 2-D xdata of shape (k, N) must size the Jacobian from the
+    N predictions, not len(x) == k, and match a manual delta-method result."""
+    from scipy import stats
+
+    def plane(xy, a, b, c):
+        return a * xy[0] + b * xy[1] + c
+
+    rng = np.random.default_rng(0)
+    xy = rng.standard_normal((2, 50))
+    z = plane(xy, 1.0, 2.0, 3.0) + 0.01 * rng.standard_normal(50)
+    res = curve_fit(plane, xy, z)
+
+    # For a plane the Jacobian is exactly [x0, x1, 1].
+    J = np.column_stack([xy[0], xy[1], np.ones(50)])
+    var = np.einsum("ij,jk,ik->i", J, res.pcov, J)
+    dof = 50 - 3
+    t = stats.t.ppf(0.975, dof)
+    s2 = np.sum(res.residuals**2) / dof
+    y_hat = plane(xy, *res.popt)
+
+    lower, upper = res.confidence_band()
+    np.testing.assert_allclose(lower, y_hat - t * np.sqrt(var), rtol=1e-4)
+    np.testing.assert_allclose(upper, y_hat + t * np.sqrt(var), rtol=1e-4)
+
+    pi = res.prediction_interval()
+    assert pi.shape == (50, 2)
+    np.testing.assert_allclose(pi[:, 0], y_hat - t * np.sqrt(var + s2), rtol=1e-4)
+    np.testing.assert_allclose(pi[:, 1], y_hat + t * np.sqrt(var + s2), rtol=1e-4)
+
+
 # ============================================================================
 # Unit Tests - Plotting
 # ============================================================================

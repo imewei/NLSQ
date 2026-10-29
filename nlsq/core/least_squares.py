@@ -365,6 +365,26 @@ class AutoDiffJacobian:
         return self.jac
 
 
+def _safe_coords(xdata: jnp.ndarray, data_mask: jnp.ndarray) -> jnp.ndarray:
+    """Replace excluded/padded observations' coordinates by the first valid one.
+
+    Masking the residual *after* the model call is not enough for reverse-mode
+    AD: a model that is non-finite (or has a non-finite derivative) at an
+    excluded row leaks ``0 * NaN`` into the gradient. Evaluating the model on a
+    valid coordinate there keeps every backward pass finite while the
+    post-evaluation ``where(mask, r, 0)`` keeps the residual unchanged. With an
+    all-True mask this is the identity.
+    """
+    if (
+        not hasattr(xdata, "ndim")
+        or xdata.ndim == 0
+        or xdata.shape[-1] != data_mask.shape[0]
+    ):
+        return xdata
+    first_valid = jnp.take(xdata, jnp.argmax(data_mask), axis=-1)[..., None]
+    return jnp.where(data_mask, xdata, first_valid)
+
+
 def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
     """Return True if ``new_fn`` differs from ``old_fn`` in a way that means
     a cached wrapper built from ``old_fn`` can no longer be reused.
@@ -394,6 +414,12 @@ def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
                 old_code.co_code != new_code.co_code
                 or old_code.co_consts != new_code.co_consts
                 or old_closure != new_closure
+                # Same bytecode, different state: bound-method receiver and
+                # default arguments (compared by ==; arrays raise -> rewrap).
+                or getattr(old_fn, "__self__", None)
+                is not getattr(new_fn, "__self__", None)
+                or old_fn.__defaults__ != new_fn.__defaults__
+                or old_fn.__kwdefaults__ != new_fn.__kwdefaults__
             )
         return old_fn != new_fn
     except Exception:
@@ -1507,7 +1533,7 @@ class LeastSquares:
             # JAX 0.8.0+ handles tuple unpacking efficiently without TracerArrayConversionError
             # This replaces the previous 100-line if-elif chain (Optimization #2)
             # See: OPTIMIZATION_QUICK_REFERENCE.md for performance analysis
-            func_eval = func(xdata, *args) - ydata
+            func_eval = func(_safe_coords(xdata, data_mask), *args) - ydata
             return jnp.where(data_mask, func_eval, 0)
 
         # need to define a separate function for each of the different
@@ -1542,7 +1568,7 @@ class LeastSquares:
             matrix are used."""
             # OPT-11: Inlined masked_residual_func for XLA fusion optimization
             # XLA can better fuse operations when they're in the same JIT scope
-            func_eval = func(xdata, *args) - ydata
+            func_eval = func(_safe_coords(xdata, data_mask), *args) - ydata
             masked_residual = jnp.where(data_mask, func_eval, 0)
             return atransform * masked_residual
 
@@ -1557,7 +1583,7 @@ class LeastSquares:
             """The residual function when there is a 2D uncertainty transform,
             that is when the full covariance matrix is given."""
             # OPT-11: Inlined masked_residual_func for XLA fusion optimization
-            func_eval = func(xdata, *args) - ydata
+            func_eval = func(_safe_coords(xdata, data_mask), *args) - ydata
             masked_residual = jnp.where(data_mask, func_eval, 0)
             return jax_solve_triangular(atransform, masked_residual, lower=True)
 
@@ -1631,6 +1657,21 @@ class LeastSquares:
             """Compute the wrapped Jacobian but masks out the padded elements
             with 0s"""
             Jt = jac_func(coords, args)
+            # Native convention is (n_params, m). Accept SciPy's (m, n) too when
+            # unambiguous (m != n); shapes are static at trace time. For m == n
+            # the native (n_params, m) reading is kept.
+            if Jt.ndim == 2:
+                m_rows, n_par = data_mask.shape[0], args.size
+                if Jt.shape == (n_par, m_rows):
+                    pass
+                elif Jt.shape == (m_rows, n_par):
+                    Jt = Jt.T
+                else:
+                    raise ValueError(
+                        f"`jac` returned shape {Jt.shape}; expected "
+                        f"(n_params, m) = ({n_par}, {m_rows}) or SciPy-style "
+                        f"(m, n_params) = ({m_rows}, {n_par})."
+                    )
             return jnp.where(data_mask, Jt, 0).T
 
         @jit

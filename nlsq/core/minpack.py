@@ -15,7 +15,8 @@ Key Components:
     - Trust Region: Advanced bounded optimization
 
 Algorithms:
-    - 'lm': Levenberg-Marquardt (unbounded problems)
+    - 'lm': accepted alias for unbounded problems; currently runs the same
+      trust-region solver as 'trf' (no separate Levenberg-Marquardt/MINPACK path)
     - 'trf': Trust Region Reflective (bounded problems, recommended)
     - 'dogbox': Dogleg with rectangular trust regions
 
@@ -324,8 +325,10 @@ def _is_auto_p0(p0: object) -> bool:
 def _infer_n_features(xdata: np.ndarray) -> int:
     """Number of independent variables in xdata: 1 for a plain 1D array,
     or xdata.shape[1] for the (n_points, n_features) 2D convention
-    InputValidator._validate_and_convert_arrays already uses (e.g. a 2D
-    surface fit). Feeds MemoryBudget.compute()/MemoryBudgetSelector.select()
+    InputValidator._validate_and_convert_arrays uses (e.g. a 2D surface fit).
+    Note: ``CurveFit.curve_fit`` itself (padding, length checks) and SciPy
+    treat 2D xdata as (n_features, n_points); this helper only follows the
+    validator/streaming convention. Feeds MemoryBudget.compute()/MemoryBudgetSelector.select()
     the real feature count so their data_gb estimate isn't silently
     1/n_features too small.
     """
@@ -374,7 +377,8 @@ def fit(  # noqa: C901
     bounds : tuple, optional
         Parameter bounds as (lower, upper).
     method : str, optional
-        Optimization algorithm ('trf', 'lm', or None for auto).
+        Optimization algorithm ('trf', 'lm', or None for auto). ``'lm'`` is
+        currently an alias that runs the same trust-region solver as ``'trf'``.
     workflow : str or config object, optional
         Workflow selection:
 
@@ -3192,6 +3196,12 @@ class CurveFit:
                 The sigma transform for the data.
             """
             sigma = jnp.asarray(sigma)
+            # Decouple masked/padded rows (zero their rows and columns, unit
+            # diagonal) so they neither correlate with nor leak into the
+            # observed block of the Cholesky factor.
+            mask = jnp.asarray(data_mask, dtype=bool)
+            keep = mask[:, None] & mask[None, :]
+            sigma = jnp.where(keep, sigma, jnp.eye(sigma.shape[0], dtype=sigma.dtype))
             transform = jax_cholesky(sigma, lower=True)
             return transform
 
@@ -3292,7 +3302,7 @@ class CurveFit:
         """
 
         if xdims > 1:
-            xpad = EPS * np.ones([xdims, len_diff])
+            xpad = EPS * np.ones([xdata.shape[0], len_diff])
             xdata = np.concatenate([xdata, xpad], axis=1)
         else:
             xpad = EPS * np.ones([len_diff])
@@ -3342,6 +3352,8 @@ class CurveFit:
         if not isinstance(sigma, np.ndarray):
             sigma = np.asarray(sigma, dtype=float)
 
+        # Negative len_diff means the data exceeds flength and was not padded.
+        len_diff = max(len_diff, 0)
         ysize = ydata.size - len_diff
 
         if sigma.ndim == 0:
@@ -3363,23 +3375,28 @@ class CurveFit:
                     sigma_padded[:m, :m] = sigma
                     sigma = sigma_padded
                 # scipy.linalg.cholesky requires lower=True to return L L^T = A
-                return self.sigma_transform2d(sigma, data_mask)
+                transform = self.sigma_transform2d(sigma, data_mask)
+                # jax_cholesky returns NaN instead of raising on a non-PD
+                # input; one scalar host check at setup (not in the hot loop).
+                if not bool(jnp.all(jnp.isfinite(transform))):
+                    raise np.linalg.LinAlgError("Cholesky produced non-finite values")
+                return transform
             except (np.linalg.LinAlgError, ValueError) as e:
                 # Check eigenvalues to provide more informative error
+                min_eig = None
                 try:
-                    eigenvalues = np.linalg.eigvalsh(sigma[:ysize, :ysize])
-                    min_eig = np.min(eigenvalues)
-                    if min_eig <= 0:
-                        raise ValueError(
-                            f"Covariance matrix `sigma` is not positive definite. "
-                            f"Minimum eigenvalue: {min_eig:.6e}. "
-                            "All eigenvalues must be positive.",
-                        ) from e
+                    min_eig = np.min(np.linalg.eigvalsh(sigma[:ysize, :ysize]))
                 except Exception as eigenvalue_error:
                     # If eigenvalue check fails, provide generic error (log for debugging)
                     self.logger.debug(
                         f"Eigenvalue check failed (non-critical): {eigenvalue_error}",
                     )
+                if min_eig is not None and min_eig <= 0:
+                    raise ValueError(
+                        f"Covariance matrix `sigma` is not positive definite. "
+                        f"Minimum eigenvalue: {min_eig:.6e}. "
+                        "All eigenvalues must be positive.",
+                    ) from e
                 raise ValueError(
                     "Failed to compute Cholesky decomposition of `sigma`. "
                     "The covariance matrix must be symmetric and positive definite.",
@@ -4228,6 +4245,37 @@ class CurveFit:
             sigma,
         )
 
+    @staticmethod
+    def _drop_unobserved_rows(res, xdata, ydata, data_mask):
+        """Drop padded (flength) and caller-masked rows from stored data/residuals.
+
+        These rows are not observations, so they must stay out of everything
+        derived from the stored data (r_squared, rmse, residuals, fvec). The
+        covariance was already computed with the mask applied. Slices only when
+        needed, so the default (all-valid) path is untouched and copy-free.
+        Mutates ``res["fun"]``/``res["jac"]``; returns the sliced (xdata, ydata).
+        """
+        valid_rows = np.asarray(data_mask, dtype=bool)
+        if valid_rows.all():
+            return xdata, ydata
+        for key in ("fun", "jac"):
+            if res.get(key) is not None:
+                res[key] = res[key][valid_rows]
+        return np.asarray(xdata)[..., valid_rows], np.asarray(ydata)[
+            valid_rows
+        ]  # (M,) or (k, M)
+
+    @staticmethod
+    def _warn_unsupported_args(method: str, **non_default: bool) -> None:
+        """Warn (instead of silently dropping) for arguments a path ignores."""
+        ignored = sorted(name for name, used in non_default.items() if used)
+        if ignored:
+            warnings.warn(
+                f"{method} does not support {ignored}; the argument(s) are ignored.",
+                UserWarning,
+                stacklevel=3,
+            )
+
     def _curve_fit_hybrid_streaming(
         self,
         f: Callable,
@@ -4240,8 +4288,13 @@ class CurveFit:
         bounds: tuple[np.ndarray, np.ndarray] = (-np.inf, np.inf),
         data_mask: np.ndarray | None = None,
         callback: Callable | None = None,
+        jac: Callable | None = None,
+        solver: str = "auto",
+        timeit: bool = False,
+        return_eval: bool = False,
+        full_output: bool = False,
         **kwargs,
-    ) -> CurveFitResult:
+    ) -> CurveFitResult | tuple:
         """Handle curve fitting with hybrid_streaming method.
 
         This method delegates to AdaptiveHybridStreamingOptimizer for
@@ -4271,6 +4324,13 @@ class CurveFit:
             (AdaptiveHybridStreamingOptimizer has no per-point masking).
         callback : callable, optional
             Progress callback function
+        jac, solver, timeit : optional
+            Not supported by this method; a non-default value emits a
+            ``UserWarning`` and is ignored.
+        return_eval : bool, default=False
+            Return ``(popt, pcov, f(xdata, *popt))``.
+        full_output : bool, default=False
+            Return the SciPy-style ``(popt, pcov, infodict, mesg, ier)`` tuple.
         **kwargs
             Additional parameters (verbose, config overrides, nan_policy)
 
@@ -4281,6 +4341,13 @@ class CurveFit:
         """
         from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        self._warn_unsupported_args(
+            "method='hybrid_streaming'",
+            jac=jac is not None,
+            solver=solver != "auto",
+            timeit=timeit,
+        )
 
         # data_mask has no way to reach AdaptiveHybridStreamingOptimizer.fit()
         # (no per-point masking support) -- fail loudly instead of silently
@@ -4387,6 +4454,22 @@ class CurveFit:
         result["ydata"] = ydata
         result["pcov"] = result_dict.get("pcov", np.full((n, n), np.inf))
 
+        if return_eval:
+            return result.x, result["pcov"], np.asarray(f(xdata, *result.x))
+        if full_output:
+            fun = result.get("fun")
+            infodict = {
+                "nfev": result.get("nfev"),
+                "fvec": np.asarray(fun) if fun is not None else None,
+            }
+            ier = 1 if result.get("success", False) else 5
+            return (
+                result.x,
+                result["pcov"],
+                infodict,
+                result.get("message", ""),
+                ier,
+            )
         return result
 
     def _curve_fit_auto_memory(
@@ -4409,6 +4492,7 @@ class CurveFit:
         compute_diagnostics: bool = False,
         diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
         diagnostics_config: DiagnosticsConfig | None = None,
+        full_output: bool = False,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
         """Handle curve fitting with automatic memory-based strategy selection.
@@ -4523,6 +4607,11 @@ class CurveFit:
                 bounds=bounds,
                 data_mask=data_mask,
                 callback=callback,
+                jac=jac,
+                solver=solver,
+                timeit=timeit,
+                return_eval=return_eval,
+                full_output=full_output,
                 config=config,
                 **kwargs,
             )
@@ -4542,6 +4631,13 @@ class CurveFit:
                     "memory_limit_gb override that avoids the chunked "
                     "strategy.",
                 )
+
+            self._warn_unsupported_args(
+                "method='auto' (chunked strategy)",
+                jac=jac is not None,
+                solver=solver != "auto",
+                full_output=full_output,
+            )
 
             # Delegate to LargeDatasetFitter
             from nlsq.streaming.large_dataset import LargeDatasetFitter
@@ -4616,6 +4712,7 @@ class CurveFit:
             compute_diagnostics=compute_diagnostics,
             diagnostics_level=diagnostics_level,
             diagnostics_config=diagnostics_config,
+            full_output=full_output,
             **kwargs,
         )
 
@@ -4897,7 +4994,8 @@ class CurveFit:
         method : str | None, optional
             Optimization algorithm. Options:
             - 'trf' (default): Trust Region Reflective
-            - 'lm': Levenberg-Marquardt
+            - 'lm': accepted for SciPy compatibility (unbounded problems only);
+              currently runs the same trust-region solver as 'trf'
             - 'hybrid_streaming': Adaptive Hybrid Streaming Optimizer (for large datasets)
             - 'auto': Memory-based automatic selection (streaming/chunked/standard)
             If None, auto-selects 'trf'.
@@ -4915,6 +5013,11 @@ class CurveFit:
                 bounds=bounds,
                 data_mask=data_mask,
                 callback=callback,
+                jac=jac,
+                solver=solver,
+                timeit=timeit,
+                return_eval=return_eval,
+                full_output=full_output,
                 **kwargs,
             )
 
@@ -4939,6 +5042,7 @@ class CurveFit:
                 compute_diagnostics=compute_diagnostics,
                 diagnostics_level=diagnostics_level,
                 diagnostics_config=diagnostics_config,
+                full_output=full_output,
                 **kwargs,
             )
 
@@ -5021,6 +5125,11 @@ class CurveFit:
             If None (default), the Jacobian will be determined using JAX's automatic
             differentiation (AD) capabilities. We recommend not using an analytical
             Jacobian, as it is usually faster to use AD.
+            The returned array must have shape ``(n_params, m)`` (the transpose
+            of SciPy's ``(m, n_params)``). SciPy-style ``(m, n_params)`` output is
+            also accepted when ``m != n_params``; when ``m == n_params`` the
+            shape is ambiguous and is read as ``(n_params, m)``. Any other shape
+            raises ``ValueError``.
         callback : callable or None, optional
             Callback function called after each optimization iteration with signature
             ``callback(iteration, cost, params, info)``. Useful for monitoring
@@ -5224,6 +5333,8 @@ class CurveFit:
                 return popt, _pcov, feval[data_mask]
             return popt, _pcov, feval
 
+        xdata, ydata = self._drop_unobserved_rows(res, xdata, ydata, data_mask)
+
         if return_full:
             # SciPy-compatible 5-tuple: (popt, pcov, infodict, mesg, ier)
             # fjac/ipvt/qtf are LM-only and not available for TRF/dogbox.
@@ -5270,7 +5381,7 @@ class CurveFit:
                 # analyzer's rank/conditioning threshold over-aggressive —
                 # the same padding-count bug _compute_covariance's SVD
                 # threshold already guards against via `ysize`).
-                jacobian = np.asarray(res.jac)[np.asarray(data_mask, dtype=bool)]
+                jacobian = np.asarray(res.jac)
 
                 # Run identifiability analysis
                 analyzer = IdentifiabilityAnalyzer(config=config)

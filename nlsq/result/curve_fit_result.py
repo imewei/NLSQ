@@ -510,10 +510,11 @@ class CurveFitResult(OptimizeResult):
         ``confidence_band``, which both need the same parameter-uncertainty
         propagation through the model.
         """
-        n_points = len(x)
         n_params = len(popt)
 
         y_pred = np.array(self.model(x, *popt))
+        # Size from the predictions: 2-D xdata is (k, N), so len(x) would be k.
+        n_points = y_pred.shape[0]
         jacobian = np.zeros((n_points, n_params))
         for i in range(n_params):
             params_plus = popt.copy()
