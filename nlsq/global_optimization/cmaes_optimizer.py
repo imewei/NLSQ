@@ -763,6 +763,16 @@ class CMAESOptimizer:
             for restore_sig, handler in previous_handlers.items():
                 signal.signal(restore_sig, handler)
 
+    def _resolve_seed(self) -> int:
+        """Return the configured seed, or draw one and log it so the run can be replayed."""
+        if self.config.seed is not None:
+            return self.config.seed
+        seed = int(np.random.randint(0, 2**31))
+        logger.info(
+            f"CMAESConfig.seed is None; drew seed={seed} (pass it back to reproduce)"
+        )
+        return seed
+
     def _run_cmaes(
         self,
         fitness_fn: Callable,
@@ -875,10 +885,9 @@ class CMAESOptimizer:
         params = params.replace(std_init=self.config.sigma)
 
         # Initialize random key
-        if self.config.seed is not None:
-            key = jax.random.key(self.config.seed)
-        else:
-            key = jax.random.key(np.random.randint(0, 2**31))
+        seed = self._resolve_seed()
+        diagnostics.seed = seed
+        key = jax.random.key(seed)
 
         # Initialize state
         key, subkey = jax.random.split(key)
@@ -1069,20 +1078,21 @@ class CMAESOptimizer:
             f"max_restarts={self.config.max_restarts}, max_gen={self.config.max_generations}",
         )
 
+        # Resolve once so both the JAX key and the restarter's popsize RNG replay
+        seed = self._resolve_seed()
+        diagnostics.seed = seed
+
         # Initialize BIPOP restarter
         restarter = BIPOPRestarter(
             base_popsize=base_popsize,
             n_params=n_params,
             max_restarts=self.config.max_restarts,
             min_fitness_spread=self.config.tol_fun,
-            seed=self.config.seed,
+            seed=seed,
         )
 
         # Initialize random key
-        if self.config.seed is not None:
-            key = jax.random.key(self.config.seed)
-        else:
-            key = jax.random.key(np.random.randint(0, 2**31))
+        key = jax.random.key(seed)
 
         total_generations = 0
         convergence_reason = "max_restarts"

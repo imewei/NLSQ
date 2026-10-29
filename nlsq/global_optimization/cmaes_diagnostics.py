@@ -39,6 +39,10 @@ class CMAESDiagnostics:
         Whether NLSQ refinement was applied.
     wall_time : float
         Total wall-clock time in seconds.
+    seed : int | None
+        Seed used for the run (the configured seed, or the one drawn when
+        ``CMAESConfig.seed`` is None). Pass it back as ``CMAESConfig.seed`` to
+        reproduce the run.
 
     Examples
     --------
@@ -68,6 +72,9 @@ class CMAESDiagnostics:
 
     # Timing
     wall_time: float = 0.0
+
+    # Reproducibility
+    seed: int | None = None
 
     def summary(self) -> str:
         """Generate a human-readable summary of the diagnostics.
@@ -108,6 +115,7 @@ class CMAESDiagnostics:
             "convergence_reason": self.convergence_reason,
             "nlsq_refinement": self.nlsq_refinement,
             "wall_time": self.wall_time,
+            "seed": self.seed,
         }
 
     @classmethod
@@ -134,6 +142,7 @@ class CMAESDiagnostics:
             convergence_reason=d.get("convergence_reason", "not_converged"),
             nlsq_refinement=d.get("nlsq_refinement", False),
             wall_time=d.get("wall_time", 0.0),
+            seed=d.get("seed"),
         )
 
     def get_fitness_improvement(self) -> float | None:

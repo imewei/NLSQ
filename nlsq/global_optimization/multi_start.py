@@ -49,6 +49,7 @@ latin_hypercube_sample : LHS sampling function
 TournamentSelector : Tournament selection for large datasets (Task Group 4)
 """
 
+import copy
 import logging
 import os
 import threading
@@ -452,6 +453,25 @@ class MultiStartOrchestrator:
             None,  # type: ignore[list-item]
         ] * n_starts
         curve_fit_kwargs = self._curve_fit_config()
+        callback_shared_warned = False
+
+        def start_kwargs() -> dict:
+            # A stateful callback (e.g. EarlyStopping) must not be shared across
+            # starts/threads, so each start gets its own deep copy.
+            nonlocal callback_shared_warned
+            out = kwargs.copy()
+            if out.get("callback") is not None:
+                try:
+                    out["callback"] = copy.deepcopy(out["callback"])
+                except Exception as e:
+                    if not callback_shared_warned:
+                        callback_shared_warned = True
+                        self.logger.warning(
+                            f"Callback could not be deep-copied ({e}); sharing one "
+                            "instance across starts, which may give run-to-run "
+                            "variation if it is stateful",
+                        )
+            return out
 
         # Per-start non-convergence is an expected, internal outcome of multi-start
         # search: many starts are deliberately spread across the basin and the
@@ -473,7 +493,7 @@ class MultiStartOrchestrator:
                         ydata,
                         p0,
                         bounds,
-                        kwargs.copy(),
+                        start_kwargs(),
                         curve_fit_kwargs,
                     )
                     _params, loss, _ = results[i]
@@ -494,7 +514,7 @@ class MultiStartOrchestrator:
                             ydata,
                             p0,
                             bounds,
-                            kwargs.copy(),
+                            start_kwargs(),
                             curve_fit_kwargs,
                         )
                         futures[future] = i
@@ -648,11 +668,13 @@ class MultiStartOrchestrator:
                 )
 
         # Handle bounds
+        fit_bounds: Any  # (-inf, inf) scalars or (lb, ub) arrays, as curve_fit accepts
         if bounds is None:
             # Infer bounds for multi-start
             self.logger.debug("Inferring bounds for multi-start sampling")
             lb, ub = infer_bounds_for_multistart(xdata, ydata, p0)
-            bounds = (lb, ub)
+            # Inferred bounds only shape the sampling box; fits stay unbounded.
+            fit_bounds = (-np.inf, np.inf)
             diagnostics["bounds_inferred"] = True
             diagnostics["inferred_bounds"] = {
                 "lower": lb.tolist(),
@@ -669,6 +691,9 @@ class MultiStartOrchestrator:
             if len(ub) == 1:
                 ub = np.full(n_params, ub[0])
 
+            # The user's bounds (possibly infinite) constrain every actual fit.
+            fit_bounds = (lb, ub)
+
             # Check for infinite bounds and infer if needed
             if not np.all(np.isfinite(lb)) or not np.all(np.isfinite(ub)):
                 self.logger.debug("Some bounds are infinite, inferring finite bounds")
@@ -681,8 +706,6 @@ class MultiStartOrchestrator:
                 lb = lb_inferred
                 ub = ub_inferred
                 diagnostics["bounds_inferred"] = True
-
-            bounds = (lb, ub)
 
         # Generate starting points
         self.logger.info(
@@ -708,7 +731,7 @@ class MultiStartOrchestrator:
             xdata=xdata,
             ydata=ydata,
             starting_points=starting_points,
-            bounds=bounds,
+            bounds=fit_bounds,
             **kwargs,
         )
 
@@ -733,7 +756,7 @@ class MultiStartOrchestrator:
                 xdata,
                 ydata,
                 p0=p0,
-                bounds=bounds,
+                bounds=fit_bounds,
                 **kwargs,
             )
             diagnostics["fallback_to_single_start"] = True
@@ -763,7 +786,7 @@ class MultiStartOrchestrator:
                     xdata,
                     ydata,
                     p0=best_params,
-                    bounds=bounds,
+                    bounds=fit_bounds,
                     **kwargs,
                 )
 

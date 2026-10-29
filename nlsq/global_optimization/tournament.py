@@ -302,9 +302,11 @@ class TournamentSelector:
 
             batch_losses = self._evaluate_candidates_on_batch(x_batch, y_batch, model)
 
-            # Accumulate losses for survivors
+            # Accumulate losses for survivors. A failed batch carries loss=inf,
+            # which is accumulated (not skipped) so a candidate that fails on
+            # hard batches cannot out-score one that is finite on all of them.
             for i in range(self.n_candidates):
-                if self.survival_mask[i] and np.isfinite(batch_losses[i]):
+                if self.survival_mask[i]:
                     round_losses[i] += batch_losses[i]
                     round_loss_counts[i] += 1
 
@@ -370,10 +372,9 @@ class TournamentSelector:
 
             batch_losses = self._evaluate_candidates_on_batch(x_batch, y_batch, model)
 
-            for i in range(self.n_candidates):
-                if np.isfinite(batch_losses[i]):
-                    self.cumulative_losses[i] += batch_losses[i]
-                    self.evaluation_counts[i] += 1
+            # Failed batches carry loss=inf and are accumulated, not skipped.
+            self.cumulative_losses += batch_losses
+            self.evaluation_counts += 1
 
             self.total_batches_evaluated += 1
 
