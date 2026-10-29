@@ -118,6 +118,28 @@ class TestCallbackIsolatedPerStart:
         )
         np.testing.assert_allclose(result.popt, [2.0, -5.0], atol=1e-4)
 
+    def test_undeepcopyable_callback_warns_once(self, caplog):
+        class _NoCopy:
+            def __call__(self, *a, **k):
+                pass
+
+            def __deepcopy__(self, memo):
+                raise TypeError("no copy")
+
+        x = np.linspace(0, 10, 30)
+        y = 2 * x - 5
+        cfg = GlobalOptimizationConfig(n_starts=4, sampler="lhs")
+        with caplog.at_level("WARNING"):
+            MultiStartOrchestrator(cfg).fit(
+                _linear,
+                x,
+                y,
+                p0=[1.0, 1.0],
+                bounds=([-10, -10], [10, 10]),
+                callback=_NoCopy(),
+            )
+        assert caplog.text.count("could not be deep-copied") == 1
+
 
 class TestCMAESSeedRecorded:
     @staticmethod
