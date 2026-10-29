@@ -1068,7 +1068,8 @@ class LargeDatasetFitter:
         self._accum_n = 0
         self._accum_information: np.ndarray | None = None
         self._accum_info_vector: np.ndarray | None = None
-        self._absolute_sigma = False
+        # Neutral outside a fit (unscaled covariance); each run sets the caller's choice.
+        self._absolute_sigma = True
 
         # Multi-start configuration (Task Group 3)
         self.multistart = multistart
