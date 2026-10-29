@@ -32,7 +32,9 @@ from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
+from nlsq.callbacks import StopOptimization
 from nlsq.core.minpack import fit
+from nlsq.gui_qt.session_state import n_points
 from nlsq.result import CurveFitResult
 
 # =============================================================================
@@ -165,14 +167,14 @@ def validate_fit_inputs(
     ydata = np.asarray(ydata)
 
     # Check for empty data
-    if len(xdata) == 0 or len(ydata) == 0:
+    n_x = n_points(xdata)
+    if n_x == 0 or len(ydata) == 0:
         raise ValueError("Data arrays must not be empty")
 
-    # Check for length mismatch
-    if len(xdata) != len(ydata):
+    # Check for length mismatch (2-D xdata is (n_coords, n_points))
+    if n_x != len(ydata):
         raise ValueError(
-            f"xdata and ydata must have the same length: "
-            f"got {len(xdata)} and {len(ydata)}",
+            f"xdata and ydata must have the same length: got {n_x} and {len(ydata)}",
         )
 
     # Check for NaN/Inf in xdata
@@ -218,7 +220,7 @@ class _CallbackWrapper:
         cost: float,
         params: np.ndarray,
         info: dict,
-    ) -> bool | None:
+    ) -> None:
         """Handle callback from optimizer.
 
         Parameters
@@ -234,8 +236,8 @@ class _CallbackWrapper:
 
         Returns
         -------
-        bool or None
-            False to abort, True or None to continue.
+        None
+            Always None; abort is signalled by raising ``StopOptimization``.
         """
         if self.callback is None:
             return None
@@ -252,9 +254,12 @@ class _CallbackWrapper:
         try:
             if self.callback.should_abort():
                 self._aborted = True
-                return False
         except Exception:
             pass
+
+        # core/trf.py ignores callback return values; only this exception stops it
+        if self._aborted:
+            raise StopOptimization("Fit aborted by user")
 
         return None
 
@@ -707,7 +712,7 @@ def is_large_dataset(xdata: np.ndarray, threshold: int = 1_000_000) -> bool:
     bool
         True if dataset is large.
     """
-    return len(xdata) >= threshold
+    return n_points(xdata) >= threshold
 
 
 def get_recommended_chunk_size(data_size: int, target_chunks: int = 10) -> int:

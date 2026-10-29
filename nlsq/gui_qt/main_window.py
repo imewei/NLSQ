@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from nlsq.gui_qt.autosave import AutosaveManager
 from nlsq.gui_qt.pages import PageState
+from nlsq.gui_qt.session_state import n_points
 from nlsq.gui_qt.theme import ThemeManager
 
 if TYPE_CHECKING:
@@ -415,8 +416,7 @@ class MainWindow(QMainWindow):
         """Update status bar with current data info."""
         state = self._app_state.state
         if state.xdata is not None and state.ydata is not None:
-            n_points = len(state.xdata)
-            self._data_status.setText(f"Data: {n_points:,} points")
+            self._data_status.setText(f"Data: {n_points(state.xdata):,} points")
         else:
             self._data_status.setText("")
 

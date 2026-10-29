@@ -29,6 +29,7 @@ from scipy import stats
 from nlsq.gui_qt.plots.fit_plot import FitPlotWidget
 from nlsq.gui_qt.plots.histogram_plot import HistogramPlotWidget
 from nlsq.gui_qt.plots.residuals_plot import ResidualsPlotWidget
+from nlsq.gui_qt.session_state import n_points
 from nlsq.gui_qt.widgets.fit_statistics import FitStatisticsWidget
 from nlsq.gui_qt.widgets.param_results import ParamResultsWidget
 
@@ -525,7 +526,7 @@ class ResultsPage(QWidget):
                     popt,
                     pcov,
                     state.model_func,
-                    n_data=len(xdata),
+                    n_data=n_points(xdata),
                 )
             except Exception as e:
                 # Log error but don't crash UI

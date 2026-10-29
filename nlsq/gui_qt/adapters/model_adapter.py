@@ -344,6 +344,12 @@ class _SafeASTValidator(ast.NodeVisitor):
             "operator",
             "pydoc",
             "telnetlib",
+            # `os` under other names / low-level I/O (parity with cli)
+            "posix",
+            "nt",
+            "_posixsubprocess",
+            "_io",
+            "pty",
         },
     )
 
@@ -388,6 +394,14 @@ class _SafeASTValidator(ast.NodeVisitor):
             "system",
             "popen",
             "spawn",
+            "posix_spawn",
+            "posix_spawnp",
+            "FileIO",
+            "save",
+            "savez",
+            "savez_compressed",
+            "savetxt",
+            "tofile",
             "Popen",
             "modules",
             "attrgetter",

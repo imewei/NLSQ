@@ -46,6 +46,7 @@ class FitWorker(QObject):
     progress = Signal(int, float)  # iteration, cost
     finished = Signal(object)  # result
     error = Signal(str)  # error message
+    aborted = Signal()  # user abort honoured (explicit flag, not message text)
 
     def __init__(self, state: Any) -> None:
         """Initialize the worker.
@@ -71,12 +72,15 @@ class FitWorker(QObject):
             result = run_fit(self._state, progress_callback=progress_callback)
 
             if self._abort_flag:
-                self.error.emit("Fit aborted by user")
+                self.aborted.emit()
             else:
                 self.finished.emit(result)
 
         except Exception as e:
-            self.error.emit(f"{type(e).__name__}: {e}")
+            if self._abort_flag:
+                self.aborted.emit()
+            else:
+                self.error.emit(f"{type(e).__name__}: {e}")
 
     def abort(self) -> None:
         """Request abort of the fit."""
@@ -370,8 +374,10 @@ class FittingOptionsPage(QWidget):
         self._fit_worker.progress.connect(self._on_fit_progress)
         self._fit_worker.finished.connect(self._on_fit_finished)
         self._fit_worker.error.connect(self._on_fit_error)
+        self._fit_worker.aborted.connect(self._on_fit_aborted)
         self._fit_worker.finished.connect(self._cleanup_thread)
         self._fit_worker.error.connect(self._cleanup_thread)
+        self._fit_worker.aborted.connect(self._cleanup_thread)
 
         # Start
         self._fit_thread.start()
@@ -421,19 +427,22 @@ class FittingOptionsPage(QWidget):
 
         self._app_state.set_fit_running(False)
 
-        if "aborted" in message.lower():
-            self._status_label.setText("Fit aborted")
-            self._status_label.setStyleSheet("color: #FF9800;")
-            self._app_state.set_fit_aborted()
-            self.fit_aborted.emit()
-        else:
-            self._status_label.setText("Fit failed")
-            self._status_label.setStyleSheet("color: #f44336;")
-            QMessageBox.critical(
-                self,
-                "Fit Error",
-                f"Curve fitting failed:\n\n{message}",
-            )
+        self._status_label.setText("Fit failed")
+        self._status_label.setStyleSheet("color: #f44336;")
+        QMessageBox.critical(
+            self,
+            "Fit Error",
+            f"Curve fitting failed:\n\n{message}",
+        )
+
+    def _on_fit_aborted(self) -> None:
+        """Handle a fit stopped by the user."""
+        self._set_running_state(False)
+        self._app_state.set_fit_running(False)
+        self._status_label.setText("Fit aborted")
+        self._status_label.setStyleSheet("color: #FF9800;")
+        self._app_state.set_fit_aborted()
+        self.fit_aborted.emit()
 
     def _cleanup_thread(self) -> None:
         """Clean up the worker thread.
