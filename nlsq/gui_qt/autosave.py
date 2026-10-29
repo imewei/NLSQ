@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import stat
 import tempfile
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
 
 __all__ = ["AutosaveManager"]
+
+logger = logging.getLogger(__name__)
 
 # Autosave directory: per-user on POSIX (the system temp dir is shared, so a
 # fixed name lets another local user pre-create it).
@@ -66,6 +69,8 @@ class AutosaveManager(QObject):
     autosave_completed = Signal()
     recovery_available = Signal(str)  # timestamp of recovery file
 
+    _autosave_warned: bool = False  # warn once per manager when autosave fails
+
     def __init__(self, app_state: AppState, parent: QObject | None = None) -> None:
         """Initialize the autosave manager.
 
@@ -83,9 +88,15 @@ class AutosaveManager(QObject):
         global AUTOSAVE_DIR, AUTOSAVE_FILE  # noqa: PLW0603 - module-level paths are the test/crash-handler hook
         try:
             _ensure_private_dir(AUTOSAVE_DIR)
-        except OSError:
+        except OSError as exc:
             AUTOSAVE_DIR = Path(tempfile.mkdtemp(prefix="nlsq_autosave_"))
             AUTOSAVE_FILE = AUTOSAVE_DIR / AUTOSAVE_FILE.name
+            logger.warning(
+                "Autosave directory unusable (%s); using %s. Crash recovery will "
+                "not find this session after a restart.",
+                exc,
+                AUTOSAVE_DIR,
+            )
 
     def start(self) -> None:
         """Start the autosave timer."""
@@ -161,9 +172,13 @@ class AutosaveManager(QObject):
                     os.unlink(tmp_name)
                 raise
             self.autosave_completed.emit()
-        except (OSError, ValueError, TypeError, RecursionError):
-            # Silently fail - autosave is best-effort
-            pass
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
+            # Best-effort: never interrupt the user, but say so once per manager.
+            if not self._autosave_warned:
+                self._autosave_warned = True
+                logger.warning(
+                    "Autosave failed (%s); crash recovery may be stale.", exc
+                )
 
     def _serialize_state(self) -> dict[str, Any]:
         """Serialize current session state to a dictionary.

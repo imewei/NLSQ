@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from nlsq.cli.model_registry import ModelRegistry
+from nlsq.cli.model_validation import DangerousPatternVisitor
 
 # Global registry instance for caching
 _registry: ModelRegistry | None = None
@@ -526,8 +527,15 @@ class _SafeASTValidator(ast.NodeVisitor):
         """
         tree = ast.parse(code)
         self.visit(tree)
-        if self.errors:
-            raise SecurityError(f"Unsafe code detected: {'; '.join(self.errors)}")
+        # Also run the CLI visitor so this check can never be laxer than the
+        # CLI's: the name sets above are GUI-specific extras, not a copy.
+        cli_visitor = DangerousPatternVisitor()
+        cli_visitor.visit(tree)
+        errors = self.errors + [
+            v for v in cli_visitor.violations if v not in self.errors
+        ]
+        if errors:
+            raise SecurityError(f"Unsafe code detected: {'; '.join(errors)}")
 
 
 class SecurityError(Exception):

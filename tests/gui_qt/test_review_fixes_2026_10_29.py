@@ -423,6 +423,37 @@ class TestGuiModelValidatorParity:
         with pytest.raises(SecurityError):
             _SafeASTValidator().validate(code)
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "import numpy\n    numpy.os.execv('/bin/sh', [])",
+            "import numpy\n    numpy.os.fork()",
+            "import numpy as np\n    np.ndarray.dump(x, '/tmp/y')",
+            "import numpy as np\n    np.lib.npyio.Path('/tmp/z').write_text('a')",
+            "import numpy as np\n    np.load('m.npy', allow_pickle=True)",
+            "import io\n    io.open('m', mode)",
+            "o = open\n    o('m', 'w')",
+            "return a * x",
+        ],
+    )
+    def test_gui_blocks_whatever_the_cli_blocks(self, body, tmp_path):
+        from nlsq.cli.model_validation import validate_model
+        from nlsq.gui_qt.adapters.model_adapter import (
+            SecurityError,
+            _SafeASTValidator,
+        )
+
+        code = f"def model(x, a, mode='w'):\n    {body}\n    return a * x\n"
+        path = tmp_path / "m.py"
+        path.write_text(code)
+        cli_blocks = not validate_model(path).is_valid
+        try:
+            _SafeASTValidator().validate(code)
+            gui_blocks = False
+        except SecurityError:
+            gui_blocks = True
+        assert gui_blocks or not cli_blocks, f"CLI blocks but GUI allows: {body!r}"
+
 
 # ---------------------------------------------------------------------------
 # 7. Varargs-model export, list-typed data, 0-d n_points
@@ -505,3 +536,29 @@ def test_n_points_zero_dim():
     assert n_points(np.array(5.0)) == 1
     assert n_points(np.zeros(4)) == 4
     assert n_points(np.zeros((2, 6))) == 6
+
+
+class TestAutosaveFailureIsLogged:
+    def test_failed_autosave_warns_once(self, caplog):
+        mgr = _manager(_mock_app_state())
+
+        def boom():
+            raise OSError("disk full")
+
+        mgr._serialize_state = boom
+        with caplog.at_level("WARNING", logger="nlsq.gui_qt.autosave"):
+            mgr._do_autosave()
+            mgr._do_autosave()
+        assert caplog.text.count("Autosave failed") == 1
+        assert "disk full" in caplog.text
+
+    def test_unusable_directory_fallback_warns(self, monkeypatch, tmp_path, caplog):
+        from nlsq.gui_qt import autosave
+
+        blocked = tmp_path / "plain_file"
+        blocked.write_text("x")  # a file where a directory is expected
+        monkeypatch.setattr(autosave, "AUTOSAVE_DIR", blocked)
+        monkeypatch.setattr(autosave, "AUTOSAVE_FILE", blocked / "session.json")
+        with caplog.at_level("WARNING", logger="nlsq.gui_qt.autosave"):
+            autosave.AutosaveManager(_mock_app_state())
+        assert "Crash recovery will not find this session" in caplog.text
