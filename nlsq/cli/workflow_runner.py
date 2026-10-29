@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 
 from nlsq.cli.data_loaders import DataLoader
-from nlsq.cli.errors import CLIError, DataLoadError, FitError, ModelError
+from nlsq.cli.errors import CLIError, ConfigError, DataLoadError, FitError, ModelError
 from nlsq.cli.model_registry import ModelRegistry
 from nlsq.cli.result_exporter import ResultExporter
 
@@ -323,6 +323,11 @@ class WorkflowRunner:
 
         # Sigma handling
         absolute_sigma = fitting_config.get("absolute_sigma", False)
+        if not isinstance(absolute_sigma, bool):
+            raise ConfigError(
+                f"fitting.absolute_sigma must be true or false, got {absolute_sigma!r}",
+                suggestion="Use an unquoted YAML boolean: `absolute_sigma: true`.",
+            )
         fit_kwargs["absolute_sigma"] = absolute_sigma
 
         # Check finite
@@ -426,6 +431,7 @@ class WorkflowRunner:
                     "success": getattr(result, "success", True),
                     "message": getattr(result, "message", "Optimization converged"),
                     "nfev": getattr(result, "nfev", 0),
+                    "nit": getattr(result, "nit", None),
                     "njev": getattr(result, "njev", 0),
                     "cost": getattr(result, "cost", None),
                 }

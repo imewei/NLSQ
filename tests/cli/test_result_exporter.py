@@ -7,6 +7,7 @@ import json
 import tempfile
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -29,6 +30,7 @@ class TestResultExporter:
             "success": True,
             "message": "Optimization converged",
             "nfev": 42,
+            "nit": 7,
             "njev": 15,
             "cost": 0.0025,
             "fun": np.array([0.01, -0.02, 0.015, -0.005]),
@@ -93,7 +95,7 @@ class TestResultExporter:
         # Verify convergence info
         assert "convergence" in exported
         convergence = exported["convergence"]
-        assert convergence["iterations"] == 42
+        assert convergence["iterations"] == 7  # nit, not nfev
         assert convergence["function_evals"] == 42  # nfev
         assert convergence["status"] == "success"
 
@@ -594,6 +596,52 @@ class TestSanitizeNonfinite:
         assert data["pcov"][1][1] is None
 
 
+class TestJaxArrayExport:
+    """JAX arrays in results must serialise like numpy arrays (incl. NaN/Inf)."""
+
+    @staticmethod
+    def _result():
+        return {
+            "popt": jnp.array([1.0, 2.0]),
+            "pcov": jnp.array([[0.1, 0.0], [0.0, 0.1]]),
+            "fun": jnp.array([0.1, -0.1, 0.2]),
+            "cost": jnp.array(0.03),
+        }
+
+    def test_json_file_export(self, tmp_path):
+        from nlsq.cli.result_exporter import ResultExporter
+
+        out = tmp_path / "r.json"
+        ResultExporter().export(
+            self._result(), {"export": {"results_file": str(out), "format": "json"}}
+        )
+        parsed = json.loads(out.read_text())
+        assert parsed["popt"] == pytest.approx([1.0, 2.0])
+        np.testing.assert_allclose(parsed["pcov"], [[0.1, 0.0], [0.0, 0.1]], rtol=1e-6)
+
+    def test_stdout_export(self, capsys):
+        from nlsq.cli.result_exporter import ResultExporter
+
+        ResultExporter().export(self._result(), {"export": {"stdout": True}})
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["popt"] == pytest.approx([1.0, 2.0])
+
+    def test_nonfinite_jax_becomes_null(self):
+        from nlsq.cli.result_exporter import NumpyJSONEncoder, _sanitize_nonfinite
+
+        arr = jnp.array([1.0, jnp.nan, jnp.inf])
+        assert _sanitize_nonfinite(arr) == [1.0, None, None]
+        assert _sanitize_nonfinite(jnp.array(jnp.nan)) is None
+        assert json.loads(json.dumps({"a": arr}, cls=NumpyJSONEncoder))["a"][0] == 1.0
+
+    def test_prepare_export_data_converts_to_lists(self):
+        from nlsq.cli.result_exporter import ResultExporter
+
+        data = ResultExporter()._prepare_export_data(self._result(), {})
+        assert isinstance(data["popt"], list)
+        assert isinstance(data["pcov"], list)
+
+
 class TestCalculateStatisticsNonfinite:
     """Tests for _calculate_statistics with non-finite residuals."""
 
@@ -748,3 +796,54 @@ class TestWorkflowRunnerLastData:
         xdata, _ydata, sigma = runner.last_data
         assert len(xdata) == 20
         assert sigma is None
+
+
+class TestConvergenceIterations:
+    """exported convergence.iterations is nit, not a relabelled nfev."""
+
+    def test_iterations_none_without_nit(self, tmp_path):
+        from nlsq.cli.result_exporter import ResultExporter
+
+        result = {"popt": [1.0], "pcov": [[0.1]], "success": True, "nfev": 9}
+        config = {
+            "export": {"results_file": str(tmp_path / "o.json"), "format": "json"}
+        }
+        ResultExporter().export(result, config)
+        conv = json.loads((tmp_path / "o.json").read_text())["convergence"]
+        assert conv["iterations"] is None
+        assert conv["function_evals"] == 9
+
+    def test_workflow_exports_nit(self, tmp_path):
+        from nlsq.cli.workflow_runner import WorkflowRunner
+
+        data_file = tmp_path / "data.txt"
+        x = np.linspace(0, 5, 20)
+        np.savetxt(data_file, np.column_stack([x, 2.0 * x + 1.0]))
+        config = {
+            "data": {
+                "input_file": str(data_file),
+                "format": "ascii",
+                "columns": {"x": 0, "y": 1},
+            },
+            "model": {"type": "builtin", "name": "linear"},
+            "fitting": {"p0": [1.0, 0.0], "method": "trf"},
+            "export": {"results_file": str(tmp_path / "o.json"), "format": "json"},
+        }
+        runner = WorkflowRunner()
+        result = runner.run(config)
+        conv = json.loads((tmp_path / "o.json").read_text())["convergence"]
+        assert conv["iterations"] == result["nit"]
+        assert conv["iterations"] != conv["function_evals"]  # linear: nit=1, nfev=2
+
+    def test_absolute_sigma_string_rejected(self):
+        from nlsq.cli.errors import ConfigError
+        from nlsq.cli.workflow_runner import WorkflowRunner
+
+        x = np.linspace(0, 1, 5)
+        with pytest.raises(ConfigError, match="absolute_sigma"):
+            WorkflowRunner()._extract_fit_params(
+                {"fitting": {"p0": [1.0, 0.0], "absolute_sigma": "false"}},
+                x,
+                x,
+                lambda x, a, b: a * x + b,
+            )

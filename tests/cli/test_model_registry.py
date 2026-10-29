@@ -439,3 +439,33 @@ class TestModelRegistryModelError:
         # Should suggest available models or correct spelling
         error_message = str(exc_info.value)
         assert "lineaar" in error_message
+
+
+class TestTrustedFlagIsStrictBool:
+    """YAML `trusted: "false"` is a truthy string and must not skip validation."""
+
+    @pytest.mark.parametrize("value", ["false", "true", "no", 1, 0, "", None])
+    def test_non_bool_trusted_rejected_before_load(self, tmp_path, monkeypatch, value):
+        from nlsq.cli.errors import ModelError
+        from nlsq.cli.model_registry import ModelRegistry
+
+        marker = tmp_path / "marker_trusted"
+        model_file = tmp_path / "m.py"
+        model_file.write_text(
+            f"import os\nos.system('echo x > {marker}')\n"
+            "def f(x, a):\n    return a * x\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        with pytest.raises(ModelError):
+            ModelRegistry().get_model(
+                str(model_file),
+                {
+                    "type": "custom",
+                    "path": str(model_file),
+                    "function": "f",
+                    "trusted": value,
+                },
+            )
+        assert not marker.exists()

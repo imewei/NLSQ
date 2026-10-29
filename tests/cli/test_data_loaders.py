@@ -769,3 +769,52 @@ class Test2DSurfaceDataLoading:
         assert xdata.ndim == 1
         assert ydata.ndim == 1
         assert len(xdata) == len(ydata)
+
+
+class TestCsvHeaderParsing:
+    """Header names must be split like the data rows (quotes, BOM)."""
+
+    def _load(self, path, columns):
+        from nlsq.cli.data_loaders import DataLoader
+
+        return DataLoader().load(str(path), {"format": "csv", "columns": columns})
+
+    def test_quoted_header_field_with_delimiter(self, tmp_path):
+        f = tmp_path / "q.csv"
+        f.write_text(
+            '"sample, id",time,signal,unused\n7,1,10,99\n7,2,20,98\n7,3,30,97\n'
+        )
+        x, y, _ = self._load(f, {"x": "time", "y": "signal"})
+        assert x.tolist() == [1.0, 2.0, 3.0]
+        assert y.tolist() == [10.0, 20.0, 30.0]
+
+    def test_utf8_bom_header(self, tmp_path):
+        f = tmp_path / "bom.csv"
+        f.write_bytes("\ufeffx,y\n1,2\n2,4\n3,6\n".encode())
+        x, y, _ = self._load(f, {"x": "x", "y": "y"})
+        assert x.tolist() == [1.0, 2.0, 3.0]
+        assert y.tolist() == [2.0, 4.0, 6.0]
+
+    def test_header_data_column_count_mismatch_raises(self, tmp_path):
+        from nlsq.cli.errors import DataLoadError
+
+        f = tmp_path / "m.csv"
+        f.write_text("a,b,c\n1,2\n2,4\n3,6\n")
+        with pytest.raises(DataLoadError):
+            self._load(f, {"x": "a", "y": "b"})
+
+    def test_header_flag_string_rejected(self, tmp_path):
+        from nlsq.cli.data_loaders import DataLoader
+        from nlsq.cli.errors import DataLoadError
+
+        f = tmp_path / "h.csv"
+        f.write_text("1,2\n2,4\n")
+        with pytest.raises(DataLoadError, match=r"csv\.header must be"):
+            DataLoader().load(
+                str(f),
+                {
+                    "format": "csv",
+                    "csv": {"header": "false"},
+                    "columns": {"x": 0, "y": 1},
+                },
+            )

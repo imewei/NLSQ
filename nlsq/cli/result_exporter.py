@@ -30,6 +30,13 @@ import numpy as np
 from nlsq.cli.errors import CLIError
 
 
+def _as_numpy(obj: Any) -> Any:
+    """Convert array-likes that are not numpy (e.g. ``jax.Array``) to ndarray."""
+    if not isinstance(obj, (np.ndarray, np.generic)) and hasattr(obj, "__array__"):
+        return np.asarray(obj)
+    return obj
+
+
 def _sanitize_nonfinite(obj: Any) -> Any:
     """Recursively replace non-finite floats with None for spec-compliant JSON.
 
@@ -39,7 +46,9 @@ def _sanitize_nonfinite(obj: Any) -> Any:
     Handles: Python float, numpy scalars (np.floating), numpy arrays (converted
     to list first so elements are walked), dicts, and lists.
     Does not handle other numpy types (np.integer etc.) — those serialize cleanly.
+    Non-numpy array-likes (``jax.Array``) are converted via ``np.asarray`` first.
     """
+    obj = _as_numpy(obj)
     if isinstance(obj, float) and not math.isfinite(obj):
         return None
     # numpy scalar floats (np.float32, np.float64, …)
@@ -71,6 +80,7 @@ class NumpyJSONEncoder(json.JSONEncoder):
         Any
             JSON-serializable object.
         """
+        obj = _as_numpy(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, (np.integer, np.int_)):
@@ -201,11 +211,11 @@ class ResultExporter:
             Prepared export data with all metadata.
         """
         # Extract parameters
-        popt = result.get("popt", result.get("x", []))
+        popt = _as_numpy(result.get("popt", result.get("x", [])))
         if isinstance(popt, np.ndarray):
             popt = popt.tolist()
 
-        pcov = result.get("pcov", [])
+        pcov = _as_numpy(result.get("pcov", []))
         if isinstance(pcov, np.ndarray):
             pcov = pcov.tolist()
 
@@ -227,7 +237,9 @@ class ResultExporter:
 
         # Extract convergence info
         convergence = {
-            "iterations": result.get("nfev", 0),
+            # nit is optimizer iterations; nfev counts function evaluations
+            # (reported separately below). None when the fit gave no nit.
+            "iterations": result.get("nit"),
             "function_evals": result.get("nfev", 0),
             "jacobian_evals": result.get("njev", 0),
             "status": "success" if result.get("success", False) else "failed",

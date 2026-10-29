@@ -602,7 +602,16 @@ class ModelRegistry:
         """
         # Step 1: Validate configuration
         file_path, function_name = self._validate_custom_model_config(config)
-        is_trusted = trusted or config.get("trusted", False)
+        config_trusted = config.get("trusted", False)
+        if not isinstance(config_trusted, bool):
+            # YAML `trusted: "false"` is a truthy string and would silently
+            # skip validation; only a real boolean may set the flag.
+            raise ModelError(
+                f"'trusted' must be true or false, got {config_trusted!r}",
+                model_type="custom",
+                suggestion="Use an unquoted YAML boolean: `trusted: true`.",
+            )
+        is_trusted = trusted or config_trusted
 
         # Step 2: Validate file exists
         path = self._validate_model_file_exists(file_path, function_name)

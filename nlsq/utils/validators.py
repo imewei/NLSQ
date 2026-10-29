@@ -97,11 +97,14 @@ class InputValidator:
                 errors.append("xdata must be at least 1-dimensional")
                 return errors, warnings_list, xdata, ydata, 0
 
-            # Handle 2D xdata (multiple independent variables)
+            # Handle 2D xdata (multiple independent variables): SciPy/CurveFit
+            # convention is (k, M) -- points along the LAST axis
             if xdata.ndim == 2:
-                n_points = xdata.shape[0]
-                n_vars = xdata.shape[1]
+                n_points = xdata.shape[-1]
+                n_vars = xdata.shape[0]
                 warnings_list.append(f"xdata has {n_vars} independent variables")
+            elif xdata.ndim > 2:
+                n_points = xdata.shape[-1]
             else:
                 n_points = len(xdata) if hasattr(xdata, "__len__") else 1
 
@@ -519,11 +522,10 @@ class InputValidator:
                     test_x = tuple(arr[: min(10, len(arr))] for arr in xdata)
                     expected_len = min(10, len(xdata[0]))
                 else:
-                    if hasattr(xdata, "ndim") and xdata.ndim > 1:
-                        test_x = xdata[: min(10, len(xdata))]
-                    else:
-                        test_x = xdata[: min(10, len(xdata))]
-                    expected_len = min(10, len(xdata))
+                    # points live on the last axis for (k, M) xdata
+                    n_test = min(10, xdata.shape[-1] if xdata.ndim > 0 else 1)
+                    test_x = xdata[..., :n_test]
+                    expected_len = n_test
 
                 if p0 is not None:
                     test_result = f(test_x, *p0)

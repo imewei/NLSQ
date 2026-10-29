@@ -4,6 +4,13 @@ This module provides security validation for custom model files loaded
 through the NLSQ CLI. It inspects model files for dangerous patterns
 that could lead to arbitrary code execution.
 
+.. warning::
+   This is a best-effort static **denylist**, NOT a sandbox. Python is too
+   dynamic for name-based AST checks to be complete, so a passing validation
+   does not prove a model file is safe. Do not load model files from
+   untrusted sources; a model file is Python code executed with the
+   privileges of the calling process.
+
 Security Features
 -----------------
 - AST-based pattern detection for dangerous operations
@@ -20,7 +27,10 @@ Dangerous Patterns Blocked
 --------------------------
 - Code execution: exec, eval, compile, __import__
 - System access: os.system, subprocess, popen
-- File modification: open with write mode
+- File modification: open with write mode, or with a mode that is not a
+  string literal (fail closed); io.FileIO; numpy file writers
+- Process creation under any module name: posix_spawn, exec*, fork*, spawn*
+  (including via the ``posix``/``nt`` aliases of ``os``)
 - Network access: socket connections
 - Memory manipulation: ctypes operations
 - Serialization code execution: pickle, marshal, shelve, dill
@@ -60,6 +70,47 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "popen",
         "spawn",
         "Popen",
+        # os process-creation/exec names, matched by attribute/symbol name so a
+        # renamed module (`posix`, `nt`, `import x as y`) does not hide them
+        "posix_spawn",
+        "posix_spawnp",
+        "execl",
+        "execle",
+        "execlp",
+        "execlpe",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+        "fork",
+        "forkpty",
+        "vfork",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+        "startfile",
+        "fdopen",
+        # File creation without open(): io.FileIO and numpy file writers
+        # (pickle-capable `allow_pickle` is blocked as a keyword, see visitor)
+        "FileIO",
+        "save",
+        "savez",
+        "savez_compressed",
+        "savetxt",
+        "tofile",
+        "dump",
+        "memmap",
+        "open_memmap",
+        "write_array",
+        "write_array_header_1_0",
+        "write_array_header_2_0",
+        "ctypeslib",
+        "f2py",
         # Network access
         "socket",
         "urlopen",
@@ -192,6 +243,13 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         # strings / spawn processes without tripping exec/subprocess checks
         "timeit",
         "asyncio",
+        # `os` under another name (posix on Unix, nt on Windows) and the C
+        # accelerator modules behind subprocess/io
+        "posix",
+        "nt",
+        "_posixsubprocess",
+        "_io",
+        "pty",
     },
 )
 
@@ -242,15 +300,24 @@ class DangerousPatternVisitor(ast.NodeVisitor):
 
     def __init__(self):
         self.violations: list[str] = []
+        # ids of nodes used directly as a call target; an `open` reference
+        # anywhere else (`o = open; o(p, "w")`) escapes the mode check
+        self._callees: set[int] = set()
 
     def visit_Name(self, node: ast.Name) -> Any:
         """Check for dangerous name references."""
         if node.id in DANGEROUS_PATTERNS:
             self.violations.append(f"Dangerous name reference: {node.id}")
+        if node.id == "open" and id(node) not in self._callees:
+            self.violations.append("Dangerous name reference: open (aliased)")
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> Any:
         """Check for dangerous function calls."""
+        self._callees.add(id(node.func))
+        # numpy.load(..., allow_pickle=...) executes pickle payloads
+        if any(k.arg == "allow_pickle" for k in node.keywords):
+            self.violations.append("Dangerous keyword argument: allow_pickle")
         # Check direct function calls
         if isinstance(node.func, ast.Name):
             if node.func.id in DANGEROUS_PATTERNS:
@@ -278,26 +345,35 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _check_open_call(self, node: ast.Call) -> None:
-        """Check if open() is called with write mode."""
-        # Check positional mode argument
-        if len(node.args) >= 2:
-            mode_arg = node.args[1]
-            if isinstance(mode_arg, ast.Constant) and isinstance(mode_arg.value, str):
-                if any(c in mode_arg.value for c in "wax+"):
-                    self.violations.append(
-                        f"File write operation: open(..., '{mode_arg.value}')",
-                    )
-        # Check keyword mode argument
-        for keyword in node.keywords:
-            if keyword.arg == "mode":
-                if isinstance(keyword.value, ast.Constant) and isinstance(
-                    keyword.value.value,
-                    str,
-                ):
-                    if any(c in keyword.value.value for c in "wax+"):
-                        self.violations.append(
-                            f"File write operation: open(..., mode='{keyword.value.value}')",
-                        )
+        """Check open() calls; fail closed unless the mode is a literal read mode."""
+        if any(isinstance(a, ast.Starred) for a in node.args) or any(
+            k.arg is None for k in node.keywords
+        ):
+            self.violations.append("File operation: open() with unpacked arguments")
+            return
+        modes = list(node.args[1:2]) + [
+            k.value for k in node.keywords if k.arg == "mode"
+        ]
+        # pathlib.Path.open(mode) / io.open(mode=...) put the mode first
+        if isinstance(node.func, ast.Attribute) and node.args:
+            first = node.args[0]
+            if (
+                isinstance(first, ast.Constant)
+                and isinstance(first.value, str)
+                and first.value
+                and set(first.value) <= set("rwxabt+U")
+            ):
+                modes.append(first)
+        for mode_arg in modes:
+            if not (
+                isinstance(mode_arg, ast.Constant) and isinstance(mode_arg.value, str)
+            ):
+                # a variable/expression mode cannot be proven read-only
+                self.violations.append("File write risk: open() mode is not a literal")
+            elif any(c in mode_arg.value for c in "wax+"):
+                self.violations.append(
+                    f"File write operation: open(..., '{mode_arg.value}')",
+                )
 
     def visit_Constant(self, node: ast.Constant) -> Any:
         """Check string constants for dunder chains used in format-string escapes.
@@ -322,6 +398,8 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """
         if node.attr in DANGEROUS_PATTERNS:
             self.violations.append(f"Dangerous attribute access: .{node.attr}")
+        if node.attr == "open" and id(node) not in self._callees:
+            self.violations.append("Dangerous attribute access: .open (aliased)")
         self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> Any:

@@ -35,6 +35,7 @@ Example Usage
 >>> # ydata shape: (n_points,) - z values (dependent variable)
 """
 
+import csv
 from pathlib import Path
 from typing import Any
 
@@ -412,7 +413,17 @@ class DataLoader:
 
         delimiter = csv_config.get("delimiter", ",")
         has_header = csv_config.get("header", True)
+        if not isinstance(has_header, bool):
+            # "false" (a quoted YAML string) is truthy and would silently drop
+            # the first data row as a header
+            raise DataLoadError(
+                f"csv.header must be true or false, got {has_header!r}",
+                file_path=file_path,
+                suggestion="Use an unquoted YAML boolean: `header: false`.",
+            )
         encoding = csv_config.get("encoding", "utf-8")
+        if encoding.lower().replace("_", "-") == "utf-8":
+            encoding = "utf-8-sig"  # strips a BOM, otherwise identical to utf-8
         missing_values = csv_config.get("missing_values", ["", "NA", "null", "NaN"])
         skip_header = csv_config.get("skip_header", 0)
 
@@ -423,8 +434,11 @@ class DataLoader:
                 # Skip additional header lines if specified
                 for _ in range(skip_header):
                     f.readline()
-                header_line = f.readline().strip()
-                header_names = [col.strip() for col in header_line.split(delimiter)]
+                # csv.reader honours quoted fields containing the delimiter,
+                # matching how the data rows are split below
+                header_names = [
+                    col.strip() for col in next(csv.reader(f, delimiter=delimiter), [])
+                ]
 
         try:
             # Calculate skip rows: additional skip_header + 1 for header row
@@ -439,6 +453,21 @@ class DataLoader:
                 filling_values=np.nan,
                 dtype=np.float64,
             )
+
+            if (
+                data.ndim == 2
+                and header_names is not None
+                and len(header_names) != data.shape[1]
+            ):
+                raise DataLoadError(
+                    f"CSV header has {len(header_names)} columns but data has "
+                    f"{data.shape[1]}",
+                    file_path=file_path,
+                    file_format="csv",
+                    context={"header_names": header_names},
+                    suggestion="Check the delimiter and that header fields are "
+                    "quoted consistently.",
+                )
 
             # Ensure 2D array
             if data.ndim == 1:

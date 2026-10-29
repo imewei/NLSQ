@@ -518,7 +518,7 @@ NLSQ implements comprehensive security measures:
      - JSON-based, CWE-502 mitigation
    * - Model Validation
      - ``cli/model_validation.py``
-     - AST-based dangerous pattern detection
+     - AST-based dangerous pattern denylist (best-effort, not a sandbox)
    * - Path Traversal
      - ``validate_path()``
      - Relative path containment
@@ -531,6 +531,16 @@ NLSQ implements comprehensive security measures:
 
 Blocked patterns include: ``exec``, ``eval``, ``subprocess``, ``socket``, ``ctypes``,
 and other dangerous builtins and module calls.
+
+.. warning::
+
+   Model validation is a best-effort static **denylist**, not a sandbox. It
+   rejects known-dangerous names, modules, and write-mode ``open()`` calls, but
+   it cannot prove that arbitrary Python is safe: Python is too dynamic for a
+   name-based check to be complete, and resource limits only wrap module load
+   time. Never load a custom model file from an untrusted source; treat
+   ``trusted: true`` and a passing validation as equally "you vouched for this
+   code", because a model file is ordinary Python executed with your privileges.
 
 
 Diagnostics System
