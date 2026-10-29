@@ -475,7 +475,9 @@ def test_summary_with_none_pcov_does_not_crash():
     old_stdout = sys.stdout
     sys.stdout = buffer = StringIO()
     try:
-        result.summary()  # Should not raise
+        # Exact fit: RSS == 0, so AIC/BIC are undefined and warn.
+        with pytest.warns(UserWarning, match="RSS"):
+            result.summary()  # Should not raise
         output = buffer.getvalue()
     finally:
         sys.stdout = old_stdout
@@ -519,7 +521,9 @@ def test_summary_with_none_optimality_does_not_crash():
     old_stdout = sys.stdout
     sys.stdout = buffer = StringIO()
     try:
-        result.summary()  # Should not raise
+        # Exact fit: RSS == 0, so AIC/BIC are undefined and warn.
+        with pytest.warns(UserWarning, match="RSS"):
+            result.summary()  # Should not raise
         output = buffer.getvalue()
     finally:
         sys.stdout = old_stdout

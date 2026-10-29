@@ -243,5 +243,6 @@ def test_compute_svd_falls_back_on_jax_runtime_error(monkeypatch):
         return real(J, full_matrices=full_matrices)
 
     monkeypatch.setattr(sf, "jax_svd", flaky)
-    _, s, _ = sf.compute_svd_with_fallback(jnp.ones((50, 3)) + jnp.eye(50, 3))
+    with pytest.warns(RuntimeWarning, match="CPU fallback"):
+        _, s, _ = sf.compute_svd_with_fallback(jnp.ones((50, 3)) + jnp.eye(50, 3))
     assert calls["n"] == 2 and s.shape == (3,)
