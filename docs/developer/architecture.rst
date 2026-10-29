@@ -524,10 +524,10 @@ NLSQ implements comprehensive security measures:
      - Relative path containment
    * - Resource Limits
      - ``resource_limits()``
-     - RLIMIT_AS + SIGALRM timeout
+     - SIGALRM timeout; RLIMIT_AS cap (relative to current VSZ), skipped when a GPU/TPU backend is active
    * - Audit Logging
      - ``AuditLogger``
-     - RotatingFileHandler (10MB, 90 days)
+     - RotatingFileHandler (10MB per file, at most 10 backups)
 
 Blocked patterns include: ``exec``, ``eval``, ``subprocess``, ``socket``, ``ctypes``,
 and other dangerous builtins and module calls.

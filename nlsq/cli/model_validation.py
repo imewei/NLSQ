@@ -753,7 +753,8 @@ class AuditLogger:
     max_size_bytes : int
         Maximum log file size before rotation (default: 10MB).
     retention_days : int
-        Number of days to retain log files (default: 90).
+        Only caps the number of rotated backups (``min(retention_days, 10)``);
+        there is no time-based expiry (default: 90).
     """
 
     def __init__(

@@ -209,7 +209,7 @@ curve_fit_result*.png
 radioactive_decay.png
 outputs/
 
-# Uncomment if you want to ignore all generated images:
+# Ignore all generated images (docs assets are re-included below):
 *.png
 *.jpg
 *.pdf
