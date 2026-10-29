@@ -20,11 +20,26 @@ import jax.numpy as jnp
 from jax.scipy.linalg import svd as jax_svd
 
 
+def _runtime_error_types() -> tuple[type[BaseException], ...]:
+    """JAX/XLA runtime-error classes available on the installed jax/jaxlib."""
+    types: list[type[BaseException]] = []
+    jax_err = getattr(jax.errors, "JaxRuntimeError", None)
+    if jax_err is not None:
+        types.append(jax_err)
+    try:  # legacy location (jaxlib < 0.5)
+        from jaxlib.xla_extension import XlaRuntimeError
+
+        types.append(XlaRuntimeError)
+    except (ImportError, AttributeError):
+        pass
+    return tuple(types)
+
+
 def is_gpu_error(error: Exception | str) -> bool:
     """Check if an exception indicates a GPU/CUDA-specific failure.
 
-    Prefers type-based matching against jaxlib.xla_extension.XlaRuntimeError,
-    which is stable across JAX versions. Falls back to string heuristics for
+    Prefers type-based matching against jax.errors.JaxRuntimeError (or the
+    legacy jaxlib.xla_extension.XlaRuntimeError on older jaxlib). Falls back to string heuristics for
     older JAX (<0.8) or error types that don't inherit from XlaRuntimeError:
     - Legacy: "cuSolver internal error" (JAX <0.8)
     - FFI: "No FFI handler registered for cusolver_gesvdj_ffi" (JAX >=0.8)
@@ -32,13 +47,9 @@ def is_gpu_error(error: Exception | str) -> bool:
     """
     # Type-based check: robust against JAX error message format changes
     if not isinstance(error, str):
-        try:
-            from jaxlib.xla_extension import XlaRuntimeError
-
-            if isinstance(error, XlaRuntimeError):
+        for runtime_error in _runtime_error_types():
+            if isinstance(error, runtime_error):
                 return True
-        except (ImportError, AttributeError):
-            pass
 
     # String fallback: covers older JAX and non-XlaRuntimeError GPU failures
     msg = str(error)

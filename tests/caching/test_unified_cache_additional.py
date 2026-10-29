@@ -99,3 +99,74 @@ def test_repr_with_stats_disabled() -> None:
     """__repr__ should use size-only format when stats disabled."""
     cache = UnifiedCache(enable_stats=False)
     assert "UnifiedCache(size=" in repr(cache)
+
+
+class TestDistinctCallablesDoNotCollide:
+    """Callables without a closure must not share a cache entry."""
+
+    @staticmethod
+    def _compile_pair(f, g):
+        import jax.numpy as jnp
+
+        from nlsq.caching.unified_cache import UnifiedCache
+
+        cache = UnifiedCache()
+        x = jnp.arange(3.0)
+        return cache.get_or_compile(f, (x,), {}), cache.get_or_compile(g, (x,), {}), x
+
+    def test_callable_instances(self):
+        import jax.numpy as jnp
+
+        class Decay:
+            def __init__(self, tau):
+                self.tau = tau
+
+            def __call__(self, x):
+                return jnp.exp(-x / self.tau)
+
+        cf, cg, x = self._compile_pair(Decay(1.0), Decay(100.0))
+        assert cf is not cg
+        assert jnp.allclose(cg(x), Decay(100.0)(x))
+
+    def test_bound_methods_and_partials_and_same_line_lambdas(self):
+        import functools
+
+        import jax.numpy as jnp
+
+        class Model:
+            def __init__(self, k):
+                self.k = k
+
+            def f(self, x):
+                return self.k * x
+
+        def scale(x, s):
+            return x * s
+
+        pairs = [
+            (Model(2.0).f, Model(10.0).f),
+            (functools.partial(scale, s=2.0), functools.partial(scale, s=10.0)),
+            ((lambda x: x + 1), (lambda x: x * 100)),
+        ]
+        for f, g in pairs:
+            cf, cg, x = self._compile_pair(f, g)
+            assert cf is not cg
+            assert jnp.allclose(cg(x), g(x))
+
+    def test_same_object_still_hits(self):
+        import jax.numpy as jnp
+
+        from nlsq.caching.unified_cache import UnifiedCache
+
+        class Scale:
+            def __call__(self, x):
+                return 2 * x
+
+        s = Scale()
+        m = Model = type("M", (), {"f": lambda self, x: x})()
+        cache = UnifiedCache()
+        x = jnp.arange(3.0)
+        for fn in (s, m.f):  # m.f builds a new bound-method object each access
+            assert cache.get_or_compile(fn, (x,), {}) is cache.get_or_compile(
+                fn, (x,), {}
+            )

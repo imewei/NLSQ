@@ -1110,3 +1110,20 @@ class TestKnownSensitivityPatterns:
         report = analyzer.analyze(J)
         assert report.available is True
         # Gaussian peak with good coverage should be identifiable
+
+
+def test_underdetermined_jacobian_matches_fim_analysis():
+    """m < n: Jacobian path must keep the nullspace, like the J^T J path."""
+    from nlsq.diagnostics.parameter_sensitivity import ParameterSensitivityAnalyzer
+
+    J = np.eye(2, 3)
+    analyzer = ParameterSensitivityAnalyzer()
+    from_jac = analyzer.analyze(J)
+    from_fim = analyzer.analyze_from_fim(J.T @ J)
+    assert from_jac.eigenvectors.shape == (3, 3)
+    np.testing.assert_allclose(from_jac.eigenvalues, [1.0, 1.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(from_jac.eigenvalues, from_fim.eigenvalues, atol=1e-12)
+    assert list(from_jac.sloppy_indices) == list(from_fim.sloppy_indices) == [2]
+    assert from_jac.health_status == from_fim.health_status
+    V = from_jac.eigenvectors
+    np.testing.assert_allclose(V.T @ V, np.eye(3), atol=1e-12)

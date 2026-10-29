@@ -503,12 +503,18 @@ class ParameterSensitivityAnalyzer:
             from nlsq.stability.svd_fallback import compute_svd_with_fallback
 
             # compute_svd_with_fallback returns V already (not transposed)
-            _, s, eigenvectors = compute_svd_with_fallback(jacobian)
+            # With fewer observations than parameters the thin SVD drops the
+            # right nullspace; request full V and pad s with the n - m zeros.
+            wide = jacobian.shape[0] < jacobian.shape[1]
+            _, s, eigenvectors = compute_svd_with_fallback(jacobian, full_matrices=wide)
             s = np.asarray(s)
             eigenvectors = np.asarray(eigenvectors)
         except ImportError:
-            _, s, vt = np.linalg.svd(jacobian, full_matrices=False)
+            wide = jacobian.shape[0] < jacobian.shape[1]
+            _, s, vt = np.linalg.svd(jacobian, full_matrices=wide)
             eigenvectors = vt.T
+        if wide:
+            s = np.concatenate([s, np.zeros(jacobian.shape[1] - s.size, s.dtype)])
 
         eigenvalues = s**2
 

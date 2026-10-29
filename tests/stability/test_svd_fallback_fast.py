@@ -215,3 +215,33 @@ class TestIsGpuError:
         from nlsq.stability.svd_fallback import _is_gpu_error
 
         assert _is_gpu_error("ValueError: shapes don't match") is False
+
+
+def test_jax_runtime_error_is_gpu_error():
+    """RESOURCE_EXHAUSTED / CUDA_ERROR_* JaxRuntimeError must trigger CPU fallback."""
+    import jax
+
+    from nlsq.stability.svd_fallback import is_gpu_error
+
+    err = jax.errors.JaxRuntimeError("RESOURCE_EXHAUSTED: Out of memory on cuda:0")
+    assert is_gpu_error(err) is True
+    assert is_gpu_error(ValueError("shape mismatch")) is False
+
+
+def test_compute_svd_falls_back_on_jax_runtime_error(monkeypatch):
+    import jax
+    import jax.numpy as jnp
+
+    import nlsq.stability.svd_fallback as sf
+
+    real, calls = sf.jax_svd, {"n": 0}
+
+    def flaky(J, full_matrices=False):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise jax.errors.JaxRuntimeError("RESOURCE_EXHAUSTED: Out of memory")
+        return real(J, full_matrices=full_matrices)
+
+    monkeypatch.setattr(sf, "jax_svd", flaky)
+    _, s, _ = sf.compute_svd_with_fallback(jnp.ones((50, 3)) + jnp.eye(50, 3))
+    assert calls["n"] == 2 and s.shape == (3,)
