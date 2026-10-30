@@ -199,12 +199,9 @@ def handle_gui(args: argparse.Namespace) -> int:
         return run_desktop()
 
     except ImportError as e:
-        print(
-            "\nError: Qt GUI dependencies not installed.\n"
-            'Install with: pip install "nlsq[gui_qt]"\n'
-            f"Details: {e}",
-            file=sys.stderr,
-        )
+        from nlsq.gui_qt import GUI_INSTALL_HINT
+
+        print(f"\nError: {GUI_INSTALL_HINT}\nDetails: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         print("\nGUI closed.")
