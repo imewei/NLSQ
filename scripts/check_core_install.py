@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import os
 import sys
+
+# Must be set before matplotlib is imported anywhere; do not rely on the caller.
+os.environ.setdefault("MPLBACKEND", "Agg")
 
 import numpy as np
 
