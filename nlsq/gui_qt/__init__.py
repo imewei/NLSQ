@@ -23,7 +23,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
 
-__all__ = ["run_desktop"]
+__all__ = ["GUI_INSTALL_HINT", "run_desktop"]
+
+GUI_INSTALL_HINT = 'The NLSQ desktop app needs the GUI extra: pip install "nlsq[gui]"'
 
 # ---------------------------------------------------------------------------
 # macOS SIGBUS Prevention — Defence in Depth
@@ -131,6 +133,14 @@ def run_desktop() -> int:
         if _debug:
             sys.stderr.write(f"[nlsq-gui] {msg}\n")
             sys.stderr.flush()
+
+    # Check before installing the Qt exception hook so a missing extra never
+    # surfaces as a traceback.
+    try:
+        import PySide6.QtWidgets
+    except ImportError:
+        sys.stderr.write(f"{GUI_INSTALL_HINT}\n")
+        return 1
 
     # Install global exception hook
     sys.excepthook = _exception_hook
