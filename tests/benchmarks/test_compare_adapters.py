@@ -92,9 +92,8 @@ def test_jaxopt_capability_records_unmaintained():
 def test_jaxopt_stops_at_the_optimum_on_large_n():
     # JAXopt's default grad-l2-norm criterion ignores xtol/gtol and runs to MAX_ITER
     av = ADAPTERS["jaxopt"].availability()
-    if not av.ok:
-        assert av.reason
-        return
+    # jaxopt is a declared `bench` dependency: fail rather than pass vacuously
+    assert av.ok, f"JAXopt unavailable: {av.reason}"
     x, y = EXP.data(100_000)
     out = ADAPTERS["jaxopt"].prepare(EXP, x, y, "end_to_end")()
     assert out.converged
