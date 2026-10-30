@@ -874,3 +874,141 @@ def test_f7_linear_solve_is_cacheable(monkeypatch):
     assert new == 1 and len(ls_mod._wrapper_cache) > 0
     np.testing.assert_array_equal(cached, uncached)
     np.testing.assert_allclose(cached, [12.0], rtol=1e-9)
+
+
+# --- round 4 (Codex phase 3d) -------------------------------------------------
+
+
+def _assert_cached_and_hits(model, y, p0=(1.0,)):
+    clear_wrapper_cache()
+    popt1, _ = curve_fit(model, XS, y, p0=list(p0))
+    assert len(ls_mod._wrapper_cache) == 1
+    (bundle,) = ls_mod._wrapper_cache.values()
+    popt2, _ = curve_fit(model, XS, y, p0=list(p0))
+    assert len(ls_mod._wrapper_cache) == 1
+    assert next(iter(ls_mod._wrapper_cache.values())) is bundle  # hit
+    np.testing.assert_array_equal(popt1, popt2)
+    return np.asarray(popt1)
+
+
+def test_b1_namedtuple_params_keyed_by_type_and_fields(monkeypatch):
+    from collections import namedtuple
+
+    fields_a = "offset_dims collapsed_slice_dims start_index_map"
+    fields_b = "offset_dims start_index_map collapsed_slice_dims"
+    tail = " operand_batching_dims start_indices_batching_dims"
+    A = namedtuple("Dims", fields_a + tail)
+    B = namedtuple("Dims", fields_b + tail)
+    da = A((1,), (0,), (1,), (), ())
+    db = B((1,), (0,), (1,), (), ())
+    x = np.array([[1.0, 2.0], [4.0, 8.0]])
+    y = np.array([6.0, 12.0])
+    idx = jnp.array([[0], [1]], dtype=jnp.int32)
+
+    def make(d):
+        return lambda z, a: a * jax.lax.gather(z, idx, d, (1, 1)).ravel()
+
+    def fit(f):
+        popt, _ = curve_fit(f, x, y, p0=[1.0])
+        return np.asarray(popt)
+
+    clear_wrapper_cache()
+    fit(make(da))
+    g = make(db)
+    before = len(ls_mod._wrapper_cache)
+    cached = fit(g)
+    assert len(ls_mod._wrapper_cache) == before + 1  # different class: miss
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+    np.testing.assert_array_equal(cached, fit(g))
+
+
+@jax.tree_util.register_pytree_node_class
+class _Scaled:
+    def __init__(self, data, scale=2.0):
+        self.data = data
+        self.scale = scale
+
+    def tree_flatten(self):
+        return (self.data,), self.scale
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        return cls(children[0], aux)
+
+    def __sub__(self, other):
+        return self.scale * self.data - other
+
+    def __jax_array__(self):
+        return self.scale * self.data
+
+    def __array__(self, dtype=None, copy=None):
+        return np.asarray(self.scale * self.data, dtype=dtype)
+
+
+def test_b2_pytree_output_is_not_cached(monkeypatch):
+    def model(z, a):
+        return _Scaled(a * z)
+
+    clear_wrapper_cache()
+    cached = _fit_xs(model, 6 * XS)
+    assert len(ls_mod._wrapper_cache) == 0  # refused: non-array output
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+    np.testing.assert_array_equal(cached, _fit_xs(model, 6 * XS))
+
+
+def test_p1_jax_operation_objects_and_policies_are_cached():
+    knots = jnp.array([0.0, 1.0, 2.0, 3.0])
+
+    def m_interp(z, a):
+        return a * jnp.interp(z, knots, knots)
+
+    def m_policy(z, a):
+        f = jax.checkpoint(
+            lambda t: a * t, policy=jax.checkpoint_policies.everything_saveable
+        )
+        return f(z)
+
+    np.testing.assert_allclose(_assert_cached_and_hits(m_interp, 6 * XS), [6.0])
+    np.testing.assert_allclose(_assert_cached_and_hits(m_policy, 6 * XS), [6.0])
+
+
+def test_p1_user_checkpoint_policy_is_refused(monkeypatch):
+    calls = {"save": True}
+
+    def policy(prim, *args, **params):
+        return calls["save"]
+
+    def model(z, a):
+        return jax.checkpoint(lambda t: a * t, policy=policy)(z)
+
+    clear_wrapper_cache()
+    cached = _fit_xs(model, 6 * XS)
+    assert len(ls_mod._wrapper_cache) == 0
+    np.testing.assert_allclose(cached, [6.0])
+
+
+def test_p2_frozenset_params_are_cached():
+    from jax.sharding import Mesh, NamedSharding, PartitionSpec
+
+    mesh = Mesh(np.array(jax.devices()), ("d",))
+    sharding = NamedSharding(mesh, PartitionSpec())
+
+    def model(z, a):
+        return jax.lax.with_sharding_constraint(a * z, sharding)
+
+    np.testing.assert_allclose(_assert_cached_and_hits(model, 6 * XS), [6.0])
+
+
+def test_p3_typed_prng_key_constants_are_cached(monkeypatch):
+    def make(seed):
+        key = jax.random.key(seed)
+        return lambda z, a: a * z + 0.01 * jax.random.normal(key, z.shape)
+
+    y = 6 * XS + 0.01 * np.asarray(jax.random.normal(jax.random.key(0), XS.shape))
+    popt = _assert_cached_and_hits(make(0), y)
+    np.testing.assert_allclose(popt, [6.0], rtol=1e-9)
+    before = len(ls_mod._wrapper_cache)
+    cached = _fit_xs(make(1), y)  # different key bits: miss
+    assert len(ls_mod._wrapper_cache) == before + 1
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+    np.testing.assert_array_equal(cached, _fit_xs(make(1), y))
