@@ -1,12 +1,16 @@
 # Documentation dependencies for local development
 #
-# Sphinx and friends live in pyproject.toml's core `dependencies`
-# (there is no `[dev]` extra — see CHANGELOG v0.7.1 for the reverted split).
+# Sphinx and friends are floors copied from the `dev` dependency group in
+# pyproject.toml. `.[gui]` is needed because autodoc imports nlsq.gui_qt and the
+# docs build uses fail_on_warning (PySide6 must be importable).
 #
-# For local documentation builds:
-#   pip install -e .
-#
-# Or use this requirements file:
+# Local documentation build:
 #   pip install -r docs/requirements.txt
 
--e .
+sphinx>=9.0.0
+furo>=2025.0.0
+sphinx-copybutton>=0.5.2
+sphinx-autodoc-typehints>=3.5.0
+sphinx-design>=0.6.0
+myst-parser>=5.0.0
+-e .[gui]

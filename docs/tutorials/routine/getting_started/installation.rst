@@ -81,11 +81,13 @@ Expected output with GPU:
 Desktop GUI (Optional)
 ----------------------
 
-To use the interactive desktop application:
+The desktop application (PySide6, pyqtgraph) is an optional extra; a plain
+``pip install nlsq`` installs the core library only. To use the interactive
+desktop application:
 
 .. code-block:: bash
 
-   pip install nlsq
+   pip install "nlsq[gui]"
 
 Launch with:
 
@@ -96,13 +98,14 @@ Launch with:
 Development Installation
 ------------------------
 
-For development, with test/lint/docs/build tooling:
+For development, with test/lint/docs/build tooling (the ``dev`` dependency
+group, which also pulls in the ``gui`` extra):
 
 .. code-block:: bash
 
    git clone https://github.com/imewei/NLSQ.git
    cd NLSQ
-   pip install -e "."
+   make dev        # or: uv sync
 
 Common Installation Issues
 --------------------------

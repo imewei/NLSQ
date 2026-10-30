@@ -53,7 +53,7 @@ Before contributing:
 
 3. **Install development dependencies**:
    ```bash
-   pip install -e "."
+   make dev        # uv sync --extra gui --group bench (or pip >= 25.1: pip install -e ".[gui]" --group dev)
    ```
 
 4. **Install pre-commit hooks**:

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (install footprint)
+- `pip install nlsq` now installs the core library only. The Qt desktop GUI
+  (PySide6, pyqtgraph) moved to the optional `gui` extra, and dev/docs/build
+  tooling moved out of runtime `dependencies` into the `dev` dependency group
+  (benchmark comparison libraries `lmfit` and `jaxopt` into `bench`).
+  **Migration:** GUI users run `pip install "nlsq[gui]"`; contributors use
+  `make dev` or `uv sync`.
+
 ## [0.7.6] - 2026-09-04
 
 ### Fixed
