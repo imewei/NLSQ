@@ -754,12 +754,30 @@ def _trace_model(
             _aval_key(jax.core.ShapedArray(a.shape, a.dtype, a.weak_type))
             for a in avals
         )
-        key = (primal_key, jac_key, in_keys, mode)
+        key = (primal_key, jac_key, in_keys, mode, _config_key())
         hash(key)
     except Exception as exc:  # _Uncacheable, trace failure, unhashable
         _logger.debug("wrapper cache: not cached: %s: %s", type(exc).__name__, exc)
         return None
     return key, private, in_keys
+
+
+def _config_key() -> tuple:
+    """Every effective JAX config value, as the calling thread sees it.
+
+    Opaque primitives (e.g. `random_bits`) are lowered per config at compile
+    time, so a config change (incl. a context-manager override such as
+    `jax.threefry_partitionable`) must miss. Any value the digest cannot key
+    exactly refuses caching.
+    """
+    items = []
+    for name, value in sorted(jax.config.values.items()):
+        if value is not None and not isinstance(
+            value, (bool, int, float, str, enum.Enum)
+        ):
+            raise _Uncacheable(f"config {name} of type {type(value).__name__}")
+        items.append((name, _canon_param(value)[1]))
+    return tuple(items)
 
 
 def _model_from_jaxpr(jaxpr: Any, in_keys: tuple) -> Callable:

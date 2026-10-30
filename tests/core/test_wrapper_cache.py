@@ -1129,3 +1129,34 @@ def test_c5_output_structure_comes_from_the_trace(monkeypatch):
     assert type(jax.jit(model)(XS, 1.0)) is _AbstractAwareScaled
     cached = _assert_refused_and_matches_uncached(model, 6 * XS, monkeypatch)
     np.testing.assert_allclose(cached, [3.0])
+
+
+def test_c6_jax_config_is_part_of_the_key(monkeypatch):
+    key = jax.random.key(0)
+
+    def model(z, a):
+        return a * z + jax.random.uniform(key, z.shape, dtype=z.dtype)
+
+    clear_wrapper_cache()
+    with jax.threefry_partitionable(True):
+        _fit_xs(model, 6 * XS)
+        _fit_xs(model, 6 * XS)
+        assert len(ls_mod._wrapper_cache) == 1  # same config: hit
+    with jax.threefry_partitionable(False):
+        cached = _fit_xs(model, 6 * XS)
+        assert len(ls_mod._wrapper_cache) == 2  # config change: miss
+        monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+        np.testing.assert_array_equal(cached, _fit_xs(model, 6 * XS))
+
+
+def test_c6_unrelated_flag_toggle_restores_a_hit():
+    def model(z, a):
+        return a * z
+
+    popt = _assert_cached_and_hits(model, 6 * XS)
+    with jax.numpy_rank_promotion("warn"):
+        _fit_xs(model, 6 * XS)
+        assert len(ls_mod._wrapper_cache) == 2  # other config: miss
+    keys = set(ls_mod._wrapper_cache)
+    np.testing.assert_array_equal(_fit_xs(model, 6 * XS), popt)
+    assert set(ls_mod._wrapper_cache) == keys  # back to the first config: hit
