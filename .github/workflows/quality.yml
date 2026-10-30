@@ -135,7 +135,7 @@ jobs:
           sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --group bench
 
       - name: Run tests with coverage
         run: |
