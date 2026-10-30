@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `benchmarks/compare/`: library comparison harness (NLSQ vs SciPy, lmfit, JAXopt,
   Optimistix) with shared tolerances, per-case fresh-process cold timing, an
-  optimum-reached gate, and a Markdown report. First CPU baseline committed as
-  `benchmarks/baselines/2026-10-30-library-comparison.md`.
+  optimum-reached gate, and a Markdown report. CPU baselines committed under `benchmarks/baselines/`: the pre-optimisation run
+  (`2026-10-30-library-comparison-before-overhead.md`) and the run at the final
+  code of this release (`2026-10-30-library-comparison.md`; same harness, machine
+  not idle during the run).
 - `LargeDatasetFitter` results (`fit`, `fit_with_progress`, `fit_large_dataset`) now carry
   `"equivalent_to_full_batch"`: `True` only when exactly one chunk was used. Multi-chunk
   fits, successful or failed, also log one warning ("not equivalent to a full-batch fit"):
@@ -132,6 +134,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Other models, warm n=1000, cache on vs off (load average about 5): a
   100-operation model 54 ms vs 372 ms; a lambda recreated on every call
   4.8 ms vs 102 ms.
+  Full harness (all four problems, batch included; committed baselines): the
+  256-fit exp_decay batch, a Python loop of NLSQ fits, drops from 48.4 s to
+  0.96 s warm; bounded_exp n=1000 from 0.237 s to 0.047 s.
   `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
 
 ### Removed
