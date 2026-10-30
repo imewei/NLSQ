@@ -20,10 +20,9 @@ def _capture_minpack_log():
     """Capture records from the "nlsq.minpack" logger directly.
 
     curve_fit's stability checks (nlsq/core/minpack.py::_apply_stability_checks)
-    log through ``get_logger("minpack")``, which unconditionally resets that
-    logger's own level to INFO on every call before logging -- so its
-    isEnabledFor() check is unaffected by ambient global logging state left
-    behind by other tests. What isn't robust to that ambient state is
+    log through ``get_logger("minpack")``, whose level defaults to WARNING, so
+    this helper sets it to INFO for the duration. What isn't robust to
+    ambient global logging state left behind by other tests is
     pytest's ``caplog``, which (with no ``logger=`` argument) only patches
     the root logger and relies on propagate=True holding all the way up the
     "nlsq.minpack" -> "nlsq" -> root chain -- a chain this codebase's
@@ -43,10 +42,14 @@ def _capture_minpack_log():
 
     logger = logging.getLogger("nlsq.minpack")
     handler = _Collector(level=logging.DEBUG)
+    old_level = logger.level
     logger.addHandler(handler)
+    # NLSQ loggers default to WARNING; the INFO "fix applied" records are opt-in.
+    logger.setLevel(logging.INFO)
     try:
         yield records
     finally:
+        logger.setLevel(old_level)
         logger.removeHandler(handler)
 
 

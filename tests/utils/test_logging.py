@@ -135,7 +135,7 @@ class TestNLSQLogger(unittest.TestCase):
 
     def test_optimization_step_tracking(self):
         """Test optimization step logging."""
-        logger = NLSQLogger("opt_test")
+        logger = NLSQLogger("opt_test", level=LogLevel.PERFORMANCE)
 
         logger.optimization_step(
             iteration=1, cost=0.5, gradient_norm=0.1, step_size=0.01, nfev=10
@@ -153,7 +153,7 @@ class TestNLSQLogger(unittest.TestCase):
 
     def test_multiple_optimization_steps(self):
         """Test tracking multiple optimization steps."""
-        logger = NLSQLogger("multi_opt_test")
+        logger = NLSQLogger("multi_opt_test", level=LogLevel.PERFORMANCE)
 
         for i in range(5):
             logger.optimization_step(
@@ -249,7 +249,7 @@ class TestNLSQLogger(unittest.TestCase):
     def test_save_iteration_data(self):
         """Test saving optimization history to file."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            logger = NLSQLogger("save_test")
+            logger = NLSQLogger("save_test", level=LogLevel.PERFORMANCE)
 
             # Add some optimization history
             for i in range(3):
@@ -342,7 +342,7 @@ class TestLoggerIntegration(unittest.TestCase):
 
     def test_logger_with_optimization(self):
         """Test logger integration with optimization workflow."""
-        logger = get_logger("integration_test")
+        logger = get_logger("integration_test", level=LogLevel.PERFORMANCE)
 
         # Simulate an optimization run
         with logger.timer("optimization"):
@@ -368,8 +368,8 @@ class TestLoggerIntegration(unittest.TestCase):
 
     def test_multiple_logger_instances(self):
         """Test multiple logger instances work independently."""
-        logger1 = get_logger("module1")
-        logger2 = get_logger("module2")
+        logger1 = get_logger("module1", level=LogLevel.PERFORMANCE)
+        logger2 = get_logger("module2", level=LogLevel.PERFORMANCE)
 
         logger1.optimization_step(iteration=1, cost=1.0)
         logger2.optimization_step(iteration=1, cost=2.0)
