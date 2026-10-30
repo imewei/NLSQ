@@ -193,15 +193,25 @@ install:
 
 dev: install-dev  ## Alias for install-dev (referenced in CLAUDE.md)
 
-install-dev: install
-	@echo "$(BOLD)$(BLUE)Installing development dependencies...$(RESET)"
-	@$(INSTALL_CMD) -e "."
+install-dev:
+	@echo "$(BOLD)$(BLUE)Installing development dependencies (gui extra + dev/bench groups)...$(RESET)"
+ifeq ($(PKG_MANAGER),uv)
+	@uv sync --extra gui --group bench
+else
+	@echo "Using pip: '--group' requires pip >= 25.1"
+	@pip install -e ".[gui]" --group dev --group bench
+endif
 	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ Dev dependencies installed!$(RESET)"
 
-install-all: install
-	@echo "$(BOLD)$(BLUE)Installing ALL dependencies...$(RESET)"
-	@$(INSTALL_CMD) -e "."
+install-all:
+	@echo "$(BOLD)$(BLUE)Installing ALL dependencies (gui extra + dev/bench groups)...$(RESET)"
+ifeq ($(PKG_MANAGER),uv)
+	@uv sync --extra gui --group bench
+else
+	@echo "Using pip: '--group' requires pip >= 25.1"
+	@pip install -e ".[gui]" --group dev --group bench
+endif
 	@$(RUN_CMD) pre-commit install 2>/dev/null || true
 	@echo "$(BOLD)$(GREEN)✓ All dependencies installed!$(RESET)"
 

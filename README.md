@@ -35,7 +35,7 @@ NLSQ is a nonlinear least squares curve fitting library built on [JAX](https://g
 pip install nlsq
 ```
 
-This installs with CPU-only JAX (works on all platforms: Linux, macOS, Windows).
+This installs the core library with CPU-only JAX (works on all platforms: Linux, macOS, Windows).
 
 ### Conda Installation
 
@@ -145,10 +145,10 @@ pip install "jax[cuda12-local]"  # or cuda13-local
 
 ### With GUI Support
 
-GUI dependencies (PySide6, pyqtgraph) are included in the main package:
+The desktop application (PySide6, pyqtgraph) is an optional extra; `pip install nlsq` installs the core library only:
 
 ```bash
-pip install nlsq    # GUI included
+pip install "nlsq[gui]"
 nlsq-gui            # Launch the desktop application
 ```
 

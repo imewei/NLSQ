@@ -80,3 +80,49 @@ def test_no_upper_caps():
     for req in _all_requirements(_load_pyproject()):
         spec = req.split(";", 1)[0]
         assert "<" not in spec, req
+
+
+REPO = PYPROJECT.parent
+INSTALL_REFERENCE_FILES = [
+    "README.md",
+    "CONTRIBUTING.md",
+    "Makefile",
+    ".readthedocs.yaml",
+    "docs/requirements.txt",
+    "docs/tutorials/routine/getting_started/installation.rst",
+    *sorted(
+        str(p.relative_to(REPO)) for p in (REPO / ".github" / "workflows").glob("*.yml")
+    ),
+]
+# The extra must start with a letter so shell classes such as `[0-9]+` do not match.
+EXTRA_REF = re.compile(r"(?:nlsq|\.)\[([A-Za-z][A-Za-z0-9_,.-]*)\]")
+
+
+def test_install_references_name_existing_extras():
+    extras = {
+        _dist_name(name)
+        for name in _load_pyproject()["project"]["optional-dependencies"]
+    }
+    for rel in INSTALL_REFERENCE_FILES:
+        text = (REPO / rel).read_text(encoding="utf-8")
+        for match in EXTRA_REF.finditer(text):
+            for name in match.group(1).split(","):
+                assert _dist_name(name) in extras, f"{rel}: unknown extra {name!r}"
+    assert "nlsq[gui]" in (REPO / "README.md").read_text(encoding="utf-8")
+
+
+def test_docs_requirements_cover_docs_packages():
+    text = (REPO / "docs" / "requirements.txt").read_text(encoding="utf-8")
+    lines = [ln.strip() for ln in text.splitlines()]
+    names = {_dist_name(ln) for ln in lines if ln and not ln.startswith(("#", "-"))}
+    required = {
+        "sphinx",
+        "furo",
+        "sphinx-copybutton",
+        "sphinx-autodoc-typehints",
+        "sphinx-design",
+        "myst-parser",
+    }
+    assert required <= names
+    # autodoc imports nlsq.gui_qt; fail_on_warning breaks without PySide6.
+    assert ".[gui]" in "\n".join(lines)
