@@ -8,7 +8,10 @@
 
 from __future__ import annotations
 
-import dataclasses
+import builtins
+import dis
+import os
+import sys
 import threading
 import types
 from collections import OrderedDict
@@ -438,31 +441,104 @@ _wrapper_cache: OrderedDict[tuple, tuple] = OrderedDict()
 _wrapper_cache_lock = threading.Lock()
 
 _EXACT_SCALARS = (type(None), bool, int, str, bytes)
-_BY_IDENTITY = (types.ModuleType, types.BuiltinFunctionType)
-_MAX_FUNCTIONS = 16  # functions reachable from the model; beyond this, no caching
+_NUMPY_SCALAR_KINDS = frozenset("biufc")  # no datetime/timedelta/void/object/str
+_MAX_FUNCTIONS = 16  # Python functions reachable from the model; beyond: no caching
+# Library modules whose *module object* may be keyed by identity. Attribute
+# rebinding inside these (monkeypatching numpy/jax) is not tracked.
+_LIBRARY_MODULES = (
+    "jax",
+    "jax.numpy",
+    "jax.lax",
+    "jax.nn",
+    "jax.scipy",
+    "jax.scipy.special",
+    "jax.scipy.stats",
+    "jax.scipy.linalg",
+    "numpy",
+    "math",
+    "cmath",
+    "scipy.special",
+)
+_GLOBAL_READS = frozenset({"LOAD_GLOBAL", "LOAD_NAME", "LOAD_FROM_DICT_OR_GLOBALS"})
+_GLOBAL_WRITES = frozenset(
+    {"STORE_GLOBAL", "DELETE_GLOBAL", "STORE_NAME", "DELETE_NAME"}
+)
 
 
-def _code_names(code: types.CodeType) -> set[str]:
-    """Global names read by `code` and by every code object nested in it."""
-    names = set(code.co_names)
+class _Uncacheable(TypeError):
+    """Raised while fingerprinting when reuse cannot be proven safe."""
+
+
+def clear_wrapper_cache() -> None:
+    """Drop every cached residual/Jacobian wrapper bundle.
+
+    `curve_fit` reuses the traced, compiled wrappers of a model across calls
+    when the model is provably unchanged (see `_wrapper_cache_key`). Call this
+    (or `nlsq.clear_cache()`) to force the next fit of every model to re-trace,
+    e.g. after mutating state the cache cannot see. Set
+    ``NLSQ_DISABLE_WRAPPER_CACHE=1`` to disable the cache entirely.
+    """
+    with _wrapper_cache_lock:
+        _wrapper_cache.clear()
+
+
+def _is_library_module(value: Any) -> bool:
+    return isinstance(value, types.ModuleType) and any(
+        sys.modules.get(name) is value for name in _LIBRARY_MODULES
+    )
+
+
+def _is_library_function(value: Any) -> bool:
+    """True iff `value` is the very object a library module exports by its name."""
+    name = getattr(value, "__name__", None)
+    if not isinstance(name, str) or isinstance(value, type):
+        return False
+    return any(
+        getattr(sys.modules.get(mod_name), name, None) is value
+        for mod_name in _LIBRARY_MODULES
+    )
+
+
+def _global_names(code: types.CodeType) -> set[str]:
+    """Names `code` (and every code object nested in it) loads from globals.
+
+    Uses the bytecode rather than ``co_names``, which also lists attribute
+    names. Any global write makes the function uncacheable.
+    """
+    names: set[str] = set()
+    for ins in dis.get_instructions(code):
+        if ins.opname in _GLOBAL_WRITES:
+            raise _Uncacheable(f"writes global {ins.argval!r}")
+        if ins.opname in _GLOBAL_READS:
+            names.add(ins.argval)
     for const in code.co_consts:
         if isinstance(const, types.CodeType):
-            names |= _code_names(const)
+            names |= _global_names(const)
     return names
 
 
 def _freeze_function(fun: types.FunctionType, seen: dict[int, Any]) -> Any:
-    """Snapshot of what tracing `fun` reads: code, closure, defaults, globals.
-
-    Recurses into functions it references, so a helper's own globals are
-    covered too. Raises TypeError past _MAX_FUNCTIONS.
-    """
+    """Snapshot of what tracing `fun` reads: code, closure, defaults, globals."""
     if id(fun) in seen:  # recursion/cycle: already snapshotted higher up
         return ("seen", fun)
     if len(seen) >= _MAX_FUNCTIONS:
-        raise TypeError("too many reachable functions")
+        raise _Uncacheable("too many reachable functions")
+    if fun.__dict__:  # function attributes are mutable state the model may read
+        raise _Uncacheable(f"{fun.__qualname__} has attributes")
+    g = fun.__globals__
+    builtins_ns = g.get("__builtins__", builtins)
+    if builtins_ns is not builtins and builtins_ns is not builtins.__dict__:
+        raise _Uncacheable("non-standard __builtins__")
     seen[id(fun)] = fun
-    code, g = fun.__code__, fun.__globals__
+    code = fun.__code__
+    reads = []
+    for name in sorted(_global_names(code)):
+        if name in g:
+            reads.append((name, _freeze(g[name], seen)))
+        elif hasattr(builtins, name):
+            reads.append((name, "builtin", getattr(builtins, name)))
+        else:
+            reads.append((name, "undefined"))
     kwdefaults = sorted((fun.__kwdefaults__ or {}).items())
     return (
         fun,
@@ -470,61 +546,69 @@ def _freeze_function(fun: types.FunctionType, seen: dict[int, Any]) -> Any:
         tuple(_freeze(c.cell_contents, seen) for c in fun.__closure__ or ()),
         _freeze(fun.__defaults__, seen),
         tuple((k, _freeze(v, seen)) for k, v in kwdefaults),
-        tuple(
-            (name, _freeze(g[name], seen))
-            for name in sorted(_code_names(code))
-            if name in g
-        ),
+        tuple(reads),
     )
 
 
 def _freeze(value: Any, seen: dict[int, Any]) -> Any:
-    """Exact, hashable snapshot of a provably immutable value.
+    """Exact, hashable snapshot of an allowlisted value; _Uncacheable otherwise.
 
-    Raises TypeError for anything that could change in place (arrays, lists,
-    dicts, classes, arbitrary objects); callers then skip the cache. Floats
-    are keyed by their bits so -0.0/0.0 and 1/1.0/True stay distinct.
-    Python functions are snapshotted recursively; modules and C builtins are
-    keyed by identity (rebinding a module attribute is not detected).
+    Allowed: exact None/bool/int/str/bytes; float/complex by bit pattern;
+    NumPy bool/int/uint/float/complex scalars by dtype and bytes; exact
+    tuples/frozensets of allowed values; Python functions (recursively, see
+    `_freeze_function`); library modules (`_LIBRARY_MODULES`) and the
+    functions they export, by identity; C builtins bound to no object or to
+    a module (``abs``, ``math.sin``). Everything else is refused.
     """
     t = type(value)
     if isinstance(value, np.generic):
-        return (t, value.tobytes())
+        if value.dtype.kind not in _NUMPY_SCALAR_KINDS:
+            raise _Uncacheable(f"numpy scalar of kind {value.dtype.kind!r}")
+        return (t, value.dtype.str, value.tobytes())
     if t in _EXACT_SCALARS:
         return (t, value)
     if t is float:
         return (t, value.hex())
     if t is complex:
         return (t, value.real.hex(), value.imag.hex())
-    if t is types.FunctionType:
-        return _freeze_function(value, seen)
-    if isinstance(value, _BY_IDENTITY):
-        return value
     if t is tuple:
         return (t, tuple(_freeze(v, seen) for v in value))
     if t is frozenset:
         return (t, frozenset(_freeze(v, seen) for v in value))
-    if dataclasses.is_dataclass(value) and t.__dataclass_params__.frozen:
-        fields = dataclasses.fields(value)
-        return (t, tuple(_freeze(getattr(value, f.name), seen) for f in fields))
-    raise TypeError(f"not provably immutable: {t.__name__}")
+    if t is types.FunctionType:
+        if _is_library_function(value):
+            return ("library", value)
+        return _freeze_function(value, seen)
+    if t is types.BuiltinFunctionType:
+        owner = value.__self__
+        if owner is None or isinstance(owner, types.ModuleType):
+            return ("builtin", value)
+        raise _Uncacheable(f"bound builtin method {value.__qualname__}")
+    if _is_library_module(value):
+        return ("module", value)
+    if _is_library_function(value):  # e.g. jnp.exp (PjitFunction), np.exp (ufunc)
+        return ("library", value)
+    raise _Uncacheable(f"not allowlisted: {t.__name__}")
 
 
 def _wrapper_cache_key(fun: Callable, n: int, mode: str) -> tuple | None:
     """Cache key for `fun`'s wrappers, or None when reuse is not provably safe.
 
-    The key holds `fun` itself (strong reference, so its id cannot be reused)
-    plus a recursive snapshot of everything its trace can read: code, closure
-    cells, defaults and the module globals named by it, its nested code and
-    the Python functions it reaches. A hit therefore means a re-trace of `fun`
-    now would see what the cached trace saw (module attributes excepted).
+    Default-deny: `fun` must be a plain Python function and everything a trace
+    of it can read (code, closure cells, defaults, the globals its bytecode
+    loads, recursively through the Python functions it reaches) must be an
+    allowlisted immutable value (`_freeze`). The key holds `fun` itself, so its
+    id cannot be reused. A hit means a re-trace now would read the same values.
+    Disabled when ``NLSQ_DISABLE_WRAPPER_CACHE=1``.
     """
+    if os.environ.get("NLSQ_DISABLE_WRAPPER_CACHE") == "1":
+        return None
     if type(fun) is not types.FunctionType:
         return None
     try:
         key = (_freeze_function(fun, {}), n, mode)
         hash(key)
-    except Exception:  # empty cell, unhashable or mutable capture: no caching
+    except Exception:  # _Uncacheable, empty cell, unhashable: rebuild per call
         return None
     return key
 

@@ -32,6 +32,10 @@ Environment Variables
    * - ``NLSQ_DISABLE_PERSISTENT_CACHE``
      - Disable the JAX compilation cache
      - unset (cache enabled)
+   * - ``NLSQ_DISABLE_WRAPPER_CACHE``
+     - Set to ``1`` to stop ``curve_fit`` reusing a model's traced
+       residual/Jacobian wrappers across calls (every fit re-traces)
+     - unset (cache enabled)
    * - ``NLSQ_JAX_CACHE_DIR``
      - JAX compilation cache directory
      - ``~/.cache/nlsq/jax_cache``

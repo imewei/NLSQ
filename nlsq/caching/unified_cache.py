@@ -447,10 +447,14 @@ def get_global_cache() -> UnifiedCache:
 
 
 def clear_cache():
-    """Clear the global unified cache."""
+    """Clear the global unified cache and curve_fit's model-wrapper cache."""
     global _global_unified_cache  # noqa: PLW0602
     if _global_unified_cache is not None:
         _global_unified_cache.clear()
+    # Lazy: least_squares imports this module.
+    from nlsq.core.least_squares import clear_wrapper_cache
+
+    clear_wrapper_cache()
 
 
 def cached_jit(
