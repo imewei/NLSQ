@@ -513,9 +513,7 @@ def _is_jax_primitive(prim: Any) -> bool:
     ):
         _jax_primitive_scan_size = len(sys.modules)
         for name, mod in list(sys.modules.items()):
-            if mod is None or not (
-                name in ("jax", "jaxlib") or name.startswith(("jax.", "jaxlib."))
-            ):
+            if mod is None or not _from_jax(name):
                 continue
             for value in list(vars(mod).values()):
                 if isinstance(value, jex_core.Primitive):
@@ -758,10 +756,7 @@ def _trace_model(
             if jac.effects:
                 return None
             _, jac_key = _snapshot_jaxpr(jac)
-        in_keys = tuple(
-            _aval_key(jax.core.ShapedArray(a.shape, a.dtype, a.weak_type))
-            for a in avals
-        )
+        in_keys = tuple(_aval_key(a) for a in primal.in_avals)
         key = (primal_key, jac_key, in_keys, mode, _config_key())
         hash(key)
     except Exception as exc:  # _Uncacheable, trace failure, unhashable
@@ -1866,14 +1861,26 @@ class LeastSquares:
             if bundle is None:
                 self.update_function(_model_from_jaxpr(private, in_keys))
                 self.autdiff_jac(None, mode=mode)
-                bundle = (self.func_none, self.func_1d, self.func_2d)
-                bundle += (self.jac_none, self.jac_1d, self.jac_2d)
+                bundle = (
+                    self.func_none,
+                    self.func_1d,
+                    self.func_2d,
+                    self.jac_none,
+                    self.jac_1d,
+                    self.jac_2d,
+                )
                 with _wrapper_cache_lock:
                     _wrapper_cache[key] = bundle
                     while len(_wrapper_cache) > _WRAPPER_CACHE_SIZE:
                         _wrapper_cache.popitem(last=False)
-            (self.func_none, self.func_1d, self.func_2d) = bundle[:3]
-            (self.jac_none, self.jac_1d, self.jac_2d) = bundle[3:]
+            (
+                self.func_none,
+                self.func_1d,
+                self.func_2d,
+                self.jac_none,
+                self.jac_1d,
+                self.jac_2d,
+            ) = bundle
             self._wrapper_key = key
         self.f = fun
         self.jac = None
