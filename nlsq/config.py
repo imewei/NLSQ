@@ -151,6 +151,9 @@ class JAXConfig:
     _x64_enabled: bool = False
     _initialized: bool = False
     _memory_config: MemoryConfig | None = None
+    # Set only when the user chose a limit (env var or set_memory_config), so
+    # the MemoryConfig default of 8 GB never caps a larger machine.
+    _memory_limit_override: float | None = None
     _large_dataset_config: LargeDatasetConfig | None = None
     _gpu_memory_configured: bool = False
 
@@ -305,6 +308,7 @@ class JAXConfig:
         if limit:
             try:
                 overrides["memory_limit_gb"] = float(limit)
+                self._memory_limit_override = overrides["memory_limit_gb"]
             except ValueError:
                 warnings.warn(f"Invalid NLSQ_MEMORY_LIMIT_GB: {limit}", stacklevel=2)
 
@@ -453,6 +457,17 @@ class JAXConfig:
         return copy.copy(instance._memory_config)
 
     @classmethod
+    def get_memory_limit_override(cls) -> float | None:
+        """Memory limit in GB the user configured, or None if never set.
+
+        Strategy selection falls back to detected memory on None.
+        """
+        instance = cls()
+        if instance._memory_config is None:
+            instance._initialize_memory_config()
+        return instance._memory_limit_override
+
+    @classmethod
     def set_memory_config(cls, config: MemoryConfig):
         """Set the memory configuration.
 
@@ -464,6 +479,7 @@ class JAXConfig:
         instance = cls()
         with cls._lock:
             instance._memory_config = config
+            instance._memory_limit_override = config.memory_limit_gb
 
         # Apply GPU memory settings immediately if possible
         try:
@@ -528,6 +544,7 @@ class JAXConfig:
         instance = cls()
         with cls._lock:
             original_config = copy.deepcopy(instance._memory_config)
+            original_override = instance._memory_limit_override
 
         try:
             cls.set_memory_config(memory_config)
@@ -535,7 +552,10 @@ class JAXConfig:
         finally:
             if original_config is not None:
                 cls.set_memory_config(original_config)
+                with cls._lock:
+                    instance._memory_limit_override = original_override
             else:
+                instance._memory_limit_override = None
                 instance._memory_config = None
                 instance._initialize_memory_config()
 
