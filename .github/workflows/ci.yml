@@ -179,11 +179,15 @@ jobs:
       - name: Check package
         run: uvx twine check dist/*
 
-      - name: Test installation from wheel
+      - name: Test core-only installation from wheel
+        env:
+          MPLBACKEND: Agg
         run: |
           uv venv .venv-test
           VIRTUAL_ENV=.venv-test uv pip install dist/*.whl
-          VIRTUAL_ENV=.venv-test uv run python -c "import nlsq; print(f'NLSQ version: {nlsq.__version__}')"
+          # Call the venv interpreter directly: `uv run` ignores VIRTUAL_ENV
+          # and would test the dev environment instead of the wheel.
+          .venv-test/bin/python scripts/check_core_install.py
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
