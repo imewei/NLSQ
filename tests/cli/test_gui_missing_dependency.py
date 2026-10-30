@@ -11,10 +11,10 @@ import pytest
 _BLOCK = 'import sys; sys.modules["PySide6"] = None; '
 
 
-def _run(code: str) -> subprocess.CompletedProcess[str]:
+def _run(code: str, block: str = _BLOCK) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "NLSQ_SKIP_GPU_CHECK": "1"}
     return subprocess.run(
-        [sys.executable, "-c", _BLOCK + code],
+        [sys.executable, "-c", block + code],
         capture_output=True,
         text=True,
         env=env,
@@ -34,6 +34,19 @@ def test_run_desktop_without_pyside6_exits_with_hint():
 @pytest.mark.serial
 def test_cli_gui_command_without_pyside6_exits_with_hint():
     proc = _run("from nlsq.cli.main import main; raise SystemExit(main(['gui']))")
+    assert proc.returncode != 0
+    assert "Launching" not in proc.stdout
+    assert "nlsq[gui]" in proc.stderr
+    assert "Traceback" not in proc.stderr
+
+
+@pytest.mark.serial
+def test_run_desktop_without_pyqtgraph_exits_with_hint():
+    # PySide6 stays importable; only pyqtgraph is missing.
+    proc = _run(
+        "import nlsq.gui_qt; raise SystemExit(nlsq.gui_qt.run_desktop())",
+        block='import sys; sys.modules["pyqtgraph"] = None; ',
+    )
     assert proc.returncode != 0
     assert "nlsq[gui]" in proc.stderr
     assert "Traceback" not in proc.stderr

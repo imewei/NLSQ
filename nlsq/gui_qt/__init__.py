@@ -134,13 +134,16 @@ def run_desktop() -> int:
             sys.stderr.write(f"[nlsq-gui] {msg}\n")
             sys.stderr.flush()
 
-    # Check before installing the Qt exception hook so a missing extra never
-    # surfaces as a traceback.
+    # Check both GUI extras before installing the Qt exception hook or creating
+    # any Qt object so a missing extra never surfaces as a traceback.
     try:
+        import pyqtgraph
         import PySide6.QtWidgets
     except ImportError:
         sys.stderr.write(f"{GUI_INSTALL_HINT}\n")
         return 1
+
+    print("Launching NLSQ Qt GUI...")
 
     # Install global exception hook
     sys.excepthook = _exception_hook
