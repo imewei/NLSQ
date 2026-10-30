@@ -36,6 +36,21 @@ class TestNLSQLogger(unittest.TestCase):
             if key in os.environ:
                 del os.environ[key]
 
+        # set_global_level()/enable_debug_mode() rewrite the level of every NLSQ
+        # logger (and get_logger() caches them), so snapshot and restore the
+        # levels or later tests in the same worker inherit ERROR and lose logs.
+        self.original_levels = {
+            lg: lg.level
+            for lg in [
+                logging.getLogger("nlsq"),
+                *(
+                    logging.getLogger(n)
+                    for n in list(logging.root.manager.loggerDict)
+                    if n.startswith("nlsq.")
+                ),
+            ]
+        }
+
         # Reset global logger state to ensure clean start for each test
         root_nlsq = logging.getLogger("nlsq")
         # Close and remove existing handlers to release file locks
@@ -59,6 +74,9 @@ class TestNLSQLogger(unittest.TestCase):
 
         if hasattr(root_nlsq, "_nlsq_initialized"):
             del root_nlsq._nlsq_initialized
+
+        for lg, level in self.original_levels.items():
+            lg.setLevel(level)
 
         # Restore original environment
         for key, value in self.original_env.items():
