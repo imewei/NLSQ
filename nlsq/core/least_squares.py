@@ -438,16 +438,54 @@ _wrapper_cache: OrderedDict[tuple, tuple] = OrderedDict()
 _wrapper_cache_lock = threading.Lock()
 
 _EXACT_SCALARS = (type(None), bool, int, str, bytes)
-_BY_IDENTITY = (types.ModuleType, types.FunctionType, types.BuiltinFunctionType, type)
+_BY_IDENTITY = (types.ModuleType, types.BuiltinFunctionType)
+_MAX_FUNCTIONS = 16  # functions reachable from the model; beyond this, no caching
 
 
-def _freeze(value: Any) -> Any:
+def _code_names(code: types.CodeType) -> set[str]:
+    """Global names read by `code` and by every code object nested in it."""
+    names = set(code.co_names)
+    for const in code.co_consts:
+        if isinstance(const, types.CodeType):
+            names |= _code_names(const)
+    return names
+
+
+def _freeze_function(fun: types.FunctionType, seen: dict[int, Any]) -> Any:
+    """Snapshot of what tracing `fun` reads: code, closure, defaults, globals.
+
+    Recurses into functions it references, so a helper's own globals are
+    covered too. Raises TypeError past _MAX_FUNCTIONS.
+    """
+    if id(fun) in seen:  # recursion/cycle: already snapshotted higher up
+        return ("seen", fun)
+    if len(seen) >= _MAX_FUNCTIONS:
+        raise TypeError("too many reachable functions")
+    seen[id(fun)] = fun
+    code, g = fun.__code__, fun.__globals__
+    kwdefaults = sorted((fun.__kwdefaults__ or {}).items())
+    return (
+        fun,
+        code,
+        tuple(_freeze(c.cell_contents, seen) for c in fun.__closure__ or ()),
+        _freeze(fun.__defaults__, seen),
+        tuple((k, _freeze(v, seen)) for k, v in kwdefaults),
+        tuple(
+            (name, _freeze(g[name], seen))
+            for name in sorted(_code_names(code))
+            if name in g
+        ),
+    )
+
+
+def _freeze(value: Any, seen: dict[int, Any]) -> Any:
     """Exact, hashable snapshot of a provably immutable value.
 
     Raises TypeError for anything that could change in place (arrays, lists,
-    dicts, arbitrary objects); callers then skip the cache. Floats are keyed
-    by their bits so -0.0/0.0 and 1/1.0/True stay distinct. Functions,
-    modules and classes are keyed by identity (one level, as `jax.jit` does).
+    dicts, classes, arbitrary objects); callers then skip the cache. Floats
+    are keyed by their bits so -0.0/0.0 and 1/1.0/True stay distinct.
+    Python functions are snapshotted recursively; modules and C builtins are
+    keyed by identity (rebinding a module attribute is not detected).
     """
     t = type(value)
     if isinstance(value, np.generic):
@@ -458,15 +496,17 @@ def _freeze(value: Any) -> Any:
         return (t, value.hex())
     if t is complex:
         return (t, value.real.hex(), value.imag.hex())
+    if t is types.FunctionType:
+        return _freeze_function(value, seen)
     if isinstance(value, _BY_IDENTITY):
         return value
     if t is tuple:
-        return (t, tuple(_freeze(v) for v in value))
+        return (t, tuple(_freeze(v, seen) for v in value))
     if t is frozenset:
-        return (t, frozenset(_freeze(v) for v in value))
+        return (t, frozenset(_freeze(v, seen) for v in value))
     if dataclasses.is_dataclass(value) and t.__dataclass_params__.frozen:
         fields = dataclasses.fields(value)
-        return (t, tuple(_freeze(getattr(value, f.name)) for f in fields))
+        return (t, tuple(_freeze(getattr(value, f.name), seen) for f in fields))
     raise TypeError(f"not provably immutable: {t.__name__}")
 
 
@@ -474,27 +514,15 @@ def _wrapper_cache_key(fun: Callable, n: int, mode: str) -> tuple | None:
     """Cache key for `fun`'s wrappers, or None when reuse is not provably safe.
 
     The key holds `fun` itself (strong reference, so its id cannot be reused)
-    plus a snapshot of everything its trace can read: code, closure cells,
-    defaults and the module globals it names. A hit therefore means a re-trace
-    of `fun` now would see exactly what the cached trace saw.
+    plus a recursive snapshot of everything its trace can read: code, closure
+    cells, defaults and the module globals named by it, its nested code and
+    the Python functions it reaches. A hit therefore means a re-trace of `fun`
+    now would see what the cached trace saw (module attributes excepted).
     """
-    if not isinstance(fun, types.FunctionType):
+    if type(fun) is not types.FunctionType:
         return None
     try:
-        code = fun.__code__
-        g = fun.__globals__
-        key = (
-            fun,
-            code,
-            tuple(_freeze(c.cell_contents) for c in fun.__closure__ or ()),
-            _freeze(fun.__defaults__),
-            tuple(
-                sorted((k, _freeze(v)) for k, v in (fun.__kwdefaults__ or {}).items())
-            ),
-            tuple((name, _freeze(g[name])) for name in code.co_names if name in g),
-            n,
-            mode,
-        )
+        key = (_freeze_function(fun, {}), n, mode)
         hash(key)
     except Exception:  # empty cell, unhashable or mutable capture: no caching
         return None

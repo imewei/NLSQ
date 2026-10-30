@@ -30,7 +30,7 @@ def test_cached_fit_matches_uncached_fit_bitwise():
     y = 2.5 * np.exp(-1.3 * X) + 0.01 * np.random.default_rng(0).standard_normal(X.size)
     ls_mod._wrapper_cache.clear()
     popt1, pcov1 = _fit(_exp, y)  # builds and stores the wrappers
-    assert any(k[0] is _exp for k in ls_mod._wrapper_cache)
+    assert any(k[0][0] is _exp for k in ls_mod._wrapper_cache)
     popt2, pcov2 = _fit(_exp, y)  # reuses them
     np.testing.assert_array_equal(popt1, popt2)
     np.testing.assert_array_equal(pcov1, pcov2)
@@ -101,7 +101,7 @@ def test_equal_but_distinct_constants_get_distinct_keys(u, v):
     key_f = _wrapper_cache_key(f, 1, "fwd")
     key_g = _wrapper_cache_key(g, 1, "fwd")
     assert key_f is not None and key_g is not None
-    assert key_f[1:] != key_g[1:]
+    assert key_f[0][1:] != key_g[0][1:]  # same snapshot apart from the fn object
 
 
 def test_non_function_callables_are_not_cached():
@@ -111,3 +111,40 @@ def test_non_function_callables_are_not_cached():
 
     assert _wrapper_cache_key(Model(), 1, "fwd") is None
     assert _wrapper_cache_key(Model().__call__, 1, "fwd") is None
+
+
+_TEMP = 1.0
+
+
+def _boltz(x):
+    return jnp.exp(-x / _TEMP)
+
+
+def _helper_model(x, a, b):
+    return a * _boltz(b * x)
+
+
+def test_global_read_by_helper_is_not_reused(monkeypatch):
+    y = 2.0 * np.exp(-0.5 * X)
+    np.testing.assert_allclose(_fit(_helper_model, y)[0], [2.0, 0.5], rtol=1e-6)
+    monkeypatch.setitem(_boltz.__globals__, "_TEMP", 2.0)
+    np.testing.assert_allclose(_fit(_helper_model, y)[0], [2.0, 1.0], rtol=1e-6)
+
+
+def _inner_lambda_model(x, a, b):
+    scale = lambda v: _TEMP * v
+    return scale(a) * jnp.exp(-b * x)
+
+
+def test_global_read_by_nested_code_is_not_reused(monkeypatch):
+    y = 2.0 * np.exp(-0.5 * X)
+    np.testing.assert_allclose(_fit(_inner_lambda_model, y)[0][0], 2.0, rtol=1e-6)
+    monkeypatch.setitem(_inner_lambda_model.__globals__, "_TEMP", 4.0)
+    np.testing.assert_allclose(_fit(_inner_lambda_model, y)[0][0], 0.5, rtol=1e-6)
+
+
+def test_class_captures_are_not_cached():
+    class Params:
+        k = 1.0
+
+    assert _wrapper_cache_key(lambda x, a: Params.k * a * x, 1, "fwd") is None
