@@ -9,6 +9,7 @@ turns their raw records into ranked, gated results.
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -136,21 +137,31 @@ def _spawn(library, mode, problem, n, batch, repeats) -> dict:
         return _blank(library, mode, problem, n, batch or None, "unavailable", reason)
     for line in reversed(p.stdout.splitlines()):
         if line.startswith(PREFIX):
-            return json.loads(line[len(PREFIX) :])
+            try:
+                return json.loads(line[len(PREFIX) :])
+            except json.JSONDecodeError as e:
+                reason = f"unparsable worker record: {e}"
+                return _blank(
+                    library, mode, problem, n, batch or None, "unavailable", reason
+                )
     tail = (p.stderr.strip().splitlines() or ["no output"])[-1]
     reason = f"worker exited {p.returncode}: {tail}"
     return _blank(library, mode, problem, n, batch or None, "unavailable", reason)
 
 
 def _finalize(case: list[dict]) -> None:
-    """Gate measured records against the best cost of the case, in place."""
+    """Gate measured records against the best finite cost of the case, in place."""
     from .timing import reaches_optimum
 
     measured = [r for r in case if r["status"] == "ok" and r["cost"] is not None]
-    if not measured:
-        return
-    best = min(r["cost"] for r in measured)
+    finite = [r["cost"] for r in measured if math.isfinite(r["cost"])]
+    best = min(finite) if finite else None
     for r in measured:
+        if best is None or not math.isfinite(r["cost"]):
+            r.update(
+                status="did_not_reach_optimum", reason="non-finite cost", cost_gap=None
+            )
+            continue
         r["cost_gap"] = (r["cost"] - best) / max(abs(best), 1e-300)
         if not reaches_optimum(r["cost"], best):
             r["status"] = "did_not_reach_optimum"
@@ -214,6 +225,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     from .adapters import ADAPTERS
     from .problems import PROBLEMS
     from .report import environment, to_markdown, write_json
+
+    for flag, given, known in (
+        ("--problems", args.problems, PROBLEMS),
+        ("--libraries", args.libraries, ADAPTERS),
+    ):
+        bad = [g for g in given or () if g not in known]
+        if bad:
+            print(
+                f"error: unknown {flag} {bad}; choose from {sorted(known)}",
+                file=sys.stderr,
+            )
+            return 2
 
     sizes, repeats = ([200], 1) if args.quick else (args.sizes, args.repeats)
     records = run(

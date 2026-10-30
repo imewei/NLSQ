@@ -1,5 +1,6 @@
 """Timing and accuracy-gate helpers."""
 
+import math
 import time
 from collections.abc import Callable
 
@@ -50,5 +51,7 @@ def all_converged(outcomes: Outcomes) -> bool:
 
 
 def reaches_optimum(cost: float, best_cost: float, rtol: float = 1e-6) -> bool:
+    if not (math.isfinite(cost) and math.isfinite(best_cost)):
+        return False
     tiny = 1e-300
     return cost <= best_cost + rtol * max(abs(best_cost), tiny)

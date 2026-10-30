@@ -2,6 +2,7 @@
 
 import importlib.metadata as md
 import json
+import math
 import os
 import platform
 from itertools import groupby
@@ -59,13 +60,22 @@ def environment() -> dict:
     }
 
 
+def _json_safe(v):
+    return None if isinstance(v, float) and not math.isfinite(v) else v
+
+
 def write_json(records: list[dict], path: Path) -> None:
-    path.write_text(json.dumps(records, indent=2) + "\n")
+    """Strict JSON: non-finite floats are written as null."""
+    safe = [{k: _json_safe(v) for k, v in r.items()} for r in records]
+    path.write_text(json.dumps(safe, indent=2, allow_nan=False) + "\n")
 
 
-def rank_case(records: list[dict]) -> list[dict]:
-    """Measured, optimum-reaching records, fastest warm median first."""
-    ok = [r for r in records if r["status"] == "ok"]
+def rank_case(records: list[dict], mode: str = "end_to_end") -> list[dict]:
+    """Optimum-reaching records of one mode, fastest warm median first.
+
+    Headline rankings use `end_to_end` only (spec section B).
+    """
+    ok = [r for r in records if r["status"] == "ok" and r["mode"] == mode]
     return sorted(ok, key=lambda r: r["warm_median_s"])
 
 
@@ -108,9 +118,8 @@ def to_markdown(records: list[dict], env: dict) -> str:
         "same tolerance and iteration budget for each criterion it exposes. A "
         "library is ranked only if its final cost matches the best cost in the "
         "case (relative 1e-6); its own `converged` flag is reported but does not "
-        "decide that. A ranked library can still show `lib converged` = False: it "
-        "reached the optimum but ran out its iteration budget, so its time "
-        "includes the unused iterations.",
+        "decide that. A ranked library can still show `lib converged` = False; the "
+        "flag is not decisive and its cause is not diagnosed here.",
         "- lmfit wraps SciPy (`leastsq` / `least_squares`); its timings include "
         "lmfit's own overhead on top of SciPy.",
         '- JAXopt: README states "JAXopt is no longer maintained nor developed".',
@@ -130,6 +139,18 @@ def to_markdown(records: list[dict], env: dict) -> str:
         lines += [f"### {title}", ""]
         lines += _table(ranked) if ranked else ["No library reached the optimum."]
         lines.append("")
+        resident = rank_case(grp, "jitted_core")
+        if resident:
+            lines += [
+                f"#### {title}: resident data (jitted_core)",
+                "",
+                "Inputs are already on the device and only the jitted solve is "
+                "timed, so this excludes the host-to-device transfer that "
+                "`end_to_end` includes; it is not comparable with the headline table.",
+                "",
+                *_table(resident),
+                "",
+            ]
 
     lines += ["## Capability matrix", ""]
     lines += [
@@ -154,8 +175,9 @@ def to_markdown(records: list[dict], env: dict) -> str:
             if r["status"] == "did_not_reach_optimum"
             else ""
         )
+        batch = f", batch={r['batch']}" if r.get("batch") else ""
         lines.append(
-            f"- {r['library']} ({r['mode']}) on {r['problem']} n={r['n']}: "
+            f"- {r['library']} ({r['mode']}) on {r['problem']} n={r['n']}{batch}: "
             f"{r['status']}. {detail}"
         )
 
