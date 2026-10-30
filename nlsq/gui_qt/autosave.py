@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
+import stat
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -18,15 +20,40 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from nlsq.gui_qt.session_state import n_points
+
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
 
 __all__ = ["AutosaveManager"]
 
-# Autosave directory
-AUTOSAVE_DIR = Path(tempfile.gettempdir()) / "nlsq_autosave"
+logger = logging.getLogger(__name__)
+
+# Autosave directory: per-user on POSIX (the system temp dir is shared, so a
+# fixed name lets another local user pre-create it).
+_UID_SUFFIX = f"_{os.getuid()}" if hasattr(os, "getuid") else ""
+AUTOSAVE_DIR = Path(tempfile.gettempdir()) / f"nlsq_autosave{_UID_SUFFIX}"
 AUTOSAVE_FILE = AUTOSAVE_DIR / "session_autosave.json"
 AUTOSAVE_INTERVAL_MS = 60000  # 1 minute
+
+
+def _ensure_private_dir(path: Path) -> None:
+    """Create ``path`` (mode 0o700) and verify we own it and it is no symlink.
+
+    The ownership/symlink checks are POSIX-only; Windows temp dirs are
+    already per-user.
+
+    Raises:
+        PermissionError: If ``path`` exists but is not a directory owned by us.
+    """
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not hasattr(os, "getuid"):
+        return
+    st = os.lstat(path)
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+        raise PermissionError(f"{path} is not a directory owned by the current user")
+    if st.st_mode & 0o077:
+        path.chmod(0o700)
 
 
 class AutosaveManager(QObject):
@@ -42,6 +69,8 @@ class AutosaveManager(QObject):
     autosave_completed = Signal()
     recovery_available = Signal(str)  # timestamp of recovery file
 
+    _autosave_warned: bool = False  # warn once per manager when autosave fails
+
     def __init__(self, app_state: AppState, parent: QObject | None = None) -> None:
         """Initialize the autosave manager.
 
@@ -54,8 +83,20 @@ class AutosaveManager(QObject):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._do_autosave)
 
-        # Ensure autosave directory exists
-        AUTOSAVE_DIR.mkdir(parents=True, exist_ok=True)
+        # Ensure autosave directory exists and is private to this user; if the
+        # shared location is unusable, fall back to a fresh private directory.
+        global AUTOSAVE_DIR, AUTOSAVE_FILE  # noqa: PLW0603 - module-level paths are the test/crash-handler hook
+        try:
+            _ensure_private_dir(AUTOSAVE_DIR)
+        except OSError as exc:
+            AUTOSAVE_DIR = Path(tempfile.mkdtemp(prefix="nlsq_autosave_"))
+            AUTOSAVE_FILE = AUTOSAVE_DIR / AUTOSAVE_FILE.name
+            logger.warning(
+                "Autosave directory unusable (%s); using %s. Crash recovery will "
+                "not find this session after a restart.",
+                exc,
+                AUTOSAVE_DIR,
+            )
 
     def start(self) -> None:
         """Start the autosave timer."""
@@ -114,15 +155,30 @@ class AutosaveManager(QObject):
         """Perform the autosave operation."""
         try:
             data = self._serialize_state()
-            # Atomic write: write to a sibling temp file then os.replace()
+            # Atomic write: write to a unique sibling temp file (mkstemp: O_EXCL,
+            # mode 0o600, never follows a pre-planted link) then os.replace()
             # so the recovery file is never left in a partially-written state.
-            tmp_path = AUTOSAVE_FILE.with_suffix(".tmp")
-            tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            os.replace(tmp_path, AUTOSAVE_FILE)
+            fd, tmp_name = tempfile.mkstemp(
+                dir=AUTOSAVE_FILE.parent,
+                prefix=AUTOSAVE_FILE.stem + ".",
+                suffix=".tmp",
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(tmp_name, AUTOSAVE_FILE)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_name)
+                raise
             self.autosave_completed.emit()
-        except (OSError, ValueError, TypeError, RecursionError):
-            # Silently fail - autosave is best-effort
-            pass
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
+            # Best-effort: never interrupt the user, but say so once per manager.
+            if not self._autosave_warned:
+                self._autosave_warned = True
+                logger.warning(
+                    "Autosave failed (%s); crash recovery may be stale.", exc
+                )
 
     def _serialize_state(self) -> dict[str, Any]:
         """Serialize current session state to a dictionary.
@@ -138,12 +194,13 @@ class AutosaveManager(QObject):
 
         # Serialize data arrays (skip large datasets to avoid OOM)
         max_autosave_points = 100_000
-        if state.xdata is not None and len(state.xdata) <= max_autosave_points:
-            data["xdata"] = state.xdata.tolist()
+        # xdata is (n,) or, for 2-D surface data, (n_coords, n)
+        if state.xdata is not None and n_points(state.xdata) <= max_autosave_points:
+            data["xdata"] = np.asarray(state.xdata).tolist()
         if state.ydata is not None and len(state.ydata) <= max_autosave_points:
-            data["ydata"] = state.ydata.tolist()
+            data["ydata"] = np.asarray(state.ydata).tolist()
         if state.sigma is not None and len(state.sigma) <= max_autosave_points:
-            data["sigma"] = state.sigma.tolist()
+            data["sigma"] = np.asarray(state.sigma).tolist()
 
         # Serialize model config
         if state.model_config is not None:
@@ -153,10 +210,11 @@ class AutosaveManager(QObject):
         if state.p0 is not None:
             data["p0"] = [float(v) for v in state.p0]
         if state.bounds is not None:
+            # None (= unbounded) is kept as JSON null; +/-inf use json's Infinity
             with contextlib.suppress(TypeError, ValueError):
                 data["bounds"] = [
-                    [float(v) for v in state.bounds[0]],
-                    [float(v) for v in state.bounds[1]],
+                    [None if v is None else float(v) for v in state.bounds[0]],
+                    [None if v is None else float(v) for v in state.bounds[1]],
                 ]
 
         # Serialize other state attributes
@@ -166,18 +224,19 @@ class AutosaveManager(QObject):
 
     @staticmethod
     def _validate_restored_array(
-        raw: Any, *, positive: bool = False
+        raw: Any, *, positive: bool = False, max_ndim: int = 1
     ) -> np.ndarray | None:
-        """Validate a 1-D array restored from autosave JSON.
+        """Validate an array restored from autosave JSON.
 
         Args:
             raw: Raw list from the serialized dictionary.
+            max_ndim: 1 for y/sigma; 2 for xdata (2-D surface data).
             positive: If True, require strictly positive values (accepting
                 +inf, the SciPy convention for "no weight" on sigma) instead
                 of the default finite-values check.
         """
         arr = np.array(raw, dtype=np.float64)
-        if arr.ndim != 1:
+        if not 1 <= arr.ndim <= max_ndim:
             return None
         valid = np.all(arr > 0) if positive else np.all(np.isfinite(arr))
         return arr if valid else None
@@ -199,7 +258,9 @@ class AutosaveManager(QObject):
         # Restore data arrays — validate before accepting to avoid emitting
         # data_changed with NaN/Inf-contaminated or malformed arrays.
         xdata = (
-            self._validate_restored_array(data["xdata"]) if "xdata" in data else None
+            self._validate_restored_array(data["xdata"], max_ndim=2)
+            if "xdata" in data
+            else None
         )
         ydata = (
             self._validate_restored_array(data["ydata"]) if "ydata" in data else None
@@ -212,7 +273,7 @@ class AutosaveManager(QObject):
 
         # Cross-validate lengths — independently-valid arrays of mismatched
         # length would silently pair the wrong sigma/y with the wrong x.
-        lengths = {len(a) for a in (xdata, ydata, sigma) if a is not None}
+        lengths = {a.shape[-1] for a in (xdata, ydata, sigma) if a is not None}
         if len(lengths) <= 1:
             if xdata is not None:
                 state.xdata = xdata
@@ -231,7 +292,10 @@ class AutosaveManager(QObject):
         if "bounds" in data:
             try:
                 lb, ub = data["bounds"]
-                state.bounds = ([float(v) for v in lb], [float(v) for v in ub])
+                state.bounds = (
+                    [None if v is None else float(v) for v in lb],
+                    [None if v is None else float(v) for v in ub],
+                )
             except (TypeError, ValueError, IndexError):
                 pass
 

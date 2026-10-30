@@ -250,12 +250,18 @@ class IdentifiabilityAnalyzer:
             from nlsq.stability.svd_fallback import compute_svd_with_fallback
 
             # compute_svd_with_fallback returns V already (not transposed)
-            _, s, v = compute_svd_with_fallback(jacobian)
+            # With fewer observations than parameters the thin SVD drops the
+            # right nullspace; request full V and pad s with the n - m zeros.
+            wide = jacobian.shape[0] < jacobian.shape[1]
+            _, s, v = compute_svd_with_fallback(jacobian, full_matrices=wide)
             s = np.asarray(s)
             v = np.asarray(v)
         except ImportError:
-            _, s, vh = np.linalg.svd(jacobian, full_matrices=False)
+            wide = jacobian.shape[0] < jacobian.shape[1]
+            _, s, vh = np.linalg.svd(jacobian, full_matrices=wide)
             v = vh.T
+        if wide:
+            s = np.concatenate([s, np.zeros(jacobian.shape[1] - s.size, s.dtype)])
 
         max_s = float(np.max(s)) if s.size else 0.0
         nonzero_s = s[s > 0]
@@ -268,8 +274,10 @@ class IdentifiabilityAnalyzer:
             condition_number = float("inf")
             numerical_rank = 0
         else:
-            min_s = float(np.min(nonzero_s))
-            condition_number = (max_s / min_s) ** 2
+            # Use the smallest singular value overall: dropping exact zeros
+            # would report a finite cond for a rank-deficient Jacobian.
+            min_s = float(np.min(s))
+            condition_number = (max_s / min_s) ** 2 if min_s > 0 else float("inf")
             numerical_rank = int(np.sum(s > tol))
 
         return s, condition_number, numerical_rank, v, tol
@@ -537,8 +545,9 @@ class IdentifiabilityAnalyzer:
             condition_number = float("inf")
             numerical_rank = 0
         else:
-            min_sv = np.min(min_sv_nonzero)
-            condition_number = float(max_sv / min_sv)
+            # Smallest singular value overall: exact zeros mean rank deficiency.
+            min_sv = np.min(singular_values)
+            condition_number = float(max_sv / min_sv) if min_sv > 0 else float("inf")
 
             # Compute numerical rank with relative tolerance
             # Use float64 eps if FIM has an integer dtype to avoid ValueError

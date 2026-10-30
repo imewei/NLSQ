@@ -7,11 +7,11 @@ including session bundles, JSON, CSV, and Python code generation.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import json
 import zipfile
 from importlib.metadata import version as _pkg_version
-from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from scipy import stats
+
+from nlsq.gui_qt.session_state import n_points
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
@@ -402,16 +404,7 @@ class ExportPage(QWidget):
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
             # Export data as CSV
             if state.xdata is not None and state.ydata is not None:
-                data_csv = StringIO()
-                data_csv.write("x,y,y_fit,residuals\n")
-                y_fit = self._compute_y_fit()
-                if y_fit is not None:
-                    for x, y, yf in zip(state.xdata, state.ydata, y_fit, strict=False):
-                        data_csv.write(f"{x},{y},{yf},{y - yf}\n")
-                else:
-                    for x, y in zip(state.xdata, state.ydata, strict=False):
-                        data_csv.write(f"{x},{y},,\n")
-                zf.writestr("data.csv", data_csv.getvalue())
+                zf.writestr("data.csv", "\n".join(self._data_csv_lines()) + "\n")
 
             # Export results as JSON
             zf.writestr("results.json", self._generate_json())
@@ -446,16 +439,7 @@ class ExportPage(QWidget):
             if state.xdata is None or state.ydata is None:
                 raise ValueError("No data available")
 
-            lines = ["x,y,y_fit,residuals"]
-            y_fit = self._compute_y_fit()
-            if y_fit is not None:
-                for x, y, yf in zip(state.xdata, state.ydata, y_fit, strict=False):
-                    lines.append(f"{x},{y},{yf},{y - yf}")
-            else:
-                for x, y in zip(state.xdata, state.ydata, strict=False):
-                    lines.append(f"{x},{y},,")
-
-            Path(path).write_text("\n".join(lines), encoding="utf-8")
+            Path(path).write_text("\n".join(self._data_csv_lines()), encoding="utf-8")
         else:
             # Export parameters only
             result = state.fit_result
@@ -470,7 +454,7 @@ class ExportPage(QWidget):
 
             # Compute t-value for 95% CI
             n_data = len(state.ydata) if state.ydata is not None else 0
-            dof = max(n_data - len(param_names), 1)
+            dof = max(n_data - len(popt), 1)
             t_val = stats.t.ppf(0.975, dof)
 
             lines = ["parameter,value,uncertainty,ci_lower,ci_upper"]
@@ -491,6 +475,27 @@ class ExportPage(QWidget):
                 lines.append(f"{name},{value},{uncert},{ci_lower},{ci_upper}")
 
             Path(path).write_text("\n".join(lines), encoding="utf-8")
+
+    def _data_csv_lines(self) -> list[str]:
+        """CSV lines (header first) for data with fit and residuals.
+
+        2-D surface data (``xdata`` shape ``(n_coords, n)``) gets one column
+        per coordinate: ``x0,x1,...``; 1-D data keeps the single ``x`` column.
+        """
+        state = self._app_state.state
+        xdata = np.asarray(state.xdata)
+        x_cols = xdata[None, :] if xdata.ndim == 1 else xdata
+        x_head = ["x"] if xdata.ndim == 1 else [f"x{i}" for i in range(len(x_cols))]
+
+        lines = [",".join([*x_head, "y", "y_fit", "residuals"])]
+        y_fit = self._compute_y_fit()
+        if y_fit is not None:
+            for *xs, y, yf in zip(*x_cols, state.ydata, y_fit, strict=False):
+                lines.append(",".join(map(str, [*xs, y, yf, y - yf])))
+        else:
+            for *xs, y in zip(*x_cols, state.ydata, strict=False):
+                lines.append(",".join(map(str, [*xs, y])) + ",,")
+        return lines
 
     def generate_python_code(self) -> str:
         """Generate Python code for reproducibility.
@@ -545,13 +550,12 @@ class ExportPage(QWidget):
                 )
             elif model_type == "custom":
                 code = state.model_config.get("code", "")
-                lines.extend(
-                    [
-                        "# Custom model function",
-                        code,
-                        "",
-                    ],
-                )
+                func_name = state.model_config.get(
+                    "function"
+                ) or self._first_function_name(code)
+                lines.extend(["# Custom model function", code, ""])
+                if func_name and func_name != "model":
+                    lines.extend([f"model = {func_name}", ""])
         else:
             lines.extend(
                 [
@@ -565,10 +569,11 @@ class ExportPage(QWidget):
         # Add data
         if state.xdata is not None and state.ydata is not None:
             # Use repr for small arrays, file reference for large
-            n = len(state.xdata)
+            n = n_points(state.xdata)
             if n <= 20:
-                x_str = np.array2string(state.xdata, separator=", ", max_line_width=80)
-                y_str = np.array2string(state.ydata, separator=", ", max_line_width=80)
+                # repr(tolist()) keeps full float64 precision, unlike array2string
+                x_str = repr(np.asarray(state.xdata).tolist())
+                y_str = repr(np.asarray(state.ydata).tolist())
                 lines.extend(
                     [
                         "# Data",
@@ -600,13 +605,25 @@ class ExportPage(QWidget):
         )
 
         if state.p0:
-            p0_str = str(list(state.p0))
+            p0_str = str([float(v) for v in state.p0])
             lines.append(f"p0 = {p0_str}")
+        elif state.model_type == "polynomial" and state.model_config:
+            # polynomial(x, *coeffs) has no fixed arity: p0 sets the parameter count
+            degree = state.model_config.get("degree", 2)
+            lines.append(f"p0 = [1.0] * {degree + 1}  # degree + 1 coefficients")
         else:
             lines.append("p0 = None  # Auto-detect initial parameters")
 
         if state.bounds:
-            lines.append(f"bounds = {state.bounds}")
+            # GUI bounds use None for "unbounded"; the script needs +/-np.inf
+            def _bound(v: Any, inf: str) -> str:
+                if v is None or not np.isfinite(float(v)):
+                    return inf
+                return repr(float(v))
+
+            lo = ", ".join(_bound(v, "-np.inf") for v in state.bounds[0])
+            hi = ", ".join(_bound(v, "np.inf") for v in state.bounds[1])
+            lines.append(f"bounds = ([{lo}], [{hi}])")
         else:
             lines.append("bounds = (-np.inf, np.inf)")
 
@@ -669,7 +686,7 @@ class ExportPage(QWidget):
             if popt is not None:
                 # Compute t-value for 95% CI
                 n_data = len(state.ydata) if state.ydata is not None else 0
-                dof = max(n_data - len(param_names), 1)
+                dof = max(n_data - len(popt), 1)
                 t_val = stats.t.ppf(0.975, dof)
 
                 params = {}
@@ -704,9 +721,10 @@ class ExportPage(QWidget):
             if state.xdata is not None and state.ydata is not None and popt is not None:
                 y_fit = self._compute_y_fit()
                 if y_fit is not None:
-                    residuals = state.ydata - y_fit
+                    ydata = np.asarray(state.ydata)
+                    residuals = ydata - np.asarray(y_fit)
                     ss_res = float(np.sum(residuals**2))
-                    ss_tot = float(np.sum((state.ydata - np.mean(state.ydata)) ** 2))
+                    ss_tot = float(np.sum((ydata - np.mean(ydata)) ** 2))
                     r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
                     rmse = float(np.sqrt(np.mean(residuals**2)))
 
@@ -716,7 +734,7 @@ class ExportPage(QWidget):
                         r_squared if np.isfinite(r_squared) else None
                     )
                     data["statistics"]["rmse"] = rmse if np.isfinite(rmse) else None
-                    data["statistics"]["n_points"] = len(state.xdata)
+                    data["statistics"]["n_points"] = n_points(state.xdata)
 
         # Model info
         if state.model_config:
@@ -758,6 +776,17 @@ class ExportPage(QWidget):
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _first_function_name(code: str) -> str | None:
+        """Name of the first function defined in ``code`` (None if unparsable)."""
+        try:
+            for node in ast.parse(code).body:
+                if isinstance(node, ast.FunctionDef):
+                    return node.name
+        except SyntaxError:
+            pass
+        return None
+
     def _compute_y_fit(self) -> np.ndarray | None:
         """Compute fitted y values.
 
@@ -793,7 +822,14 @@ class ExportPage(QWidget):
         from nlsq.gui_qt.adapters.model_adapter import get_model_info
 
         state = self._app_state.state
+        names: list[str] = []
         if state.model_func is not None:
-            info = get_model_info(state.model_func)
-            return info.get("param_names", [])
-        return []
+            names = list(get_model_info(state.model_func).get("param_names", []))
+        # Varargs models (``lambda x, *c``) expose no names: pad to len(popt)
+        # with the same ``c{i}`` convention get_model_info uses for polynomials.
+        popt = getattr(state.fit_result, "x", None)
+        if popt is None:
+            popt = getattr(state.fit_result, "popt", None)
+        n_fit = 0 if popt is None else len(popt)
+        names.extend(f"c{i}" for i in range(len(names), n_fit))
+        return names

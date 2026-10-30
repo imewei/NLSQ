@@ -116,3 +116,35 @@ class TestValidatorIntegration:
 
 
 # 8 focused integration tests
+
+
+class TestEnableStabilityMultiVariable:
+    """xdata (k, M) must validate the same with enable_stability=True."""
+
+    def test_two_variable_xdata_fits(self):
+        from nlsq import CurveFit
+
+        rng = np.random.default_rng(0)
+        n = 100
+        X = rng.uniform(0, 1, (2, n))
+        y = 2 * X[0] + 3 * X[1] + rng.normal(0, 0.01, n)
+
+        def f(X, a, b):
+            return a * X[0] + b * X[1]
+
+        res = CurveFit(enable_stability=True).curve_fit(f, X, y, p0=[1, 1])
+        np.testing.assert_allclose(np.asarray(res.popt), [2.0, 3.0], atol=0.05)
+
+    def test_wide_xdata_with_many_variables(self):
+        from nlsq import CurveFit
+
+        rng = np.random.default_rng(1)
+        n = 60
+        X = rng.uniform(0, 1, (12, n))  # k > 10 rows exercises the test-slice path
+        y = X.sum(axis=0)
+
+        def f(X, a):
+            return a * X.sum(axis=0)
+
+        res = CurveFit(enable_stability=True).curve_fit(f, X, y, p0=[0.5])
+        np.testing.assert_allclose(np.asarray(res.popt), [1.0], atol=1e-3)

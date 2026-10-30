@@ -107,8 +107,8 @@ class TestValidateAndConvertArrays:
         assert n_points == 1
 
     def test_2d_xdata(self):
-        """Test with 2D xdata (multiple independent variables)."""
-        xdata = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        """2D xdata is (k, M): k variables along axis 0, M points on the last."""
+        xdata = np.array([[1.0, 3.0, 5.0], [2.0, 4.0, 6.0]])
         ydata = np.array([10.0, 20.0, 30.0])
 
         errors, warnings, _x_out, _y_out, n_points = (

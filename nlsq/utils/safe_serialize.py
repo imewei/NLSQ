@@ -190,6 +190,8 @@ def _convert_to_serializable(obj: Any) -> Any:
     if isinstance(obj, (str, bool)):
         # bool must come before int since bool is subclass of int
         return obj
+    if isinstance(obj, np.bool_):
+        return bool(obj)
 
     # Handle numeric types (including numpy scalars)
     if isinstance(obj, (int, np.integer)):
@@ -284,7 +286,12 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
             f"(limit: {_MAX_DESERIALIZE_ELEMENTS:,}). "
             "Possible DoS via attacker-controlled shape.",
         )
-    return np.array(data, dtype=dtype).reshape(shape)
+    try:
+        return np.array(data, dtype=dtype).reshape(shape)
+    except (ValueError, TypeError) as e:
+        raise SafeSerializationError(
+            f"Malformed ndarray in serialized data: {e}",
+        ) from e
 
 
 def _convert_from_serializable(obj: Any) -> Any:

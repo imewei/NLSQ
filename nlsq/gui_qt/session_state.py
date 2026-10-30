@@ -15,6 +15,16 @@ from typing import Any
 import numpy as np
 
 
+def n_points(xdata: Any) -> int:
+    """Number of data points in ``xdata``.
+
+    1-D data is ``(n,)``; 2-D surface data is ``(n_coords, n)``, so the point
+    count is always the last axis, not ``len()``.
+    """
+    arr = np.asarray(xdata)
+    return int(arr.shape[-1]) if arr.ndim > 1 else int(arr.size)
+
+
 @dataclass(slots=True)
 class SessionState:
     """Container for all GUI session state fields.

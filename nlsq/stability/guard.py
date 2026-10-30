@@ -364,8 +364,15 @@ class NumericalStabilityGuard:
             warnings.warn("Jacobian contains NaN or Inf values, replacing with zeros")
             J = jnp.where(jnp.isfinite(J), J, 0.0)
 
-        # Check if matrix is all zeros
-        if jnp.allclose(J, 0.0):
+        # float32 Jacobians need float32 epsilon: float64 eps is below float32
+        # resolution, so rank deficiency could never be flagged and adding it
+        # would mix dtypes. float64 Jacobians keep self.eps unchanged.
+        eps = max(self.eps, float(jnp.finfo(J.dtype).eps))
+
+        # Check if matrix is all zeros. Exact test: an absolute tolerance
+        # (jnp.allclose atol=1e-8) would call any Jacobian with SI-scale
+        # entries (< 1e-8) "all zeros" although it is perfectly conditioned.
+        if not bool(jnp.any(J != 0)):
             warnings.warn("Jacobian is all zeros, adding small perturbation")
             # Perturb the diagonal in place (same low-memory pattern used
             # below for regularization) rather than a uniform scalar add:
@@ -373,7 +380,7 @@ class NumericalStabilityGuard:
             # identical (rank 1), which is still singular for n > 1 and
             # doesn't actually fix conditioning.
             diag_indices = jnp.arange(min(m, n))
-            J = J.at[diag_indices, diag_indices].add(self.eps)
+            J = J.at[diag_indices, diag_indices].add(jnp.asarray(eps, J.dtype))
             return J, {
                 "has_nan": has_nan,
                 "has_inf": has_inf,
@@ -422,8 +429,15 @@ class NumericalStabilityGuard:
             max_sv = svd_vals[0]
             min_sv_cached = svd_vals[-1]
 
-            # Compute condition number safely
-            if min_sv_cached < self.eps * max_sv:
+            # Numerical-rank cutoff (numpy.linalg.matrix_rank convention).
+            # A bare eps * max_sv sits inside the rounding noise of the
+            # R factor: an exactly duplicated float32 column left
+            # s_min / s_max at 0.5-0.8 eps, so whether it fell below the
+            # cutoff depended on the platform's LAPACK. float32 cannot reach
+            # condition_threshold on its own, so this cutoff is its only
+            # rank-deficiency signal.
+            rank_tol = max(m, n) * eps * max_sv
+            if min_sv_cached < rank_tol:
                 condition_number = np.inf
             else:
                 condition_number = float(max_sv / min_sv_cached)
@@ -450,13 +464,17 @@ class NumericalStabilityGuard:
                 f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})",
             )
             # Efficient diagonal regularization - 99% memory reduction vs jnp.eye(m, n)
-            J = J.at[diag_indices, diag_indices].add(self.regularization_factor)
+            J = J.at[diag_indices, diag_indices].add(
+                jnp.asarray(self.regularization_factor, J.dtype)
+            )
             regularized = True
 
         # Check for near-zero singular values (use cached value)
         if min_sv_cached is not None and min_sv_cached < self.eps * 10:
             # Efficient diagonal regularization
-            J = J.at[diag_indices, diag_indices].add(self.eps * 10)
+            J = J.at[diag_indices, diag_indices].add(
+                jnp.asarray(self.eps * 10, J.dtype)
+            )
             regularized = True
 
         issues = {

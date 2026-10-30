@@ -500,5 +500,42 @@ class TestCurveFitLargeAutoSizeDetection(unittest.TestCase):
         self.assertIsInstance(popt, np.ndarray)
 
 
+class TestScipyConvention2DXdata(unittest.TestCase):
+    """2-D xdata is (k, M) (scipy convention): point count is the last axis."""
+
+    @staticmethod
+    def _plane(xy, a, b, c):
+        return a * xy[0] + b * xy[1] + c
+
+    def _data(self, n):
+        rng = np.random.default_rng(0)
+        xy = rng.standard_normal((2, n))
+        z = self._plane(xy, 1.0, 2.0, 3.0) + 0.01 * rng.standard_normal(n)
+        return xy, z
+
+    def test_curve_fit_large_small_2d(self):
+        xy, z = self._data(50)
+        popt, _ = curve_fit_large(self._plane, xy, z, p0=[1, 1, 1])
+        np.testing.assert_allclose(popt, [1, 2, 3], atol=0.05)
+
+    def test_curve_fit_large_streaming_path_2d(self):
+        xy, z = self._data(50_000)
+        popt, _ = curve_fit_large(
+            self._plane, xy, z, p0=[1, 1, 1], auto_size_detection=False
+        )
+        np.testing.assert_allclose(popt, [1, 2, 3], atol=0.05)
+
+    def test_fit_preset_large_2d(self):
+        xy, z = self._data(50_000)
+        with pytest.warns(FutureWarning):
+            popt, _ = nlsq.fit(self._plane, xy, z, p0=[1, 1, 1], preset="large")
+        np.testing.assert_allclose(popt, [1, 2, 3], atol=0.05)
+
+    def test_mismatched_length_still_rejected(self):
+        xy, z = self._data(50)
+        with pytest.raises(ValueError, match="same length: 50 vs 49"):
+            curve_fit_large(self._plane, xy, z[:-1], p0=[1, 1, 1])
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -193,7 +193,8 @@ def load_from_clipboard(
         delimiter = detect_delimiter(text)
 
     # Parse the text
-    lines = text.strip().split("\n")
+    # strip only newlines: a trailing tab/comma is a real (empty) last cell
+    lines = text.strip("\r\n").split("\n")
 
     if has_header and len(lines) > 0:
         # Skip header row
@@ -202,28 +203,7 @@ def load_from_clipboard(
     if not lines:
         raise ValueError("No data rows found in clipboard text")
 
-    # Parse rows
-    rows: list[list[float]] = []
-    for line_num, line in enumerate(lines, start=1):
-        stripped_line = line.strip()
-        if not stripped_line:
-            continue
-
-        # Split by delimiter
-        if delimiter is None:
-            # Whitespace splitting
-            parts = stripped_line.split()
-        else:
-            parts = stripped_line.split(delimiter)
-
-        try:
-            row = [float(p.strip()) for p in parts if p.strip()]
-            if row:
-                rows.append(row)
-        except ValueError as e:
-            raise ValueError(
-                f"Cannot parse line {line_num} as numeric data: '{stripped_line}'",
-            ) from e
+    rows = parse_numeric_rows(lines, delimiter)
 
     if not rows:
         raise ValueError("No valid numeric data found in clipboard text")
@@ -260,6 +240,41 @@ def load_from_clipboard(
         ) from e
 
     return xdata, ydata, sigma
+
+
+def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[float]]:
+    """Parse delimited text lines into rows of floats.
+
+    With an explicit delimiter an empty cell becomes NaN so later values stay
+    in their own column (dropping it would shift them left); downstream
+    validation then rejects the NaN. Whitespace splitting (``delimiter=None``)
+    cannot express empty cells.
+
+    Raises
+    ------
+    ValueError
+        If a non-empty cell is not numeric (message names the line).
+    """
+    rows: list[list[float]] = []
+    for line_num, line in enumerate(lines, start=1):
+        stripped_line = line.strip()
+        if not stripped_line:
+            continue
+
+        # Only strip the line terminator for an explicit delimiter: a trailing
+        # tab/comma is a real (empty) last cell.
+        parts = (
+            stripped_line.split()
+            if delimiter is None
+            else line.strip("\r\n").split(delimiter)
+        )
+        try:
+            rows.append([float(p.strip()) if p.strip() else np.nan for p in parts])
+        except ValueError as e:
+            raise ValueError(
+                f"Cannot parse line {line_num} as numeric data: '{stripped_line}'",
+            ) from e
+    return rows
 
 
 def detect_delimiter(text: str) -> str | None:

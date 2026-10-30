@@ -585,3 +585,26 @@ class TestIdentifiabilityAnalyzerEdgeCases:
         # Should detect conditioning issues
         assert report.available is True
         assert report.condition_number > 1e8
+
+
+def test_zero_column_jacobian_reports_infinite_condition_number():
+    from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
+    from nlsq.diagnostics.types import DiagnosticsConfig
+
+    J = np.random.default_rng(0).standard_normal((100, 3))
+    J[:, 2] = 0.0
+    report = IdentifiabilityAnalyzer(DiagnosticsConfig()).analyze(J)
+    assert report.numerical_rank == 2
+    assert report.condition_number == float("inf")
+
+
+def test_underdetermined_jacobian_is_rank_deficient():
+    """m < n: the n - m nullspace directions must count as zero singular values."""
+    from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
+    from nlsq.diagnostics.types import DiagnosticsConfig
+
+    J = np.eye(2, 3)
+    report = IdentifiabilityAnalyzer(DiagnosticsConfig()).analyze(J)
+    assert report.numerical_rank == 2
+    assert report.numerical_rank < 3
+    assert report.condition_number == float("inf")

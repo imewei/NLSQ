@@ -539,3 +539,32 @@ class TestVmapCompatibility:
 
         expected = jnp.array([[1.0, 2.0], [3.0, 4.0]])
         assert_allclose(np.asarray(results), np.asarray(expected), rtol=1e-10)
+
+
+class TestJacobianUnitIndependence:
+    """Conditioning checks must not depend on the Jacobian's absolute scale."""
+
+    @pytest.mark.parametrize("dtype", [jnp.float64, jnp.float32])
+    def test_small_scale_jacobian_not_declared_zero(self, dtype):
+        rng = np.random.default_rng(0)
+        J = jnp.asarray(rng.standard_normal((200, 3)) * 1e-10, dtype=dtype)
+        guard = NumericalStabilityGuard()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            J_fixed, issues = guard.check_and_fix_jacobian(J)
+        assert issues["condition_number"] < 2.0
+        assert not issues["regularized"]
+        assert not issues["is_ill_conditioned"]
+        np.testing.assert_array_equal(np.asarray(J_fixed), np.asarray(J))
+
+    def test_float32_rank_deficiency_flagged_without_dtype_warning(self):
+        rng = np.random.default_rng(0)
+        J = rng.standard_normal((500, 4))
+        J[:, 3] = J[:, 2]
+        guard = NumericalStabilityGuard()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            warnings.simplefilter("ignore", UserWarning)
+            J_fixed, issues = guard.check_and_fix_jacobian(jnp.asarray(J, jnp.float32))
+        assert issues["is_ill_conditioned"] and issues["regularized"]
+        assert J_fixed.dtype == jnp.float32

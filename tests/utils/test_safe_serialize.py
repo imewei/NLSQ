@@ -656,3 +656,19 @@ class TestDictKeyRoundTrip:
         malformed_json = b'{"__nlsq_type__": "totally_bogus_type", "value": 1}'
         with pytest.raises(SafeSerializationError, match="Unrecognized __nlsq_type__"):
             safe_loads(malformed_json)
+
+
+class TestNumpyBoolAndMalformedArray:
+    def test_numpy_bool_value_round_trips_as_bool(self):
+        out = safe_loads(
+            safe_dumps({"converged": np.bool_(True), "f": np.bool_(False)})
+        )
+        assert out == {"converged": True, "f": False}
+        assert type(out["converged"]) is bool
+
+    def test_malformed_ndarray_payload_raises_safe_error(self):
+        payload = (
+            b'{"__nlsq_type__":"ndarray","dtype":"float64","shape":[3],"data":[1,2]}'
+        )
+        with pytest.raises(SafeSerializationError):
+            safe_loads(payload)

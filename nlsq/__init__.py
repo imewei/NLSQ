@@ -558,7 +558,8 @@ def fit(
     # Input validation
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
-    n_points = len(xdata)
+    # scipy convention: 2-D xdata is (k, M), point count is the last axis
+    n_points = xdata.shape[-1] if xdata.ndim > 1 else len(xdata)
 
     # Auto-select preset if not provided
     if preset is None:
@@ -854,19 +855,20 @@ def curve_fit_large(
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
 
-    # Check for edge cases
-    if len(xdata) == 0:
+    # Check for edge cases (scipy convention: 2-D xdata is (k, M), points on last axis)
+    n_x = xdata.shape[-1] if xdata.ndim > 1 else len(xdata)
+    if n_x == 0:
         raise ValueError("`xdata` cannot be empty.")
     if len(ydata) == 0:
         raise ValueError("`ydata` cannot be empty.")
-    if len(xdata) != len(ydata):
+    if n_x != len(ydata):
         raise ValueError(
-            f"`xdata` and `ydata` must have the same length: {len(xdata)} vs {len(ydata)}.",
+            f"`xdata` and `ydata` must have the same length: {n_x} vs {len(ydata)}.",
         )
-    if len(xdata) < 2:
-        raise ValueError(f"Need at least 2 data points for fitting, got {len(xdata)}.")
+    if n_x < 2:
+        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
 
-    n_points = len(xdata)
+    n_points = n_x
 
     # Handle hybrid_streaming method specially
     if method == "hybrid_streaming":

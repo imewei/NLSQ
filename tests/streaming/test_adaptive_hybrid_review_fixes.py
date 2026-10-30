@@ -695,3 +695,99 @@ class TestResidualWeightingDoesNotCorruptGlobalBestTracker:
             np.asarray(optimizer.best_params_global),
             np.array([2.0, 1.0]),
         )
+
+
+class TestMultiFeatureXdataJacobian:
+    """Phase 2 Jacobian was built one data point at a time, so a model that
+    indexes x[:, j] (2-D xdata) raised IndexError in all three Jacobian code
+    paths; fit() swallowed it and returned success=False with zero covariance.
+    """
+
+    @staticmethod
+    def _model(x, a, b):
+        return a + b * x[:, 1]
+
+    @staticmethod
+    def _data(n=200):
+        t = np.linspace(0.0, 1.0, n)
+        X = np.column_stack([np.zeros(n), t])
+        return X, 2.0 + 3.0 * t
+
+    def _optimizer(self, **cfg):
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(chunk_size=64, verbose=0, **cfg),
+        )
+        X, y = self._data()
+        optimizer._setup_normalization(self._model, jnp.array([0.5, 0.5]), None)
+        return optimizer, jnp.asarray(X), jnp.asarray(y)
+
+    def test_chunk_jacobian_compiled_and_fallback_paths(self):
+        optimizer, X, _ = self._optimizer(normalize=False)
+        params = optimizer.normalized_params
+        expected = np.column_stack([np.ones(len(X)), np.asarray(X[:, 1])])
+        compiled = optimizer._compute_jacobian_chunk(X, params)
+        optimizer._jacobian_fn_compiled = None
+        fallback = optimizer._compute_jacobian_chunk(X, params)
+        np.testing.assert_allclose(np.asarray(compiled), expected, atol=1e-12)
+        np.testing.assert_allclose(np.asarray(fallback), expected, atol=1e-12)
+
+    def test_scan_accumulator_without_compiled_jacobian(self):
+        optimizer, X, y = self._optimizer(normalize=False)
+        params = optimizer.normalized_params
+        args = (X, y, params)
+        jtj_c, jtr_c, _ = optimizer._accumulate_jtj_jtr_scan(*args)
+        optimizer._jacobian_fn_compiled = None
+        jtj_f, jtr_f, _ = optimizer._accumulate_jtj_jtr_scan(*args)
+        np.testing.assert_allclose(np.asarray(jtj_f), np.asarray(jtj_c), rtol=1e-10)
+        np.testing.assert_allclose(np.asarray(jtr_f), np.asarray(jtr_c), rtol=1e-10)
+        assert float(jtj_c[0, 0]) == pytest.approx(len(X))
+
+    def test_fit_runs_phase2_with_2d_xdata(self):
+        X, y = self._data()
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(chunk_size=64, verbose=0, enable_checkpoints=False),
+        )
+        result = optimizer.fit((X, y), self._model, [0.5, 0.5], verbose=0)
+        diag = result["streaming_diagnostics"]
+        assert diag["phase_iterations"]["phase2"] > 0
+        assert "failed" not in diag["gauss_newton_diagnostics"]["convergence_reason"]
+        np.testing.assert_allclose(np.asarray(result["x"]), [2.0, 3.0], atol=1e-4)
+
+
+class TestMultiFeatureModelJacobian:
+    """Phase 2 Jacobians must feed the model a batched (1, k) row so models
+    indexing ``x[:, j]`` work; a bare (k,) row raised an IndexError."""
+
+    @staticmethod
+    def _setup():
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(chunk_size=8, normalize=False),
+        )
+
+        def model(x, a, b):
+            return a * x[:, 0] + b * x[:, 1]
+
+        x = jnp.stack([jnp.linspace(1.0, 3.0, 20), jnp.linspace(2.0, 0.5, 20)], axis=1)
+        y = 2.0 * x[:, 0] + 3.0 * x[:, 1]
+        optimizer._setup_normalization(model, jnp.array([1.0, 1.0]), None)
+        return optimizer, x, y
+
+    def test_jacobian_chunk_of_multifeature_model(self):
+        optimizer, x, _ = self._setup()
+        jac = optimizer._compute_jacobian_chunk(x, optimizer.normalized_params)
+        np.testing.assert_allclose(np.asarray(jac), np.asarray(x), atol=1e-10)
+
+    def test_jtj_accumulation_of_multifeature_model(self):
+        optimizer, x, y = self._setup()
+        params = optimizer.normalized_params
+        expected = np.asarray(x).T @ np.asarray(x)
+
+        jtj_scan, _, _ = optimizer._accumulate_jtj_jtr_scan(x, y, params)
+        np.testing.assert_allclose(np.asarray(jtj_scan), expected, rtol=1e-8)
+
+        jtj, jtr = jnp.zeros((2, 2)), jnp.zeros(2)
+        for i in range(0, 20, 8):
+            jtj, jtr, _ = optimizer._accumulate_jtj_jtr(
+                x[i : i + 8], y[i : i + 8], params, jtj, jtr
+            )
+        np.testing.assert_allclose(np.asarray(jtj), expected, rtol=1e-8)

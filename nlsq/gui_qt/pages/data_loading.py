@@ -346,9 +346,13 @@ class DataLoadingPage(QWidget):
 
     def _on_parse_clipboard(self) -> None:
         """Handle parse clipboard button click."""
-        from nlsq.gui_qt.adapters.data_adapter import detect_delimiter
+        from nlsq.gui_qt.adapters.data_adapter import (
+            detect_delimiter,
+            parse_numeric_rows,
+        )
 
-        text = self._clipboard_text.toPlainText().strip()
+        raw_text = self._clipboard_text.toPlainText()
+        text = raw_text.strip()
         if not text:
             self._show_error("No Data", "Please paste data into the text area first.")
             return
@@ -356,21 +360,7 @@ class DataLoadingPage(QWidget):
         try:
             # Detect delimiter and parse
             delimiter = detect_delimiter(text)
-            lines = text.split("\n")
-            rows: list[list[float]] = []
-
-            for line in lines:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if delimiter is None:
-                    parts = stripped.split()
-                else:
-                    parts = stripped.split(delimiter)
-
-                row = [float(p.strip()) for p in parts if p.strip()]
-                if row:
-                    rows.append(row)
+            rows = parse_numeric_rows(raw_text.split("\n"), delimiter)
 
             if not rows:
                 self._show_error("Parse Error", "No valid numeric data found.")

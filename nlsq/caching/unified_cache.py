@@ -23,6 +23,7 @@ Design Goals
 """
 
 import hashlib
+import inspect
 import logging
 import threading
 import time
@@ -114,11 +115,28 @@ class UnifiedCache:
         # Per-instance lock for thread-safe cache operations
         self._lock = threading.Lock()
 
-    def _get_function_hash(self, func: Callable) -> str:
-        """Generate stable hash for a function.
+    @staticmethod
+    def _identity_tag(func: Callable) -> str:
+        """Per-object identity token for ``func`` (weakref-registry serial).
 
-        Uses function source code, signature, module, and name to create
-        a stable hash that persists across sessions.
+        Bound methods are re-created on every attribute access, so they are
+        keyed by their ``__self__``; everything else by the callable itself.
+        """
+        target = func.__self__ if inspect.ismethod(func) else func
+        try:
+            return str(_closure_serial(target))
+        except TypeError:  # unhashable / non-weakrefable target
+            return f"id{id(target)}"
+
+    def _get_function_hash(self, func: Callable) -> str:
+        """Generate an in-memory cache hash for a function.
+
+        Combines function source code, signature, module and name with a
+        per-object identity token. Source text alone does not determine
+        behavior (closures, bound methods, callable instances,
+        ``functools.partial`` and same-line lambdas all share source or
+        have none), so the token is always mixed in. Nothing here is
+        persisted to disk; the hash is only valid within this process.
 
         Parameters
         ----------
@@ -130,28 +148,13 @@ class UnifiedCache:
         func_hash : str
             Hexadecimal hash string (16 characters)
         """
+        tag = self._identity_tag(func)
         try:
-            # Try to get source code for regular functions (from caching.py pattern)
-            import inspect
-
             source = inspect.getsource(func)
             signature = str(inspect.signature(func))
             module = getattr(func, "__module__", "unknown")
             name = getattr(func, "__name__", "unknown")
-
-            # Combine all identifying information. Mix in a per-object serial
-            # only for actual closures (__closure__ is not None): two
-            # distinct closures sharing source text (built by the same
-            # factory, capturing different data) must not collide. A
-            # closure-free top-level function's source fully determines its
-            # behavior, so leave its hash stable across objects/sessions -
-            # this cache persists to disk and is meant to survive restarts.
-            closure_tag = (
-                f"\n{_closure_serial(func)}"
-                if getattr(func, "__closure__", None)
-                else ""
-            )
-            combined = f"{module}.{name}:{signature}\n{source}{closure_tag}"
+            combined = f"{module}.{name}:{signature}\n{source}\n{tag}"
             return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
         except (OSError, TypeError):
@@ -160,25 +163,23 @@ class UnifiedCache:
                 if hasattr(func, "__code__"):
                     code = func.__code__
                     code_hash = hashlib.sha256(code.co_code).hexdigest()[:8]
-                    closure_tag = (
-                        f"_{_closure_serial(func)}" if func.__closure__ else ""
-                    )
-                    return f"code_{code_hash}_{code.co_argcount}{closure_tag}"
-                # Use qualified name for a persistent key instead of id()
+                    return f"code_{code_hash}_{code.co_argcount}_{tag}"
                 name = getattr(
                     func,
                     "__qualname__",
                     getattr(func, "__name__", "unknown"),
                 )
                 module = getattr(func, "__module__", "unknown")
-                return hashlib.sha256(f"{module}.{name}".encode()).hexdigest()[:16]
+                return hashlib.sha256(f"{module}.{name}\n{tag}".encode()).hexdigest()[
+                    :16
+                ]
             except (AttributeError, TypeError, ValueError):
                 name = getattr(
                     func,
                     "__qualname__",
                     getattr(func, "__name__", "unknown"),
                 )
-                return hashlib.sha256(name.encode()).hexdigest()[:16]
+                return hashlib.sha256(f"{name}\n{tag}".encode()).hexdigest()[:16]
 
     def _get_array_signature(self, arr) -> str:
         """Get signature for array based on dtype and rank (shape-relaxed).

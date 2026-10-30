@@ -7,6 +7,7 @@ logging works correctly.
 
 import tempfile
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -901,3 +902,78 @@ system = pydoc.locate("os.system")
         visitor.visit(tree)
 
         assert any("format" in v for v in visitor.violations)
+
+
+class TestDenylistBypassRegressions:
+    """Model files that previously passed validate_model and ran their payload.
+
+    Each case writes a marker file inside tmp_path. validate_model must reject
+    the file, and after a rejected ModelRegistry load the marker must not exist.
+    """
+
+    # (id, import/payload template; {m} is the marker path literal)
+    PAYLOADS: ClassVar[dict[str, str]] = {
+        "posix_spawn": (
+            "import posix\n"
+            "posix.posix_spawn('/bin/sh', ['sh', '-c', 'echo x > ' + {m}], {{}})\n"
+        ),
+        "from_posix_execv_fork": (
+            "from posix import execv as _x, fork\n"
+            "if fork() == 0:\n"
+            "    _x('/bin/sh', ['sh', '-c', 'echo x > ' + {m}])\n"
+        ),
+        "dynamic_open_mode": ("m = 'w'\nwith open({m}, m) as fh:\n    fh.write('x')\n"),
+        "dynamic_open_mode_kw": (
+            "m = 'w'\nwith open({m}, mode=m) as fh:\n    fh.write('x')\n"
+        ),
+        "aliased_open": "o = open\nwith o({m}, 'w') as fh:\n    fh.write('x')\n",
+        "pathlib_style_open": (
+            "from pathlib import Path\nwith Path({m}).open('w') as fh:\n"
+            "    fh.write('x')\n"
+        ),
+        "io_fileio": (
+            "import io\nfh = io.FileIO({m}, 'w')\nfh.write(b'x')\nfh.close()\n"
+        ),
+        "numpy_save": "import numpy as np\nnp.save({m}, np.arange(3))\n",
+        "numpy_savez_alias": ("import numpy as n2\nn2.savez({m}, a=n2.arange(3))\n"),
+        "numpy_savetxt": "import numpy as np\nnp.savetxt({m}, np.arange(3))\n",
+        "ndarray_tofile": "import numpy as np\nnp.arange(3).tofile({m})\n",
+        "numpy_memmap": ("import numpy as np\nnp.memmap({m}, mode='w+', shape=(3,))\n"),
+        "numpy_load_allow_pickle": (
+            "import numpy as np\nnp.load({m}, allow_pickle=True)\n"
+        ),
+    }
+
+    @pytest.mark.parametrize("name", sorted(PAYLOADS))
+    def test_bypass_rejected_and_never_runs(self, name, tmp_path, monkeypatch):
+        from nlsq.cli.errors import ModelError
+        from nlsq.cli.model_registry import ModelRegistry
+
+        marker = tmp_path / f"marker_{name}"
+        body = self.PAYLOADS[name].format(m=repr(str(marker)))
+        model_file = tmp_path / "evil.py"
+        model_file.write_text(body + "\ndef f(x, a):\n    return a * x\n")
+
+        result = validate_model(model_file)
+        assert not result.is_valid, f"{name} passed validation"
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path))  # audit log under tmp
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        with pytest.raises(ModelError):
+            ModelRegistry().get_model(
+                str(model_file),
+                {"type": "custom", "path": str(model_file), "function": "f"},
+            )
+        assert not marker.exists()
+        assert not list(tmp_path.glob("marker_*"))
+
+    def test_read_only_numpy_and_literal_read_open_still_valid(self, tmp_path):
+        model_file = tmp_path / "ok.py"
+        model_file.write_text(
+            "import numpy as np\n"
+            "import jax.numpy as jnp\n"
+            "def f(x, a, b):\n    return a * jnp.exp(-b * x) + np.pi\n"
+            "with open(__file__, 'r') as fh:\n    pass\n"
+        )
+        assert validate_model(model_file).is_valid
