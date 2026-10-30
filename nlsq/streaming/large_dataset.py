@@ -2972,7 +2972,10 @@ def fit_large_dataset(
     Returns
     -------
     OptimizeResult
-        Optimization result
+        Optimization result. Also carries ``equivalent_to_full_batch``
+        (bool): ``True`` only when the data fit in a single chunk; ``False``
+        marks a precision-weighted combination of per-chunk fits that is not
+        equivalent to a full-batch fit for nonlinear models.
 
     Examples
     --------
