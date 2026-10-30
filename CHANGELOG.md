@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Optimistix) with shared tolerances, per-case fresh-process cold timing, an
   optimum-reached gate, and a Markdown report. First CPU baseline committed as
   `benchmarks/baselines/2026-10-30-library-comparison.md`.
+- `LargeDatasetFitter` results (`fit`, `fit_with_progress`, `fit_large_dataset`) now carry
+  `"equivalent_to_full_batch"`: `True` only when exactly one chunk was used. Multi-chunk
+  fits, successful or failed, also log one warning ("not equivalent to a full-batch fit"):
+  the precision-weighted chunk combination (see the `_update_parameters_convergence`
+  docstring in `nlsq/streaming/large_dataset.py`) is exact only for linear models and an
+  approximation for nonlinear ones. No numeric path changed.
 
 ### Changed (install footprint)
 - `pip install nlsq` now installs the core library only. The Qt desktop GUI

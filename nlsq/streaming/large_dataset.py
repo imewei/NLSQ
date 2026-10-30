@@ -1726,7 +1726,7 @@ class LargeDatasetFitter:
             )
             # Add multi-start diagnostics to result
             result["multistart_diagnostics"] = multistart_diagnostics
-            return result
+            return self._annotate_equivalence(result, stats.n_chunks)
 
         # Handle chunked processing (will use streaming if enabled for very large datasets)
         result = self._fit_chunked(
@@ -1746,6 +1746,25 @@ class LargeDatasetFitter:
         multistart_diagnostics["total_fit_time_seconds"] = time.time() - fit_start_time
         result["multistart_diagnostics"] = multistart_diagnostics
 
+        return self._annotate_equivalence(result, stats.n_chunks)
+
+    def _annotate_equivalence(
+        self, result: OptimizeResult, n_chunks: int
+    ) -> OptimizeResult:
+        """Record whether the fit equals a full-batch fit (one chunk only).
+
+        Multi-chunk results are a precision-weighted combination of per-chunk
+        fits (see ``_update_parameters_convergence``), which is exact only for
+        linear models, so they are flagged and warned about once per fit.
+        """
+        equivalent = n_chunks == 1
+        result["equivalent_to_full_batch"] = equivalent
+        if not equivalent:
+            self.logger.warning(
+                f"Fit used {n_chunks} chunks and is not equivalent to a "
+                "full-batch fit; for nonlinear models the combined estimate "
+                "is an approximation."
+            )
         return result
 
     def _fit_single_chunk(
