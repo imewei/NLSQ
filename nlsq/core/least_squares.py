@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import enum
+import functools
 import hashlib
 import logging
 import os
@@ -28,9 +29,24 @@ from nlsq.config import JAXConfig
 __jax_config = JAXConfig()
 import jax
 import jax.numpy as jnp
+import jaxlib
 from jax import jacfwd, jacrev, jit
 from jax.extend import core as jex_core
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
+
+try:  # the PRNG implementation registry moved in JAX 0.12
+    from jax._src.random.prng import prngs as _PRNG_REGISTRY
+except ImportError:  # pragma: no cover
+    try:
+        from jax._src.prng import prngs as _PRNG_REGISTRY
+    except ImportError:
+        _PRNG_REGISTRY = {}  # unknown layout: every typed PRNG key is refused
+try:
+    from jax._src.numpy.hijax import SearchSorted as _SearchSorted
+
+    _JAX_CALLABLE_PARAM_TYPES = frozenset({_SearchSorted})
+except ImportError:  # pragma: no cover
+    _JAX_CALLABLE_PARAM_TYPES = frozenset()
 
 from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import get_global_cache
@@ -475,6 +491,8 @@ _RULE_PARAMS = {
     "custom_vjp_call": frozenset({"fwd_jaxpr_thunk", "bwd", "out_trees"}),
 }
 _MESH_TYPES = (jax.sharding.Mesh, jax.sharding.AbstractMesh)
+_PRNG_IMPLS = frozenset({"threefry2x32", "rbg", "unsafe_rbg"})
+_JAX_DIRS = tuple(os.path.dirname(m.__file__) + os.sep for m in (jax, jaxlib))
 _jax_primitive_ids: set[int] = set()
 _jax_primitive_scan_size = 0
 
@@ -520,15 +538,16 @@ def _aval_key(aval: Any) -> tuple:
 def _array_key(value: Any) -> tuple:
     dtype = getattr(value, "dtype", None)
     if dtype is not None and jax.dtypes.issubdtype(dtype, jax.dtypes.prng_key):
-        # Typed PRNG keys: implementation + raw key bits (immutable jax.Array).
+        # Typed PRNG keys: a built-in implementation (the object JAX
+        # registered, not just its name) + raw key bits (immutable jax.Array).
+        # A define_prng_impl() implementation runs user code the jaxpr does
+        # not contain, so it is refused.
+        impl = getattr(dtype, "_impl", None)
+        name = getattr(impl, "name", None)
+        if name not in _PRNG_IMPLS or _PRNG_REGISTRY.get(name) is not impl:
+            raise _Uncacheable(f"PRNG implementation {name!r}")
         data = np.asarray(jax.random.key_data(value))
-        return (
-            "prng_key",
-            dtype,
-            str(jax.random.key_impl(value)),
-            tuple(value.shape),
-            _array_key(data),
-        )
+        return ("prng_key", name, tuple(value.shape), _array_key(data))
     arr = np.ascontiguousarray(np.asarray(value))
     if arr.dtype.hasobject:
         raise _Uncacheable("object array")
@@ -575,12 +594,21 @@ def _canon_param(value: Any) -> tuple[Any, Any]:
         return snap, ("array", _array_key(snap))
     if isinstance(value, enum.Enum):
         return value, (t, value.name)
-    # A plain module-level JAX function (e.g. a jax.checkpoint_policies
-    # policy) without closure or attributes: keyed by identity + defaults.
+    if isinstance(value, functools.partial):
+        # jax.tree_util.Partial and friends wrap arbitrary user callables.
+        raise _Uncacheable(f"partial param of type {t.__module__}.{t.__name__}")
+    # A module-level JAX function (e.g. a jax.checkpoint_policies policy):
+    # the real attribute of an imported jax/jaxlib module, without closure or
+    # attributes, keyed by identity + defaults. A spoofed __module__ fails.
     if t is types.FunctionType:
-        if value.__closure__ or value.__dict__ or not _from_jax(value.__module__):
+        if value.__closure__ or value.__dict__ or not _jax_attr(value):
             raise _Uncacheable(f"function {value.__module__}.{value.__qualname__}")
-        return value, ("fn", value, _canon_param(value.__defaults__)[1])
+        return value, (
+            "fn",
+            value,
+            _canon_param(value.__defaults__)[1],
+            _canon_param(value.__kwdefaults__)[1],
+        )
     module = t.__module__
     if not _from_jax(module):
         raise _Uncacheable(f"param of type {module}.{t.__name__}")
@@ -590,17 +618,28 @@ def _canon_param(value: Any) -> tuple[Any, Any]:
     if not callable(value) or isinstance(value, _MESH_TYPES):
         hash(value)
         return value, (t, value)
-    # JAX-defined callable objects (e.g. the SearchSorted operation): keyed by
-    # type and canonicalised attributes. User callables are refused.
-    attrs = getattr(value, "__dict__", None)
-    if isinstance(attrs, dict) and not hasattr(t, "__slots__"):
-        return value, (t, _canon_param(dict(attrs))[1])
+    # JAX operation objects of an allowlisted exact class (e.g. SearchSorted):
+    # keyed by class and canonicalised attributes. Every other callable,
+    # including any user callable, is refused.
+    if t in _JAX_CALLABLE_PARAM_TYPES:
+        return value, (t, _canon_param(dict(vars(value)))[1])
     raise _Uncacheable(f"callable param of type {module}.{t.__name__}")
 
 
 def _from_jax(module: str | None) -> bool:
     return bool(module) and (
         module in ("jax", "jaxlib") or module.startswith(("jax.", "jaxlib."))
+    )
+
+
+def _jax_attr(fn: types.FunctionType) -> bool:
+    """True iff `fn` is the attribute `fn.__name__` of an imported jax/jaxlib module."""
+    mod = sys.modules.get(fn.__module__)
+    path = getattr(mod, "__file__", None)
+    return (
+        isinstance(path, str)
+        and path.startswith(_JAX_DIRS)
+        and getattr(mod, fn.__name__, None) is fn
     )
 
 
@@ -675,21 +714,27 @@ def _trace_model(
         x_aval = jax.eval_shape(_safe_coords, x_in, mask)
         p_aval = jax.ShapeDtypeStruct((), jnp.asarray(x0).dtype)
         avals = (x_aval, *[p_aval] * x0.size)
+
         # Fresh wrappers on purpose: make_jaxpr caches traces by function
         # identity, which would return a stale jaxpr after a state change.
-        primal, out_shape = jax.make_jaxpr(
-            lambda *a: fun(*a),  # noqa: PLW0108
-            return_shape=True,
-        )(*avals)
-        # Only a bare array output: a pytree (even one leaf) carries structure
-        # and aux data that evaluating the flat jaxpr would drop.
-        if (
-            primal.effects
-            or len(primal.outvars) != 1
-            or type(out_shape) is not jax.ShapeDtypeStruct
-        ):
-            _logger.debug("wrapper cache: not cached (effects or non-array output)")
-            return None
+        def model(*a):
+            out = fun(*a)
+            # Only a bare array output: a pytree (even one leaf) carries
+            # structure and aux data that evaluating the flat jaxpr would
+            # drop. The structure is read off the real traced output here,
+            # never rebuilt through a user tree_unflatten.
+            treedef = jax.tree_util.tree_structure(out)
+            if (
+                treedef.num_leaves != 1
+                or treedef.num_nodes != 1
+                or not isinstance(out, jax.Array)
+            ):
+                raise _Uncacheable(f"non-array output {type(out).__name__}")
+            return out
+
+        primal = jax.make_jaxpr(model)(*avals)
+        if primal.effects or len(primal.outvars) != 1:
+            raise _Uncacheable("effects or non-array output")
         private, primal_key = _snapshot_jaxpr(primal)
         jac_key = None
         if _has_rule_mark(primal_key):
