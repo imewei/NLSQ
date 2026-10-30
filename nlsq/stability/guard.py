@@ -429,8 +429,15 @@ class NumericalStabilityGuard:
             max_sv = svd_vals[0]
             min_sv_cached = svd_vals[-1]
 
-            # Compute condition number safely
-            if min_sv_cached < eps * max_sv:
+            # Numerical-rank cutoff (numpy.linalg.matrix_rank convention).
+            # A bare eps * max_sv sits inside the rounding noise of the
+            # R factor: an exactly duplicated float32 column left
+            # s_min / s_max at 0.5-0.8 eps, so whether it fell below the
+            # cutoff depended on the platform's LAPACK. float32 cannot reach
+            # condition_threshold on its own, so this cutoff is its only
+            # rank-deficiency signal.
+            rank_tol = max(m, n) * eps * max_sv
+            if min_sv_cached < rank_tol:
                 condition_number = np.inf
             else:
                 condition_number = float(max_sv / min_sv_cached)
