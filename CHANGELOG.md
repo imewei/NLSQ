@@ -37,15 +37,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   programs (~125 ms of 167 ms at n=1000). Stateless kernels (`CommonJIT`,
   `CurveFit` sigma/covariance, `LossFunctionsJIT`) are now module-level
   singletons, and the residual/Jacobian wrappers of the user model are reused
-  from a bounded cache only when provably equivalent to re-tracing: the model
-  must be a plain function whose closure cells, defaults and referenced
-  module globals are immutable values (scalars by exact bits, tuples, frozen
-  dataclasses, functions/modules by identity); anything else (array or list
-  captures, callable objects, bound methods) is rebuilt per call as before.
-  No fit result changes: golden-master and bit-identity tests pass. A lambda
-  created anew for every call still compiles each time, because a new
-  function object can't be proven equivalent. Cold (first-call) time is
-  unchanged (~0.77 s).
+  from a bounded cache (32 models) only when provably equivalent to
+  re-tracing: the model must be a plain function, and its closure cells,
+  defaults and referenced module globals, followed recursively through
+  every Python function and nested code it reaches, must be immutable
+  values (scalars by exact bits, tuples, frozen dataclasses; modules and C
+  builtins by identity). Anything else (array, list or class captures,
+  callable objects, bound methods) is rebuilt per call as before. Fit
+  results are unchanged (golden-master and bit-identity tests pass), with
+  one exception: rebinding an *attribute of an imported module* that the
+  model reads (`mymod.K = 2`) between two fits of the same function is not
+  detected, so the second fit reuses the first trace. Rebinding the model's
+  own or a helper's module globals is detected. A lambda created anew for
+  every call still compiles each time, because a new function object cannot
+  be proven equivalent. Cold (first-call) time is unchanged (~0.77 s).
 
   Harness: `python -m benchmarks.compare.run_library_comparison --problems
   exp_decay --sizes 1000 100000 --repeats 7 --no-batch`, CPU (i9-13900H),
