@@ -65,8 +65,11 @@ def _np_model(problem: Problem) -> Callable:
 
 @functools.cache
 def _jnp_model(problem: Problem) -> Callable:
-    # cached so repeated fits pass the same callable (NLSQ keys its JIT cache on it)
-    return lambda x, *p: problem.model(jnp, x, *p)
+    # Cached so repeated fits pass the same callable. Captures the model
+    # function, not the Problem dataclass: a plain jnp function is the shape a
+    # user writes, and NLSQ only reuses traces of provably immutable models.
+    model = problem.model
+    return lambda x, *p: model(jnp, x, *p)
 
 
 class _Base:
