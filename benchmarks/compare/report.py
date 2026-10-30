@@ -108,7 +108,9 @@ def to_markdown(records: list[dict], env: dict) -> str:
         "same tolerance and iteration budget for each criterion it exposes. A "
         "library is ranked only if its final cost matches the best cost in the "
         "case (relative 1e-6); its own `converged` flag is reported but does not "
-        "decide that.",
+        "decide that. A ranked library can still show `lib converged` = False: it "
+        "reached the optimum but ran out its iteration budget, so its time "
+        "includes the unused iterations.",
         "- lmfit wraps SciPy (`leastsq` / `least_squares`); its timings include "
         "lmfit's own overhead on top of SciPy.",
         '- JAXopt: README states "JAXopt is no longer maintained nor developed".',
