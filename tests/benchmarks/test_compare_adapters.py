@@ -32,9 +32,8 @@ def test_every_adapter_reports_availability_with_reason(name):
 def test_available_adapters_recover_truth_on_exp_decay(name, mode):
     adapter = ADAPTERS[name]
     av = adapter.availability()
-    if not av.ok:
-        assert av.reason
-        return
+    # every adapter's library is a declared dependency: fail rather than pass vacuously
+    assert av.ok, f"{name} unavailable: {av.reason}"
     x, y = EXP.data(1000)
     out = adapter.prepare(EXP, x, y, mode)()
     truth = np.asarray(EXP.p_true)
@@ -57,11 +56,14 @@ def test_unbounded_libraries_decline_the_bounded_problem(name):
         assert (ok, reason) == (True, "")
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name", NAMES)
 def test_bounded_fit_respects_bounds(name):
     adapter = ADAPTERS[name]
     p = PROBLEMS["bounded_exp"]
-    if not adapter.availability().ok or not adapter.supports(p)[0]:
+    av = adapter.availability()
+    assert av.ok, f"{name} unavailable: {av.reason}"
+    if not adapter.supports(p)[0]:  # real capability gap, asserted in the test above
         return
     x, y = p.data(1000)
     out = adapter.prepare(p, x, y, "end_to_end")()
@@ -74,8 +76,8 @@ def test_bounded_fit_respects_bounds(name):
 @pytest.mark.parametrize(("name", "mode"), _cases())
 def test_batch_cost_matches_single_fit_cost(name, mode):
     adapter = ADAPTERS[name]
-    if not adapter.availability().ok:
-        return
+    av = adapter.availability()
+    assert av.ok, f"{name} unavailable: {av.reason}"
     x, Y = EXP.batch_data(200, 4)
     batch = adapter.prepare_batch(EXP, x, Y, mode)()
     assert len(batch) == 4
