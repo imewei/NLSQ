@@ -67,6 +67,14 @@ def test_reaches_optimum_gate():
     assert not reaches_optimum(1e-3, 0.0)
 
 
+def test_reaches_optimum_rejects_non_finite_inputs():
+    nan, inf = float("nan"), float("inf")
+    assert not reaches_optimum(nan, 1.0)
+    assert not reaches_optimum(1.0, nan)
+    assert not reaches_optimum(inf, inf)
+    assert not reaches_optimum(inf, 1.0)
+
+
 def test_case_cost_averages_a_batch_and_all_converged_requires_every_fit():
     p = PROBLEMS["exp_decay"]
     x, y = p.data(100)
