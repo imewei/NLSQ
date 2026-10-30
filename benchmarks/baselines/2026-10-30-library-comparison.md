@@ -5,7 +5,7 @@
 
 Caveats:
 
-- Stopping criteria are analogous, not identical: every library gets the same tolerance and iteration budget for each criterion it exposes. A library is ranked only if its final cost matches the best cost in the case (relative 1e-6); its own `converged` flag is reported but does not decide that. A ranked library can still show `lib converged` = False: it reached the optimum but ran out its iteration budget, so its time includes the unused iterations.
+- Stopping criteria are analogous, not identical: every library gets the same tolerance and iteration budget for each criterion it exposes. A library is ranked only if its final cost matches the best cost in the case (relative 1e-6); its own `converged` flag is reported but does not decide that. A ranked library can still show `lib converged` = False; the flag is not decisive and its cause is not diagnosed here.
 - lmfit wraps SciPy (`leastsq` / `least_squares`); its timings include lmfit's own overhead on top of SciPy.
 - JAXopt: README states "JAXopt is no longer maintained nor developed".
 - Cold = first call in a fresh process after a trivial backend warm-up (includes JIT compilation); warm = median and IQR of repeated calls.
@@ -17,145 +17,215 @@ Caveats:
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| scipy | end_to_end | 0.0932 | 0.00439 | 8.08e-05 | 18 | 0 | 0.2 | True |
-| lmfit | end_to_end | 0.405 | 0.0069 | 0.000188 | 72 | 0 | 0.2 | True |
-| nlsq | end_to_end | 1.58 | 0.253 | 0.0276 | 18 | 9.99e-13 | 0.2 | True |
+| scipy | end_to_end | 0.0054 | 0.00435 | 1.12e-05 | 18 | 0 | 0.2 | True |
+| lmfit | end_to_end | 0.00828 | 0.00712 | 0.000123 | 72 | 0 | 0.2 | True |
+| nlsq | end_to_end | 1.42 | 0.237 | 0.00894 | 18 | 9.99e-13 | 0.2 | True |
 
 ### bounded_exp, n=100000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| lmfit | end_to_end | 0.707 | 0.28 | 0.00602 | 72 | 0 | 0.2 | True |
-| scipy | end_to_end | 0.363 | 0.284 | 0.0129 | 18 | 0 | 0.2 | True |
-| nlsq | end_to_end | 1.77 | 0.424 | 0.0214 | 18 | 6.98e-13 | 0.2 | True |
+| lmfit | end_to_end | 0.218 | 0.278 | 0.00497 | 72 | 0 | 0.2 | True |
+| scipy | end_to_end | 0.281 | 0.281 | 0.039 | 18 | 0 | 0.2 | True |
+| nlsq | end_to_end | 1.66 | 0.41 | 0.0248 | 18 | 6.98e-13 | 0.2 | True |
 
 ### bounded_exp, n=1000000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| nlsq | end_to_end | 2.73 | 1.53 | 0.146 | 18 | 6.38e-13 | 0.2 | True |
-| scipy | end_to_end | 2.44 | 2.55 | 0.105 | 18 | 0 | 0.2 | True |
-| lmfit | end_to_end | 2.96 | 2.59 | 0.165 | 72 | 0 | 0.2 | True |
+| nlsq | end_to_end | 2.91 | 1.53 | 0.0272 | 18 | 6.38e-13 | 0.2 | True |
+| scipy | end_to_end | 2.49 | 2.48 | 0.131 | 18 | 0 | 0.2 | True |
+| lmfit | end_to_end | 2.43 | 2.52 | 0.0623 | 72 | 0 | 0.2 | True |
 
 ### exp_decay, n=200, batch=256
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| optimistix | jitted_core | 0.473 | 0.0576 | 0.00303 | - | 0 | 0.0465 | True |
-| optimistix | end_to_end | 0.479 | 0.0596 | 0.00263 | - | 0 | 0.0465 | True |
-| scipy | end_to_end | 0.292 | 0.205 | 0.0023 | 5 | 1.84e-13 | 0.0465 | True |
-| lmfit | end_to_end | 0.807 | 0.417 | 0.00256 | 21 | 1.14e-13 | 0.0465 | True |
-| jaxopt | jitted_core | 2.59 | 2.18 | 0.148 | - | 0 | 0.0465 | False |
-| jaxopt | end_to_end | 2.49 | 2.19 | 0.0815 | - | 0 | 0.0465 | False |
-| nlsq | end_to_end | 44.1 | 48.4 | 3.54 | 5 | 1.84e-13 | 0.0465 | True |
+| jaxopt | end_to_end | 0.5 | 0.0177 | 0.000772 | - | 0 | 0.0465 | True |
+| optimistix | end_to_end | 0.458 | 0.0584 | 0.0113 | - | 0 | 0.0465 | True |
+| scipy | end_to_end | 0.21 | 0.206 | 0.00224 | 5 | 1.84e-13 | 0.0465 | True |
+| lmfit | end_to_end | 0.414 | 0.414 | 0.00227 | 21 | 1.14e-13 | 0.0465 | True |
+| nlsq | end_to_end | 44.3 | 48.4 | 3.55 | 5 | 1.84e-13 | 0.0465 | True |
+
+#### exp_decay, n=200, batch=256: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.485 | 0.0188 | 0.0038 | - | 0 | 0.0465 | True |
+| optimistix | jitted_core | 0.464 | 0.0577 | 0.00692 | - | 0 | 0.0465 | True |
 
 ### exp_decay, n=1000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| optimistix | jitted_core | 0.205 | 0.000505 | 0.000146 | - | 0 | 0.00839 | True |
-| jaxopt | jitted_core | 0.508 | 0.000632 | 6.65e-05 | - | 0 | 0.00839 | True |
-| jaxopt | end_to_end | 0.485 | 0.000814 | 7.38e-05 | - | 0 | 0.00839 | True |
-| optimistix | end_to_end | 0.21 | 0.000985 | 4.07e-05 | - | 0 | 0.00839 | True |
-| scipy | end_to_end | 0.0928 | 0.0011 | 8.35e-05 | 5 | 4.47e-15 | 0.00839 | True |
-| lmfit | end_to_end | 0.435 | 0.00179 | 0.00013 | 21 | 1.68e-15 | 0.00839 | True |
-| nlsq | end_to_end | 0.832 | 0.184 | 0.0297 | 5 | 4.47e-15 | 0.00839 | True |
+| jaxopt | end_to_end | 0.48 | 0.000837 | 8.77e-05 | - | 0 | 0.00839 | True |
+| scipy | end_to_end | 0.00196 | 0.00101 | 3.58e-05 | 5 | 4.47e-15 | 0.00839 | True |
+| optimistix | end_to_end | 0.204 | 0.00119 | 0.000128 | - | 0 | 0.00839 | True |
+| lmfit | end_to_end | 0.00259 | 0.00179 | 7.21e-05 | 21 | 1.68e-15 | 0.00839 | True |
+| nlsq | end_to_end | 0.824 | 0.167 | 0.0163 | 5 | 4.47e-15 | 0.00839 | True |
+
+#### exp_decay, n=1000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.47 | 0.000759 | 7.99e-05 | - | 0 | 0.00839 | True |
+| optimistix | jitted_core | 0.201 | 0.00111 | 0.000136 | - | 0 | 0.00839 | True |
 
 ### exp_decay, n=100000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| jaxopt | jitted_core | 0.261 | 0.00745 | 0.00513 | - | 1.14e-16 | 0.000569 | True |
-| jaxopt | end_to_end | 0.28 | 0.00818 | 0.000355 | - | 1.14e-16 | 0.000569 | True |
-| lmfit | end_to_end | 0.43 | 0.0229 | 0.000183 | 21 | 3.41e-16 | 0.000569 | True |
-| optimistix | jitted_core | 0.213 | 0.0284 | 0.00661 | - | 0 | 0.000569 | True |
-| optimistix | end_to_end | 0.23 | 0.0332 | 0.00592 | - | 0 | 0.000569 | True |
-| scipy | end_to_end | 0.158 | 0.067 | 0.00666 | 5 | 1.14e-16 | 0.000569 | True |
-| nlsq | end_to_end | 0.856 | 0.229 | 0.0101 | 7 | 1.14e-16 | 0.000569 | True |
+| jaxopt | end_to_end | 0.255 | 0.0116 | 0.00294 | - | 1.14e-16 | 0.000569 | True |
+| lmfit | end_to_end | 0.0247 | 0.0229 | 0.00018 | 21 | 3.41e-16 | 0.000569 | True |
+| optimistix | end_to_end | 0.221 | 0.0311 | 0.0107 | - | 0 | 0.000569 | True |
+| scipy | end_to_end | 0.0519 | 0.058 | 0.00864 | 5 | 1.14e-16 | 0.000569 | True |
+| nlsq | end_to_end | 0.805 | 0.219 | 0.00959 | 7 | 1.14e-16 | 0.000569 | True |
+
+#### exp_decay, n=100000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.27 | 0.013 | 0.0047 | - | 1.14e-16 | 0.000569 | True |
+| optimistix | jitted_core | 0.223 | 0.0264 | 0.00692 | - | 0 | 0.000569 | True |
 
 ### exp_decay, n=1000000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| lmfit | end_to_end | 0.685 | 0.255 | 0.0105 | 21 | 1.82e-16 | 7.62e-05 | True |
-| optimistix | jitted_core | 0.464 | 0.273 | 0.0281 | - | 1.82e-16 | 7.62e-05 | True |
-| optimistix | end_to_end | 0.477 | 0.307 | 0.0161 | - | 1.82e-16 | 7.62e-05 | True |
-| nlsq | end_to_end | 1.11 | 0.624 | 0.0457 | 7 | 1.82e-16 | 7.62e-05 | True |
-| scipy | end_to_end | 0.678 | 0.689 | 0.0898 | 5 | 0 | 7.62e-05 | True |
-| jaxopt | jitted_core | 18.5 | 17.8 | 0.852 | - | 1.82e-16 | 7.62e-05 | False |
-| jaxopt | end_to_end | 17.7 | 18 | 0.495 | - | 1.82e-16 | 7.62e-05 | False |
+| jaxopt | end_to_end | 0.407 | 0.167 | 0.0226 | - | 1.82e-16 | 7.62e-05 | True |
+| lmfit | end_to_end | 0.291 | 0.248 | 0.00293 | 21 | 1.82e-16 | 7.62e-05 | True |
+| optimistix | end_to_end | 0.474 | 0.25 | 0.0217 | - | 1.82e-16 | 7.62e-05 | True |
+| nlsq | end_to_end | 1.09 | 0.63 | 0.0337 | 7 | 1.82e-16 | 7.62e-05 | True |
+| scipy | end_to_end | 0.635 | 0.681 | 0.0488 | 5 | 0 | 7.62e-05 | True |
+
+#### exp_decay, n=1000000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.414 | 0.148 | 0.0132 | - | 1.82e-16 | 7.62e-05 | True |
+| optimistix | jitted_core | 0.45 | 0.264 | 0.0282 | - | 1.82e-16 | 7.62e-05 | True |
 
 ### gaussian, n=1000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| jaxopt | jitted_core | 0.536 | 0.000875 | 6.04e-05 | - | 0 | 0.000733 | True |
-| optimistix | jitted_core | 0.217 | 0.000998 | 0.000134 | - | 0 | 0.000733 | True |
-| optimistix | end_to_end | 0.216 | 0.00141 | 0.000192 | - | 0 | 0.000733 | True |
-| scipy | end_to_end | 0.0851 | 0.00174 | 5.5e-05 | 9 | 0 | 0.000733 | True |
-| lmfit | end_to_end | 0.429 | 0.00223 | 0.000176 | 38 | 5.24e-14 | 0.000733 | True |
-| jaxopt | end_to_end | 0.535 | 0.00235 | 0.000227 | - | 0 | 0.000733 | True |
-| nlsq | end_to_end | 0.842 | 0.182 | 0.0143 | 9 | 0 | 0.000733 | True |
+| jaxopt | end_to_end | 0.54 | 0.00097 | 0.000152 | - | 0 | 0.000733 | True |
+| optimistix | end_to_end | 0.215 | 0.000977 | 0.000198 | - | 0 | 0.000733 | True |
+| scipy | end_to_end | 0.0026 | 0.00172 | 9.34e-05 | 9 | 0 | 0.000733 | True |
+| lmfit | end_to_end | 0.00301 | 0.00223 | 0.000152 | 38 | 5.24e-14 | 0.000733 | True |
+| nlsq | end_to_end | 0.774 | 0.171 | 0.00676 | 9 | 0 | 0.000733 | True |
+
+#### gaussian, n=1000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.527 | 0.000955 | 0.00014 | - | 0 | 0.000733 | True |
+| optimistix | jitted_core | 0.211 | 0.00105 | 0.000359 | - | 0 | 0.000733 | True |
 
 ### gaussian, n=100000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| lmfit | end_to_end | 0.434 | 0.0372 | 0.000929 | 34 | 0 | 0.000156 | True |
-| optimistix | end_to_end | 0.304 | 0.0852 | 0.0153 | - | 0 | 0.000156 | True |
-| optimistix | jitted_core | 0.312 | 0.0854 | 0.00205 | - | 0 | 0.000156 | True |
-| scipy | end_to_end | 0.192 | 0.114 | 0.000784 | 9 | 0 | 0.000156 | True |
-| nlsq | end_to_end | 0.97 | 0.319 | 0.0308 | 13 | 0 | 0.000156 | True |
-| jaxopt | end_to_end | 1.71 | 1.37 | 0.00574 | - | 0 | 0.000156 | False |
-| jaxopt | jitted_core | 1.67 | 1.37 | 0.015 | - | 0 | 0.000156 | False |
+| jaxopt | end_to_end | 0.365 | 0.0352 | 0.00239 | - | 0 | 0.000156 | True |
+| lmfit | end_to_end | 0.0382 | 0.0369 | 0.000175 | 34 | 1.14e-16 | 0.000156 | True |
+| optimistix | end_to_end | 0.321 | 0.0897 | 0.00516 | - | 1.14e-16 | 0.000156 | True |
+| scipy | end_to_end | 0.104 | 0.111 | 0.00207 | 9 | 1.14e-16 | 0.000156 | True |
+| nlsq | end_to_end | 0.983 | 0.302 | 0.0341 | 13 | 1.14e-16 | 0.000156 | True |
+
+#### gaussian, n=100000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.365 | 0.0357 | 0.00187 | - | 0 | 0.000156 | True |
+| optimistix | jitted_core | 0.306 | 0.0904 | 0.00804 | - | 1.14e-16 | 0.000156 | True |
 
 ### gaussian, n=1000000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| lmfit | end_to_end | 0.871 | 0.421 | 0.0093 | 34 | 1.82e-16 | 6.62e-05 | True |
-| optimistix | jitted_core | 1.05 | 0.861 | 0.0469 | - | 0 | 6.62e-05 | True |
-| optimistix | end_to_end | 0.942 | 0.897 | 0.0512 | - | 0 | 6.62e-05 | True |
-| nlsq | end_to_end | 1.77 | 1.19 | 0.045 | 13 | 0 | 6.62e-05 | True |
-| scipy | end_to_end | 1.33 | 1.21 | 0.0613 | 9 | 1.82e-16 | 6.62e-05 | True |
-| jaxopt | end_to_end | 27.1 | 26.9 | 0.617 | - | 1.82e-16 | 6.62e-05 | False |
-| jaxopt | jitted_core | 28.7 | 27.2 | 0.61 | - | 1.82e-16 | 6.62e-05 | False |
+| lmfit | end_to_end | 0.46 | 0.408 | 0.00429 | 34 | 1.82e-16 | 6.62e-05 | True |
+| jaxopt | end_to_end | 0.959 | 0.625 | 0.0624 | - | 1.82e-16 | 6.62e-05 | True |
+| optimistix | end_to_end | 0.9 | 0.828 | 0.0233 | - | 0 | 6.62e-05 | True |
+| scipy | end_to_end | 1.08 | 1.15 | 0.0607 | 9 | 1.82e-16 | 6.62e-05 | True |
+| nlsq | end_to_end | 1.77 | 1.21 | 0.0644 | 13 | 0 | 6.62e-05 | True |
+
+#### gaussian, n=1000000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.925 | 0.625 | 0.0947 | - | 1.82e-16 | 6.62e-05 | True |
+| optimistix | jitted_core | 1.05 | 0.859 | 0.0558 | - | 0 | 6.62e-05 | True |
 
 ### two_exp, n=1000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| jaxopt | jitted_core | 0.585 | 0.00105 | 0.000135 | - | 3.72e-16 | 0.186 | True |
-| jaxopt | end_to_end | 0.594 | 0.00146 | 0.000257 | - | 3.72e-16 | 0.186 | True |
-| optimistix | end_to_end | 0.211 | 0.00293 | 0.00128 | - | 0 | 0.186 | True |
-| optimistix | jitted_core | 0.21 | 0.00305 | 0.000974 | - | 0 | 0.186 | True |
-| scipy | end_to_end | 0.0862 | 0.00312 | 6.65e-05 | 15 | 4.56e-10 | 0.185 | True |
-| lmfit | end_to_end | 0.399 | 0.00354 | 0.000216 | 73 | 3.26e-09 | 0.184 | True |
-| nlsq | end_to_end | 0.855 | 0.175 | 0.00596 | 15 | 4.52e-10 | 0.185 | True |
+| jaxopt | end_to_end | 0.573 | 0.000933 | 0.000138 | - | 3.72e-16 | 0.186 | True |
+| scipy | end_to_end | 0.00404 | 0.00311 | 2.6e-05 | 15 | 4.56e-10 | 0.185 | True |
+| lmfit | end_to_end | 0.00428 | 0.00348 | 0.000161 | 73 | 3.26e-09 | 0.184 | True |
+| optimistix | end_to_end | 0.215 | 0.0042 | 0.00113 | - | 0 | 0.186 | True |
+| nlsq | end_to_end | 0.785 | 0.176 | 0.00333 | 15 | 4.52e-10 | 0.185 | True |
+
+#### two_exp, n=1000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.572 | 0.000988 | 8.02e-05 | - | 3.72e-16 | 0.186 | True |
+| optimistix | jitted_core | 0.211 | 0.00303 | 0.00126 | - | 0 | 0.186 | True |
 
 ### two_exp, n=100000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| lmfit | end_to_end | 0.456 | 0.0628 | 0.001 | 42 | 6.82e-16 | 0.0666 | True |
-| optimistix | end_to_end | 0.339 | 0.124 | 0.00346 | - | 0 | 0.473 | True |
-| optimistix | jitted_core | 0.351 | 0.126 | 0.00481 | - | 0 | 0.473 | True |
-| scipy | end_to_end | 0.218 | 0.167 | 0.00742 | 9 | 0 | 0.0666 | True |
-| nlsq | end_to_end | 0.894 | 0.338 | 0.00998 | 11 | 2.27e-16 | 0.0666 | True |
-| jaxopt | jitted_core | 1.57 | 1.25 | 0.0116 | - | 0 | 0.0666 | False |
-| jaxopt | end_to_end | 1.59 | 1.26 | 0.0153 | - | 0 | 0.0666 | False |
+| jaxopt | end_to_end | 0.364 | 0.0436 | 0.00127 | - | 0 | 0.0666 | True |
+| lmfit | end_to_end | 0.0639 | 0.0616 | 0.00111 | 42 | 6.82e-16 | 0.0666 | True |
+| optimistix | end_to_end | 0.358 | 0.127 | 0.00573 | - | 0 | 0.473 | True |
+| scipy | end_to_end | 0.138 | 0.16 | 0.00829 | 9 | 0 | 0.0666 | True |
+| nlsq | end_to_end | 0.993 | 0.356 | 0.0299 | 11 | 2.27e-16 | 0.0666 | True |
+
+#### two_exp, n=100000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 0.347 | 0.0429 | 0.00191 | - | 0 | 0.0666 | True |
+| optimistix | jitted_core | 0.334 | 0.132 | 0.0128 | - | 0 | 0.473 | True |
 
 ### two_exp, n=1000000
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
-| lmfit | end_to_end | 1.2 | 0.725 | 0.0206 | 42 | 0 | 0.0125 | True |
-| scipy | end_to_end | 1.57 | 1.38 | 0.134 | 9 | 0 | 0.0125 | True |
-| nlsq | end_to_end | 2.06 | 1.65 | 0.0961 | 11 | 0 | 0.0125 | True |
-| optimistix | end_to_end | 1.83 | 1.78 | 0.088 | - | 0 | 0.0125 | True |
-| optimistix | jitted_core | 1.96 | 1.79 | 0.136 | - | 0 | 0.0125 | True |
-| jaxopt | jitted_core | 23.9 | 23 | 0.469 | - | 0 | 0.0125 | False |
-| jaxopt | end_to_end | 22.8 | 23.6 | 0.525 | - | 0 | 0.0125 | False |
+| lmfit | end_to_end | 0.804 | 0.701 | 0.00366 | 42 | 0 | 0.0125 | True |
+| jaxopt | end_to_end | 1.39 | 1.02 | 0.118 | - | 0 | 0.0125 | True |
+| scipy | end_to_end | 1.41 | 1.31 | 0.0215 | 9 | 0 | 0.0125 | True |
+| nlsq | end_to_end | 2.16 | 1.6 | 0.0932 | 11 | 0 | 0.0125 | True |
+| optimistix | end_to_end | 1.93 | 1.79 | 0.0368 | - | 0 | 0.0125 | True |
+
+#### two_exp, n=1000000: resident data (jitted_core)
+
+Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+
+| library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
+|---|---|---|---|---|---|---|---|---|
+| jaxopt | jitted_core | 1.24 | 1 | 0.0943 | - | 0 | 0.0125 | True |
+| optimistix | jitted_core | 1.92 | 1.69 | 0.125 | - | 0 | 0.0125 | True |
 
 ## Capability matrix
 
@@ -164,7 +234,7 @@ Caveats:
 | nlsq | yes | yes | yes | no | yes |  |
 | scipy | yes | yes | yes | no | yes |  |
 | lmfit | yes | yes | yes | no | yes | wraps SciPy leastsq / least_squares |
-| jaxopt | no | no | no | yes | no | README: "JAXopt is no longer maintained nor developed"; tol/xtol/gtol all honoured |
+| jaxopt | no | no | no | yes | no | README: "JAXopt is no longer maintained nor developed"; stop_criterion=madsen-nielsen: xtol and gtol active, tol unused (the default grad-l2-norm ignores xtol/gtol) |
 | optimistix | no | no | no | yes | yes | rtol/atol only; no separate gtol |
 
 ## Unavailable, unsupported or excluded
