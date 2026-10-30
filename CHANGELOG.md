@@ -21,6 +21,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Migration:** GUI users run `pip install "nlsq[gui]"`; contributors use
   `make dev` or `uv sync`.
 
+### Fixed
+- A default `import nlsq` + fit no longer prints `INFO:`/`PERFORMANCE:` log
+  lines to stderr. `nlsq/config.py` logged through the root logger
+  (`logging.debug(...)`), which ran `logging.basicConfig()` and installed a
+  stderr handler on the application's root logger, and NLSQ's loggers
+  defaulted to INFO. Config now logs through a module logger, and NLSQ
+  loggers default to WARNING (INFO with `NLSQ_VERBOSE=1`, DEBUG with
+  `NLSQ_DEBUG=1`); `NLSQ_SAVE_ITERATIONS` still records iteration history.
+
+### Performance
+- Warm small fits no longer re-compile. `curve_fit()` builds a new
+  `CurveFit`/`LeastSquares` per call, and their JIT kernels were per-instance
+  `@jit` closures, so every warm call re-traced and re-compiled 4 XLA
+  programs (~125 ms of 167 ms at n=1000). Stateless kernels (`CommonJIT`,
+  `CurveFit` sigma/covariance, `LossFunctionsJIT`) are now module-level
+  singletons, and the residual/Jacobian wrappers of the user model are reused
+  from a bounded cache only when provably equivalent to re-tracing: the model
+  must be a plain function whose closure cells, defaults and referenced
+  module globals are immutable values (scalars by exact bits, tuples, frozen
+  dataclasses, functions/modules by identity); anything else (array or list
+  captures, callable objects, bound methods) is rebuilt per call as before.
+  No fit result changes: golden-master and bit-identity tests pass. A lambda
+  created anew for every call still compiles each time, because a new
+  function object can't be proven equivalent. Cold (first-call) time is
+  unchanged (~0.77 s).
+
+  Harness: `python -m benchmarks.compare.run_library_comparison --problems
+  exp_decay --sizes 1000 100000 --repeats 7 --no-batch`, CPU (i9-13900H),
+  warm median in seconds; ratio = NLSQ warm / library warm (lower is
+  better for NLSQ). "Before" is after the logging fix, identical to the
+  committed Task 7 baseline (0.167 s at n=1000).
+
+  | n | library | before (s) | NLSQ/lib before | after (s) | NLSQ/lib after |
+  |---|---|---|---|---|---|
+  | 1000 | **nlsq** | **0.167** | – | **0.00275** | – |
+  | 1000 | jaxopt | 0.000759 | 220× | 0.000316 | 8.7× |
+  | 1000 | scipy | 0.00102 | 164× | 0.00103 | 2.7× |
+  | 1000 | optimistix | 0.000697 | 240× | 0.00104 | 2.6× |
+  | 1000 | lmfit | 0.00183 | 91× | 0.00177 | 1.6× |
+  | 100000 | **nlsq** | **0.224** | – | **0.0380** | – |
+  | 100000 | jaxopt | 0.0156 | 14× | 0.0122 | 3.1× |
+  | 100000 | lmfit | 0.0230 | 9.7× | 0.0230 | 1.7× |
+  | 100000 | optimistix | 0.0325 | 6.9× | 0.0299 | 1.3× |
+  | 100000 | scipy | 0.0543 | 4.1× | 0.0661 | 0.57× |
+
+  Warm n=1000 drops 61× (0.167 s → 2.75 ms, target ≤ 34 ms). A
+  `loss='soft_l1'` fit drops from 146 ms to 5 ms. The remaining ~2.7 ms is
+  spread across Python orchestration (object setup, validation, the TRF
+  loop's dispatches) with no single dominant item;
+  `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
+
 ## [0.7.6] - 2026-09-04
 
 ### Fixed
