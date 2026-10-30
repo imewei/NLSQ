@@ -8,6 +8,10 @@
 
 from __future__ import annotations
 
+import dataclasses
+import threading
+import types
+from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 from warnings import warn
@@ -426,6 +430,77 @@ def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
         return True
 
 
+# Residual/Jacobian wrapper bundles for the autodiff path, shared across
+# LeastSquares instances. curve_fit() builds a new LeastSquares per call, so
+# per-instance wrappers were re-traced and re-compiled on every fit.
+_WRAPPER_CACHE_SIZE = 32
+_wrapper_cache: OrderedDict[tuple, tuple] = OrderedDict()
+_wrapper_cache_lock = threading.Lock()
+
+_EXACT_SCALARS = (type(None), bool, int, str, bytes)
+_BY_IDENTITY = (types.ModuleType, types.FunctionType, types.BuiltinFunctionType, type)
+
+
+def _freeze(value: Any) -> Any:
+    """Exact, hashable snapshot of a provably immutable value.
+
+    Raises TypeError for anything that could change in place (arrays, lists,
+    dicts, arbitrary objects); callers then skip the cache. Floats are keyed
+    by their bits so -0.0/0.0 and 1/1.0/True stay distinct. Functions,
+    modules and classes are keyed by identity (one level, as `jax.jit` does).
+    """
+    t = type(value)
+    if isinstance(value, np.generic):
+        return (t, value.tobytes())
+    if t in _EXACT_SCALARS:
+        return (t, value)
+    if t is float:
+        return (t, value.hex())
+    if t is complex:
+        return (t, value.real.hex(), value.imag.hex())
+    if isinstance(value, _BY_IDENTITY):
+        return value
+    if t is tuple:
+        return (t, tuple(_freeze(v) for v in value))
+    if t is frozenset:
+        return (t, frozenset(_freeze(v) for v in value))
+    if dataclasses.is_dataclass(value) and t.__dataclass_params__.frozen:
+        fields = dataclasses.fields(value)
+        return (t, tuple(_freeze(getattr(value, f.name)) for f in fields))
+    raise TypeError(f"not provably immutable: {t.__name__}")
+
+
+def _wrapper_cache_key(fun: Callable, n: int, mode: str) -> tuple | None:
+    """Cache key for `fun`'s wrappers, or None when reuse is not provably safe.
+
+    The key holds `fun` itself (strong reference, so its id cannot be reused)
+    plus a snapshot of everything its trace can read: code, closure cells,
+    defaults and the module globals it names. A hit therefore means a re-trace
+    of `fun` now would see exactly what the cached trace saw.
+    """
+    if not isinstance(fun, types.FunctionType):
+        return None
+    try:
+        code = fun.__code__
+        g = fun.__globals__
+        key = (
+            fun,
+            code,
+            tuple(_freeze(c.cell_contents) for c in fun.__closure__ or ()),
+            _freeze(fun.__defaults__),
+            tuple(
+                sorted((k, _freeze(v)) for k, v in (fun.__kwdefaults__ or {}).items())
+            ),
+            tuple((name, _freeze(g[name])) for name in code.co_names if name in g),
+            n,
+            mode,
+        )
+        hash(key)
+    except Exception:  # empty cell, unhashable or mutable capture: no caching
+        return None
+    return key
+
+
 class LeastSquares:
     """Core least squares optimization engine with JAX acceleration.
 
@@ -649,9 +724,10 @@ class LeastSquares:
 
             # Update function if needed
             if func_update:
-                self.update_function(fun)
                 if jac is None:
-                    self.autdiff_jac(jac, mode=jacobian_mode_selected)
+                    self._bind_autodiff_wrappers(fun, jacobian_mode_selected)
+                else:
+                    self.update_function(fun)
 
             # Handle analytical Jacobian
             if jac is not None:
@@ -1456,6 +1532,33 @@ class LeastSquares:
         )
 
         return result
+
+    def _bind_autodiff_wrappers(self, fun: Callable, mode: str) -> None:
+        """update_function(fun) + autdiff_jac(None), reusing cached wrappers.
+
+        Reuse happens only under `_wrapper_cache_key`'s conditions; otherwise
+        the wrappers are rebuilt exactly as before.
+        """
+        key = _wrapper_cache_key(fun, self.n, mode)
+        with _wrapper_cache_lock:
+            bundle = _wrapper_cache.get(key) if key is not None else None
+            if bundle is not None:
+                _wrapper_cache.move_to_end(key)
+        if bundle is None:
+            self.update_function(fun)
+            self.autdiff_jac(None, mode=mode)
+            if key is not None:
+                bundle = (self.func_none, self.func_1d, self.func_2d)
+                bundle += (self.jac_none, self.jac_1d, self.jac_2d)
+                with _wrapper_cache_lock:
+                    _wrapper_cache[key] = bundle
+                    while len(_wrapper_cache) > _WRAPPER_CACHE_SIZE:
+                        _wrapper_cache.popitem(last=False)
+            return
+        (self.func_none, self.func_1d, self.func_2d) = bundle[:3]
+        (self.jac_none, self.jac_1d, self.jac_2d) = bundle[3:]
+        self.f = fun
+        self.jac = None
 
     def autdiff_jac(self, jac: None, mode: str = "fwd") -> None:
         """We do this for all three sigma transformed functions such
