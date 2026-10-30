@@ -42,7 +42,6 @@ _MODULE_ALIASES = {
     "nlsq.fallback": "nlsq.stability.fallback",
     "nlsq.bound_inference": "nlsq.precision.bound_inference",
     "nlsq.least_squares": "nlsq.core.least_squares",
-    "nlsq.async_logger": "nlsq.utils.async_logger",
     "nlsq.svd_fallback": "nlsq.stability.svd_fallback",
     "nlsq.loss_functions": "nlsq.core.loss_functions",
     "nlsq.functions": "nlsq.core.functions",

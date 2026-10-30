@@ -30,7 +30,6 @@ The ``nlsq`` package is organized into logical subpackages:
    ├── stability/       2,760 lines - Numerical robustness, fallbacks, recovery
    ├── interfaces/      1,306 lines - Protocol definitions for DI
    ├── result/          1,221 lines - OptimizeResult, CurveFitResult
-   ├── facades/           385 lines - Lazy-loading dependency breakers
    └── (root)          ~4,850 lines - Config, callbacks, types, device, constants
 
 
@@ -57,11 +56,9 @@ The following diagram illustrates the layered architecture of NLSQ:
    │  ├── CovarianceComputer   ├── TournamentSelect   │   0: Normalization        │
    │  └── StreamingCoordinator ├── LHS/Sobol/Halton   │   1: L-BFGS warmup       │
    │                           └── MethodSelector      │   2: Gauss-Newton         │
-   │  Facades (circular dep    Presets: fast/robust/   └── 3: Denormalization      │
-   │   breakers):              global/thorough/                                    │
-   │  ├── OptimizationFacade   streaming/cmaes-*                                  │
-   │  ├── StabilityFacade                                                         │
-   │  └── DiagnosticsFacade                                                       │
+   │                           Presets: fast/robust/   └── 3: Denormalization      │
+   │                           global/thorough/                                    │
+   │                           streaming/cmaes-*                                  │
    ├──────────────────────────────────────────────────────────────────────────────┤
    │                          CORE OPTIMIZATION ENGINE                            │
    ├──────────────────────────────────────────────────────────────────────────────┤
@@ -265,31 +262,6 @@ Memory Management
 - Power-of-2 bucket sizes eliminate JIT recompilation: 1024, 2048, 4096, ..., 131072
 - psutil for system memory detection with 16GB default fallback
 - Automatic chunk size calculation based on available memory
-
-
-Facades
--------
-
-The ``facades/`` package (385 lines) breaks circular import dependencies by deferring
-heavy imports to function-call time. Each facade provides lazy accessors for a
-subsystem that would otherwise create import cycles with ``core/minpack.py``:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 35 35
-
-   * - Facade
-     - Deferred Subsystem
-     - Key Accessors
-   * - ``OptimizationFacade``
-     - ``global_optimization/``
-     - ``get_cmaes_optimizer()``, ``get_multistart_optimizer()``
-   * - ``StabilityFacade``
-     - ``stability/``
-     - ``get_fallback_svd()``, ``get_stability_guard()``, ``get_recovery_handler()``
-   * - ``DiagnosticsFacade``
-     - ``diagnostics/``
-     - ``get_convergence_monitor()``, ``get_diagnostics_config()``
 
 
 Protocol-Based Dependency Injection
@@ -672,9 +644,7 @@ Design Patterns
    * - Phased Pipeline
      - 4-phase streaming optimizer
    * - Lazy Loading
-     - ``__getattr__`` in ``__init__.py``, ``orchestration/``, ``facades/`` (50%+ import reduction)
-   * - Facade
-     - Break circular dependencies (``facades/``) with deferred imports
+     - ``__getattr__`` in ``__init__.py``, ``orchestration/`` (50%+ import reduction)
    * - Adapter
      - GUI adapters bridge NLSQ to Qt widgets; ``CurveFitAdapter`` for protocol compliance
    * - Feature Flags
@@ -752,7 +722,7 @@ Global Optimization
 Performance Optimizations
 -------------------------
 
-1. **Lazy Imports**: 50%+ reduction in cold import time via ``__getattr__`` in package init, orchestration, and facades
+1. **Lazy Imports**: 50%+ reduction in cold import time via ``__getattr__`` in package init and orchestration
 2. **Shape-Relaxed Cache Keys**: Cache by ``(hash, dtype, rank)`` not exact shapes
 3. **Power-of-2 Bucketing**: Static array shapes for JIT efficiency
 4. **xxhash**: 10x faster hashing than SHA256

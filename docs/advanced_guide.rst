@@ -57,7 +57,6 @@ NLSQ provides multiple API levels for different needs:
    :caption: API Reference
 
    reference/core_api
-   reference/facades
    howto/advanced_api
 
 .. toctree::

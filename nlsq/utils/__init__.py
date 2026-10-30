@@ -7,7 +7,6 @@ This subpackage contains utility modules:
 - profiler_visualization: Profiling visualizations
 - profiling: Profiling utilities
 - logging: Logging configuration
-- async_logger: Asynchronous logging
 - validators: Input validation
 - error_messages: Error message formatting
 - safe_serialize: Secure JSON-based serialization (replaces pickle)

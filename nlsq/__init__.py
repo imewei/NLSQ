@@ -238,6 +238,21 @@ _LAZY_MODULES: dict[str, str] = {
 # Cache for lazily-loaded attributes
 _LAZY_CACHE: dict[str, Any] = {}
 
+# Top-level exports that still resolve but warn once per name. Import them from
+# their defining modules (nlsq.utils.profiler / nlsq.utils.profiler_visualization).
+_DEPRECATED_EXPORTS: dict[str, str] = {
+    name: f"nlsq.{name} is deprecated and will be removed in the next minor release"
+    for name in (
+        "PerformanceProfiler",
+        "ProfileMetrics",
+        "clear_profiling_data",
+        "get_global_profiler",
+        "ProfilerVisualization",
+        "ProfilingDashboard",
+    )
+}
+_deprecation_seen: set[str] = set()
+
 
 def __getattr__(name: str) -> Any:
     """Lazily load specialty modules on first access.
@@ -245,6 +260,12 @@ def __getattr__(name: str) -> Any:
     This enables faster import time by deferring loading of specialty
     modules until they are actually needed.
     """
+    if name in _DEPRECATED_EXPORTS and name not in _deprecation_seen:
+        _deprecation_seen.add(name)
+        import warnings
+
+        warnings.warn(_DEPRECATED_EXPORTS[name], DeprecationWarning, stacklevel=2)
+
     # Check if it's a lazy module
     if name in _LAZY_MODULES:
         # Return cached value if already loaded

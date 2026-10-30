@@ -117,10 +117,3 @@ Import Patterns
    # Core classes
    from nlsq.core.least_squares import LeastSquares
    from nlsq.core.trf import TrustRegionReflective
-
-   # Facades
-   from nlsq.facades import (
-       OptimizationFacade,
-       StabilityFacade,
-       DiagnosticsFacade,
-   )

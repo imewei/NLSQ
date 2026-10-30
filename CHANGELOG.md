@@ -128,6 +128,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4.8 ms vs 102 ms.
   `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
 
+### Removed
+
+- `nlsq.facades` (`OptimizationFacade`, `StabilityFacade`, `DiagnosticsFacade`)
+  and `nlsq.utils.async_logger`. Nothing in the package used either; the
+  facade import cycles they were written for no longer exist.
+
+### Deprecated
+
+- `nlsq.PerformanceProfiler`, `nlsq.ProfileMetrics`, `nlsq.clear_profiling_data`,
+  `nlsq.get_global_profiler`, `nlsq.ProfilerVisualization` and
+  `nlsq.ProfilingDashboard`. Accessing them from the top-level package now
+  emits one `DeprecationWarning` per name and they will be removed from it in
+  the next minor release. Import them from `nlsq.utils.profiler` and
+  `nlsq.utils.profiler_visualization` instead.
+
 ## [0.7.6] - 2026-09-04
 
 ### Fixed

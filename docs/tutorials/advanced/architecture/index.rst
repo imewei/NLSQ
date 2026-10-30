@@ -32,7 +32,6 @@ Package Structure
    ├── streaming/      # Large dataset handling
    ├── caching/        # Performance optimization
    ├── stability/      # Numerical stability
-   ├── facades/        # Lazy-loading wrappers
    └── gui_qt/         # Desktop application
 
 Key Design Principles

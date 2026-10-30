@@ -57,11 +57,6 @@ Module Hierarchy
    ├── precision/             # Precision control
    │   └── parameter_normalizer.py
    │
-   ├── facades/               # Lazy loading
-   │   ├── optimization_facade.py
-   │   ├── stability_facade.py
-   │   └── diagnostics_facade.py
-   │
    ├── global_optimization/   # Global search
    │   ├── multi_start.py          # MultiStartOrchestrator
    │   ├── cmaes_optimizer.py      # CMAESOptimizer
@@ -111,12 +106,6 @@ Import Patterns
    from nlsq.diagnostics.types import DiagnosticsConfig, DiagnosticLevel
    from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
 
-**Facades (lazy loading):**
-
-.. code-block:: python
-
-   from nlsq.facades import OptimizationFacade, StabilityFacade
-
 Lazy Loading
 ------------
 
@@ -161,7 +150,6 @@ Circular dependencies are broken via:
 
 1. **Lazy imports**: Import at function call time
 2. **TYPE_CHECKING**: Type hints without runtime import
-3. **Facades**: Lazy-loading wrappers
 
 Next Steps
 ----------
