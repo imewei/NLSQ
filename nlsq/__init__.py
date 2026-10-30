@@ -28,6 +28,7 @@ Examples
 import faulthandler
 import os
 import sys
+import threading
 
 # Enable faulthandler FIRST so any SIGBUS/SIGSEGV during import prints a
 # traceback to stderr instead of dying silently.  This is deliberately before
@@ -252,6 +253,7 @@ _DEPRECATED_EXPORTS: dict[str, str] = {
     )
 }
 _deprecation_seen: set[str] = set()
+_deprecation_lock = threading.Lock()
 
 
 def __getattr__(name: str) -> Any:
@@ -263,9 +265,14 @@ def __getattr__(name: str) -> Any:
     if name in _DEPRECATED_EXPORTS and name not in _deprecation_seen:
         import warnings
 
-        # Mark seen only after warn: under -W error the raise must repeat.
-        warnings.warn(_DEPRECATED_EXPORTS[name], DeprecationWarning, stacklevel=2)
-        _deprecation_seen.add(name)
+        # The lock makes check-warn-add atomic so concurrent first accesses warn
+        # once. Mark seen only after warn: under -W error the raise must repeat.
+        with _deprecation_lock:
+            if name not in _deprecation_seen:
+                warnings.warn(
+                    _DEPRECATED_EXPORTS[name], DeprecationWarning, stacklevel=2
+                )
+                _deprecation_seen.add(name)
 
     # Check if it's a lazy module
     if name in _LAZY_MODULES:
