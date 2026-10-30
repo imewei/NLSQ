@@ -485,11 +485,13 @@ class _Uncacheable(Exception):
     """Raised while digesting a jaxpr that cannot be keyed exactly."""
 
 
-# Params holding a custom derivative rule. They are not digested directly;
-# the rule is covered by the digest of the traced Jacobian (see _trace_model).
+# Params holding a custom_jvp rule. They are not digested directly; the rule is
+# traced (and memoised) with the Jacobian, so the digest of the traced Jacobian
+# covers it (see _trace_model). custom_vjp is refused instead: its `bwd`
+# callable is re-invoked at every recompile of a cached wrapper and would read
+# the owning model's *current* state while fitting another model.
 _RULE_PARAMS = {
     "custom_jvp_call": frozenset({"jvp_jaxpr_fun", "jvp_jaxpr_thunk"}),
-    "custom_vjp_call": frozenset({"fwd_jaxpr_thunk", "bwd", "out_trees"}),
 }
 _MESH_TYPES = (jax.sharding.Mesh, jax.sharding.AbstractMesh)
 _PRNG_IMPLS = frozenset({"threefry2x32", "rbg", "unsafe_rbg"})
@@ -665,7 +667,12 @@ def _snapshot_jaxpr(jaxpr: Any) -> tuple[Any, tuple]:
     eqns, eqn_keys = [], []
     for eqn in jaxpr.eqns:
         prim = eqn.primitive
-        if eqn.effects or "callback" in prim.name or not _is_jax_primitive(prim):
+        if (
+            eqn.effects
+            or "callback" in prim.name
+            or prim.name.startswith("custom_vjp")
+            or not _is_jax_primitive(prim)
+        ):
             raise _Uncacheable(f"primitive {prim.name}")
         ins = [atom(a) for a in eqn.invars]
         rule = _RULE_PARAMS.get(prim.name, frozenset())
