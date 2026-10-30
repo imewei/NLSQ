@@ -240,8 +240,6 @@ NLSQ is organized into well-separated layers (~74,000 lines):
 │  ├── NumericalGuard   ├── AlgorithmSel.   ├── UnifiedCache  ├── Identifiab. │
 │  ├── SVD fallback     ├── ParamNormalizer └── MemoryMgr     ├── GradientMon │
 │  └── Recovery         └── BoundsInfer.                      └── PluginSys.  │
-│  facades/ (v0.6.4)                                                          │
-│  ├── OptimizationFacade  ├── StabilityFacade  └── DiagnosticsFacade         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                            INFRASTRUCTURE                                   │
 │  config.py (Singleton)              Security                               │

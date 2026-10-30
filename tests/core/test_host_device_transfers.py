@@ -23,82 +23,12 @@ import pytest
 
 from nlsq import curve_fit
 from nlsq.core.least_squares import LeastSquares
-from nlsq.utils.async_logger import (
-    is_jax_array,
-    log_convergence_async,
-    log_iteration_async,
-)
 from nlsq.utils.profiling import (
     PerformanceMetrics,
     analyze_source_transfers,
     compare_transfer_reduction,
     profile_optimization,
 )
-
-
-@pytest.mark.serial
-class TestAsyncLogging:
-    """Test Task 2.4: Async logging with jax.debug.callback."""
-
-    def test_is_jax_array_detection(self):
-        """Verify JAX array detection works correctly."""
-        # JAX arrays
-        assert is_jax_array(jnp.array([1.0, 2.0, 3.0]))
-        assert is_jax_array(jnp.zeros(10))
-
-        # NumPy arrays (not JAX)
-        assert not is_jax_array(np.array([1.0, 2.0]))
-        assert not is_jax_array(1.0)
-        assert not is_jax_array("string")
-        assert not is_jax_array(None)
-
-    def test_async_logging_no_device_sync(self):
-        """Verify async logging completes without error."""
-        x = jnp.array([1.0, 2.0, 3.0])
-        cost = jnp.sum(x**2)
-        grad_norm = jnp.linalg.norm(x)
-
-        # Logging should complete without error
-        for i in range(5):
-            log_iteration_async(i, cost, grad_norm, verbose=2)
-
-    def test_log_iteration_async_throttles_jax_array_iteration(self, monkeypatch):
-        """verbose=1 must throttle to every 10th iteration even when
-        `iteration` is a concrete jax.Array rather than a plain int --
-        `isinstance(iteration, int)` alone never throttled JAX-array
-        counters, the common case for JIT-friendly loops."""
-        calls = []
-        monkeypatch.setattr(
-            jax.debug, "callback", lambda *args, **kwargs: calls.append(args)
-        )
-        cost = jnp.array(1.0)
-        grad_norm = jnp.array(1.0)
-        for i in range(20):
-            log_iteration_async(jnp.array(i), cost, grad_norm, verbose=1)
-        assert len(calls) == 2  # iterations 0 and 10 only
-
-    def test_log_iteration_async_surfaces_malformed_iteration(self):
-        """A bare TypeError from int(iteration) -- e.g. a multi-element
-        array or None -- means the caller passed a malformed argument and
-        must propagate as a real error, not be silently swallowed into
-        'log every iteration' alongside the intended traced-value case
-        (jax.errors.ConcretizationTypeError)."""
-        cost = jnp.array(1.0)
-        grad_norm = jnp.array(1.0)
-        with pytest.raises(TypeError):
-            log_iteration_async(jnp.array([1, 2, 3]), cost, grad_norm, verbose=1)
-
-    def test_log_iteration_async_does_not_throttle_traced_iteration(self):
-        """A traced iteration (inside jit) raises ConcretizationTypeError
-        on int(), which IS the intended case to swallow -- verbose=1 must
-        fall through to logging every call rather than raising."""
-
-        @jax.jit
-        def run(i, c, g):
-            log_iteration_async(i, c, g, verbose=1)
-            return i
-
-        run(jnp.array(3), jnp.array(1.0), jnp.array(1.0))
 
 
 class TestTransferProfiling:

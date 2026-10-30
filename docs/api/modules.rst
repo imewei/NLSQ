@@ -69,16 +69,6 @@ optima in problems with multiple local minima:
    nlsq.global_optimization.config
    nlsq.global_optimization.sampling
 
-Facades (v0.6.4+)
------------------
-
-Lazy-loading facades for breaking circular dependencies:
-
-.. toctree::
-   :maxdepth: 2
-
-   nlsq.facades
-
 Workflow System (v0.5.5+)
 -------------------------
 
@@ -173,7 +163,6 @@ Performance analysis, profiling, and benchmarking tools (NEW in v0.3.0-beta.2+):
 .. toctree::
    :maxdepth: 2
 
-   nlsq.async_logger
    nlsq.profiling
    nlsq.profiler
    nlsq.profiler_visualization
@@ -221,9 +210,6 @@ Complete Module Listing
 - :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v0.4.2)
 - :doc:`nlsq.streaming.phases` - Phase classes (WarmupPhase, GaussNewtonPhase, etc.) (NEW in v0.4.3)
 
-**Facades** (NEW in v0.6.4):
-- :doc:`nlsq.facades` - OptimizationFacade, StabilityFacade, DiagnosticsFacade
-
 **Global Optimization Modules** (NEW in v0.3.3+):
 - :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers
 
@@ -256,7 +242,6 @@ Complete Module Listing
 - :doc:`nlsq.common_scipy` - SciPy compatibility layer
 
 **Performance & Profiling**:
-- :doc:`nlsq.async_logger` - Async logging infrastructure (NEW in v0.3.0-beta.3)
 - :doc:`nlsq.profiling` - JAX profiler integration and static analysis (v0.3.0-beta.2+)
 - :doc:`nlsq.profiler` - Performance profiler (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.profiler_visualization` - Profiling visualization (NEW in v0.3.0-beta.2)
