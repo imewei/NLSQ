@@ -75,6 +75,7 @@ def _exp(x, a, b):
     return a * jnp.exp(-b * x)
 
 
+@pytest.mark.slow
 def test_cached_fit_matches_uncached_fit_bitwise(monkeypatch):
     y = 2.5 * np.exp(-1.3 * X) + 0.01 * np.random.default_rng(0).standard_normal(X.size)
     monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
@@ -266,6 +267,7 @@ class _Cfg:
     factor: ClassVar[float] = 1.0
 
 
+@pytest.mark.slow
 def test_probe_d_frozen_dataclass_classvar(monkeypatch):
     cfg = _Cfg()
 
@@ -328,6 +330,7 @@ def test_n1_import_inside_model_body(mymod):
 _DYN = 1.0
 
 
+@pytest.mark.slow
 def test_n2_dynamic_reads(monkeypatch, mymod, tmp_path):
     def m_globals(x, a, b):
         return globals()["_DYN"] * a * jnp.exp(-b * x)
@@ -734,6 +737,7 @@ def test_f3_custom_vjp_rule_state_is_keyed_in_rev_mode(monkeypatch):
     assert new == 1  # the bwd rule state is in the (jacrev) key
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("variant", ["defjvp", "defjvps"])
 def test_d1_user_jvp_rule_reading_a_global(monkeypatch, variant):
     state = {"sc": 1.0}
@@ -810,6 +814,7 @@ print("OK")
 """
 
 
+@pytest.mark.slow
 @pytest.mark.serial
 @pytest.mark.parametrize("simplified", ["1", "0"])
 def test_f4_array_literals_are_keyed(simplified, tmp_path):
@@ -1139,6 +1144,7 @@ def test_c5_output_structure_comes_from_the_trace(monkeypatch):
     np.testing.assert_allclose(cached, [3.0])
 
 
+@pytest.mark.slow
 def test_c6_jax_config_is_part_of_the_key(monkeypatch):
     key = jax.random.key(0)
 
@@ -1168,3 +1174,23 @@ def test_c6_unrelated_flag_toggle_restores_a_hit():
     keys = set(ls_mod._wrapper_cache)
     np.testing.assert_array_equal(_fit_xs(model, 6 * XS), popt)
     assert set(ls_mod._wrapper_cache) == keys  # back to the first config: hit
+
+
+def test_cache_is_lru_bounded(monkeypatch):
+    """The size bound evicts the least recently used entry, not the newest."""
+    monkeypatch.setattr(ls_mod, "_WRAPPER_CACHE_SIZE", 2)
+    m1, m2, m3, m4 = (_make_closure_const(k) for k in (1.0, 2.0, 3.0, 4.0))
+
+    def keys_after(model):
+        _fit(model)
+        assert len(ls_mod._wrapper_cache) <= 2
+        return set(ls_mod._wrapper_cache)
+
+    k1 = keys_after(m1)
+    k12 = keys_after(m2)
+    (key2,) = k12 - k1
+    k23 = keys_after(m3)
+    assert key2 in k23 and not (k1 & k23)  # m1 was evicted
+    assert keys_after(m2) == k23  # hit: m2 is now the most recent
+    k24 = keys_after(m4)
+    assert key2 in k24 and len(k24) == 2  # m3, the LRU entry, was evicted

@@ -124,6 +124,7 @@ def test_markdown_carries_required_caveats():
     assert "tpu-sentinel" in md
 
 
+@pytest.mark.slow
 @pytest.mark.serial
 def test_quick_run_writes_valid_json_and_markdown(tmp_path, monkeypatch):
     # main() sets these; monkeypatch restores them afterwards
