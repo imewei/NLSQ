@@ -150,7 +150,8 @@ the cost is recomputed from the returned parameters, and a library is ranked onl
 if that cost matches the best in the case (a fast early stop is listed as
 `did_not_reach_optimum`, not ranked). The raw JSON lands in the git-ignored
 `benchmarks/results/`; the rendered report is committed under `baselines/`
-(`2026-10-30-library-comparison.md`).
+(`2026-10-30-library-comparison.md`; `…-before-overhead.md` is the run from before the
+small-fit overhead work, kept for the before/after comparison).
 
 ## Baselines
 
