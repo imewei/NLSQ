@@ -57,9 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       equation's primitive object; its parameters (floats by bits, arrays
       and literals by dtype, shape and bytes); nested jaxprs and their
       constants, recursively; and the variable wiring and types.
-    - If the model uses `custom_jvp`/`custom_vjp` rules, its Jacobian is
-      traced as well (with the AD mode in use), so the rule is part of the
-      key.
+    - If the model uses `custom_jvp` rules, its Jacobian is traced as well
+      (with the AD mode in use), so the rule is part of the key. Models that
+      use `custom_vjp` are not cached: the `bwd` callable runs again at every
+      recompile and would read another model's current state.
     - The effective JAX config of the calling thread (every `jax.config`
       value, including context-manager overrides such as
       `jax.threefry_partitionable`) is part of the key, since opaque
@@ -97,6 +98,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         100-operation model, and 4.5 ms for a model with a `custom_jvp`
         rule (Jacobian traced too). That is far below the 90–350 ms XLA
         compile it avoids.
+    - Captured constants are hashed on every call, and each cache entry
+      keeps its own copy of them. With an 80 MB captured array a warm fit
+      costs 85–104 ms instead of 5 ms (still faster than 654–732 ms with the
+      cache off) and the 32 entries can hold 32 copies. Pass large arrays as
+      `xdata`/arguments rather than closing over them, or set
+      `NLSQ_DISABLE_WRAPPER_CACHE=1`.
     - `nlsq.clear_cache()` drops the cache;
       `NLSQ_DISABLE_WRAPPER_CACHE=1` disables it.
     - Results are bit-identical with the cache on or off. A regression test
@@ -110,8 +117,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Harness: `python -m benchmarks.compare.run_library_comparison --problems
   exp_decay --sizes 1000 100000 --repeats 7 --no-batch`, CPU (i9-13900H),
   warm median in seconds; ratio = NLSQ warm / library warm (lower is
-  better for NLSQ). "Before" was taken after the logging fix and is
-  identical to the committed Task 7 baseline (0.167 s at n=1000). The
+  better for NLSQ). "Before" was taken after the logging fix; its NLSQ
+  n=1000 cell (0.167 s) equals the committed Task 7 baseline, but the other
+  libraries' cells were re-measured in that run and differ from the committed
+  file (optimistix n=1000: 0.000697 s here, 0.00119 s committed). The
   harness now hands NLSQ a closure over the model *function* (as a user
   writes it); with the traced-jaxpr key its earlier closure over a frozen
   dataclass would be cached too.
@@ -142,13 +151,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Full harness (all four problems, batch included; committed baselines): the
   256-fit exp_decay batch, a Python loop of NLSQ fits, drops from 48.4 s to
   0.96 s warm; bounded_exp n=1000 from 0.237 s to 0.047 s.
+  Large-n warm times are not improved: in the committed baselines
+  bounded_exp n=1e6 reads 1.53 s before and 2.21 s after, while scipy reads
+  2.48 s and 3.00 s in the same pair of runs. That points to machine load
+  (the "after" run was loaded), but a small regression cannot be excluded.
   `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
 
 ### Removed
 
 - `nlsq.facades` (`OptimizationFacade`, `StabilityFacade`, `DiagnosticsFacade`)
-  and `nlsq.utils.async_logger`. Nothing in the package or the test suite
-  imported either, apart from their own unit tests.
+  and `nlsq.utils.async_logger`. Nothing in the package imported either; the
+  tests that used them were removed with them (`async_logger` unit tests, and
+  the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
 
 ### Deprecated
 
