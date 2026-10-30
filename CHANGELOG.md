@@ -102,7 +102,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Results are bit-identical with the cache on or off. A regression test
       for each known stale-state or key-collision case checks that the
       cached fit equals the uncached fit.
-  - Cold (first-call) time is unchanged (~0.8 s).
+  - Cold (first-call) time is not improved, and in the committed baselines it
+    is higher (exp_decay n=1000: 0.82 s to 1.0 s; bounded_exp n=1e6: 2.9 s to
+    5.5 s). The two baselines were taken under different machine load, so the
+    size of the rise is uncertain; the jaxpr trace is a plausible cause.
 
   Harness: `python -m benchmarks.compare.run_library_comparison --problems
   exp_decay --sizes 1000 100000 --repeats 7 --no-batch`, CPU (i9-13900H),
@@ -128,7 +131,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The "after" column was measured on a loaded machine (load average
   about 11), so all libraries' warm times are noisier than "before".
-  Warm n=1000 is 41× faster (0.167 s to 4.1 ms; the target was ≤ 34 ms).
+  Warm n=1000 is 41× faster in this run (0.167 s to 4.1 ms; the target was
+  ≤ 34 ms). The committed full-harness baseline, a separate run, shows
+  6.0 ms (about 28×).
   The remaining time is the per-call cache-key trace (~0.9 ms) plus Python
   orchestration (object setup, validation, the TRF loop's dispatches).
   Other models, warm n=1000, cache on vs off (load average about 5): a

@@ -53,7 +53,7 @@ Caveats:
 
 #### exp_decay, n=200, batch=256: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -72,7 +72,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### exp_decay, n=1000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -91,7 +91,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### exp_decay, n=100000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -110,7 +110,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### exp_decay, n=1000000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -129,7 +129,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### gaussian, n=1000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -148,7 +148,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### gaussian, n=100000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -167,7 +167,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### gaussian, n=1000000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -186,7 +186,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### two_exp, n=1000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -205,7 +205,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### two_exp, n=100000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
@@ -224,7 +224,7 @@ Inputs are already on the device and only the jitted solve is timed, so this exc
 
 #### two_exp, n=1000000: resident data (jitted_core)
 
-Inputs are already on the device and only the jitted solve is timed, so this excludes the host-to-device transfer that `end_to_end` includes; it is not comparable with the headline table.
+Inputs are already on the device. The timed region is the jitted solve plus synchronisation and result materialisation (`np.asarray` of the device outputs and per-fit result construction); it excludes the host-to-device transfer of the inputs that `end_to_end` includes, so it is not comparable with the headline table.
 
 | library | mode | cold (s) | warm median (s) | warm IQR (s) | nfev | cost gap | max param err | lib converged |
 |---|---|---|---|---|---|---|---|---|
