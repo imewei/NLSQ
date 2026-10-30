@@ -139,8 +139,10 @@ def run_desktop() -> int:
     try:
         import pyqtgraph
         import PySide6.QtWidgets
-    except ImportError:
-        sys.stderr.write(f"{GUI_INSTALL_HINT}\n")
+    except ImportError as e:
+        # Keep the cause: an installed PySide6 with a missing system library
+        # (libGL, libxcb) is not fixed by installing the extra.
+        sys.stderr.write(f"{GUI_INSTALL_HINT}\nDetails: {e}\n")
         return 1
 
     print("Launching NLSQ Qt GUI...")
