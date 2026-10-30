@@ -109,23 +109,27 @@ class NLSQLogger:
     ...     logger.fit_complete(iterations=50, final_cost=1.2e-6)
     """
 
-    def __init__(self, name: str, level: int | LogLevel = LogLevel.INFO):
+    def __init__(self, name: str, level: int | LogLevel | None = None):
         """Initialize NLSQ logger.
 
         Parameters
         ----------
         name : str
             Logger name, typically the module name
-        level : int | LogLevel
-            Initial logging level
+        level : int | LogLevel | None
+            Initial logging level. None (default) means WARNING, or INFO when
+            NLSQ_VERBOSE=1. NLSQ_DEBUG=1 always forces DEBUG.
         """
         self.name = f"nlsq.{name}" if not name.startswith("nlsq.") else name
         self.logger = logging.getLogger(self.name)
 
-        # Override level for debug mode
-        debug_mode = os.getenv("NLSQ_DEBUG", "0") == "1"
-        if debug_mode:
+        # Library default is quiet: INFO records would otherwise reach any
+        # root handler the application installs (e.g. logging.basicConfig()).
+        if os.getenv("NLSQ_DEBUG", "0") == "1":
             level = LogLevel.DEBUG
+        elif level is None:
+            verbose = os.getenv("NLSQ_VERBOSE", "0") == "1"
+            level = LogLevel.INFO if verbose else LogLevel.WARNING
 
         self.logger.setLevel(level)
 
@@ -388,7 +392,11 @@ class NLSQLogger:
         """
         # OPT-17: Guard to prevent unnecessary work when logging is disabled
         # This avoids building metrics dict and history append when not logging
-        if not self.logger.isEnabledFor(LogLevel.PERFORMANCE):
+        # NLSQ_SAVE_ITERATIONS opts into history even at the quiet default level.
+        if not (
+            self.logger.isEnabledFor(LogLevel.PERFORMANCE)
+            or os.getenv("NLSQ_SAVE_ITERATIONS")
+        ):
             return
 
         metrics: dict[str, Any] = {
@@ -690,15 +698,15 @@ _loggers: dict[str, NLSQLogger] = {}
 _loggers_lock = threading.Lock()
 
 
-def get_logger(name: str, level: int | LogLevel = LogLevel.INFO) -> NLSQLogger:
+def get_logger(name: str, level: int | LogLevel | None = None) -> NLSQLogger:
     """Get or create a logger for the given name (thread-safe).
 
     Parameters
     ----------
     name : str
         Logger name (will be prefixed with "nlsq." if not already)
-    level : int | LogLevel
-        Logging level
+    level : int | LogLevel | None
+        Logging level; None uses the environment default (see NLSQLogger)
 
     Returns
     -------

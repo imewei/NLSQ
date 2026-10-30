@@ -11,6 +11,10 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+# Module logger: calling logging.info()/debug() on the root logger would run
+# logging.basicConfig() and attach a stderr handler to the application's root.
+_logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class MemoryConfig:
@@ -206,7 +210,7 @@ class JAXConfig:
         if cache_dir:
             nlsq_cache_dir = os.getenv("NLSQ_JAX_CACHE_DIR")
             if nlsq_cache_dir:
-                logging.info(
+                _logger.info(
                     f"Using JAX_COMPILATION_CACHE_DIR={cache_dir} "
                     f"(NLSQ_JAX_CACHE_DIR={nlsq_cache_dir} ignored)",
                 )
@@ -230,10 +234,10 @@ class JAXConfig:
                 min_compile_time,
             )
 
-            logging.debug(f"JAX persistent cache enabled at {cache_dir}")
+            _logger.debug(f"JAX persistent cache enabled at {cache_dir}")
         except Exception as e:
             # Non-fatal: log warning and continue without persistent cache
-            logging.warning(
+            _logger.warning(
                 f"Failed to enable JAX persistent compilation cache: {e}. "
                 "Cold-start may be slower.",
             )
@@ -257,7 +261,7 @@ class JAXConfig:
         # Users can override via XLA_PYTHON_CLIENT_PREALLOCATE=true.
         if "XLA_PYTHON_CLIENT_PREALLOCATE" not in os.environ:
             os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-            logging.debug("Set XLA_PYTHON_CLIENT_PREALLOCATE=false (default for NLSQ)")
+            _logger.debug("Set XLA_PYTHON_CLIENT_PREALLOCATE=false (default for NLSQ)")
 
         # Check for NLSQ-specific GPU memory fraction setting
         gpu_memory_fraction = os.getenv("NLSQ_GPU_MEMORY_FRACTION")
@@ -266,7 +270,7 @@ class JAXConfig:
                 fraction = float(gpu_memory_fraction)
                 if 0.0 < fraction <= 1.0:
                     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(fraction)
-                    logging.info(f"Set XLA_PYTHON_CLIENT_MEM_FRACTION={fraction}")
+                    _logger.info(f"Set XLA_PYTHON_CLIENT_MEM_FRACTION={fraction}")
                 else:
                     warnings.warn(
                         f"Invalid NLSQ_GPU_MEMORY_FRACTION: {gpu_memory_fraction}. Must be between 0.0 and 1.0.",
@@ -284,7 +288,7 @@ class JAXConfig:
         # XLA_PYTHON_CLIENT_PREALLOCATE=true.
         if os.getenv("NLSQ_DISABLE_GPU_PREALLOCATION") == "1":
             os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-            logging.info("Disabled GPU memory preallocation via XLA env var")
+            _logger.info("Disabled GPU memory preallocation via XLA env var")
 
         self._gpu_memory_configured = True
 
@@ -466,7 +470,7 @@ class JAXConfig:
             if config.gpu_memory_fraction is not None:
                 # Note: JAX memory fraction handling varies by version and backend
                 # This is stored in our config for use by downstream components
-                logging.info(
+                _logger.info(
                     f"Updated GPU memory fraction to {config.gpu_memory_fraction} (stored for downstream use)",
                 )
         except ImportError:
@@ -709,11 +713,11 @@ def configure_for_large_datasets(
     )
     JAXConfig.set_large_dataset_config(large_dataset_config)
 
-    logging.info("Configured NLSQ for large datasets:")
-    logging.info(f"  Memory limit: {memory_limit_gb} GB")
-    logging.info("  Streaming: enabled (always available)")
-    logging.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
-    logging.info(
+    _logger.info("Configured NLSQ for large datasets:")
+    _logger.info(f"  Memory limit: {memory_limit_gb} GB")
+    _logger.info("  Streaming: enabled (always available)")
+    _logger.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
+    _logger.info(
         f"  Progress reporting: {'enabled' if progress_reporting else 'disabled'}",
     )
 
@@ -859,4 +863,4 @@ def set_jacobian_mode(mode: str):
         )
 
     os.environ["NLSQ_JACOBIAN_MODE"] = mode
-    logging.info(f"Set Jacobian mode to '{mode}' via environment variable")
+    _logger.info(f"Set Jacobian mode to '{mode}' via environment variable")
