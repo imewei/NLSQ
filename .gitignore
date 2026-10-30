@@ -224,9 +224,7 @@ outputs/
 # Benchmark Results
 # ----------------------------------------------------------------------------
 benchmark_results/
-benchmarks/results/*.json
-benchmarks/results/*.csv
-benchmarks/results/*.png
+benchmarks/results/
 # benchmarks/*.prof (Covered by generic *.prof)
 benchmarks/benchmark_results/
 benchmark_results.json
