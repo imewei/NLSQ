@@ -602,3 +602,21 @@ def test_cached_wrappers_never_call_the_user_function():
     _fit(model)
     _fit(model)
     assert calls[0] == 2  # exactly the one cache-key trace per fit
+
+
+@pytest.mark.parametrize("disable", ["1", "0"])
+def test_reused_instance_with_changed_parameter_count(monkeypatch, disable):
+    from nlsq.core.least_squares import LeastSquares
+
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", disable)
+
+    def poly(x, *p):
+        return sum(c * x**i for i, c in enumerate(p))
+
+    y = 1.0 + 2.0 * X + 0.5 * X**2
+    ls = LeastSquares()
+    xd, yd = jnp.asarray(X), jnp.asarray(y)
+    r2 = ls.least_squares(poly, np.ones(2), xdata=xd, ydata=yd)
+    r3 = ls.least_squares(poly, np.ones(3), xdata=xd, ydata=yd)
+    assert r2.x.shape == (2,)
+    np.testing.assert_allclose(r3.x, [1.0, 2.0, 0.5], rtol=1e-6)
