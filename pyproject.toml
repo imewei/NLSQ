@@ -119,12 +119,32 @@ dependencies = [
 
     # Global optimization
     "evosax>=0.2.0",          # JAX-based CMA-ES with built-in BIPOP restart conditions
+]
 
-    # Qt GUI (native desktop application) -- shipped in the default install;
-    # README documents `pip install nlsq` as "GUI included".
+# GPU extras remain optional — they are mutually exclusive (only ONE can be active).
+# Use: pip install "nlsq[gpu_cuda13]" or pip install "nlsq[gpu_cuda12]"
+# Or:  make install-jax-gpu (auto-detects system CUDA)
+[project.optional-dependencies]
+gui = [
+    # Qt desktop application (nlsq-gui); not installed by default
     "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.2)
     "pyqtgraph>=0.14.0",      # GPU-accelerated scientific plotting (tested on 0.14.0)
+]
+gpu_cuda13 = [
+    # CUDA 13 GPU support — versions must match jaxlib
+    "jax-cuda13-plugin>=0.8.0",    # CUDA 13 plugin (must match jaxlib version)
+    "jax-cuda13-pjrt>=0.8.0",     # CUDA 13 PJRT runtime (must match jaxlib version)
+]
+gpu_cuda12 = [
+    # CUDA 12 GPU support — versions must match jaxlib
+    "jax-cuda12-plugin>=0.8.0",    # CUDA 12 plugin (must match jaxlib version)
+    "jax-cuda12-pjrt>=0.8.0",     # CUDA 12 PJRT runtime (must match jaxlib version)
+]
 
+# Development tooling (installed by `uv sync`; not part of the runtime install).
+[dependency-groups]
+dev = [
+    "nlsq[gui]",              # GUI toolkit for the Qt test suite
     # Testing
     "pytest>=9.0.0,!=9.2.0",  # Tested on 9.0.2; 9.2.0 breaks pytest-benchmark 5.3.0 (_nodeid), later releases allowed
     "pytest-cov>=7.0.0",      # Tested on 7.0.0
@@ -169,20 +189,10 @@ dependencies = [
     "setuptools-scm>=9.2.0",  # Version management (tested on 9.2.2)
     "wheel>=0.46.2",          # Wheel builder (tested on 0.46.3)
 ]
-
-# GPU extras remain optional — they are mutually exclusive (only ONE can be active).
-# Use: pip install "nlsq[gpu_cuda13]" or pip install "nlsq[gpu_cuda12]"
-# Or:  make install-jax-gpu (auto-detects system CUDA)
-[project.optional-dependencies]
-gpu_cuda13 = [
-    # CUDA 13 GPU support — versions must match jaxlib
-    "jax-cuda13-plugin>=0.8.0",    # CUDA 13 plugin (must match jaxlib version)
-    "jax-cuda13-pjrt>=0.8.0",     # CUDA 13 PJRT runtime (must match jaxlib version)
-]
-gpu_cuda12 = [
-    # CUDA 12 GPU support — versions must match jaxlib
-    "jax-cuda12-plugin>=0.8.0",    # CUDA 12 plugin (must match jaxlib version)
-    "jax-cuda12-pjrt>=0.8.0",     # CUDA 12 PJRT runtime (must match jaxlib version)
+# Comparison libraries for the benchmark harness (`uv sync --group bench`).
+bench = [
+    "lmfit>=1.3.4",           # Tested on 1.3.4
+    "jaxopt>=0.8.5",          # Tested on 0.8.5
 ]
 
 [project.urls]

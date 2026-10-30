@@ -209,6 +209,15 @@ wheels = [
 ]
 
 [[package]]
+name = "asteval"
+version = "1.0.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/65/9a/e10e062c83de2219c5f9ef9d684dac39323c052de140e257afd0f60f8ca7/asteval-1.0.10.tar.gz", hash = "sha256:46a4ed13cc2e4a29a21418f89dedd57db70d98eb96db0fb4c441d4edb2f5afed", size = 59581, upload-time = "2026-08-21T21:07:06.6Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/16/e78d6e60ecd1b3cf446fad45985ad6cda22f46ad2cffabb644d77b317bc4/asteval-1.0.10-py3-none-any.whl", hash = "sha256:8d805fa8084aa12204715f799430f0012a0db38b42e997f9f11a9637ad59855f", size = 23466, upload-time = "2026-08-21T21:07:05.678Z" },
+]
+
+[[package]]
 name = "asttokens"
 version = "3.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -976,6 +985,15 @@ wheels = [
 ]
 
 [[package]]
+name = "dill"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/e1/56027a71e31b02ddc53c7d65b01e68edf64dea2932122fe7746a516f75d5/dill-0.4.1.tar.gz", hash = "sha256:423092df4182177d4d8ba8290c8a5b640c66ab35ec7da59ccfa00f6fa3eea5fa", size = 187315, upload-time = "2026-01-19T02:36:56.85Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/77/dc8c558f7593132cf8fefec57c4f60c83b16941c574ac5f619abb3ae7933/dill-0.4.1-py3-none-any.whl", hash = "sha256:1e1ce33e978ae97fcfcff5638477032b801c46c7c65cf717f95fbc2248f79a9d", size = 120019, upload-time = "2026-01-19T02:36:55.663Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1651,6 +1669,21 @@ wheels = [
 ]
 
 [[package]]
+name = "jaxopt"
+version = "0.8.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jax" },
+    { name = "jaxlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3a/da/ff7d7fbd13b8ed5e8458e80308d075fc649062b9f8676d3fc56f2dc99a82/jaxopt-0.8.5.tar.gz", hash = "sha256:2790bd68ef132b216c083a8bc7a2704eceb35a92c0fc0a1e652e79dfb1e9e9ab", size = 121709, upload-time = "2025-04-14T17:59:01.618Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/d8/55e0901103c93d57bab3b932294c216f0cbd49054187ce29f8f13808d530/jaxopt-0.8.5-py3-none-any.whl", hash = "sha256:ff221d1a86908ec759eb1e219ee1d12bf208a70707e961bf7401076fe7cf4d5e", size = 172434, upload-time = "2025-04-14T17:59:00.342Z" },
+]
+
+[[package]]
 name = "jaxtyping"
 version = "0.3.11"
 source = { registry = "https://pypi.org/simple" }
@@ -2182,6 +2215,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/77/e0/b7e501899cebd6dc609a01645350afa7976d40a8f3c0bfdf4560e448b2b7/lineax-0.1.1.tar.gz", hash = "sha256:187b8ea93b8e1099fb792e81c6e71a9c269f4fcadbb5313fe312d5847f581f9d", size = 53195, upload-time = "2026-05-01T15:59:06.793Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/f8/0d32243c6b8e5dbee9097cf0c95bbdf8681ba4463c927c2e3445f3775814/lineax-0.1.1-py3-none-any.whl", hash = "sha256:2e399f1674773ab2ba54d76175a618977a554f47abd0a345198d53d92c07beb2", size = 77567, upload-time = "2026-05-01T15:59:05.517Z" },
+]
+
+[[package]]
+name = "lmfit"
+version = "1.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "asteval" },
+    { name = "dill" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "uncertainties" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/e5/a35942aed2de95e228728c34609b51fe3ec9182398eac50d288eef313aa2/lmfit-1.3.4.tar.gz", hash = "sha256:3c22c28c43f717f6c5b4a3bd81e893a2149739c26a592c046f2e33c23cfbe497", size = 630720, upload-time = "2025-07-19T20:09:01.876Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/7e/7b91c89a4cf0f543a83be978657afb20c86af6d725253e319589dcc4ce52/lmfit-1.3.4-py3-none-any.whl", hash = "sha256:afce1593b42324d37ae2908249b0c55445e2f4c1a0474ff706a8e2f7b5d949fa", size = 97662, upload-time = "2025-07-19T20:09:00.32Z" },
 ]
 
 [[package]]
@@ -2743,53 +2792,18 @@ wheels = [
 name = "nlsq"
 source = { editable = "." }
 dependencies = [
-    { name = "asv" },
-    { name = "bandit" },
-    { name = "black" },
-    { name = "build" },
     { name = "evosax" },
-    { name = "furo" },
     { name = "h5py" },
-    { name = "hypothesis" },
-    { name = "ipykernel" },
-    { name = "ipython" },
     { name = "jax" },
     { name = "jaxlib" },
-    { name = "jupyterlab" },
     { name = "matplotlib" },
-    { name = "memory-profiler" },
-    { name = "mypy" },
-    { name = "myst-parser" },
-    { name = "notebook" },
     { name = "numpy" },
     { name = "optax" },
     { name = "optimistix" },
-    { name = "pip-audit" },
-    { name = "pre-commit" },
     { name = "psutil" },
-    { name = "pyqtgraph" },
-    { name = "pyside6" },
-    { name = "pytest" },
-    { name = "pytest-benchmark" },
-    { name = "pytest-cov" },
-    { name = "pytest-qt" },
-    { name = "pytest-rerunfailures" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-    { name = "pyupgrade" },
     { name = "pyyaml" },
-    { name = "ruff" },
     { name = "scipy" },
-    { name = "setuptools" },
-    { name = "setuptools-scm" },
-    { name = "sphinx", version = "9.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or (extra == 'extra-4-nlsq-gpu-cuda12' and extra == 'extra-4-nlsq-gpu-cuda13')" },
-    { name = "sphinx", version = "9.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' or (extra == 'extra-4-nlsq-gpu-cuda12' and extra == 'extra-4-nlsq-gpu-cuda13')" },
-    { name = "sphinx-autodoc-typehints" },
-    { name = "sphinx-copybutton" },
-    { name = "sphinx-design" },
     { name = "tqdm" },
-    { name = "twine" },
-    { name = "wheel" },
     { name = "xxhash" },
 ]
 
@@ -2802,39 +2816,99 @@ gpu-cuda13 = [
     { name = "jax-cuda13-pjrt" },
     { name = "jax-cuda13-plugin" },
 ]
+gui = [
+    { name = "pyqtgraph" },
+    { name = "pyside6" },
+]
+
+[package.dev-dependencies]
+bench = [
+    { name = "jaxopt" },
+    { name = "lmfit" },
+]
+dev = [
+    { name = "asv" },
+    { name = "bandit" },
+    { name = "black" },
+    { name = "build" },
+    { name = "furo" },
+    { name = "hypothesis" },
+    { name = "ipykernel" },
+    { name = "ipython" },
+    { name = "jupyterlab" },
+    { name = "memory-profiler" },
+    { name = "mypy" },
+    { name = "myst-parser" },
+    { name = "nlsq", extra = ["gui"] },
+    { name = "notebook" },
+    { name = "pip-audit" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-benchmark" },
+    { name = "pytest-cov" },
+    { name = "pytest-qt" },
+    { name = "pytest-rerunfailures" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+    { name = "pyupgrade" },
+    { name = "ruff" },
+    { name = "setuptools" },
+    { name = "setuptools-scm" },
+    { name = "sphinx", version = "9.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or (extra == 'extra-4-nlsq-gpu-cuda12' and extra == 'extra-4-nlsq-gpu-cuda13')" },
+    { name = "sphinx", version = "9.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' or (extra == 'extra-4-nlsq-gpu-cuda12' and extra == 'extra-4-nlsq-gpu-cuda13')" },
+    { name = "sphinx-autodoc-typehints" },
+    { name = "sphinx-copybutton" },
+    { name = "sphinx-design" },
+    { name = "twine" },
+    { name = "wheel" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "asv", specifier = ">=0.6.5" },
-    { name = "bandit", specifier = ">=1.9.0" },
-    { name = "black", specifier = ">=25.0.0" },
-    { name = "build", specifier = ">=1.3.0" },
     { name = "evosax", specifier = ">=0.2.0" },
-    { name = "furo", specifier = ">=2025.0.0" },
     { name = "h5py", specifier = ">=3.15.0" },
-    { name = "hypothesis", specifier = ">=6.148.0" },
-    { name = "ipykernel", specifier = ">=7.0.0" },
-    { name = "ipython", specifier = ">=9.0.0" },
     { name = "jax", specifier = ">=0.8.0" },
     { name = "jax-cuda12-pjrt", marker = "extra == 'gpu-cuda12'", specifier = ">=0.8.0" },
     { name = "jax-cuda12-plugin", marker = "extra == 'gpu-cuda12'", specifier = ">=0.8.0" },
     { name = "jax-cuda13-pjrt", marker = "extra == 'gpu-cuda13'", specifier = ">=0.8.0" },
     { name = "jax-cuda13-plugin", marker = "extra == 'gpu-cuda13'", specifier = ">=0.8.0" },
     { name = "jaxlib", specifier = ">=0.8.0" },
-    { name = "jupyterlab", specifier = ">=4.5.0" },
     { name = "matplotlib", specifier = ">=3.10.0" },
-    { name = "memory-profiler", specifier = ">=0.61.0" },
-    { name = "mypy", specifier = ">=1.19.0" },
-    { name = "myst-parser", specifier = ">=5.0.0" },
-    { name = "notebook", specifier = ">=7.5.0" },
     { name = "numpy", specifier = ">=2.2" },
     { name = "optax", specifier = ">=0.2.6" },
     { name = "optimistix", specifier = ">=0.1.0" },
+    { name = "psutil", specifier = ">=7.2.0" },
+    { name = "pyqtgraph", marker = "extra == 'gui'", specifier = ">=0.14.0" },
+    { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.10.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "scipy", specifier = ">=1.16.0" },
+    { name = "tqdm", specifier = ">=4.67.0" },
+    { name = "xxhash", specifier = ">=3.6.0" },
+]
+provides-extras = ["gui", "gpu-cuda13", "gpu-cuda12"]
+
+[package.metadata.requires-dev]
+bench = [
+    { name = "jaxopt", specifier = ">=0.8.5" },
+    { name = "lmfit", specifier = ">=1.3.4" },
+]
+dev = [
+    { name = "asv", specifier = ">=0.6.5" },
+    { name = "bandit", specifier = ">=1.9.0" },
+    { name = "black", specifier = ">=25.0.0" },
+    { name = "build", specifier = ">=1.3.0" },
+    { name = "furo", specifier = ">=2025.0.0" },
+    { name = "hypothesis", specifier = ">=6.148.0" },
+    { name = "ipykernel", specifier = ">=7.0.0" },
+    { name = "ipython", specifier = ">=9.0.0" },
+    { name = "jupyterlab", specifier = ">=4.5.0" },
+    { name = "memory-profiler", specifier = ">=0.61.0" },
+    { name = "mypy", specifier = ">=1.19.0" },
+    { name = "myst-parser", specifier = ">=5.0.0" },
+    { name = "nlsq", extras = ["gui"] },
+    { name = "notebook", specifier = ">=7.5.0" },
     { name = "pip-audit", specifier = ">=2.9.0" },
     { name = "pre-commit", specifier = ">=4.5.0" },
-    { name = "psutil", specifier = ">=7.2.0" },
-    { name = "pyqtgraph", specifier = ">=0.14.0" },
-    { name = "pyside6", specifier = ">=6.10.0" },
     { name = "pytest", specifier = ">=9.0.0,!=9.2.0" },
     { name = "pytest-benchmark", specifier = ">=5.2.3" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
@@ -2843,21 +2917,16 @@ requires-dist = [
     { name = "pytest-timeout", specifier = ">=2.4.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "pyupgrade", specifier = ">=3.21.0" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", specifier = ">=0.14.0" },
-    { name = "scipy", specifier = ">=1.16.0" },
     { name = "setuptools", specifier = ">=80.0.0" },
     { name = "setuptools-scm", specifier = ">=9.2.0" },
     { name = "sphinx", specifier = ">=9.0.0" },
     { name = "sphinx-autodoc-typehints", specifier = ">=3.5.0" },
     { name = "sphinx-copybutton", specifier = ">=0.5.2" },
     { name = "sphinx-design", specifier = ">=0.6.0" },
-    { name = "tqdm", specifier = ">=4.67.0" },
     { name = "twine", specifier = ">=6.2.0" },
     { name = "wheel", specifier = ">=0.46.2" },
-    { name = "xxhash", specifier = ">=3.6.0" },
 ]
-provides-extras = ["gpu-cuda13", "gpu-cuda12"]
 
 [[package]]
 name = "nodeenv"
@@ -4778,6 +4847,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7a/29/6a1391d31cd00ff9e927215a224a880e1e84e826b64ba80a499e51c074d8/tzdata-2026.6.tar.gz", hash = "sha256:85d2cd9c09f81f0bb29db27759fc83af4f1e620efb814f8c5bf8b4cc4feece6d", size = 201017, upload-time = "2026-10-28T09:57:09.137Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/66/9a06c2227fedfd4919f0eaaa8b94377d9730882a7e4f95823c9a331ab5e1/tzdata-2026.6-py2.py3-none-any.whl", hash = "sha256:0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec", size = 348210, upload-time = "2026-10-28T09:57:07.276Z" },
+]
+
+[[package]]
+name = "uncertainties"
+version = "3.2.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/0c/cb09f33b26955399c675ab378e4063ed7e48422d3d49f96219ab0be5eba9/uncertainties-3.2.3.tar.gz", hash = "sha256:76a5653e686f617a42922d546a239e9efce72e6b35411b7750a1d12dcba03031", size = 160492, upload-time = "2025-04-21T19:58:28.63Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8f/5e/f1e1dd319e35e962a4e00b33150a8868b6329cc1d19fd533436ba5488f09/uncertainties-3.2.3-py3-none-any.whl", hash = "sha256:313353900d8f88b283c9bad81e7d2b2d3d4bcc330cbace35403faaed7e78890a", size = 60118, upload-time = "2025-04-21T19:58:26.864Z" },
 ]
 
 [[package]]
