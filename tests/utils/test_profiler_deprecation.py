@@ -38,6 +38,20 @@ def test_deprecated_names_warn_once(name):
     assert first is second
 
 
+def test_deprecation_keeps_raising_under_error_filter():
+    name = DEPRECATED[0]
+    for _ in range(2):  # a failed warn must not mark the name as seen
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(DeprecationWarning, match="next minor release"):
+                getattr(nlsq, name)
+    with pytest.warns(DeprecationWarning):
+        getattr(nlsq, name)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        getattr(nlsq, name)  # warned normally once: now silent
+
+
 @pytest.mark.serial
 def test_import_nlsq_emits_no_deprecation_warning():
     r = subprocess.run(

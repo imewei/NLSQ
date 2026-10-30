@@ -457,9 +457,10 @@ def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
 # per-instance wrappers were re-traced and re-compiled on every fit.
 #
 # A cache hit requires an identical traced computation: the model is traced
-# abstractly on every call and the key is its closed jaxpr (text, with every
-# Python scalar it read baked in as a literal, plus a digest of its constant
-# arrays). Any model state read at trace time is therefore part of the key.
+# abstractly on every call and the key is a structural digest of its closed
+# jaxpr (_snapshot_jaxpr: primitive objects, canonicalised params, avals incl.
+# weak_type, const/literal bytes), the AD mode and the effective jax config.
+# Any model state read at trace time is therefore part of the key.
 # Cached wrappers evaluate that jaxpr, never the user function, so a later
 # re-trace cannot pick up state the key did not see.
 _logger = logging.getLogger(__name__)

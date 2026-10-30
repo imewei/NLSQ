@@ -261,10 +261,11 @@ def __getattr__(name: str) -> Any:
     modules until they are actually needed.
     """
     if name in _DEPRECATED_EXPORTS and name not in _deprecation_seen:
-        _deprecation_seen.add(name)
         import warnings
 
+        # Mark seen only after warn: under -W error the raise must repeat.
         warnings.warn(_DEPRECATED_EXPORTS[name], DeprecationWarning, stacklevel=2)
+        _deprecation_seen.add(name)
 
     # Check if it's a lazy module
     if name in _LAZY_MODULES:
