@@ -8,12 +8,9 @@
 
 from __future__ import annotations
 
-import builtins
-import dis
+import hashlib
 import os
-import sys
 import threading
-import types
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
@@ -25,7 +22,9 @@ import numpy as np
 from nlsq.config import JAXConfig
 
 __jax_config = JAXConfig()
+import jax
 import jax.numpy as jnp
+import jaxlib
 from jax import jacfwd, jacrev, jit
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
 
@@ -436,181 +435,103 @@ def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
 # Residual/Jacobian wrapper bundles for the autodiff path, shared across
 # LeastSquares instances. curve_fit() builds a new LeastSquares per call, so
 # per-instance wrappers were re-traced and re-compiled on every fit.
+#
+# A cache hit requires an identical traced computation: the model is traced
+# abstractly on every call and the key is its closed jaxpr (text, with every
+# Python scalar it read baked in as a literal, plus a digest of its constant
+# arrays). Any model state read at trace time is therefore part of the key.
+# Cached wrappers evaluate that jaxpr, never the user function, so a later
+# re-trace cannot pick up state the key did not see.
 _WRAPPER_CACHE_SIZE = 32
 _wrapper_cache: OrderedDict[tuple, tuple] = OrderedDict()
 _wrapper_cache_lock = threading.Lock()
-
-_EXACT_SCALARS = (type(None), bool, int, str, bytes)
-_NUMPY_SCALAR_KINDS = frozenset("biufc")  # no datetime/timedelta/void/object/str
-_MAX_FUNCTIONS = 16  # Python functions reachable from the model; beyond: no caching
-# Library modules whose *module object* may be keyed by identity. Attribute
-# rebinding inside these (monkeypatching numpy/jax) is not tracked.
-_LIBRARY_MODULES = (
-    "jax",
-    "jax.numpy",
-    "jax.lax",
-    "jax.nn",
-    "jax.scipy",
-    "jax.scipy.special",
-    "jax.scipy.stats",
-    "jax.scipy.linalg",
-    "numpy",
-    "math",
-    "cmath",
-    "scipy.special",
-)
-_GLOBAL_READS = frozenset({"LOAD_GLOBAL", "LOAD_NAME", "LOAD_FROM_DICT_OR_GLOBALS"})
-_GLOBAL_WRITES = frozenset(
-    {"STORE_GLOBAL", "DELETE_GLOBAL", "STORE_NAME", "DELETE_NAME"}
-)
-
-
-class _Uncacheable(TypeError):
-    """Raised while fingerprinting when reuse cannot be proven safe."""
+_JAX_DIRS = tuple(os.path.dirname(m.__file__) + os.sep for m in (jax, jaxlib))
 
 
 def clear_wrapper_cache() -> None:
     """Drop every cached residual/Jacobian wrapper bundle.
 
-    `curve_fit` reuses the traced, compiled wrappers of a model across calls
-    when the model is provably unchanged (see `_wrapper_cache_key`). Call this
-    (or `nlsq.clear_cache()`) to force the next fit of every model to re-trace,
-    e.g. after mutating state the cache cannot see. Set
-    ``NLSQ_DISABLE_WRAPPER_CACHE=1`` to disable the cache entirely.
+    `curve_fit` reuses the compiled residual/Jacobian of a model across calls
+    when the model traces to an identical computation. Call this (or
+    `nlsq.clear_cache()`) to free them. Set ``NLSQ_DISABLE_WRAPPER_CACHE=1``
+    to disable the cache entirely.
     """
     with _wrapper_cache_lock:
         _wrapper_cache.clear()
 
 
-def _is_library_module(value: Any) -> bool:
-    return isinstance(value, types.ModuleType) and any(
-        sys.modules.get(name) is value for name in _LIBRARY_MODULES
-    )
+def _iter_eqns(jaxpr: Any):
+    """Every equation of `jaxpr`, including those of nested jaxprs."""
+    for eqn in jaxpr.eqns:
+        yield eqn
+        for value in eqn.params.values():
+            for item in value if isinstance(value, (tuple, list)) else (value,):
+                sub = getattr(item, "jaxpr", item)  # ClosedJaxpr -> Jaxpr
+                if hasattr(sub, "eqns"):
+                    yield from _iter_eqns(sub)
 
 
-def _is_library_function(value: Any) -> bool:
-    """True iff `value` is the very object a library module exports by its name."""
-    name = getattr(value, "__name__", None)
-    if not isinstance(name, str) or isinstance(value, type):
+def _jaxpr_is_cacheable(closed: Any) -> bool:
+    """False for effects, callbacks, and custom derivative rules not from JAX.
+
+    A custom_jvp/custom_vjp rule body is not part of the jaxpr text, so only
+    rules defined inside the jax/jaxlib packages (e.g. jax.nn.relu) are
+    accepted.
+    """
+    if closed.effects or len(closed.jaxpr.outvars) != 1:
         return False
-    return any(
-        getattr(sys.modules.get(mod_name), name, None) is value
-        for mod_name in _LIBRARY_MODULES
-    )
+    for eqn in _iter_eqns(closed.jaxpr):
+        name = eqn.primitive.name
+        if "callback" in name:
+            return False
+        if name.startswith("custom_"):
+            call = getattr(eqn.params.get("call_jaxpr"), "jaxpr", None)
+            src = getattr(getattr(call, "debug_info", None), "func_src_info", None)
+            if not src or not src.rpartition(" at ")[2].startswith(_JAX_DIRS):
+                return False
+    return True
 
 
-def _global_names(code: types.CodeType) -> set[str]:
-    """Names `code` (and every code object nested in it) loads from globals.
+def _trace_model(
+    fun: Callable, xdata: Any, x0: np.ndarray, mode: str
+) -> tuple[tuple, Any] | None:
+    """(cache key, closed jaxpr) of `fun` as the residual wrappers call it.
 
-    Uses the bytecode rather than ``co_names``, which also lists attribute
-    names. Any global write makes the function uncacheable.
-    """
-    names: set[str] = set()
-    for ins in dis.get_instructions(code):
-        if ins.opname in _GLOBAL_WRITES:
-            raise _Uncacheable(f"writes global {ins.argval!r}")
-        if ins.opname in _GLOBAL_READS:
-            names.add(ins.argval)
-    for const in code.co_consts:
-        if isinstance(const, types.CodeType):
-            names |= _global_names(const)
-    return names
-
-
-def _freeze_function(fun: types.FunctionType, seen: dict[int, Any]) -> Any:
-    """Snapshot of what tracing `fun` reads: code, closure, defaults, globals."""
-    if id(fun) in seen:  # recursion/cycle: already snapshotted higher up
-        return ("seen", fun)
-    if len(seen) >= _MAX_FUNCTIONS:
-        raise _Uncacheable("too many reachable functions")
-    if fun.__dict__:  # function attributes are mutable state the model may read
-        raise _Uncacheable(f"{fun.__qualname__} has attributes")
-    g = fun.__globals__
-    builtins_ns = g.get("__builtins__", builtins)
-    if builtins_ns is not builtins and builtins_ns is not builtins.__dict__:
-        raise _Uncacheable("non-standard __builtins__")
-    seen[id(fun)] = fun
-    code = fun.__code__
-    reads = []
-    for name in sorted(_global_names(code)):
-        if name in g:
-            reads.append((name, _freeze(g[name], seen)))
-        elif hasattr(builtins, name):
-            reads.append((name, "builtin", getattr(builtins, name)))
-        else:
-            reads.append((name, "undefined"))
-    kwdefaults = sorted((fun.__kwdefaults__ or {}).items())
-    return (
-        fun,
-        code,
-        tuple(_freeze(c.cell_contents, seen) for c in fun.__closure__ or ()),
-        _freeze(fun.__defaults__, seen),
-        tuple((k, _freeze(v, seen)) for k, v in kwdefaults),
-        tuple(reads),
-    )
-
-
-def _freeze(value: Any, seen: dict[int, Any]) -> Any:
-    """Exact, hashable snapshot of an allowlisted value; _Uncacheable otherwise.
-
-    Allowed: exact None/bool/int/str/bytes; float/complex by bit pattern;
-    NumPy bool/int/uint/float/complex scalars by dtype and bytes; exact
-    tuples/frozensets of allowed values; Python functions (recursively, see
-    `_freeze_function`); library modules (`_LIBRARY_MODULES`) and the
-    functions they export, by identity; C builtins bound to no object or to
-    a module (``abs``, ``math.sin``). Everything else is refused.
-    """
-    t = type(value)
-    if isinstance(value, np.generic):
-        if value.dtype.kind not in _NUMPY_SCALAR_KINDS:
-            raise _Uncacheable(f"numpy scalar of kind {value.dtype.kind!r}")
-        return (t, value.dtype.str, value.tobytes())
-    if t in _EXACT_SCALARS:
-        return (t, value)
-    if t is float:
-        return (t, value.hex())
-    if t is complex:
-        return (t, value.real.hex(), value.imag.hex())
-    if t is tuple:
-        return (t, tuple(_freeze(v, seen) for v in value))
-    if t is frozenset:
-        return (t, frozenset(_freeze(v, seen) for v in value))
-    if t is types.FunctionType:
-        if _is_library_function(value):
-            return ("library", value)
-        return _freeze_function(value, seen)
-    if t is types.BuiltinFunctionType:
-        owner = value.__self__
-        if owner is None or isinstance(owner, types.ModuleType):
-            return ("builtin", value)
-        raise _Uncacheable(f"bound builtin method {value.__qualname__}")
-    if _is_library_module(value):
-        return ("module", value)
-    if _is_library_function(value):  # e.g. jnp.exp (PjitFunction), np.exp (ufunc)
-        return ("library", value)
-    raise _Uncacheable(f"not allowlisted: {t.__name__}")
-
-
-def _wrapper_cache_key(fun: Callable, n: int, mode: str) -> tuple | None:
-    """Cache key for `fun`'s wrappers, or None when reuse is not provably safe.
-
-    Default-deny: `fun` must be a plain Python function and everything a trace
-    of it can read (code, closure cells, defaults, the globals its bytecode
-    loads, recursively through the Python functions it reaches) must be an
-    allowlisted immutable value (`_freeze`). The key holds `fun` itself, so its
-    id cannot be reused. A hit means a re-trace now would read the same values.
-    Disabled when ``NLSQ_DISABLE_WRAPPER_CACHE=1``.
+    Returns None (use the uncached path) when the cache is disabled, tracing
+    fails, or the jaxpr is not cacheable.
     """
     if os.environ.get("NLSQ_DISABLE_WRAPPER_CACHE") == "1":
         return None
-    if type(fun) is not types.FunctionType:
-        return None
     try:
-        key = (_freeze_function(fun, {}), n, mode)
+        x_aval = jax.ShapeDtypeStruct(xdata.shape, xdata.dtype)
+        p_aval = jax.ShapeDtypeStruct((), jnp.asarray(x0).dtype)
+        # Fresh wrapper on purpose: make_jaxpr caches traces by function
+        # identity, which would return a stale jaxpr after a state change.
+        fresh = lambda *args: fun(*args)  # noqa: E731, PLW0108
+        closed = jax.make_jaxpr(fresh)(x_aval, *[p_aval] * x0.size)
+        if not _jaxpr_is_cacheable(closed):
+            return None
+        consts = tuple(
+            (c.dtype.str, c.shape, hashlib.sha256(c.tobytes()).hexdigest())
+            for c in map(np.asarray, closed.consts)
+        )
+        key = (str(closed.jaxpr), consts, x_aval, p_aval, x0.size, mode)
         hash(key)
-    except Exception:  # _Uncacheable, empty cell, unhashable: rebuild per call
+    except Exception:  # not traceable as the wrappers would call it
         return None
-    return key
+    return key, closed
+
+
+def _model_from_jaxpr(closed: Any, x_shape: tuple, n: int) -> Callable:
+    """Model function that evaluates `closed` (no reference to the user fn)."""
+    jaxpr, consts = closed.jaxpr, closed.consts
+
+    def model(x, *p):
+        if jnp.shape(x) != x_shape or len(p) != n:
+            raise ValueError("cached model called with different input shapes")
+        return jax.core.eval_jaxpr(jaxpr, consts, x, *p)[0]
+
+    return model
 
 
 class LeastSquares:
@@ -678,6 +599,8 @@ class LeastSquares:
         # initialize jacobian to None and f to a dummy function
         self.f = lambda x: None
         self.jac: Callable[..., jnp.ndarray] | None = None
+        # Cache key of the bound traced wrappers; None = built from self.f.
+        self._wrapper_key: tuple | None = None
 
         # need a separate instance of the autodiff class for each of the
         # the different sigma/covariance cases
@@ -831,22 +754,28 @@ class LeastSquares:
             Jacobian function
         """
         if xdata is not None and ydata is not None:
-            # Check if fit function needs updating
-            func_update = _closure_aware_changed(self.f, fun)
-
-            # Update function if needed
-            if func_update:
-                if jac is None:
-                    self._bind_autodiff_wrappers(fun, jacobian_mode_selected)
-                else:
+            # Autodiff path: reuse wrappers of an identical traced computation.
+            traced = jac is None and self._bind_traced_wrappers(
+                fun, xdata, x0, jacobian_mode_selected
+            )
+            if not traced:
+                # Uncached path. Rebuild if the bound wrappers came from a
+                # traced jaxpr or the fit function changed.
+                func_update = self._wrapper_key is not None or _closure_aware_changed(
+                    self.f, fun
+                )
+                self._wrapper_key = None
+                if func_update:
                     self.update_function(fun)
+                    if jac is None:
+                        self.autdiff_jac(jac, mode=jacobian_mode_selected)
 
-            # Handle analytical Jacobian
-            if jac is not None:
-                if _closure_aware_changed(self.jac, jac):
-                    self.wrap_jac(jac)
-            elif self.jac is not None and not func_update:
-                self.autdiff_jac(jac, mode=jacobian_mode_selected)
+                # Handle analytical Jacobian
+                if jac is not None:
+                    if _closure_aware_changed(self.jac, jac):
+                        self.wrap_jac(jac)
+                elif self.jac is not None and not func_update:
+                    self.autdiff_jac(jac, mode=jacobian_mode_selected)
 
             # Select appropriate residual function and Jacobian
             if transform is None:
@@ -1645,32 +1574,38 @@ class LeastSquares:
 
         return result
 
-    def _bind_autodiff_wrappers(self, fun: Callable, mode: str) -> None:
-        """update_function(fun) + autdiff_jac(None), reusing cached wrappers.
+    def _bind_traced_wrappers(
+        self, fun: Callable, xdata: Any, x0: np.ndarray, mode: str
+    ) -> bool:
+        """Bind autodiff wrappers built from `fun`'s traced jaxpr, cached.
 
-        Reuse happens only under `_wrapper_cache_key`'s conditions; otherwise
-        the wrappers are rebuilt exactly as before.
+        Returns False when `fun` is not cacheable (see `_trace_model`); the
+        caller then builds wrappers from `fun` as before.
         """
-        key = _wrapper_cache_key(fun, self.n, mode)
-        with _wrapper_cache_lock:
-            bundle = _wrapper_cache.get(key) if key is not None else None
-            if bundle is not None:
-                _wrapper_cache.move_to_end(key)
-        if bundle is None:
-            self.update_function(fun)
-            self.autdiff_jac(None, mode=mode)
-            if key is not None:
+        traced = _trace_model(fun, xdata, x0, mode)
+        if traced is None:
+            return False
+        key, closed = traced
+        if key != self._wrapper_key:
+            with _wrapper_cache_lock:
+                bundle = _wrapper_cache.get(key)
+                if bundle is not None:
+                    _wrapper_cache.move_to_end(key)
+            if bundle is None:
+                self.update_function(_model_from_jaxpr(closed, xdata.shape, x0.size))
+                self.autdiff_jac(None, mode=mode)
                 bundle = (self.func_none, self.func_1d, self.func_2d)
                 bundle += (self.jac_none, self.jac_1d, self.jac_2d)
                 with _wrapper_cache_lock:
                     _wrapper_cache[key] = bundle
                     while len(_wrapper_cache) > _WRAPPER_CACHE_SIZE:
                         _wrapper_cache.popitem(last=False)
-            return
-        (self.func_none, self.func_1d, self.func_2d) = bundle[:3]
-        (self.jac_none, self.jac_1d, self.jac_2d) = bundle[3:]
+            (self.func_none, self.func_1d, self.func_2d) = bundle[:3]
+            (self.jac_none, self.jac_1d, self.jac_2d) = bundle[3:]
+            self._wrapper_key = key
         self.f = fun
         self.jac = None
+        return True
 
     def autdiff_jac(self, jac: None, mode: str = "fwd") -> None:
         """We do this for all three sigma transformed functions such
