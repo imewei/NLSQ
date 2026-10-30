@@ -127,8 +127,9 @@ def to_markdown(records: list[dict], env: dict) -> str:
         "trivial backend warm-up (imports and library loading are excluded; JIT "
         "tracing/compilation and first-call allocation are included); warm = "
         "median and IQR of repeated calls.",
-        "- In the batch case cold is close to warm because the first call is the "
-        "entire 256-fit batch.",
+        "- Sequential libraries (scipy, lmfit) show cold close to warm; vmapped "
+        "JAX batches (jaxopt, optimistix, nlsq) still pay first-call compilation, "
+        "so their cold time is far above warm.",
         "- At equal cost a ranked library can show a larger max parameter error "
         "than its peers on flat-valley problems (two_exp: optimistix 0.47 vs 0.07). "
         "Cost is the ranking criterion; parameter error is reported for "
@@ -152,9 +153,12 @@ def to_markdown(records: list[dict], env: dict) -> str:
             lines += [
                 f"#### {title}: resident data (jitted_core)",
                 "",
-                "Inputs are already on the device and only the jitted solve is "
-                "timed, so this excludes the host-to-device transfer that "
-                "`end_to_end` includes; it is not comparable with the headline table.",
+                "Inputs are already on the device. The timed region is the jitted "
+                "solve plus synchronisation and result materialisation (`np.asarray` "
+                "of the device outputs and per-fit result construction); it "
+                "excludes the host-to-device transfer of the inputs that "
+                "`end_to_end` includes, so it is not comparable with the headline "
+                "table.",
                 "",
                 *_table(resident),
                 "",
