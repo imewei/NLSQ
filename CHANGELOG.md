@@ -34,48 +34,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Warm small fits no longer re-compile. `curve_fit()` builds a new
   `CurveFit`/`LeastSquares` per call, and their JIT kernels were per-instance
   `@jit` closures, so every warm call re-traced and re-compiled 4 XLA
-  programs (~125 ms of 167 ms at n=1000). Stateless kernels (`CommonJIT`,
-  `CurveFit` sigma/covariance, `LossFunctionsJIT`) are now module-level
-  singletons, and the residual/Jacobian wrappers of the user model are reused
-  from a bounded cache (32 models) only when provably equivalent to
-  re-tracing: the model must be a plain function, and its closure cells,
-  defaults and referenced module globals, followed recursively through
-  every Python function and nested code it reaches, must be immutable
-  values (scalars by exact bits, tuples, frozen dataclasses; modules and C
-  builtins by identity). Anything else (array, list or class captures,
-  callable objects, bound methods) is rebuilt per call as before. Fit
-  results are unchanged (golden-master and bit-identity tests pass), with
-  one exception: rebinding an *attribute of an imported module* that the
-  model reads (`mymod.K = 2`) between two fits of the same function is not
-  detected, so the second fit reuses the first trace. Rebinding the model's
-  own or a helper's module globals is detected. A lambda created anew for
-  every call still compiles each time, because a new function object cannot
-  be proven equivalent. Cold (first-call) time is unchanged (~0.77 s).
+  programs (~125 ms of 167 ms at n=1000).
+  - Stateless kernels (`CommonJIT`, `CurveFit` sigma/covariance,
+    `LossFunctionsJIT`) are now module-level singletons. This applies to every
+    model; robust-loss fits gain most (`loss='soft_l1'`, n=1000: 146 ms to
+    5.5 ms).
+  - The traced residual/Jacobian of the user's model (autodiff path, no
+    `jac`) is reused from a bounded cache (32 models) **only when provably
+    equivalent to re-tracing** (default-deny). The model must be a plain
+    Python function without attributes and with the standard builtins.
+    Everything a trace of it can read must be allowlisted: its closure
+    cells, defaults, and the globals its bytecode loads, followed
+    recursively through the Python functions it reaches.
+    - Allowlisted values: exact numbers and strings (floats by bit
+      pattern), NumPy bool/int/float/complex scalars (with dtype), and
+      tuples/frozensets of these.
+    - Allowlisted modules: `jax`, `jax.numpy`, `jax.lax`, `jax.nn`,
+      `jax.scipy`, `numpy`, `math`, `cmath`, `scipy.special`, together with
+      the functions they export, and C builtins such as `abs`.
+    - Everything else is re-traced on every call, as before: models that
+      capture or read arrays, lists, dicts, dataclass instances, classes,
+      objects, function attributes, bound methods (including
+      `dict.get`/`ndarray.mean`), partials, or the user's own modules
+      (also `os.environ`). New lambdas created per call are also re-traced.
+    - Fit results do not depend on the cache. A test per known stale-state
+      pattern checks that the fit after a mutation equals a cold fit.
+    - Monkeypatching the allowlisted libraries themselves (e.g. rebinding
+      `jnp.exp`) is not tracked.
+    - `nlsq.clear_cache()` drops the cache;
+      `NLSQ_DISABLE_WRAPPER_CACHE=1` disables it.
+  - Cold (first-call) time is unchanged (~0.8 s).
 
   Harness: `python -m benchmarks.compare.run_library_comparison --problems
   exp_decay --sizes 1000 100000 --repeats 7 --no-batch`, CPU (i9-13900H),
   warm median in seconds; ratio = NLSQ warm / library warm (lower is
-  better for NLSQ). "Before" is after the logging fix, identical to the
-  committed Task 7 baseline (0.167 s at n=1000).
+  better for NLSQ). "Before" was taken after the logging fix and is
+  identical to the committed Task 7 baseline (0.167 s at n=1000). The
+  harness now hands NLSQ a closure over the model *function* (as a user
+  writes it). Its previous closure over a frozen dataclass is refused by
+  the cache and stays at ~98 ms warm (n=1000), which is still faster than
+  before because of the shared kernels.
 
   | n | library | before (s) | NLSQ/lib before | after (s) | NLSQ/lib after |
   |---|---|---|---|---|---|
-  | 1000 | **nlsq** | **0.167** | – | **0.00275** | – |
-  | 1000 | jaxopt | 0.000759 | 220× | 0.000316 | 8.7× |
-  | 1000 | scipy | 0.00102 | 164× | 0.00103 | 2.7× |
-  | 1000 | optimistix | 0.000697 | 240× | 0.00104 | 2.6× |
-  | 1000 | lmfit | 0.00183 | 91× | 0.00177 | 1.6× |
-  | 100000 | **nlsq** | **0.224** | – | **0.0380** | – |
-  | 100000 | jaxopt | 0.0156 | 14× | 0.0122 | 3.1× |
-  | 100000 | lmfit | 0.0230 | 9.7× | 0.0230 | 1.7× |
-  | 100000 | optimistix | 0.0325 | 6.9× | 0.0299 | 1.3× |
-  | 100000 | scipy | 0.0543 | 4.1× | 0.0661 | 0.57× |
+  | 1000 | **nlsq** | **0.167** | – | **0.00278** | – |
+  | 1000 | jaxopt | 0.000759 | 220× | 0.000356 | 7.8× |
+  | 1000 | optimistix | 0.000697 | 240× | 0.000933 | 3.0× |
+  | 1000 | scipy | 0.00102 | 164× | 0.00101 | 2.8× |
+  | 1000 | lmfit | 0.00183 | 91× | 0.00180 | 1.5× |
+  | 100000 | **nlsq** | **0.224** | – | **0.0411** | – |
+  | 100000 | jaxopt | 0.0156 | 14× | 0.0134 | 3.1× |
+  | 100000 | lmfit | 0.0230 | 9.7× | 0.0230 | 1.8× |
+  | 100000 | optimistix | 0.0325 | 6.9× | 0.0283 | 1.5× |
+  | 100000 | scipy | 0.0543 | 4.1× | 0.0600 | 0.69× |
 
-  Warm n=1000 drops 61× (0.167 s → 2.75 ms, target ≤ 34 ms). A
-  `loss='soft_l1'` fit drops from 146 ms to 5 ms. The remaining ~2.7 ms is
-  spread across Python orchestration (object setup, validation, the TRF
-  loop's dispatches) with no single dominant item;
-  `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
+  Warm n=1000 is 60× faster (0.167 s to 2.78 ms; the target was ≤ 34 ms).
+  The remaining ~2.8 ms is spread across Python orchestration (object
+  setup, validation, the TRF loop's dispatches), with no single dominant
+  item. `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
 
 ## [0.7.6] - 2026-09-04
 
