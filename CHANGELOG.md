@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make dev` or `uv sync`.
 
 ### Fixed
+- `NLSQ_MEMORY_LIMIT_GB`, `set_memory_limits()`, `configure_for_large_datasets()` and
+  `memory_context()` now reach strategy selection. They were stored but never read, so
+  `MemoryBudget.compute()` (and `workflow="auto"`) always used detected system memory.
+  Precedence: per-call `memory_limit_gb` > configured limit > detected memory. The
+  8 GB `MemoryConfig` default is not treated as a configured limit. Still not wired:
+  the configured `safety_factor`, `gpu_memory_fraction`, chunk-size and
+  `out_of_memory_strategy` fields.
 - A default `import nlsq` + fit no longer prints `INFO:`/`PERFORMANCE:` log
   lines to stderr. `nlsq/config.py` logged through the root logger
   (`logging.debug(...)`), which ran `logging.basicConfig()` and installed a
