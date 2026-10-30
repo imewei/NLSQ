@@ -195,7 +195,6 @@ def handle_gui(args: argparse.Namespace) -> int:
     try:
         from nlsq.gui_qt import run_desktop
 
-        print("Launching NLSQ Qt GUI...")
         return run_desktop()
 
     except ImportError as e:
