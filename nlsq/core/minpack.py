@@ -2737,8 +2737,17 @@ def curve_fit(
     Notes
     -----
     This function creates a CurveFit instance internally and calls its curve_fit method.
-    For multiple fits with the same function signature, consider creating a CurveFit
-    instance directly to benefit from JAX compilation caching.
+
+    Repeated fits of the same model reuse its traced, compiled residual and
+    Jacobian (no ``jac``) only when ``f`` is a plain Python function and
+    everything it can read is provably immutable: numbers, strings, tuples,
+    other such functions (recursively), and the library modules/functions of
+    ``jax``, ``numpy``, ``math``, ``cmath`` and ``scipy.special``. Models
+    that capture or read anything else (arrays, lists, dicts, objects,
+    dataclasses, function attributes, bound methods, your own modules) are
+    re-traced on every call, as are new lambdas created per call. Use
+    ``nlsq.clear_cache()`` to drop the cache, or set
+    ``NLSQ_DISABLE_WRAPPER_CACHE=1`` to disable it.
 
     When fallback=True, the optimizer tries increasingly aggressive recovery strategies
     if the initial optimization fails. This is particularly useful for:
