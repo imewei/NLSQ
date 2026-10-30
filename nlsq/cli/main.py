@@ -198,9 +198,11 @@ def handle_gui(args: argparse.Namespace) -> int:
         return run_desktop()
 
     except ImportError as e:
-        from nlsq.gui_qt import GUI_INSTALL_HINT
-
-        print(f"\nError: {GUI_INSTALL_HINT}\nDetails: {e}", file=sys.stderr)
+        try:
+            from nlsq.gui_qt import GUI_INSTALL_HINT as hint
+        except ImportError:  # gui_qt itself failed to import
+            hint = 'The NLSQ desktop app needs the GUI extra: pip install "nlsq[gui]"'
+        print(f"\nError: {hint}\nDetails: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         print("\nGUI closed.")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 import types
 
 import pytest
@@ -135,8 +136,24 @@ def test_handle_config_file_exists(
     assert "exists" in capsys.readouterr().err
 
 
-def test_handle_gui_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """handle_gui should return 1 if Qt dependencies are missing."""
+def test_handle_gui_without_pyside6(
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """handle_gui returns 1 and names the gui extra if PySide6 is missing.
+
+    capfd, not capsys: importing nlsq.gui_qt calls faulthandler.enable(),
+    which needs a real stderr file descriptor.
+    """
+    monkeypatch.setitem(sys.modules, "PySide6", None)
+    monkeypatch.setitem(sys.modules, "PySide6.QtWidgets", None)
+    assert cli_main.handle_gui(types.SimpleNamespace()) == 1
+    assert "nlsq[gui]" in capfd.readouterr().err
+
+
+def test_handle_gui_import_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """handle_gui returns 1 with the hint even if nlsq.gui_qt cannot be imported."""
     import builtins
 
     original_import = builtins.__import__
@@ -147,8 +164,8 @@ def test_handle_gui_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", mock_import)
-    args = types.SimpleNamespace()
-    assert cli_main.handle_gui(args) == 1
+    assert cli_main.handle_gui(types.SimpleNamespace()) == 1
+    assert "nlsq[gui]" in capsys.readouterr().err
 
 
 def test_handle_gui_keyboard_interrupt(monkeypatch: pytest.MonkeyPatch) -> None:
