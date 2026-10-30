@@ -45,26 +45,25 @@ Before contributing:
    cd nlsq
    ```
 
-2. **Create a virtual environment**:
+2. **Install development dependencies** (creates `.venv` with the `gui` extra and the `dev` and `bench` dependency groups, and installs the pre-commit hooks):
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   make dev        # uv sync --extra gui --group bench; falls back to pip when uv is absent
    ```
+   `uv sync` manages its own `.venv`, so a separately activated `venv` is ignored. Either
+   activate it (`source .venv/bin/activate`; Windows: `.venv\Scripts\activate`) or prefix
+   commands with `uv run`.
 
-3. **Install development dependencies**:
+   Without uv (pip >= 25.1; run inside your own virtual environment):
    ```bash
-   make dev        # uv sync --extra gui --group bench (or pip >= 25.1: pip install -e ".[gui]" --group dev)
-   ```
-
-4. **Install pre-commit hooks**:
-   ```bash
+   python -m venv .venv && source .venv/bin/activate
+   pip install -e ".[gui]" --group dev --group bench
    pre-commit install
    ```
 
-5. **Verify installation**:
+3. **Verify installation**:
    ```bash
-   python -c "import nlsq; print(nlsq.__version__)"
-   python -m pytest tests/ -x -v
+   uv run python -c "import nlsq; print(nlsq.__version__)"   # or plain `python` inside .venv
+   uv run pytest tests/ -x -v
    ```
 
 ### GPU Setup (Optional)

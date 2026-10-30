@@ -156,7 +156,8 @@ python benchmarks/components/cache_benchmark.py --output my_baseline.json
 ## Requirements
 
 ```bash
-# Core dependencies (included with nlsq[dev])
+# Test tooling comes from `make dev` / `uv sync` (the `dev` dependency group);
+# benchmark comparison libraries come from `uv sync --group bench`
 pip install pytest pytest-benchmark
 
 # For GPU benchmarks

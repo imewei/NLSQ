@@ -6,13 +6,14 @@ This guide covers installing and starting the NLSQ desktop application.
 Installation
 ------------
 
-Install NLSQ with GUI support:
+Install NLSQ with the optional ``gui`` extra (a plain ``pip install nlsq``
+installs the core library only):
 
 .. code-block:: bash
 
-   pip install nlsq
+   pip install "nlsq[gui]"
 
-This installs:
+The ``gui`` extra installs:
 
 - PySide6 (Qt bindings)
 - pyqtgraph (GPU-accelerated plotting)
@@ -108,7 +109,7 @@ Troubleshooting Launch Issues
 
 .. code-block:: bash
 
-   pip install nlsq
+   pip install "nlsq[gui]"
 
 **"Cannot find OpenGL":**
 

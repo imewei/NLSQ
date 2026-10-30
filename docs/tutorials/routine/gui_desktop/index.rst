@@ -28,8 +28,8 @@ Quick Start
 
 .. code-block:: bash
 
-   # Install with GUI support
-   pip install nlsq
+   # Install with GUI support (the ``gui`` extra)
+   pip install "nlsq[gui]"
 
    # Launch the application
    nlsq-gui
