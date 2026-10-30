@@ -67,6 +67,7 @@ def test_dev_group_has_test_lint_docs_build_tools():
         "build",
         "twine",
         "hypothesis",
+        "nlsq",  # self-reference to nlsq[gui]; Makefile and docs rely on it
     }
     assert required <= names
 
@@ -92,6 +93,14 @@ INSTALL_REFERENCE_FILES = [
     "docs/tutorials/routine/getting_started/installation.rst",
     *sorted(
         str(p.relative_to(REPO)) for p in (REPO / ".github" / "workflows").glob("*.yml")
+    ),
+    # Historical changelogs and design docs legitimately mention old extras.
+    *sorted(
+        str(p.relative_to(REPO))
+        for pattern in ("*.rst", "*.md")
+        for p in (REPO / "docs").rglob(pattern)
+        if p.relative_to(REPO / "docs").parts[0] not in {"superpowers", "_build"}
+        and "changelog" not in p.name.lower()
     ),
 ]
 # The extra must start with a letter so shell classes such as `[0-9]+` do not match.

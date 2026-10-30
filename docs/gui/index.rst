@@ -15,6 +15,9 @@ The complete GUI documentation lives in the structured tutorial:
 Quick Start
 -----------
 
+The GUI is an optional extra: install it with ``pip install "nlsq[gui]"``
+(a plain ``pip install nlsq`` installs the core library only).
+
 Launch the GUI from the command line:
 
 .. code-block:: bash
