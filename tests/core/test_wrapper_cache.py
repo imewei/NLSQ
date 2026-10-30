@@ -1012,3 +1012,120 @@ def test_p3_typed_prng_key_constants_are_cached(monkeypatch):
     assert len(ls_mod._wrapper_cache) == before + 1
     monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
     np.testing.assert_array_equal(cached, _fit_xs(make(1), y))
+
+
+# --- round 5 (Codex phase 3e, Opus E1) ----------------------------------------
+
+
+def _assert_refused_and_matches_uncached(model, y, monkeypatch):
+    clear_wrapper_cache()
+    cached = _fit_xs(model, y)
+    assert len(ls_mod._wrapper_cache) == 0
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+    np.testing.assert_array_equal(cached, _fit_xs(model, y))
+    return cached
+
+
+def test_e1_partial_params_are_refused(monkeypatch):
+    from jax.tree_util import Partial
+
+    def make(save):
+        pol = Partial(lambda *a, **k: save)
+        return lambda z, a: jax.checkpoint(lambda t: a * t, policy=pol)(z)
+
+    with pytest.raises(ls_mod._Uncacheable):
+        ls_mod._canon_param(Partial(lambda u: u))
+    with pytest.raises(ls_mod._Uncacheable):
+        ls_mod._canon_param(functools.partial(lambda u: u))
+    _assert_refused_and_matches_uncached(make(True), 6 * XS, monkeypatch)
+    _assert_refused_and_matches_uncached(make(False), 6 * XS, monkeypatch)
+
+
+def test_c3_jax_function_params_need_module_identity(monkeypatch):
+    import jax._src.ad_checkpoint as mod
+
+    def policy(prim, *args, gain=1.0, **params):
+        return True
+
+    policy.__module__ = "jax.numerical_probe"  # module string never imported
+    with pytest.raises(ls_mod._Uncacheable):
+        ls_mod._canon_param(policy)
+    policy.__module__ = mod.__name__  # real module, but not its attribute
+    with pytest.raises(ls_mod._Uncacheable):
+        ls_mod._canon_param(policy)
+
+    def model(z, a):
+        return jax.checkpoint(lambda t: a * t, policy=policy)(z)
+
+    _assert_refused_and_matches_uncached(model, 6 * XS, monkeypatch)
+
+    monkeypatch.setattr(mod, policy.__name__, policy, raising=False)
+    key = ls_mod._canon_param(policy)[1]
+    policy.__kwdefaults__ = {"gain": 2.0}
+    assert ls_mod._canon_param(policy)[1] != key
+
+
+def test_c3_spoofed_module_callable_object_is_refused(monkeypatch):
+    class Op:
+        __module__ = "jax._src.numpy.hijax"
+
+        def __call__(self, z):
+            return z
+
+    with pytest.raises(ls_mod._Uncacheable):
+        ls_mod._canon_param(Op())
+
+
+def test_c4_custom_prng_implementation_is_refused(monkeypatch):
+    from jax.extend import random as ext_random
+
+    def make_impl(name):
+        return ext_random.define_prng_impl(
+            key_shape=(1,),
+            seed=lambda n: jnp.asarray([n], dtype=jnp.uint32),
+            split=lambda k, shape: jax.random.bits(
+                jax.random.key(k[0]), shape, dtype=jnp.uint32
+            )[..., None],
+            random_bits=lambda k, width, shape: jax.random.bits(
+                jax.random.key(k[0]), shape, dtype=jnp.uint32
+            ),
+            fold_in=lambda k, n: k + jnp.asarray(n, dtype=jnp.uint32),
+            name=name,
+            tag=name[:3],
+        )
+
+    def make(key):
+        def model(z, a):
+            gain = jax.random.bits(key, z.shape, dtype=jnp.uint32) & jnp.uint32(3)
+            return (gain.astype(z.dtype) + 0.5) * a * z
+
+        return model
+
+    for name in ("xor_random", "threefry2x32"):  # user impl, incl. a spoofed name
+        key = jax.random.key(0, impl=make_impl(name))
+        with pytest.raises(ls_mod._Uncacheable):
+            ls_mod._array_key(key)
+        model = make(key)
+        y = np.asarray(model(jnp.asarray(XS), 6.0))
+        monkeypatch.delenv("NLSQ_DISABLE_WRAPPER_CACHE", raising=False)
+        _assert_refused_and_matches_uncached(model, y, monkeypatch)
+    for name in ("threefry2x32", "rbg", "unsafe_rbg"):
+        assert ls_mod._array_key(jax.random.key(0, impl=name))[1] == name
+
+
+@jax.tree_util.register_pytree_node_class
+class _AbstractAwareScaled(_Scaled):
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        if type(children[0]) is jax.ShapeDtypeStruct:
+            return children[0]  # lies to return_shape=True
+        return cls(children[0], aux)
+
+
+def test_c5_output_structure_comes_from_the_trace(monkeypatch):
+    def model(z, a):
+        return _AbstractAwareScaled(a * z)
+
+    assert type(jax.jit(model)(XS, 1.0)) is _AbstractAwareScaled
+    cached = _assert_refused_and_matches_uncached(model, 6 * XS, monkeypatch)
+    np.testing.assert_allclose(cached, [3.0])
