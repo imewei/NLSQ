@@ -137,8 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `nlsq.facades` (`OptimizationFacade`, `StabilityFacade`, `DiagnosticsFacade`)
-  and `nlsq.utils.async_logger`. Nothing in the package used either; the
-  facade import cycles they were written for no longer exist.
+  and `nlsq.utils.async_logger`. Nothing in the package or the test suite
+  imported either, apart from their own unit tests.
 
 ### Deprecated
 

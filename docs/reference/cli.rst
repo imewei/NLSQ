@@ -40,11 +40,12 @@ Launch the interactive Qt desktop GUI for visual curve fitting.
    nlsq gui
 
 The GUI provides a 5-page workflow: Data Loading → Model Selection → Fitting Options
-→ Results → Export. Requires the ``gui_qt`` extra:
+→ Results → Export. Requires the ``gui`` extra (PySide6, pyqtgraph), which the
+core install does not include:
 
 .. code-block:: bash
 
-   pip install nlsq
+   pip install "nlsq[gui]"
 
 nlsq fit
 ~~~~~~~~
