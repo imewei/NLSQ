@@ -2740,11 +2740,13 @@ def curve_fit(
 
     Repeated fits reuse a model's compiled residual and Jacobian (autodiff,
     no ``jac``) when the model traces to an identical computation: every call
-    traces ``f`` abstractly, and the traced program, including every value
-    ``f`` read at trace time (globals, closures, attributes, files, ...),
-    is the cache key, so changed model state is a cache miss. Models with
-    side effects or callbacks (``jax.debug.print``, ``pure_callback``), user
-    ``custom_jvp``/``custom_vjp`` rules, or a user ``jac`` are not cached.
+    traces ``f`` abstractly (and its Jacobian, if it uses ``custom_jvp`` or
+    ``custom_vjp`` rules), and the traced program's exact structure,
+    including every value ``f`` read at trace time (globals, closures,
+    attributes, files, ...) and the bytes of its constants, is the cache
+    key, so changed model state is a cache miss. Models with side effects or
+    callbacks (``jax.debug.print``, ``pure_callback``), user-defined JAX
+    primitives, or a user ``jac`` are not cached.
     ``nlsq.clear_cache()`` drops the cache; ``NLSQ_DISABLE_WRAPPER_CACHE=1``
     disables it.
 

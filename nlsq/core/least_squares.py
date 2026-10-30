@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
+import enum
 import hashlib
 import os
+import sys
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
@@ -24,8 +26,8 @@ from nlsq.config import JAXConfig
 __jax_config = JAXConfig()
 import jax
 import jax.numpy as jnp
-import jaxlib
 from jax import jacfwd, jacrev, jit
+from jax.extend import core as jex_core
 from jax.scipy.linalg import solve_triangular as jax_solve_triangular
 
 from nlsq.caching.memory_manager import get_memory_manager
@@ -445,7 +447,6 @@ def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
 _WRAPPER_CACHE_SIZE = 32
 _wrapper_cache: OrderedDict[tuple, tuple] = OrderedDict()
 _wrapper_cache_lock = threading.Lock()
-_JAX_DIRS = tuple(os.path.dirname(m.__file__) + os.sep for m in (jax, jaxlib))
 
 
 def clear_wrapper_cache() -> None:
@@ -460,76 +461,223 @@ def clear_wrapper_cache() -> None:
         _wrapper_cache.clear()
 
 
-def _iter_eqns(jaxpr: Any):
-    """Every equation of `jaxpr`, including those of nested jaxprs."""
-    for eqn in jaxpr.eqns:
-        yield eqn
-        for value in eqn.params.values():
-            for item in value if isinstance(value, (tuple, list)) else (value,):
-                sub = getattr(item, "jaxpr", item)  # ClosedJaxpr -> Jaxpr
-                if hasattr(sub, "eqns"):
-                    yield from _iter_eqns(sub)
+class _Uncacheable(Exception):
+    """Raised while digesting a jaxpr that cannot be keyed exactly."""
 
 
-def _jaxpr_is_cacheable(closed: Any) -> bool:
-    """False for effects, callbacks, and custom derivative rules not from JAX.
+# Params holding a custom derivative rule. They are not digested directly;
+# the rule is covered by the digest of the traced Jacobian (see _trace_model).
+_RULE_PARAMS = {
+    "custom_jvp_call": frozenset({"jvp_jaxpr_fun", "jvp_jaxpr_thunk"}),
+    "custom_vjp_call": frozenset({"fwd_jaxpr_thunk", "bwd", "out_trees"}),
+}
+_MESH_TYPES = (jax.sharding.Mesh, jax.sharding.AbstractMesh)
+_jax_primitive_ids: set[int] = set()
+_jax_primitive_scan_size = 0
 
-    A custom_jvp/custom_vjp rule body is not part of the jaxpr text, so only
-    rules defined inside the jax/jaxlib packages (e.g. jax.nn.relu) are
-    accepted.
+
+def _is_jax_primitive(prim: Any) -> bool:
+    """True iff `prim` is a module-level primitive of jax/jaxlib.
+
+    A user-made primitive's implementation/lowering state is not part of a
+    jaxpr, so such primitives are refused.
     """
-    if closed.effects or len(closed.jaxpr.outvars) != 1:
-        return False
-    for eqn in _iter_eqns(closed.jaxpr):
-        name = eqn.primitive.name
-        if "callback" in name:
-            return False
-        if name.startswith("custom_"):
-            call = getattr(eqn.params.get("call_jaxpr"), "jaxpr", None)
-            src = getattr(getattr(call, "debug_info", None), "func_src_info", None)
-            if not src or not src.rpartition(" at ")[2].startswith(_JAX_DIRS):
-                return False
-    return True
+    global _jax_primitive_scan_size  # noqa: PLW0603
+    if (
+        id(prim) not in _jax_primitive_ids
+        and len(sys.modules) != _jax_primitive_scan_size
+    ):
+        _jax_primitive_scan_size = len(sys.modules)
+        for name, mod in list(sys.modules.items()):
+            if mod is None or not (
+                name in ("jax", "jaxlib") or name.startswith(("jax.", "jaxlib."))
+            ):
+                continue
+            for value in list(vars(mod).values()):
+                if isinstance(value, jex_core.Primitive):
+                    _jax_primitive_ids.add(id(value))
+    return id(prim) in _jax_primitive_ids
+
+
+_RULE_MARK = ("custom derivative rule",)  # in a key: Jacobian trace needed
+
+
+def _has_rule_mark(key: Any) -> bool:
+    if key is _RULE_MARK:
+        return True
+    return isinstance(key, tuple) and any(_has_rule_mark(k) for k in key)
+
+
+def _aval_key(aval: Any) -> tuple:
+    if not isinstance(aval, jax.core.ShapedArray):
+        raise _Uncacheable(f"unsupported aval {type(aval).__name__}")
+    return (tuple(aval.shape), str(aval.dtype), bool(aval.weak_type))
+
+
+def _array_key(value: Any) -> tuple:
+    arr = np.ascontiguousarray(np.asarray(value))
+    if arr.dtype.hasobject:
+        raise _Uncacheable("object array")
+    return (arr.dtype.str, arr.shape, hashlib.sha256(arr.tobytes()).hexdigest())
+
+
+def _private(value: Any) -> Any:
+    """Snapshot of host-mutable data; immutable values are returned as is."""
+    return np.array(value, copy=True) if isinstance(value, np.ndarray) else value
+
+
+def _canon_param(value: Any) -> tuple[Any, Any]:
+    """(value with private snapshots, exact hashable key) of a primitive param."""
+    t = type(value)
+    if isinstance(value, jex_core.Jaxpr):
+        return _snapshot_jaxpr(value)
+    if t in (tuple, list) or (isinstance(value, tuple) and hasattr(value, "_fields")):
+        pairs = [_canon_param(v) for v in value]
+        vals = [v for v, _ in pairs]
+        rebuilt = t(*vals) if hasattr(value, "_fields") else t(vals)
+        return rebuilt, (t.__name__, tuple(k for _, k in pairs))
+    if t is dict:
+        pairs = {k: _canon_param(v) for k, v in value.items()}
+        return (
+            {k: v for k, (v, _) in pairs.items()},
+            ("dict", tuple(sorted((k, c) for k, (_, c) in pairs.items()))),
+        )
+    if value is None or t in (bool, int, str, bytes):
+        return value, (t.__name__, value)
+    if t is float:
+        return value, ("float", value.hex())
+    if t is complex:
+        return value, ("complex", value.real.hex(), value.imag.hex())
+    if isinstance(value, np.dtype):
+        return value, ("dtype", str(value))
+    if isinstance(value, (np.ndarray, np.generic, jax.Array)):
+        snap = _private(value)
+        return snap, ("array", _array_key(snap))
+    if isinstance(value, enum.Enum):
+        return value, (t, value.name)
+    module = t.__module__
+    from_jax = module == "jax" or module.startswith(("jax.", "jaxlib"))
+    # JAX's own immutable, hashable param objects (shardings, Inline, flat
+    # trees, ...). Callables are refused (they may close over user state),
+    # except Mesh, which is callable only as a context manager.
+    if from_jax and (not callable(value) or isinstance(value, _MESH_TYPES)):
+        hash(value)
+        return value, (t, value)
+    raise _Uncacheable(f"param of type {module}.{t.__name__}")
+
+
+def _snapshot_jaxpr(jaxpr: Any) -> tuple[Any, tuple]:
+    """(copy of `jaxpr` with private constants, exact structural key).
+
+    The key covers every equation's primitive object, canonicalised params
+    (recursing into nested jaxprs and their constants), literal values by
+    dtype/shape/bytes, variable wiring and avals, and constants by bytes.
+    """
+    ids: dict[Any, int] = {}
+
+    def atom(a: Any) -> tuple[Any, tuple]:
+        if isinstance(a, jex_core.Literal):
+            val = _private(a.val)
+            lit = a if val is a.val else jex_core.Literal(val, a.aval)
+            return lit, ("lit", _aval_key(a.aval), _array_key(val))
+        ids.setdefault(a, len(ids))
+        return a, ("var", ids[a], _aval_key(a.aval))
+
+    head = tuple(atom(v)[1] for v in (*jaxpr.constvars, *jaxpr.invars))
+    eqns, eqn_keys = [], []
+    for eqn in jaxpr.eqns:
+        prim = eqn.primitive
+        if eqn.effects or "callback" in prim.name or not _is_jax_primitive(prim):
+            raise _Uncacheable(f"primitive {prim.name}")
+        ins = [atom(a) for a in eqn.invars]
+        rule = _RULE_PARAMS.get(prim.name, frozenset())
+        params, param_keys = {}, []
+        for name in sorted(eqn.params):
+            if name in rule:
+                params[name] = eqn.params[name]
+                param_keys.append((name, _RULE_MARK))
+                continue
+            params[name], key = _canon_param(eqn.params[name])
+            param_keys.append((name, key))
+        outs = tuple(atom(o)[1] for o in eqn.outvars)
+        eqns.append(eqn.replace(invars=[a for a, _ in ins], params=params))
+        eqn_keys.append((prim, tuple(param_keys), tuple(k for _, k in ins), outs))
+    outvars = [atom(o) for o in jaxpr.outvars]
+    consts = [_private(c) for c in jaxpr.consts]
+    new = jaxpr.replace(eqns=eqns, outvars=[o for o, _ in outvars]).with_consts(consts)
+    key = (
+        head,
+        tuple(eqn_keys),
+        tuple(k for _, k in outvars),
+        tuple(_array_key(c) for c in consts),
+    )
+    return new, key
 
 
 def _trace_model(
-    fun: Callable, xdata: Any, x0: np.ndarray, mode: str
-) -> tuple[tuple, Any] | None:
-    """(cache key, closed jaxpr) of `fun` as the residual wrappers call it.
+    fun: Callable, xdata: Any, ydata: Any, x0: np.ndarray, mode: str
+) -> tuple[tuple, Any, tuple] | None:
+    """(cache key, private jaxpr, input aval keys) of `fun`, or None.
 
-    Returns None (use the uncached path) when the cache is disabled, tracing
-    fails, or the jaxpr is not cacheable.
+    `fun` is traced as the residual wrappers call it (x as delivered by
+    _safe_coords, incl. weak_type; n scalar params of x0's dtype), and its
+    Jacobian is traced with the same AD mode the wrappers use, so custom
+    derivative rules (inlined there) are part of the key. None (uncached path)
+    when the cache is disabled, tracing fails, or anything in either jaxpr
+    cannot be keyed exactly (effects, callbacks, user primitives, unknown
+    params).
     """
     if os.environ.get("NLSQ_DISABLE_WRAPPER_CACHE") == "1":
         return None
     try:
-        x_aval = jax.ShapeDtypeStruct(xdata.shape, xdata.dtype)
-        p_aval = jax.ShapeDtypeStruct((), jnp.asarray(x0).dtype)
-        # Fresh wrapper on purpose: make_jaxpr caches traces by function
-        # identity, which would return a stale jaxpr after a state change.
-        fresh = lambda *args: fun(*args)  # noqa: E731, PLW0108
-        closed = jax.make_jaxpr(fresh)(x_aval, *[p_aval] * x0.size)
-        if not _jaxpr_is_cacheable(closed):
-            return None
-        consts = tuple(
-            (c.dtype.str, c.shape, hashlib.sha256(c.tobytes()).hexdigest())
-            for c in map(np.asarray, closed.consts)
+        x_in = jax.ShapeDtypeStruct(
+            xdata.shape, xdata.dtype, weak_type=bool(getattr(xdata, "weak_type", False))
         )
-        key = (str(closed.jaxpr), consts, x_aval, p_aval, x0.size, mode)
+        mask = jax.ShapeDtypeStruct(jnp.shape(ydata), jnp.bool_)
+        x_aval = jax.eval_shape(_safe_coords, x_in, mask)
+        p_aval = jax.ShapeDtypeStruct((), jnp.asarray(x0).dtype)
+        avals = (x_aval, *[p_aval] * x0.size)
+        # Fresh wrappers on purpose: make_jaxpr caches traces by function
+        # identity, which would return a stale jaxpr after a state change.
+        primal = jax.make_jaxpr(lambda *a: fun(*a))(*avals)  # noqa: PLW0108
+        if primal.effects or len(primal.outvars) != 1:
+            return None
+        private, primal_key = _snapshot_jaxpr(primal)
+        jac_key = None
+        if _has_rule_mark(primal_key):
+            # The rule bodies are not in the primal jaxpr; they are inlined in
+            # the traced Jacobian, so key on that too. Without custom rules the
+            # Jacobian is fully determined by the primal jaxpr (JAX's own AD
+            # rules; user primitives are refused).
+            ad = jacfwd if mode == "fwd" else jacrev
+            argnums = tuple(range(1, x0.size + 1))
+            jac = jax.make_jaxpr(
+                lambda *a: ad(lambda *b: fun(*b), argnums=argnums)(*a)  # noqa: PLW0108
+            )(*avals)
+            if jac.effects:
+                return None
+            _, jac_key = _snapshot_jaxpr(jac)
+        in_keys = tuple(
+            _aval_key(jax.core.ShapedArray(a.shape, a.dtype, a.weak_type))
+            for a in avals
+        )
+        key = (primal_key, jac_key, in_keys, mode)
         hash(key)
-    except Exception:  # not traceable as the wrappers would call it
+    except Exception:  # _Uncacheable, trace failure, unhashable: no caching
         return None
-    return key, closed
+    return key, private, in_keys
 
 
-def _model_from_jaxpr(closed: Any, x_shape: tuple, n: int) -> Callable:
-    """Model function that evaluates `closed` (no reference to the user fn)."""
-    jaxpr, consts = closed.jaxpr, closed.consts
+def _model_from_jaxpr(jaxpr: Any, in_keys: tuple) -> Callable:
+    """Model that evaluates the private `jaxpr` (no reference to the user fn)."""
 
-    def model(x, *p):
-        if jnp.shape(x) != x_shape or len(p) != n:
-            raise ValueError("cached model called with different input shapes")
-        return jax.core.eval_jaxpr(jaxpr, consts, x, *p)[0]
+    def model(*args):
+        got = tuple(_aval_key(jax.typeof(a)) for a in args)
+        if got != in_keys:
+            raise ValueError(
+                f"cached model called with inputs {got}, traced for {in_keys}"
+            )
+        return jax.core.eval_jaxpr(jaxpr, jaxpr.consts, *args)[0]
 
     return model
 
@@ -757,7 +905,7 @@ class LeastSquares:
         if xdata is not None and ydata is not None:
             # Autodiff path: reuse wrappers of an identical traced computation.
             traced = jac is None and self._bind_traced_wrappers(
-                fun, xdata, x0, jacobian_mode_selected
+                fun, xdata, ydata, x0, jacobian_mode_selected
             )
             if not traced:
                 # Uncached path. Rebuild if the bound wrappers came from a
@@ -1579,24 +1727,24 @@ class LeastSquares:
         return result
 
     def _bind_traced_wrappers(
-        self, fun: Callable, xdata: Any, x0: np.ndarray, mode: str
+        self, fun: Callable, xdata: Any, ydata: Any, x0: np.ndarray, mode: str
     ) -> bool:
         """Bind autodiff wrappers built from `fun`'s traced jaxpr, cached.
 
         Returns False when `fun` is not cacheable (see `_trace_model`); the
         caller then builds wrappers from `fun` as before.
         """
-        traced = _trace_model(fun, xdata, x0, mode)
+        traced = _trace_model(fun, xdata, ydata, x0, mode)
         if traced is None:
             return False
-        key, closed = traced
+        key, private, in_keys = traced
         if key != self._wrapper_key:
             with _wrapper_cache_lock:
                 bundle = _wrapper_cache.get(key)
                 if bundle is not None:
                     _wrapper_cache.move_to_end(key)
             if bundle is None:
-                self.update_function(_model_from_jaxpr(closed, xdata.shape, x0.size))
+                self.update_function(_model_from_jaxpr(private, in_keys))
                 self.autdiff_jac(None, mode=mode)
                 bundle = (self.func_none, self.func_1d, self.func_2d)
                 bundle += (self.jac_none, self.jac_1d, self.jac_2d)

@@ -42,7 +42,10 @@ def _counted_fit(model, **kw):
 
 
 def _cacheable(model, n=2):
-    return ls_mod._trace_model(model, jnp.asarray(X), np.ones(n), "fwd") is not None
+    return (
+        ls_mod._trace_model(model, jnp.asarray(X), jnp.asarray(Y2), np.ones(n), "fwd")
+        is not None
+    )
 
 
 def _assert_state_change_misses(model, mutate, expected_a):
@@ -410,7 +413,7 @@ def test_n5_function_metadata_introspection(monkeypatch):
     )
 
 
-def test_n6_descriptors_only_run_during_the_one_trace():
+def test_n6_descriptors_only_run_during_the_traces():
     class Cfg:
         reads = 0
 
@@ -430,9 +433,11 @@ def test_n6_descriptors_only_run_during_the_one_trace():
 
     clear_wrapper_cache()
     popt, new = _counted_fit(model)
-    assert Cfg.reads == 1  # one trace per fit, no inspection by the cache
+    # One trace per fit (no custom rule, so no Jacobian trace); the cache never
+    # inspects the object, so __getattr__ is never reached.
+    assert Cfg.reads == 1
     assert new == 1
-    np.testing.assert_allclose(popt[0], 2.0, rtol=1e-6)  # fit used the one read
+    np.testing.assert_allclose(popt[0], 2.0, rtol=1e-6)  # traced at 1.0
     popt, new = _counted_fit(model)
     assert Cfg.reads == 2
     assert new == 1  # the property returned a new value: miss
@@ -562,20 +567,6 @@ def test_effects_and_callbacks_are_not_cached(capfd):
     np.testing.assert_allclose(popt, [2.0, 0.5], rtol=1e-6)
 
 
-def test_user_custom_jvp_is_not_cached():
-    @jax.custom_jvp
-    def f(x):
-        return jnp.exp(x)
-
-    f.defjvp(lambda primals, tangents: (f(primals[0]), f(primals[0]) * tangents[0]))
-
-    def model(x, a, b):
-        return a * f(-b * x)
-
-    assert not _cacheable(model)
-    np.testing.assert_allclose(_fit(model)[0], [2.0, 0.5], rtol=1e-6)
-
-
 def test_nlsq_clear_cache_empties_wrapper_cache():
     _fit(_exp)
     assert len(ls_mod._wrapper_cache) >= 1
@@ -601,7 +592,7 @@ def test_cached_wrappers_never_call_the_user_function():
     clear_wrapper_cache()
     _fit(model)
     _fit(model)
-    assert calls[0] == 2  # exactly the one cache-key trace per fit
+    assert calls[0] == 2  # one cache-key trace per fit (no custom rule)
 
 
 @pytest.mark.parametrize("disable", ["1", "0"])
@@ -620,3 +611,266 @@ def test_reused_instance_with_changed_parameter_count(monkeypatch, disable):
     r3 = ls.least_squares(poly, np.ones(3), xdata=xd, ydata=yd)
     assert r2.x.shape == (2,)
     np.testing.assert_allclose(r3.x, [1.0, 2.0, 0.5], rtol=1e-6)
+
+
+# --- round 3: structural key (Codex F1-F7, Opus D1) --------------------------
+
+XS = np.linspace(0.1, 2.0, 40)
+
+
+def _fit_xs(model, y, **kw):
+    popt, _ = curve_fit(model, XS, y, p0=kw.pop("p0", [1.0]), **kw)
+    return np.asarray(popt)
+
+
+def _cached_vs_uncached(model, y, monkeypatch, **kw):
+    """(cached popt, new cache entries, popt with the cache disabled)."""
+    before = len(ls_mod._wrapper_cache)
+    cached = _fit_xs(model, y, **dict(kw))
+    new = len(ls_mod._wrapper_cache) - before
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+    uncached = _fit_xs(model, y, **dict(kw))
+    monkeypatch.delenv("NLSQ_DISABLE_WRAPPER_CACHE")
+    return cached, new, uncached
+
+
+def test_f1_nested_jit_constants_are_keyed(monkeypatch):
+    def make(k):
+        c = np.full_like(XS, k)
+
+        @jax.jit
+        def transform(z):
+            return c * z
+
+        return lambda z, a: a * transform(z)
+
+    clear_wrapper_cache()
+    _fit_xs(make(1.0), 6 * XS)
+    cached, new, uncached = _cached_vs_uncached(make(2.0), 6 * XS, monkeypatch)
+    assert new == 1
+    np.testing.assert_array_equal(cached, uncached)
+    np.testing.assert_allclose(cached, [3.0], rtol=1e-9)
+
+
+def test_f2_constants_are_private_snapshots(monkeypatch):
+    c = np.ones_like(XS)
+
+    def first(z, a):
+        return a * z + c
+
+    clear_wrapper_cache()
+    _fit_xs(first, 3 * XS + 1)
+    c[:] = 2.0  # mutate the array the first entry was traced with
+    fresh = np.ones_like(XS)
+
+    def second(z, a):
+        return a * z + fresh
+
+    sigma = np.ones_like(XS)
+    cached, new, uncached = _cached_vs_uncached(
+        second, 3 * XS + 1, monkeypatch, sigma=sigma
+    )
+    assert new == 0  # same computation as the first entry's snapshot: hit
+    np.testing.assert_array_equal(cached, uncached)
+    np.testing.assert_allclose(cached, [3.0], rtol=1e-9)
+
+
+def test_f3_custom_jvp_rule_state_is_keyed(monkeypatch):
+    slope = {"zero": 1.0}
+    relu = jax.custom_jvp(jax.nn.relu)
+
+    @relu.defjvp
+    def rule(primals, tangents):
+        (z,), (dz,) = primals, tangents
+        s = jnp.where(z > 0, 1.0, jnp.where(z < 0, 0.0, slope["zero"]))
+        return jax.nn.relu(z), s * dz
+
+    def model(z, a):
+        return relu(a * z)
+
+    clear_wrapper_cache()
+    _fit_xs(model, 3 * XS, p0=[0.0])
+    slope["zero"] = 0.0
+    cached, new, uncached = _cached_vs_uncached(model, 3 * XS, monkeypatch, p0=[0.0])
+    assert new == 1
+    np.testing.assert_array_equal(cached, uncached)
+    np.testing.assert_allclose(cached, [0.0])
+
+
+def test_f3_custom_vjp_rule_state_is_keyed_in_rev_mode(monkeypatch):
+    monkeypatch.setenv("NLSQ_JACOBIAN_MODE", "rev")
+    slope = {"zero": 1.0}
+
+    @jax.custom_vjp
+    def relu(z):
+        return jax.nn.relu(z)
+
+    def fwd(z):
+        return jax.nn.relu(z), z
+
+    def bwd(z, g):
+        s = jnp.where(z > 0, 1.0, jnp.where(z < 0, 0.0, slope["zero"]))
+        return (s * g,)
+
+    relu.defvjp(fwd, bwd)
+
+    def model(z, a):
+        return relu(a * z)
+
+    clear_wrapper_cache()
+    _fit_xs(model, 3 * XS, p0=[0.0])
+    slope["zero"] = 0.0
+    cached, new, uncached = _cached_vs_uncached(model, 3 * XS, monkeypatch, p0=[0.0])
+    np.testing.assert_array_equal(cached, uncached)
+    np.testing.assert_allclose(cached, [0.0])
+    assert new == 1  # the bwd rule state is in the (jacrev) key
+
+
+@pytest.mark.parametrize("variant", ["defjvp", "defjvps"])
+def test_d1_user_jvp_rule_reading_a_global(monkeypatch, variant):
+    state = {"sc": 1.0}
+    g = jax.custom_jvp(jnp.exp)
+    if variant == "defjvp":
+        g.defjvp(lambda p, t: (jnp.exp(p[0]), state["sc"] * jnp.exp(p[0]) * t[0]))
+    else:
+        g.defjvps(lambda t, primal_out, z: state["sc"] * primal_out * t)
+    x = np.linspace(0, 4, 200)
+    y = 2 * np.exp(-0.7 * x) + 0.01 * np.sin(9 * x)
+
+    def model(z, a, b):
+        return a * g(-b * z)
+
+    def fit():
+        popt, pcov = curve_fit(model, x, y, p0=(1.0, 1.0), max_nfev=3)
+        return np.asarray(popt), np.asarray(pcov)
+
+    clear_wrapper_cache()
+    fit()
+    state["sc"] = 5.0
+    before = len(ls_mod._wrapper_cache)
+    cached = fit()
+    assert len(ls_mod._wrapper_cache) - before == 1  # rule state is in the key
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+    uncached = fit()
+    np.testing.assert_array_equal(cached[0], uncached[0])
+    np.testing.assert_array_equal(cached[1], uncached[1])
+
+
+def test_f4_literal_bits_are_keyed(monkeypatch):
+    def make(gain):
+        bits = np.float64(np.nan).view(np.uint64) | np.uint64(int(gain))
+        lit = bits.view(np.float64)  # NaN whose payload encodes the gain
+
+        def model(z, a):
+            g = jax.lax.bitcast_convert_type(lit, jnp.uint64) & jnp.uint64(3)
+            return g.astype(jnp.float64) * a * z
+
+        return model
+
+    clear_wrapper_cache()
+    _fit_xs(make(1), 6 * XS)
+    cached, new, uncached = _cached_vs_uncached(make(2), 6 * XS, monkeypatch)
+    assert new == 1
+    np.testing.assert_array_equal(cached, uncached)
+    np.testing.assert_allclose(cached, [3.0], rtol=1e-9)
+
+
+_ARRAY_LITERAL_SCRIPT = """
+import os
+import numpy as np
+import jax.numpy as jnp
+from nlsq import curve_fit
+from nlsq.core import least_squares as ls
+x = np.linspace(.1, 2., 40)
+def make(k):
+    c = jnp.full_like(jnp.asarray(x), k)
+    return lambda z, a: a * c * z
+def fit(f):
+    p, _ = curve_fit(f, x, 6 * x, p0=[1.])
+    return p
+ls.clear_wrapper_cache()
+fit(make(1.))
+g = make(2.)
+n0 = len(ls._wrapper_cache)
+cached = fit(g)
+assert len(ls._wrapper_cache) == n0 + 1, "array literal change must miss"
+os.environ["NLSQ_DISABLE_WRAPPER_CACHE"] = "1"
+uncached = fit(g)
+np.testing.assert_array_equal(cached, uncached)
+np.testing.assert_allclose(cached, [3.0], rtol=1e-9)
+print("OK")
+"""
+
+
+@pytest.mark.serial
+@pytest.mark.parametrize("simplified", ["1", "0"])
+def test_f4_array_literals_are_keyed(simplified, tmp_path):
+    import subprocess
+
+    env = dict(os.environ, JAX_USE_SIMPLIFIED_JAXPR_CONSTANTS=simplified)
+    env.update(NLSQ_SKIP_GPU_CHECK="1")
+    env.pop("NLSQ_DISABLE_WRAPPER_CACHE", None)
+    proc = subprocess.run(
+        [sys.executable, "-c", _ARRAY_LITERAL_SCRIPT],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=300,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert "OK" in proc.stdout
+
+
+def test_f5_user_primitives_are_not_cached(monkeypatch):
+    from jax.extend import core as jex_core
+    from jax.interpreters import ad, mlir
+
+    def make(k):
+        prim = jex_core.Primitive("scale_probe")
+        prim.def_impl(lambda z: k * z)
+        prim.def_abstract_eval(lambda aval: aval)
+        mlir.register_lowering(
+            prim, mlir.lower_fun(lambda z: k * z, multiple_results=False)
+        )
+        ad.primitive_jvps[prim] = lambda ps, ts: (prim.bind(ps[0]), k * ts[0])
+        return lambda z, a: prim.bind(a * z)
+
+    clear_wrapper_cache()
+    _fit_xs(make(1.0), 6 * XS)
+    cached, new, uncached = _cached_vs_uncached(make(2.0), 6 * XS, monkeypatch)
+    assert new == 0 and len(ls_mod._wrapper_cache) == 0  # refused
+    np.testing.assert_array_equal(cached, uncached)
+    np.testing.assert_allclose(cached, [3.0], rtol=1e-9)
+
+
+def test_f6_weak_type_input_is_traced_as_delivered(monkeypatch):
+    from nlsq.core.least_squares import LeastSquares
+
+    x = jnp.broadcast_to(jnp.asarray(2.0), (40,))
+    assert x.weak_type
+    y = 6 * x
+
+    def model(z, a):
+        return (2.0 if z.weak_type else 1.0) * a * z
+
+    def fit():
+        return LeastSquares().least_squares(model, np.ones(1), xdata=x, ydata=y).x
+
+    clear_wrapper_cache()
+    cached = fit()
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
+    uncached = fit()
+    np.testing.assert_array_equal(cached, uncached)
+
+
+def test_f7_linear_solve_is_cacheable(monkeypatch):
+    def model(z, a):
+        return a * jnp.linalg.solve(2 * jnp.eye(2), jnp.stack((z, z)))[0]
+
+    clear_wrapper_cache()
+    cached, new, uncached = _cached_vs_uncached(model, 6 * XS, monkeypatch)
+    assert new == 1 and len(ls_mod._wrapper_cache) > 0
+    np.testing.assert_array_equal(cached, uncached)
+    np.testing.assert_allclose(cached, [12.0], rtol=1e-9)
