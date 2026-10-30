@@ -41,36 +41,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     5.5 ms).
   - The compiled residual/Jacobian of the user's model (autodiff path, no
     `jac`) is reused from a bounded cache (32 entries) when **the model
-    traces to an identical computation**. Every `curve_fit` call traces the
-    model abstractly (`jax.make_jaxpr`). The cache key is that traced
-    program: its jaxpr text, with every Python scalar the model read baked
-    in as a literal, plus a digest of each constant array, the input
-    shapes/dtypes, the parameter count and the AD mode.
+    traces to an identical computation**.
+    - Every `curve_fit` call traces the model abstractly (`jax.make_jaxpr`)
+      with the exact input types the wrappers deliver, including
+      `weak_type`.
+    - The key is an exact structural digest of the traced program: each
+      equation's primitive object; its parameters (floats by bits, arrays
+      and literals by dtype, shape and bytes); nested jaxprs and their
+      constants, recursively; and the variable wiring and types.
+    - If the model uses `custom_jvp`/`custom_vjp` rules, its Jacobian is
+      traced as well (with the AD mode in use), so the rule is part of the
+      key.
     - Model state read at trace time is part of the key, however it is
       read: globals, closures, attributes, imports, `os.environ`, files,
-      NumPy state. Changed state is therefore a miss and a rebuild, exactly
-      as before; an unchanged computation is a hit.
-    - Cached wrappers evaluate the jaxpr and never call the user function
-      again.
+      NumPy state, derivative rules. Changed state is therefore a miss and
+      a rebuild, exactly as before; an identical computation is a hit.
+    - Constants are copied privately before hashing, and cached wrappers
+      evaluate those copies, never the user function, so mutating a user
+      array later cannot alter a cached program.
     - This also caches lambdas recreated on every call, partials, callable
-      objects and decorated models.
-    - Not cached (re-traced per call as before): a user `jac`; models whose
+      objects, decorated models, `jnp.linalg.solve`, and JAX's own custom
+      rules such as `jax.nn.relu`.
+    - Not cached (re-traced per call, as before): a user `jac`; models whose
       trace fails; models with side effects or callbacks (`jax.debug.print`,
-      `pure_callback`); and user `custom_jvp`/`custom_vjp` rules, whose rule
-      bodies are not part of the jaxpr (JAX's own, e.g. `jax.nn.relu`, are
-      cached).
+      `pure_callback`); user-defined JAX primitives (their implementation is
+      not in the jaxpr); and parameter types the digest does not know.
     - Limits:
       - each entry keeps its compiled programs alive;
-      - library internals that do not change the traced program are, by
+      - JAX/library internals that do not change the traced program are, by
         construction, irrelevant to the result and not tracked;
-      - tracing costs about 0.7 ms per call for exp_decay and 3.7 ms for a
-        100-operation model. That is far below the 90–340 ms XLA compile it
-        avoids.
+      - tracing costs about 0.9 ms per call for exp_decay, 4.3 ms for a
+        100-operation model, and 4.5 ms for a model with a `custom_jvp`
+        rule (Jacobian traced too). That is far below the 90–350 ms XLA
+        compile it avoids.
     - `nlsq.clear_cache()` drops the cache;
       `NLSQ_DISABLE_WRAPPER_CACHE=1` disables it.
     - Results are bit-identical with the cache on or off. A regression test
-      for each known stale-state pattern checks that the fit after a
-      mutation equals a cold fit.
+      for each known stale-state or key-collision case checks that the
+      cached fit equals the uncached fit.
   - Cold (first-call) time is unchanged (~0.8 s).
 
   Harness: `python -m benchmarks.compare.run_library_comparison --problems
@@ -84,23 +92,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   | n | library | before (s) | NLSQ/lib before | after (s) | NLSQ/lib after |
   |---|---|---|---|---|---|
-  | 1000 | **nlsq** | **0.167** | – | **0.00351** | – |
-  | 1000 | jaxopt | 0.000759 | 220× | 0.000219 | 16× |
-  | 1000 | optimistix | 0.000697 | 240× | 0.000984 | 3.6× |
-  | 1000 | scipy | 0.00102 | 164× | 0.00102 | 3.4× |
-  | 1000 | lmfit | 0.00183 | 91× | 0.00176 | 2.0× |
-  | 100000 | **nlsq** | **0.224** | – | **0.0439** | – |
-  | 100000 | jaxopt | 0.0156 | 14× | 0.0110 | 4.0× |
-  | 100000 | lmfit | 0.0230 | 9.7× | 0.0230 | 1.9× |
-  | 100000 | optimistix | 0.0325 | 6.9× | 0.0307 | 1.4× |
-  | 100000 | scipy | 0.0543 | 4.1× | 0.0610 | 0.72× |
+  | 1000 | **nlsq** | **0.167** | – | **0.00411** | – |
+  | 1000 | jaxopt | 0.000759 | 220× | 0.000850 | 4.8× |
+  | 1000 | optimistix | 0.000697 | 240× | 0.000739 | 5.6× |
+  | 1000 | scipy | 0.00102 | 164× | 0.00107 | 3.8× |
+  | 1000 | lmfit | 0.00183 | 91× | 0.00176 | 2.3× |
+  | 100000 | **nlsq** | **0.224** | – | **0.0502** | – |
+  | 100000 | jaxopt | 0.0156 | 14× | 0.00861 | 5.8× |
+  | 100000 | lmfit | 0.0230 | 9.7× | 0.0248 | 2.0× |
+  | 100000 | optimistix | 0.0325 | 6.9× | 0.0205 | 2.4× |
+  | 100000 | scipy | 0.0543 | 4.1× | 0.113 | 0.44× |
 
-  Warm n=1000 is 48× faster (0.167 s to 3.5 ms; the target was ≤ 34 ms).
-  The remaining ~3.5 ms is the per-call cache-key trace (~0.7 ms) plus
-  Python orchestration (object setup, validation, the TRF loop's
-  dispatches), with no single dominant item. Other models, warm n=1000,
-  cache on vs off: a 100-operation model 29 ms vs 367 ms; a lambda
-  recreated on every call 3.3 ms vs 100 ms. `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
+  The "after" column was measured on a loaded machine (load average
+  about 11), so all libraries' warm times are noisier than "before".
+  Warm n=1000 is 41× faster (0.167 s to 4.1 ms; the target was ≤ 34 ms).
+  The remaining time is the per-call cache-key trace (~0.9 ms) plus Python
+  orchestration (object setup, validation, the TRF loop's dispatches).
+  Other models, warm n=1000, cache on vs off (load average about 5): a
+  100-operation model 54 ms vs 372 ms; a lambda recreated on every call
+  4.8 ms vs 102 ms.
+  `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
 
 ## [0.7.6] - 2026-09-04
 
