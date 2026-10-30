@@ -1162,7 +1162,7 @@ def test_c6_unrelated_flag_toggle_restores_a_hit():
         return a * z
 
     popt = _assert_cached_and_hits(model, 6 * XS)
-    with jax.numpy_rank_promotion("warn"):
+    with jax.default_matmul_precision("highest"):
         _fit_xs(model, 6 * XS)
         assert len(ls_mod._wrapper_cache) == 2  # other config: miss
     keys = set(ls_mod._wrapper_cache)
