@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `benchmarks/compare/`: library comparison harness (NLSQ vs SciPy, lmfit, JAXopt,
+  Optimistix) with shared tolerances, per-case fresh-process cold timing, an
+  optimum-reached gate, and a Markdown report. First CPU baseline committed as
+  `benchmarks/baselines/2026-10-30-library-comparison.md`.
+
 ### Changed (install footprint)
 - `pip install nlsq` now installs the core library only. The Qt desktop GUI
   (PySide6, pyqtgraph) moved to the optional `gui` extra, and dev/docs/build

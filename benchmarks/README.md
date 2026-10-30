@@ -129,6 +129,29 @@ Focused pytest-benchmark tests for specific operations:
 | `test_sparse.py` | SC-002: 100x sparse Jacobian speedup |
 | `test_optimizations.py` | Overall optimization validation |
 
+## Library comparison
+
+Compares NLSQ against SciPy, lmfit, JAXopt and Optimistix (`benchmarks/compare/`).
+Install the comparison libraries with `uv sync --group bench`.
+
+```bash
+uv run python -m benchmarks.compare.run_library_comparison \
+    --sizes 1000 100000 1000000 --repeats 7 --out benchmarks/results
+uv run python -m benchmarks.compare.run_library_comparison --quick --no-batch   # smoke run
+# GPU (not measured in the committed baseline):
+JAX_PLATFORMS=cuda uv run python -m benchmarks.compare.run_library_comparison --out benchmarks/results
+```
+
+Fairness rules: every library gets the same tolerance (1e-8) for each stopping
+criterion it exposes and the same iteration budget; each case runs in a fresh
+worker process after a trivial backend warm-up, so "cold" is the first call
+(including JIT compilation) and "warm" is the median and IQR of repeated calls;
+the cost is recomputed from the returned parameters, and a library is ranked only
+if that cost matches the best in the case (a fast early stop is listed as
+`did_not_reach_optimum`, not ranked). The raw JSON lands in the git-ignored
+`benchmarks/results/`; the rendered report is committed under `baselines/`
+(`2026-10-30-library-comparison.md`).
+
 ## Baselines
 
 Baseline results are stored in `baselines/` as JSON files:
