@@ -120,6 +120,31 @@ def test_install_references_name_existing_extras():
     assert "nlsq[gui]" in (REPO / "README.md").read_text(encoding="utf-8")
 
 
+# Prose such as "Requires the ``gui`` extra:" introducing the install command.
+PROSE_EXTRA = re.compile(r"``([A-Za-z][A-Za-z0-9_.-]*)``\s+extra\b")
+PIP_INSTALL = re.compile(r"pip install\s+(.*)")
+
+
+def test_prose_extra_mentions_name_existing_extras_and_install_them():
+    extras = {
+        _dist_name(name)
+        for name in _load_pyproject()["project"]["optional-dependencies"]
+    }
+    for rel in INSTALL_REFERENCE_FILES:
+        text = (REPO / rel).read_text(encoding="utf-8")
+        for match in PROSE_EXTRA.finditer(text):
+            name = match.group(1)
+            assert _dist_name(name) in extras, f"{rel}: unknown extra {name!r}"
+            if text[match.end() :].lstrip(" ")[:1] != ":":
+                continue  # not introducing a command
+            # The next install command must actually request that extra.
+            install = PIP_INSTALL.search(text, match.end())
+            assert install and f"nlsq[{name}]" in install.group(1), (
+                f"{rel}: the {name!r} extra is named but the next `pip install` "
+                f"does not request nlsq[{name}]"
+            )
+
+
 def test_docs_requirements_cover_docs_packages():
     text = (REPO / "docs" / "requirements.txt").read_text(encoding="utf-8")
     lines = [ln.strip() for ln in text.splitlines()]

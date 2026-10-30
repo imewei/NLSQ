@@ -24,6 +24,14 @@ from nlsq import curve_fit
 from nlsq.core import least_squares as ls_mod
 from nlsq.core.least_squares import clear_wrapper_cache
 
+
+@pytest.fixture(autouse=True)
+def _clean_cache_state(monkeypatch):
+    """Start every test with the cache enabled and empty, whatever the shell sets."""
+    monkeypatch.delenv("NLSQ_DISABLE_WRAPPER_CACHE", raising=False)
+    clear_wrapper_cache()
+
+
 X = np.linspace(0.0, 4.0, 200)
 Y2 = 2.0 * np.exp(-0.5 * X)
 P0 = [1.0, 1.0]
