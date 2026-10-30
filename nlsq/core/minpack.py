@@ -2738,16 +2738,15 @@ def curve_fit(
     -----
     This function creates a CurveFit instance internally and calls its curve_fit method.
 
-    Repeated fits of the same model reuse its traced, compiled residual and
-    Jacobian (no ``jac``) only when ``f`` is a plain Python function and
-    everything it can read is provably immutable: numbers, strings, tuples,
-    other such functions (recursively), and the library modules/functions of
-    ``jax``, ``numpy``, ``math``, ``cmath`` and ``scipy.special``. Models
-    that capture or read anything else (arrays, lists, dicts, objects,
-    dataclasses, function attributes, bound methods, your own modules) are
-    re-traced on every call, as are new lambdas created per call. Use
-    ``nlsq.clear_cache()`` to drop the cache, or set
-    ``NLSQ_DISABLE_WRAPPER_CACHE=1`` to disable it.
+    Repeated fits reuse a model's compiled residual and Jacobian (autodiff,
+    no ``jac``) when the model traces to an identical computation: every call
+    traces ``f`` abstractly, and the traced program, including every value
+    ``f`` read at trace time (globals, closures, attributes, files, ...),
+    is the cache key, so changed model state is a cache miss. Models with
+    side effects or callbacks (``jax.debug.print``, ``pure_callback``), user
+    ``custom_jvp``/``custom_vjp`` rules, or a user ``jac`` are not cached.
+    ``nlsq.clear_cache()`` drops the cache; ``NLSQ_DISABLE_WRAPPER_CACHE=1``
+    disables it.
 
     When fallback=True, the optimizer tries increasingly aggressive recovery strategies
     if the initial optimization fails. This is particularly useful for:
