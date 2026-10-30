@@ -207,7 +207,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--quick", action="store_true", help="n=200, one repeat")
     ap.add_argument("--problems", nargs="+")
     ap.add_argument("--sizes", nargs="+", type=int, default=[1000, 100_000])
-    ap.add_argument("--repeats", type=int, default=7)
+    ap.add_argument(
+        "--repeats",
+        type=int,
+        default=7,
+        choices=range(1, 1000),
+        metavar="N",
+        help="warm repeats per case (>= 1)",
+    )
     ap.add_argument("--no-batch", action="store_true")
     ap.add_argument("--libraries", nargs="+")
     ap.add_argument("--out", type=Path, default=Path("benchmarks/results"))

@@ -140,3 +140,24 @@ def test_quick_run_writes_valid_json_and_markdown(tmp_path, monkeypatch):
     md = next(tmp_path.glob("*.md")).read_text()
     for lib in ("nlsq", "scipy", "lmfit", "jaxopt", "optimistix"):
         assert lib in md
+
+
+def test_run_spawns_one_fresh_process_per_library_and_mode(monkeypatch):
+    # cold_s is only meaningful if no case shares a process with another
+    calls = []
+
+    def fake_spawn(library, mode, problem, n, batch, repeats):
+        calls.append((library, mode, problem, n, batch))
+        return runner._blank(library, mode, problem, n, batch or None, "ok", None)
+
+    monkeypatch.setattr(runner, "_spawn", fake_spawn)
+    runner.run(["exp_decay"], [200], 1, False, libraries=["nlsq", "scipy"])
+    assert len(calls) == len(set(calls)) >= 2
+    assert {c[0] for c in calls} == {"nlsq", "scipy"}
+
+
+@pytest.mark.parametrize("bad", ["0", "-1"])
+def test_non_positive_repeats_are_rejected(bad, capsys):
+    with pytest.raises(SystemExit):
+        main(["--repeats", bad])
+    assert "--repeats" in capsys.readouterr().err
