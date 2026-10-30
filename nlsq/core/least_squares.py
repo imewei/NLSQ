@@ -601,6 +601,7 @@ class LeastSquares:
         self.jac: Callable[..., jnp.ndarray] | None = None
         # Cache key of the bound traced wrappers; None = built from self.f.
         self._wrapper_key: tuple | None = None
+        self._wrapped_n: int | None = None  # n the uncached wrappers were built for
 
         # need a separate instance of the autodiff class for each of the
         # the different sigma/covariance cases
@@ -761,12 +762,15 @@ class LeastSquares:
             if not traced:
                 # Uncached path. Rebuild if the bound wrappers came from a
                 # traced jaxpr or the fit function changed.
-                func_update = self._wrapper_key is not None or _closure_aware_changed(
-                    self.f, fun
+                func_update = (
+                    self._wrapper_key is not None
+                    or self._wrapped_n != self.n  # autodiff Jacobian is sized by n
+                    or _closure_aware_changed(self.f, fun)
                 )
                 self._wrapper_key = None
                 if func_update:
                     self.update_function(fun)
+                    self._wrapped_n = self.n
                     if jac is None:
                         self.autdiff_jac(jac, mode=jacobian_mode_selected)
 
