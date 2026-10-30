@@ -52,6 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - If the model uses `custom_jvp`/`custom_vjp` rules, its Jacobian is
       traced as well (with the AD mode in use), so the rule is part of the
       key.
+    - The effective JAX config of the calling thread (every `jax.config`
+      value, including context-manager overrides such as
+      `jax.threefry_partitionable`) is part of the key, since opaque
+      primitives like `random_bits` are lowered per config at compile time;
+      a config change is a miss.
     - Model state read at trace time is part of the key, however it is
       read: globals, closures, attributes, imports, `os.environ`, files,
       NumPy state, derivative rules. Changed state is therefore a miss and
