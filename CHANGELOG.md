@@ -60,12 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       evaluate those copies, never the user function, so mutating a user
       array later cannot alter a cached program.
     - This also caches lambdas recreated on every call, partials, callable
-      objects, decorated models, `jnp.linalg.solve`, and JAX's own custom
-      rules such as `jax.nn.relu`.
+      objects, decorated models, `jnp.linalg.solve`, `jnp.interp`, JAX
+      checkpoint policies, sharding constraints, captured PRNG keys, and
+      JAX's own custom rules such as `jax.nn.relu`.
     - Not cached (re-traced per call, as before): a user `jac`; models whose
       trace fails; models with side effects or callbacks (`jax.debug.print`,
-      `pure_callback`); user-defined JAX primitives (their implementation is
-      not in the jaxpr); and parameter types the digest does not know.
+      `pure_callback`); models returning a pytree instead of a bare array;
+      user-defined JAX primitives (their implementation is not in the
+      jaxpr); user callables passed into JAX operations (e.g. a custom
+      checkpoint policy); and parameter types the digest does not know. Each
+      refusal is logged at DEBUG on `nlsq.core.least_squares` with its
+      reason.
     - Limits:
       - each entry keeps its compiled programs alive;
       - JAX/library internals that do not change the traced program are, by
