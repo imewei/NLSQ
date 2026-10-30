@@ -3011,6 +3011,70 @@ def _initialize_feasible(lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
     return p0
 
 
+# Module-level JIT singletons bound by CurveFit. Per-instance `@jit` closures
+# were new function objects on every curve_fit() call (which builds a new
+# CurveFit), so JAX re-traced and re-compiled them each time.
+
+
+@jit
+def _sigma_transform1d(
+    sigma: jnp.ndarray,
+    data_mask: jnp.ndarray,
+) -> jnp.ndarray:
+    """Compute the sigma transform for 1D data.
+
+    Parameters
+    ----------
+    sigma : jnp.ndarray
+        The standard deviation of the data.
+    data_mask : jnp.ndarray
+        A binary mask indicating which data points to use in the fit.
+
+    Returns
+    -------
+    jnp.ndarray
+        The sigma transform for the data.
+    """
+    transform = 1.0 / sigma
+    return transform
+
+
+@jit
+def _sigma_transform2d(
+    sigma: jnp.ndarray,
+    data_mask: jnp.ndarray,
+) -> jnp.ndarray:
+    """Compute the sigma transform for 2D data.
+
+    Parameters
+    ----------
+    sigma : jnp.ndarray
+        The standard deviation of the data.
+    data_mask : jnp.ndarray
+        A binary mask indicating which data points to use in the fit.
+
+    Returns
+    -------
+    jnp.ndarray
+        The sigma transform for the data.
+    """
+    sigma = jnp.asarray(sigma)
+    # Decouple masked/padded rows (zero their rows and columns, unit
+    # diagonal) so they neither correlate with nor leak into the
+    # observed block of the Cholesky factor.
+    mask = jnp.asarray(data_mask, dtype=bool)
+    keep = mask[:, None] & mask[None, :]
+    sigma = jnp.where(keep, sigma, jnp.eye(sigma.shape[0], dtype=sigma.dtype))
+    transform = jax_cholesky(sigma, lower=True)
+    return transform
+
+
+@jit
+def _covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
+    _, s, VT = jax_svd(jac, full_matrices=False)
+    return s, VT
+
+
 class CurveFit:
     """Main class for nonlinear least squares curve fitting with JAX acceleration.
 
@@ -3146,79 +3210,17 @@ class CurveFit:
         self.flength = flength
 
     def create_sigma_transform_funcs(self) -> None:
-        """Create JIT-compiled sigma transform functions.
+        """Bind the JIT-compiled sigma transform functions.
 
-        This function creates two JIT-compiled functions: `sigma_transform1d` and
-        `sigma_transform2d`, which are used to compute the sigma transform for 1D
-        and 2D data, respectively. The functions are stored as attributes of the
-        object on which the method is called.
+        `sigma_transform1d` and `sigma_transform2d` compute the sigma transform
+        for 1D and 2D sigma, respectively.
         """
-
-        @jit
-        def sigma_transform1d(
-            sigma: jnp.ndarray,
-            data_mask: jnp.ndarray,
-        ) -> jnp.ndarray:
-            """Compute the sigma transform for 1D data.
-
-            Parameters
-            ----------
-            sigma : jnp.ndarray
-                The standard deviation of the data.
-            data_mask : jnp.ndarray
-                A binary mask indicating which data points to use in the fit.
-
-            Returns
-            -------
-            jnp.ndarray
-                The sigma transform for the data.
-            """
-            transform = 1.0 / sigma
-            return transform
-
-        @jit
-        def sigma_transform2d(
-            sigma: jnp.ndarray,
-            data_mask: jnp.ndarray,
-        ) -> jnp.ndarray:
-            """Compute the sigma transform for 2D data.
-
-            Parameters
-            ----------
-            sigma : jnp.ndarray
-                The standard deviation of the data.
-            data_mask : jnp.ndarray
-                A binary mask indicating which data points to use in the fit.
-
-            Returns
-            -------
-            jnp.ndarray
-                The sigma transform for the data.
-            """
-            sigma = jnp.asarray(sigma)
-            # Decouple masked/padded rows (zero their rows and columns, unit
-            # diagonal) so they neither correlate with nor leak into the
-            # observed block of the Cholesky factor.
-            mask = jnp.asarray(data_mask, dtype=bool)
-            keep = mask[:, None] & mask[None, :]
-            sigma = jnp.where(keep, sigma, jnp.eye(sigma.shape[0], dtype=sigma.dtype))
-            transform = jax_cholesky(sigma, lower=True)
-            return transform
-
-        self.sigma_transform1d = sigma_transform1d
-        self.sigma_transform2d = sigma_transform2d
-        """For fixed input arrays we need to pad the actual data to match the
-        fixed input array size"""
+        self.sigma_transform1d = _sigma_transform1d
+        self.sigma_transform2d = _sigma_transform2d
 
     def create_covariance_svd(self) -> None:
-        """Create JIT-compiled SVD function for covariance computation."""
-
-        @jit
-        def covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
-            _, s, VT = jax_svd(jac, full_matrices=False)
-            return s, VT
-
-        self.covariance_svd = covariance_svd
+        """Bind the JIT-compiled SVD function for covariance computation."""
+        self.covariance_svd = _covariance_svd
 
     def _select_tr_solver(
         self,

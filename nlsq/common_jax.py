@@ -318,6 +318,93 @@ def solve_lsq_trust_region_jax(
     )
 
 
+# Module-level JIT singletons bound by CommonJIT (same pattern as
+# trf_jit.TrustRegionJITFunctions). A per-instance `@jit` closure is a new
+# function object, so every curve_fit() call (which builds a new CommonJIT)
+# re-traced and re-compiled it.
+
+
+@jit
+def _scale_for_robust_loss_function(
+    J: jnp.ndarray,
+    f: jnp.ndarray,
+    rho: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Scale Jacobian and residuals for a robust loss function.
+
+    Parameters
+    ----------
+    J : jnp.ndarray
+        Jacobian matrix.
+    f : jnp.ndarray
+        Residuals.
+    rho : jnp.ndarray
+        Cost function evaluation.
+    """
+    # Scale Jacobian and residuals for robust loss function
+    J_scale = rho[1] + 2 * rho[2] * f**2
+
+    # Prevent division by zero
+    mask = J_scale < EPS
+    J_scale = jnp.where(mask, EPS, J_scale)
+    J_scale = J_scale**0.5
+
+    # Compute scaling factors
+    fscale = rho[1] / J_scale
+
+    # Apply scaling
+    f = f * fscale
+    J = J * J_scale[:, jnp.newaxis]
+    return J, f
+
+
+@jit
+def _js_dot(J: jnp.ndarray, s: jnp.ndarray) -> jnp.ndarray:
+    return J.dot(s)
+
+
+@jit
+def _js0_dot(J: jnp.ndarray, s0: jnp.ndarray) -> jnp.ndarray:
+    return J.dot(s0)
+
+
+@jit
+def _evaluate_quadratic1(J, g, s):
+    Js = J.dot(s)
+    q = jnp.dot(Js, Js)
+    l = jnp.dot(s, g)
+    return 0.5 * q + l
+
+
+@jit
+def _evaluate_quadratic_diagonal1(J, g, s, diag):
+    Js = J.dot(s)
+    q = jnp.dot(Js, Js) + jnp.dot(s * diag, s)
+    l = jnp.dot(s, g)
+    return 0.5 * q + l
+
+
+@jit
+def _evaluate_quadratic2(J, g, s):
+    Js = J.dot(s.T)
+    q = jnp.sum(Js**2, axis=0)
+    l = jnp.dot(s, g)
+    return 0.5 * q + l
+
+
+@jit
+def _evaluate_quadratic_diagonal2(J, g, s, diag):
+    Js = J.dot(s.T)
+    q = jnp.sum(Js**2, axis=0) + jnp.sum(diag * s**2, axis=1)
+    l = jnp.dot(s, g)
+    return 0.5 * q + l
+
+
+@jit
+def _jac_sum_func(J):
+    return jnp.sum(J**2, axis=0) ** 0.5
+
+
 class CommonJIT:
     """JIT-compiled common functions for nonlinear least squares optimization.
 
@@ -432,43 +519,8 @@ class CommonJIT:
         self.create_scale_for_robust_loss_function()
 
     def create_scale_for_robust_loss_function(self):
-        """Create the scaling function for the loss functions"""
-
-        @jit
-        def scale_for_robust_loss_function(
-            J: jnp.ndarray,
-            f: jnp.ndarray,
-            rho: jnp.ndarray,
-        ) -> tuple[jnp.ndarray, jnp.ndarray]:
-            """Scale Jacobian and residuals for a robust loss function.
-            Arrays are modified in place.
-
-            Parameters
-            ----------
-            J : jnp.ndarray
-                Jacobian matrix.
-            f : jnp.ndarray
-                Residuals.
-            rho : jnp.ndarray
-                Cost function evaluation.
-            """
-            # Scale Jacobian and residuals for robust loss function
-            J_scale = rho[1] + 2 * rho[2] * f**2
-
-            # Prevent division by zero
-            mask = J_scale < EPS
-            J_scale = jnp.where(mask, EPS, J_scale)
-            J_scale = J_scale**0.5
-
-            # Compute scaling factors
-            fscale = rho[1] / J_scale
-
-            # Apply scaling
-            f = f * fscale
-            J = J * J_scale[:, jnp.newaxis]
-            return J, f
-
-        self.scale_for_robust_loss_function = scale_for_robust_loss_function
+        """Bind the scaling function for the loss functions."""
+        self.scale_for_robust_loss_function = _scale_for_robust_loss_function
 
     def build_quadratic_1d(
         self,
@@ -571,17 +623,8 @@ class CommonJIT:
         shapes which causes retracing of the function if we use the same
         function for both.
         """
-
-        @jit
-        def js_dot(J: jnp.ndarray, s: jnp.ndarray) -> jnp.ndarray:
-            return J.dot(s)
-
-        @jit
-        def js0_dot(J: jnp.ndarray, s0: jnp.ndarray) -> jnp.ndarray:
-            return J.dot(s0)
-
-        self.js_dot = js_dot
-        self.js0_dot = js0_dot
+        self.js_dot = _js_dot
+        self.js0_dot = _js0_dot
 
     def evaluate_quadratic(
         self,
@@ -622,50 +665,17 @@ class CommonJIT:
         return self.evaluate_quadratic_diagonal2(J, g, s, diag)
 
     def create_quadratic_funcs(self):
-        @jit
-        def evaluate_quadratic1(J, g, s):
-            Js = J.dot(s)
-            q = jnp.dot(Js, Js)
-            l = jnp.dot(s, g)
-            return 0.5 * q + l
-
-        @jit
-        def evaluate_quadratic_diagonal1(J, g, s, diag):
-            Js = J.dot(s)
-            q = jnp.dot(Js, Js) + jnp.dot(s * diag, s)
-            l = jnp.dot(s, g)
-            return 0.5 * q + l
-
-        @jit
-        def evaluate_quadratic2(J, g, s):
-            Js = J.dot(s.T)
-            q = jnp.sum(Js**2, axis=0)
-            l = jnp.dot(s, g)
-            return 0.5 * q + l
-
-        @jit
-        def evaluate_quadratic_diagonal2(J, g, s, diag):
-            Js = J.dot(s.T)
-            q = jnp.sum(Js**2, axis=0) + jnp.sum(diag * s**2, axis=1)
-            l = jnp.dot(s, g)
-            return 0.5 * q + l
-
-        self.evaluate_quadratic1 = evaluate_quadratic1
-        self.evaluate_quadratic_diagonal1 = evaluate_quadratic_diagonal1
-        self.evaluate_quadratic2 = evaluate_quadratic2
-        self.evaluate_quadratic_diagonal2 = evaluate_quadratic_diagonal2
+        self.evaluate_quadratic1 = _evaluate_quadratic1
+        self.evaluate_quadratic_diagonal1 = _evaluate_quadratic_diagonal1
+        self.evaluate_quadratic2 = _evaluate_quadratic2
+        self.evaluate_quadratic_diagonal2 = _evaluate_quadratic_diagonal2
 
     def create_jac_sum(self):
-        """Create the function for the sum of the Jacobian squared and then
+        """Bind the function for the sum of the Jacobian squared and then
         taking the square root. This is used to compute the scale for the
         variables. Can potentially remove this.
         """
-
-        @jit
-        def jac_sum_func(J):
-            return jnp.sum(J**2, axis=0) ** 0.5
-
-        self.jac_sum_func = jac_sum_func
+        self.jac_sum_func = _jac_sum_func
 
 
 # ---------------------------------------------------------------------------
