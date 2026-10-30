@@ -68,13 +68,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       `pure_callback`); models returning a pytree instead of a bare array;
       user-defined JAX primitives (their implementation is not in the
       jaxpr); user callables passed into JAX operations (e.g. a custom
-      checkpoint policy); and parameter types the digest does not know. Each
+      checkpoint policy, also behind `jax.tree_util.Partial`); keys of a
+      user PRNG implementation (`define_prng_impl`); and parameter types the
+      digest does not know. Each
       refusal is logged at DEBUG on `nlsq.core.least_squares` with its
       reason.
     - Limits:
       - each entry keeps its compiled programs alive;
       - JAX/library internals that do not change the traced program are, by
         construction, irrelevant to the result and not tracked;
+      - library-level monkeypatching, hand-mutating JAX-internal objects and
+        deliberately spoofed module names are outside the cache's soundness
+        guarantee (as they are for JAX's own trace cache);
       - tracing costs about 0.9 ms per call for exp_decay, 4.3 ms for a
         100-operation model, and 4.5 ms for a model with a `custom_jvp`
         rule (Jacobian traced too). That is far below the 90–350 ms XLA
