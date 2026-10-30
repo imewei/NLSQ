@@ -8,7 +8,9 @@ Caveats:
 - Stopping criteria are analogous, not identical: every library gets the same tolerance and iteration budget for each criterion it exposes. A library is ranked only if its final cost matches the best cost in the case (relative 1e-6); its own `converged` flag is reported but does not decide that. A ranked library can still show `lib converged` = False; the flag is not decisive and its cause is not diagnosed here.
 - lmfit wraps SciPy (`leastsq` / `least_squares`); its timings include lmfit's own overhead on top of SciPy.
 - JAXopt: README states "JAXopt is no longer maintained nor developed".
-- Cold = first call in a fresh process after a trivial backend warm-up (includes JIT compilation); warm = median and IQR of repeated calls.
+- Cold = first fit call in a fresh process, after library imports and a trivial backend warm-up (imports and library loading are excluded; JIT tracing/compilation and first-call allocation are included); warm = median and IQR of repeated calls.
+- In the batch case cold is close to warm because the first call is the entire 256-fit batch.
+- At equal cost a ranked library can show a larger max parameter error than its peers on flat-valley problems (two_exp: optimistix 0.47 vs 0.07). Cost is the ranking criterion; parameter error is reported for information.
 - GPU was not measured: this run used the CPU backend.
 
 ## Results
