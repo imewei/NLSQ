@@ -1566,7 +1566,11 @@ class LargeDatasetFitter:
         Returns
         -------
         OptimizeResult
-            Optimization result with fitted parameters and statistics
+            Optimization result with fitted parameters and statistics. Also
+            carries ``equivalent_to_full_batch`` (bool): ``True`` only when the
+            data fit in a single chunk; ``False`` marks a precision-weighted
+            combination of per-chunk fits that is not equivalent to a
+            full-batch fit for nonlinear models.
         """
         return self._fit_implementation(
             f,
@@ -1615,7 +1619,11 @@ class LargeDatasetFitter:
         Returns
         -------
         OptimizeResult
-            Optimization result with fitted parameters and statistics
+            Optimization result with fitted parameters and statistics. Also
+            carries ``equivalent_to_full_batch`` (bool): ``True`` only when the
+            data fit in a single chunk; ``False`` marks a precision-weighted
+            combination of per-chunk fits that is not equivalent to a
+            full-batch fit for nonlinear models.
         """
         return self._fit_implementation(
             f,
@@ -1762,8 +1770,9 @@ class LargeDatasetFitter:
         if not equivalent:
             self.logger.warning(
                 f"Fit used {n_chunks} chunks and is not equivalent to a "
-                "full-batch fit; for nonlinear models the combined estimate "
-                "is an approximation."
+                "full-batch fit; the combined estimate is a precision-weighted "
+                "combination of per-chunk fits, exact only for linear models "
+                "and an approximation for nonlinear ones."
             )
         return result
 

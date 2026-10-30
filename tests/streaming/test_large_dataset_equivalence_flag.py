@@ -44,6 +44,20 @@ def test_multi_chunk_fit_is_flagged(caplog):
 
     assert result.success
     assert result[FLAG] is False
+    assert result["n_chunks"] >= 3  # genuinely chunked, not a borderline split
+    (record,) = _flag_records(caplog)
+    assert f"used {result['n_chunks']} chunks" in record.getMessage()
+    assert "precision-weighted" in record.getMessage()
+
+
+def test_fit_with_progress_carries_the_flag(caplog):
+    x, y = _data()
+    single = _fitter(8.0, caplog).fit_with_progress(_model, x, y, p0=[1.0, 0.0])
+    assert single[FLAG] is True
+    assert not _flag_records(caplog)
+
+    multi = _fitter(0.0001, caplog).fit_with_progress(_model, x, y, p0=[1.0, 0.0])
+    assert multi[FLAG] is False
     assert len(_flag_records(caplog)) == 1
 
 
