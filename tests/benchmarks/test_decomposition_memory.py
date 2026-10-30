@@ -9,7 +9,6 @@ Reference: specs/017-curve-fit-decomposition/spec.md SC-011
 from __future__ import annotations
 
 import gc
-import sys
 from typing import Any
 
 import jax.numpy as jnp

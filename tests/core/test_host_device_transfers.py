@@ -1,16 +1,12 @@
 """Test suite for Task Group 2: Host-Device Transfer Reduction.
 
 This test suite validates the implementation of:
-- Task 2.4: Async logging with jax.debug.callback
+- Task 2.4: Verbose logging during optimization
 - Task 2.6: Transfer profiling infrastructure
 - Task 2.7-2.8: Transfer reduction via JAX operations
 - Task 2.10: Performance improvement validation
 
 All tests ensure GPU-CPU transfers are minimized during optimization.
-
-Note: TestAsyncLogging is marked serial because jax.debug.callback can have
-race conditions when multiple tests invoke async callbacks simultaneously
-in parallel pytest-xdist workers.
 """
 
 import os
@@ -258,10 +254,10 @@ class TestPerformanceImprovement:
 
 # Integration test combining multiple features
 class TestIntegration:
-    """Integration tests combining async logging, profiling, and transfer reduction."""
+    """Integration tests combining verbose logging, profiling, and transfer reduction."""
 
     def test_full_workflow_with_profiling(self):
-        """Test complete workflow with profiling and async logging."""
+        """Test complete workflow with profiling and verbose logging."""
 
         def model(x, a, b, c):
             return a * jnp.exp(-b * x) + c
@@ -277,7 +273,7 @@ class TestIntegration:
                 x,
                 y_data,
                 p0=[1.0, 0.1, 0.0],
-                verbose=2,  # Async logging enabled
+                verbose=2,  # Verbose logging enabled
             )
 
         # Verify profiling

@@ -233,8 +233,8 @@ class TestStreamingBatchPadding:
 class TestHostDeviceTransferReduction:
     """Test Task Group 2: Host-device transfer reduction integration."""
 
-    def test_async_logging_in_optimization(self):
-        """Verify async logging works during optimization."""
+    def test_verbose_logging_in_optimization(self):
+        """Verify verbose logging works during optimization."""
 
         def model(x, a, b):
             return a * jnp.exp(-b * x)
@@ -243,7 +243,7 @@ class TestHostDeviceTransferReduction:
         x = jnp.linspace(0, 5, 100)
         y = 2.0 * jnp.exp(-0.5 * x) + 0.05 * np.random.randn(100)
 
-        # Fit with verbose=2 (async logging every iteration)
+        # Fit with verbose=2 (per-iteration logging)
         with profile_optimization() as metrics:
             popt, _ = curve_fit(model, x, y, p0=[1.0, 0.1], verbose=2)
 
@@ -252,7 +252,7 @@ class TestHostDeviceTransferReduction:
         # Allow generous timeout for parallel test execution (JIT compilation overhead)
         assert metrics.total_time_sec < 30.0
 
-        # Async logging shouldn't significantly slow down optimization
+        # Verbose logging shouldn't significantly slow down optimization
         # (baseline without logging is ~same time)
 
     def test_transfer_reduction_source_analysis(self):
