@@ -58,11 +58,14 @@ class Adapter(Protocol):
     ) -> Callable[[], list[FitOutcome]]: ...
 
 
+@functools.cache
 def _np_model(problem: Problem) -> Callable:
     return lambda x, *p: problem.model(np, x, *p)
 
 
+@functools.cache
 def _jnp_model(problem: Problem) -> Callable:
+    # cached so repeated fits pass the same callable (NLSQ keys its JIT cache on it)
     return lambda x, *p: problem.model(jnp, x, *p)
 
 
@@ -80,7 +83,11 @@ class _Base:
             return False, "no bounds support"
         return True, ""
 
+    def _preload(self) -> None:
+        """Import implementation modules now so the cold call excludes imports."""
+
     def prepare(self, problem, x, y, mode):
+        self._preload()
         return lambda: self._fit(problem, x, y)
 
     def prepare_batch(self, problem, X, Y, mode):
@@ -106,6 +113,7 @@ class _NLSQ(_Base):
     name, dist = "nlsq", "nlsq"
     capabilities = Capabilities(True, True, True, False, True, "")
 
+    # no _preload: a sys.modules probe found no module first imported by curve_fit
     def _fit(self, problem, x, y):
         r = nlsq.curve_fit(
             _jnp_model(problem),
@@ -126,6 +134,9 @@ class _NLSQ(_Base):
 class _SciPy(_Base):
     name, dist = "scipy", "scipy"
     capabilities = Capabilities(True, True, True, False, True, "")
+
+    def _preload(self):
+        from scipy.optimize import curve_fit
 
     def _fit(self, problem, x, y):
         from scipy.optimize import curve_fit
@@ -151,6 +162,9 @@ class _LMFit(_Base):
     capabilities = Capabilities(
         True, True, True, False, True, "wraps SciPy leastsq / least_squares"
     )
+
+    def _preload(self):
+        from lmfit import Model
 
     def _fit(self, problem, x, y):
         from lmfit import Model
@@ -246,7 +260,8 @@ class _JAXopt(_JaxBase):
         True,
         False,
         'README: "JAXopt is no longer maintained nor developed"; '
-        "tol/xtol/gtol all honoured",
+        "stop_criterion=madsen-nielsen: xtol and gtol active, tol unused "
+        "(the default grad-l2-norm ignores xtol/gtol)",
     )
 
     def _core(self, problem):
@@ -259,11 +274,14 @@ class _JAXopt(_JaxBase):
             xtol=TOL,
             gtol=TOL,
             maxiter=MAX_ITER,
+            # default "grad-l2-norm" checks only the unnormalised gradient norm
+            # against tol and never stops at the optimum for large n
+            stop_criterion="madsen-nielsen",
         )
 
         def core(p0, x, y):
             r = solver.run(p0, x, y)
-            # any of tol/xtol/gtol stops the loop early; hitting maxiter means not converged
+            # xtol or gtol stops the loop early; hitting maxiter means not converged
             return r.params, r.state.iter_num < MAX_ITER
 
         return core
