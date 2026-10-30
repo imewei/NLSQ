@@ -708,7 +708,7 @@ def test_f3_custom_jvp_rule_state_is_keyed(monkeypatch):
     np.testing.assert_allclose(cached, [0.0])
 
 
-def test_f3_custom_vjp_rule_state_is_keyed_in_rev_mode(monkeypatch):
+def test_f3_custom_vjp_models_are_not_cached(monkeypatch):
     monkeypatch.setenv("NLSQ_JACOBIAN_MODE", "rev")
     slope = {"zero": 1.0}
 
@@ -734,7 +734,39 @@ def test_f3_custom_vjp_rule_state_is_keyed_in_rev_mode(monkeypatch):
     cached, new, uncached = _cached_vs_uncached(model, 3 * XS, monkeypatch, p0=[0.0])
     np.testing.assert_array_equal(cached, uncached)
     np.testing.assert_allclose(cached, [0.0])
-    assert new == 1  # the bwd rule state is in the (jacrev) key
+    assert new == 0  # custom_vjp is refused: the bwd callable is live state
+
+
+def test_custom_vjp_instances_do_not_share_a_bwd_rule(monkeypatch):
+    """Two same-shaped custom_vjp models must each use their own bwd rule, also
+    when a wrapper is recompiled (first fit with sigma, or after clear_caches)."""
+    monkeypatch.setenv("NLSQ_JACOBIAN_MODE", "rev")
+    xs = np.linspace(0.1, 2.0, 40)
+    ys = 2.5 * np.exp(-1.3 * xs) + 0.01 * np.sin(17 * xs)
+
+    def make(state):
+        @jax.custom_vjp
+        def g(z):
+            return jnp.exp(z)
+
+        g.defvjp(
+            lambda z: (jnp.exp(z), z),
+            lambda z, ct: (state["k"] * jnp.exp(z) * ct,),
+        )
+        return lambda x, a, b: g(-b * x) * a
+
+    def run(disable):
+        monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1" if disable else "0")
+        clear_wrapper_cache()
+        jax.clear_caches()
+        owner_state = {"k": 1.0}
+        owner, victim = make(owner_state), make({"k": 1.0})
+        curve_fit(owner, xs, ys, p0=[1.0, 1.0])
+        owner_state["k"] = 0.0  # only the owner's rule changes
+        popt, _ = curve_fit(victim, xs, ys, p0=[1.0, 1.0], sigma=np.ones_like(ys))
+        return np.asarray(popt)
+
+    np.testing.assert_array_equal(run(disable=False), run(disable=True))
 
 
 @pytest.mark.slow
