@@ -251,6 +251,11 @@ class MemoryBudget:
         >>> budget.fits_in_memory
         True
         """
+        if memory_limit_gb is None:
+            from nlsq.config import JAXConfig
+
+            memory_limit_gb = JAXConfig.get_memory_limit_override()
+
         # Validation
         if n_points <= 0:
             raise ValueError("n_points must be positive")
