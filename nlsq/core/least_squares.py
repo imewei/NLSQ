@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import enum
 import hashlib
+import logging
 import os
 import sys
 import threading
+import types
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
@@ -444,6 +446,7 @@ def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
 # arrays). Any model state read at trace time is therefore part of the key.
 # Cached wrappers evaluate that jaxpr, never the user function, so a later
 # re-trace cannot pick up state the key did not see.
+_logger = logging.getLogger(__name__)
 _WRAPPER_CACHE_SIZE = 32
 _wrapper_cache: OrderedDict[tuple, tuple] = OrderedDict()
 _wrapper_cache_lock = threading.Lock()
@@ -511,10 +514,21 @@ def _has_rule_mark(key: Any) -> bool:
 def _aval_key(aval: Any) -> tuple:
     if not isinstance(aval, jax.core.ShapedArray):
         raise _Uncacheable(f"unsupported aval {type(aval).__name__}")
-    return (tuple(aval.shape), str(aval.dtype), bool(aval.weak_type))
+    return (tuple(aval.shape), aval.dtype, bool(aval.weak_type))
 
 
 def _array_key(value: Any) -> tuple:
+    dtype = getattr(value, "dtype", None)
+    if dtype is not None and jax.dtypes.issubdtype(dtype, jax.dtypes.prng_key):
+        # Typed PRNG keys: implementation + raw key bits (immutable jax.Array).
+        data = np.asarray(jax.random.key_data(value))
+        return (
+            "prng_key",
+            dtype,
+            str(jax.random.key_impl(value)),
+            tuple(value.shape),
+            _array_key(data),
+        )
     arr = np.ascontiguousarray(np.asarray(value))
     if arr.dtype.hasobject:
         raise _Uncacheable("object array")
@@ -531,11 +545,17 @@ def _canon_param(value: Any) -> tuple[Any, Any]:
     t = type(value)
     if isinstance(value, jex_core.Jaxpr):
         return _snapshot_jaxpr(value)
-    if t in (tuple, list) or (isinstance(value, tuple) and hasattr(value, "_fields")):
+    namedtuple = isinstance(value, tuple) and hasattr(value, "_fields")
+    if t in (tuple, list) or namedtuple:
         pairs = [_canon_param(v) for v in value]
         vals = [v for v, _ in pairs]
-        rebuilt = t(*vals) if hasattr(value, "_fields") else t(vals)
-        return rebuilt, (t.__name__, tuple(k for _, k in pairs))
+        rebuilt = t(*vals) if namedtuple else t(vals)
+        # The type object itself (not its name) plus its field order.
+        fields = tuple(value._fields) if namedtuple else ()
+        return rebuilt, (t, fields, tuple(k for _, k in pairs))
+    if t is frozenset:
+        keys = frozenset(_canon_param(v)[1] for v in value)  # order-independent
+        return value, (t, keys)
     if t is dict:
         pairs = {k: _canon_param(v) for k, v in value.items()}
         return (
@@ -549,21 +569,39 @@ def _canon_param(value: Any) -> tuple[Any, Any]:
     if t is complex:
         return value, ("complex", value.real.hex(), value.imag.hex())
     if isinstance(value, np.dtype):
-        return value, ("dtype", str(value))
+        return value, (np.dtype, value)
     if isinstance(value, (np.ndarray, np.generic, jax.Array)):
         snap = _private(value)
         return snap, ("array", _array_key(snap))
     if isinstance(value, enum.Enum):
         return value, (t, value.name)
+    # A plain module-level JAX function (e.g. a jax.checkpoint_policies
+    # policy) without closure or attributes: keyed by identity + defaults.
+    if t is types.FunctionType:
+        if value.__closure__ or value.__dict__ or not _from_jax(value.__module__):
+            raise _Uncacheable(f"function {value.__module__}.{value.__qualname__}")
+        return value, ("fn", value, _canon_param(value.__defaults__)[1])
     module = t.__module__
-    from_jax = module == "jax" or module.startswith(("jax.", "jaxlib"))
+    if not _from_jax(module):
+        raise _Uncacheable(f"param of type {module}.{t.__name__}")
     # JAX's own immutable, hashable param objects (shardings, Inline, flat
-    # trees, ...). Callables are refused (they may close over user state),
-    # except Mesh, which is callable only as a context manager.
-    if from_jax and (not callable(value) or isinstance(value, _MESH_TYPES)):
+    # trees, ...), keyed by their own equality, as JAX's caches do. Mesh is
+    # callable only as a context manager.
+    if not callable(value) or isinstance(value, _MESH_TYPES):
         hash(value)
         return value, (t, value)
-    raise _Uncacheable(f"param of type {module}.{t.__name__}")
+    # JAX-defined callable objects (e.g. the SearchSorted operation): keyed by
+    # type and canonicalised attributes. User callables are refused.
+    attrs = getattr(value, "__dict__", None)
+    if isinstance(attrs, dict) and not hasattr(t, "__slots__"):
+        return value, (t, _canon_param(dict(attrs))[1])
+    raise _Uncacheable(f"callable param of type {module}.{t.__name__}")
+
+
+def _from_jax(module: str | None) -> bool:
+    return bool(module) and (
+        module in ("jax", "jaxlib") or module.startswith(("jax.", "jaxlib."))
+    )
 
 
 def _snapshot_jaxpr(jaxpr: Any) -> tuple[Any, tuple]:
@@ -639,8 +677,18 @@ def _trace_model(
         avals = (x_aval, *[p_aval] * x0.size)
         # Fresh wrappers on purpose: make_jaxpr caches traces by function
         # identity, which would return a stale jaxpr after a state change.
-        primal = jax.make_jaxpr(lambda *a: fun(*a))(*avals)  # noqa: PLW0108
-        if primal.effects or len(primal.outvars) != 1:
+        primal, out_shape = jax.make_jaxpr(
+            lambda *a: fun(*a),  # noqa: PLW0108
+            return_shape=True,
+        )(*avals)
+        # Only a bare array output: a pytree (even one leaf) carries structure
+        # and aux data that evaluating the flat jaxpr would drop.
+        if (
+            primal.effects
+            or len(primal.outvars) != 1
+            or type(out_shape) is not jax.ShapeDtypeStruct
+        ):
+            _logger.debug("wrapper cache: not cached (effects or non-array output)")
             return None
         private, primal_key = _snapshot_jaxpr(primal)
         jac_key = None
@@ -663,7 +711,8 @@ def _trace_model(
         )
         key = (primal_key, jac_key, in_keys, mode)
         hash(key)
-    except Exception:  # _Uncacheable, trace failure, unhashable: no caching
+    except Exception as exc:  # _Uncacheable, trace failure, unhashable
+        _logger.debug("wrapper cache: not cached: %s: %s", type(exc).__name__, exc)
         return None
     return key, private, in_keys
 
