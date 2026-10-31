@@ -63,9 +63,23 @@ def _bounds_seen_by_fitter(monkeypatch, n, chunk_size):
     return seen[0]
 
 
-@pytest.mark.parametrize("n", [2, 5, 9])
-def test_tiny_inputs_get_one_point_chunks(monkeypatch, n):
-    assert _bounds_seen_by_fitter(monkeypatch, n, None) == (1, 1)
+@pytest.mark.parametrize("n", [2, 5, 9, 1000])
+def test_tiny_inputs_run_as_a_single_chunk(monkeypatch, n):
+    assert _bounds_seen_by_fitter(monkeypatch, n, None) == (n, n)
+
+
+def test_default_ceiling_is_a_tenth_of_the_data_once_that_exceeds_the_floor(
+    monkeypatch,
+):
+    assert _bounds_seen_by_fitter(monkeypatch, 20_000, None) == (1000, 2000)
+
+
+def test_forced_large_path_on_a_tiny_input_matches_a_full_fit():
+    # One-point chunks used to be fit separately and silently gave [2.08, 1.5].
+    x = np.linspace(0, 1, 5)
+    y = 2.0 * np.exp(-3.0 * x)
+    popt, _ = curve_fit_large(_model, x, y, p0=[1.0, 1.0], auto_size_detection=False)
+    np.testing.assert_allclose(popt, [2.0, 3.0], rtol=1e-6)
 
 
 def test_explicit_chunk_size_is_the_ceiling_and_caps_the_floor(monkeypatch):

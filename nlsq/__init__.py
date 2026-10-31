@@ -1019,8 +1019,12 @@ def curve_fit_large(
     # Create memory configuration
     if chunk_size is not None and chunk_size <= 0:
         raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+    # Default ceiling: a tenth of the data, but never below the 1000-point floor
+    # (or the whole input if smaller), so tiny inputs fit as one chunk, not many.
     max_chunk_size = (
-        max(1, min(1_000_000, n_points // 10)) if chunk_size is None else chunk_size
+        min(1_000_000, max(n_points // 10, min(1000, n_points)))
+        if chunk_size is None
+        else chunk_size
     )
     memory_config = MemoryConfig(
         progress_reporting=show_progress,
