@@ -171,16 +171,29 @@ def test_one_point_tail_does_not_corrupt_the_combined_fit():
     np.testing.assert_allclose(popt, expected, rtol=0.05)
 
 
-def test_chunks_smaller_than_the_parameter_count_are_rejected():
+def test_chunk_size_below_the_parameter_count_is_enlarged_with_a_warning(caplog):
     def quad(x, a, b, c):
         return a * x * x + b * x + c
 
     x = np.linspace(0, 5, 10)
     y = 2 * x * x + 3 * x + 4
-    with pytest.raises(ValueError, match=r"chunk_size.*parameters"):
-        curve_fit_large(
+    with caplog.at_level("WARNING", logger="nlsq"):
+        popt, _ = curve_fit_large(
             quad, x, y, p0=[1.0, 1.0, 1.0], chunk_size=2, auto_size_detection=False
         )
+    np.testing.assert_allclose(popt, [2.0, 3.0, 4.0], rtol=1e-6)
+    assert "underdetermined" in caplog.text
+
+
+def test_default_chunking_keeps_a_many_parameter_fit_in_one_chunk():
+    # 1001 points / 501 parameters: 500-point default chunks cannot fix 501 values.
+    def gather(x, *p):
+        return jnp.asarray(p)[x.astype(int)]
+
+    x = np.arange(1001, dtype=float) % 501
+    y = np.full(1001, 2.0)
+    popt, _ = curve_fit_large(gather, x, y, p0=np.ones(501), auto_size_detection=False)
+    np.testing.assert_allclose(popt, 2.0, rtol=1e-6)
 
 
 def test_empty_input_yields_no_chunks():

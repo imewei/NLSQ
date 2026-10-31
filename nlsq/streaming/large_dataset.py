@@ -11,6 +11,7 @@ This module provides utilities for efficiently fitting curve parameters to very 
 from __future__ import annotations
 
 import gc
+import logging
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator
@@ -662,6 +663,21 @@ class MemoryEstimator:
             n_chunks = 1
         else:
             n_chunks = (n_points + chunk_size - 1) // chunk_size
+            # Each chunk is fit on its own, so it needs more points than
+            # parameters; enlarge the chunks rather than fit an underdetermined one
+            # (skipped when the whole dataset has fewer points than parameters).
+            max_determined = max(1, n_points // (n_params + 1))
+            if n_points > n_params and n_chunks > max_determined:
+                logging.getLogger("nlsq").warning(
+                    "chunk size %d would leave chunks with too few points for %d "
+                    "parameters (underdetermined); using %d chunk(s) instead of %d",
+                    chunk_size,
+                    n_params,
+                    max_determined,
+                    n_chunks,
+                )
+                chunk_size = (n_points + max_determined - 1) // max_determined
+                n_chunks = (n_points + chunk_size - 1) // chunk_size
 
         # Calculate total memory estimate
         total_memory_gb = (n_points * memory_per_point) / (1024**3)
@@ -782,19 +798,6 @@ class DataChunker:
             bounds.append((start, end))
             start = end
         return bounds
-
-    @staticmethod
-    def check_chunks_determined(
-        chunk_bounds: list[tuple[int, int]], n_params: int
-    ) -> None:
-        """Raise if a multi-chunk split has a chunk with fewer points than parameters."""
-        smallest = min((end - start for start, end in chunk_bounds), default=0)
-        if len(chunk_bounds) > 1 and smallest < n_params:
-            raise ValueError(
-                f"chunk_size gives chunks of {smallest} points, fewer than the "
-                f"{n_params} parameters, so each chunk fit is underdetermined; "
-                "use a larger chunk_size"
-            )
 
     @staticmethod
     def create_chunks(
@@ -2711,8 +2714,6 @@ class LargeDatasetFitter:
         )
 
         chunk_bounds = DataChunker.chunk_bounds(n_points, stats.recommended_chunk_size)
-        DataChunker.check_chunks_determined(chunk_bounds, stats.n_params)
-
         # Initialize state variables
         (
             progress,
