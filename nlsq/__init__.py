@@ -994,9 +994,12 @@ def curve_fit_large(
 
     # Use large dataset processing
     # Import lazy modules needed for large dataset processing
+    from dataclasses import replace
+
     from nlsq.config import (
         LargeDatasetConfig,
         MemoryConfig,
+        get_memory_config,
         large_dataset_context,
         memory_context,
     )
@@ -1015,7 +1018,6 @@ def curve_fit_large(
 
     # Create memory configuration
     memory_config = MemoryConfig(
-        memory_limit_gb=memory_limit_gb,
         progress_reporting=show_progress,
         min_chunk_size=max(1000, n_points // 10000),  # Dynamic min chunk size
         max_chunk_size=min(1_000_000, n_points // 10)
@@ -1029,7 +1031,15 @@ def curve_fit_large(
     )
 
     # Use context managers to temporarily set configuration
-    with memory_context(memory_config), large_dataset_context(large_dataset_config):
+    # Layer only the chunk bounds and progress flag over the user's global
+    # settings; the fitter below gets its limit explicitly.
+    context_config = replace(
+        get_memory_config(),
+        progress_reporting=memory_config.progress_reporting,
+        min_chunk_size=memory_config.min_chunk_size,
+        max_chunk_size=memory_config.max_chunk_size,
+    )
+    with memory_context(context_config), large_dataset_context(large_dataset_config):
         # Create fitter with current configuration
         fitter = LargeDatasetFitter(
             memory_limit_gb=memory_limit_gb,

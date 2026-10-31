@@ -22,8 +22,9 @@ class MemoryConfig:
 
     Attributes
     ----------
-    memory_limit_gb : float
-        Maximum memory limit in GB (default: 8.0)
+    memory_limit_gb : float | None
+        Maximum memory limit in GB (0.1-1024). ``None`` (default) means
+        unset: strategy selection uses the detected system memory.
     gpu_memory_fraction : float | None
         Fraction of GPU memory to use (0.0-1.0, None for automatic)
     chunk_size_mb : int | None
@@ -42,7 +43,7 @@ class MemoryConfig:
         Maximum chunk size in data points
     """
 
-    memory_limit_gb: float = 8.0
+    memory_limit_gb: float | None = None
     gpu_memory_fraction: float | None = None
     chunk_size_mb: int | None = None
     out_of_memory_strategy: str = "fallback"
@@ -54,7 +55,7 @@ class MemoryConfig:
 
     def __post_init__(self):
         """Validate configuration values."""
-        if not 0.1 <= self.memory_limit_gb <= 1024:
+        if self.memory_limit_gb is not None and not 0.1 <= self.memory_limit_gb <= 1024:
             raise ValueError(
                 f"memory_limit_gb must be between 0.1 and 1024, got {self.memory_limit_gb}",
             )
@@ -348,6 +349,25 @@ class JAXConfig:
         if os.getenv("NLSQ_DISABLE_PROGRESS_REPORTING") == "1":
             overrides["progress_reporting"] = False
 
+        # An out-of-range value must not make every later fit raise from this
+        # lazy initializer: warn and fall back to the default for that field.
+        env_names = {
+            "memory_limit_gb": "NLSQ_MEMORY_LIMIT_GB",
+            "gpu_memory_fraction": "NLSQ_GPU_MEMORY_FRACTION",
+            "chunk_size_mb": "NLSQ_CHUNK_SIZE_MB",
+            "out_of_memory_strategy": "NLSQ_OOM_STRATEGY",
+            "safety_factor": "NLSQ_SAFETY_FACTOR",
+        }
+        for key in list(overrides):
+            try:
+                MemoryConfig(**{key: overrides[key]})
+            except ValueError as exc:
+                value = overrides.pop(key)
+                warnings.warn(
+                    f"Ignoring {env_names.get(key, key)}={value}: {exc}",
+                    stacklevel=2,
+                )
+
         self._memory_config = MemoryConfig(**overrides)
 
     def _initialize_large_dataset_config(self):
@@ -536,8 +556,9 @@ class JAXConfig:
             if original_config is not None:
                 cls.set_memory_config(original_config)
             else:
-                instance._memory_config = None
-                instance._initialize_memory_config()
+                with cls._lock:
+                    instance._memory_config = None
+                    instance._initialize_memory_config()
 
     @classmethod
     @contextmanager
@@ -625,7 +646,7 @@ def get_memory_config() -> MemoryConfig:
 
 
 def set_memory_limits(
-    memory_limit_gb: float,
+    memory_limit_gb: float | None,
     gpu_memory_fraction: float | None = None,
     safety_factor: float = 0.8,
 ):
@@ -633,8 +654,9 @@ def set_memory_limits(
 
     Parameters
     ----------
-    memory_limit_gb : float
-        Maximum memory to use in GB
+    memory_limit_gb : float | None
+        Maximum memory to use in GB (0.1-1024). ``None`` clears the configured
+        limit, so strategy selection uses the detected system memory.
     gpu_memory_fraction : float, optional
         Fraction of GPU memory to use (0.0-1.0)
     safety_factor : float, optional
@@ -666,7 +688,7 @@ def set_memory_limits(
 
 
 def configure_for_large_datasets(
-    memory_limit_gb: float = 8.0,
+    memory_limit_gb: float | None = None,
     enable_chunking: bool = True,
     progress_reporting: bool = True,
 ):
@@ -678,7 +700,8 @@ def configure_for_large_datasets(
     Parameters
     ----------
     memory_limit_gb : float, optional
-        Maximum memory to use in GB (default: 8.0)
+        Maximum memory to use in GB. ``None`` (default) leaves the limit
+        unset, so strategy selection uses the detected system memory.
     enable_chunking : bool, optional
         Enable automatic data chunking (default: True)
     progress_reporting : bool, optional
@@ -700,7 +723,10 @@ def configure_for_large_datasets(
     # Configure memory settings
     memory_config = MemoryConfig(
         memory_limit_gb=memory_limit_gb,
-        auto_chunk_threshold_gb=memory_limit_gb * 0.5
+        auto_chunk_threshold_gb=(
+            memory_limit_gb if memory_limit_gb is not None else 8.0
+        )
+        * 0.5
         if enable_chunking
         else float("inf"),
         progress_reporting=progress_reporting,
@@ -714,7 +740,9 @@ def configure_for_large_datasets(
     JAXConfig.set_large_dataset_config(large_dataset_config)
 
     _logger.info("Configured NLSQ for large datasets:")
-    _logger.info(f"  Memory limit: {memory_limit_gb} GB")
+    _logger.info(
+        f"  Memory limit: {memory_limit_gb if memory_limit_gb is not None else 'auto'} GB",
+    )
     _logger.info("  Streaming: enabled (always available)")
     _logger.info(f"  Chunking: {'enabled' if enable_chunking else 'disabled'}")
     _logger.info(

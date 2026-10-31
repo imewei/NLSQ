@@ -46,8 +46,8 @@ Environment Variables
      - Fraction of GPU memory XLA may claim (0.0-1.0)
      - unset (grows as needed)
    * - ``NLSQ_MEMORY_LIMIT_GB``
-     - Default ``MemoryConfig.memory_limit_gb``
-     - ``8.0``
+     - ``MemoryConfig.memory_limit_gb``: memory limit in GB (0.1-1024) used by strategy selection; an out-of-range value is ignored with a warning
+     - unset (detected system memory)
    * - ``NLSQ_CHUNK_SIZE_MB``
      - Default ``MemoryConfig.chunk_size_mb``
      - auto
@@ -110,7 +110,7 @@ Memory settings
 
    # Inspect the current configuration
    config = get_memory_config()
-   print(config.memory_limit_gb)
+   print(config.memory_limit_gb)  # 16.0 here; None until a limit is set
 
    # Temporarily override for a block of code
    with memory_context(MemoryConfig(memory_limit_gb=32.0)):

@@ -260,7 +260,7 @@ class TestMemoryConfig(unittest.TestCase):
 
         config = MemoryConfig()
 
-        self.assertEqual(config.memory_limit_gb, 8.0)
+        self.assertIsNone(config.memory_limit_gb)
         self.assertIsNone(config.gpu_memory_fraction)
         self.assertIsNone(config.chunk_size_mb)
         self.assertEqual(config.out_of_memory_strategy, "fallback")
@@ -521,7 +521,9 @@ class TestMemoryConfigFunctions(unittest.TestCase):
         config = get_memory_config()
 
         self.assertIsInstance(config, MemoryConfig)
-        self.assertGreater(config.memory_limit_gb, 0)
+        # None unless NLSQ_MEMORY_LIMIT_GB was set in the environment
+        if config.memory_limit_gb is not None:
+            self.assertGreater(config.memory_limit_gb, 0)
 
     def test_set_memory_limits_basic(self):
         """Test set_memory_limits function with basic parameters."""

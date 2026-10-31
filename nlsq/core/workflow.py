@@ -231,7 +231,9 @@ class MemoryBudget:
         safety_factor : float, default=0.75
             Memory safety factor (0.75 means use 75% of available).
         memory_limit_gb : float | None, default=None
-            Override memory limit in GB. If None, auto-detect.
+            Override memory limit in GB. If None, use the configured limit
+            (``NLSQ_MEMORY_LIMIT_GB``, ``set_memory_limits``, ``memory_context``),
+            else auto-detect.
         use_gpu : bool, default=False
             If True, use GPU memory instead of CPU memory.
 
@@ -251,6 +253,11 @@ class MemoryBudget:
         >>> budget.fits_in_memory
         True
         """
+        if memory_limit_gb is None:
+            from nlsq.config import JAXConfig
+
+            memory_limit_gb = JAXConfig.get_memory_config().memory_limit_gb
+
         # Validation
         if n_points <= 0:
             raise ValueError("n_points must be positive")
@@ -394,7 +401,9 @@ class MemoryBudgetSelector:
         n_features : int, default=1
             Number of features in x_data.
         memory_limit_gb : float | None, default=None
-            Override memory limit in GB. If None, auto-detect.
+            Override memory limit in GB. If None, use the configured limit
+            (``NLSQ_MEMORY_LIMIT_GB``, ``set_memory_limits``, ``memory_context``),
+            else auto-detect.
         goal : OptimizationGoal | None, default=None
             Optimization goal (affects tolerances, not strategy selection).
         use_gpu : bool, default=False

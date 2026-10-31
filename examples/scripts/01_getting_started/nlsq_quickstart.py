@@ -51,6 +51,13 @@ from nlsq import (
 # ======================================================================
 
 
+def format_limit(config):
+    """Memory limit for display; None means unset (detected system memory)."""
+    if config.memory_limit_gb is None:
+        return "auto (detected)"
+    return f"{config.memory_limit_gb} GB"
+
+
 def linear(x, m, b):
     return m * x + b
 
@@ -108,7 +115,7 @@ plt.close()
 
 # Check current memory configuration
 current_config = get_memory_config()
-print(f"Current memory limit: {current_config.memory_limit_gb} GB")
+print(f"Current memory limit: {format_limit(current_config)}")
 
 # Estimate memory requirements for our dataset
 n_points = len(x)
@@ -121,18 +128,18 @@ print(f"  Number of chunks needed: {memory_stats.n_chunks}")
 
 
 # You can temporarily change memory settings using context managers
-print("Default memory limit:", get_memory_config().memory_limit_gb, "GB")
+print("Default memory limit:", format_limit(get_memory_config()))
 
 # Use a temporary memory configuration
 temp_config = MemoryConfig(memory_limit_gb=4.0)
 with memory_context(temp_config):
-    print("Inside context memory limit:", get_memory_config().memory_limit_gb, "GB")
+    print("Inside context memory limit:", format_limit(get_memory_config()))
 
-print("After context memory limit:", get_memory_config().memory_limit_gb, "GB")
+print("After context memory limit:", format_limit(get_memory_config()))
 
 # Or you can set global memory limits
 set_memory_limits(memory_limit_gb=6.0, safety_factor=0.9)
-print("New global memory limit:", get_memory_config().memory_limit_gb, "GB")
+print("New global memory limit:", format_limit(get_memory_config()))
 
 
 # Practical example: Automatically configure memory for large datasets
@@ -150,7 +157,7 @@ print(f"  Estimated memory: {large_stats.total_memory_estimate_gb:.3f} GB")
 # Automatically set appropriate memory limits based on the estimation
 recommended_limit = max(4.0, large_stats.total_memory_estimate_gb * 1.5)
 set_memory_limits(memory_limit_gb=recommended_limit)
-print(f"  Set memory limit to: {get_memory_config().memory_limit_gb} GB")
+print(f"  Set memory limit to: {format_limit(get_memory_config())}")
 
 # Now you can safely work with larger datasets
 print("✓ Memory management configured for large dataset processing")

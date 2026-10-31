@@ -46,6 +46,13 @@ QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 
 
+def format_limit(config):
+    """Memory limit for display; None means unset (detected system memory)."""
+    if config.memory_limit_gb is None:
+        return "auto (detected)"
+    return f"{config.memory_limit_gb} GB"
+
+
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
 
@@ -605,7 +612,7 @@ def demonstrate_memory_management():
     # Advanced memory management
     print("\n--- Current Memory Configuration ---")
     current_config = get_memory_config()
-    print(f"Memory limit: {current_config.memory_limit_gb} GB")
+    print(f"Memory limit: {format_limit(current_config)}")
 
     # Test memory estimation
     print("\n--- Memory Estimation ---")
@@ -678,7 +685,7 @@ def demonstrate_memory_management():
             print(f"  {config_name:15s}: ❌ Failed - {type(e).__name__}")
 
     # Reset to original configuration
-    print(f"\nMemory configuration reset to: {get_memory_config().memory_limit_gb} GB")
+    print(f"\nMemory configuration reset to: {format_limit(get_memory_config())}")
 
 
 # Run memory management demo
@@ -1109,7 +1116,7 @@ def print_summary_and_best_practices():
     if ADVANCED_FEATURES_AVAILABLE:
         try:
             mem_config = get_memory_config()
-            print(f"Current memory limit: {mem_config.memory_limit_gb} GB")
+            print(f"Current memory limit: {format_limit(mem_config)}")
         except:
             # Intentionally ignoring errors
             pass
