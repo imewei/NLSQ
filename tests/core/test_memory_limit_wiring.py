@@ -45,6 +45,13 @@ def test_set_memory_limits_reaches_the_budget():
     assert _available() == 0.5
 
 
+def test_set_memory_limits_none_clears_the_configured_limit():
+    set_memory_limits(memory_limit_gb=0.5)
+    set_memory_limits(memory_limit_gb=None)
+    assert get_memory_config().memory_limit_gb is None
+    assert _available() == DETECTED_GB
+
+
 def test_per_call_limit_beats_the_global_limit():
     set_memory_limits(memory_limit_gb=0.5)
     budget = MemoryBudget.compute(n_points=N, n_params=P, memory_limit_gb=2.0)
