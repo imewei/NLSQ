@@ -31,8 +31,9 @@ class MemoryConfig:
         Default chunk size in MB for data processing
     out_of_memory_strategy : str
         Strategy when out of memory: 'fallback', 'reduce', 'error'
-    safety_factor : float
-        Safety factor for memory calculations (0.0-1.0)
+    safety_factor : float | None
+        Fraction of the memory limit that strategy selection may use
+        (0.1-1.0). ``None`` (default) leaves the workflow default of 0.75.
     auto_chunk_threshold_gb : float
         Automatically enable chunking above this memory threshold
     progress_reporting : bool
@@ -47,7 +48,7 @@ class MemoryConfig:
     gpu_memory_fraction: float | None = None
     chunk_size_mb: int | None = None
     out_of_memory_strategy: str = "fallback"
-    safety_factor: float = 0.8
+    safety_factor: float | None = None
     auto_chunk_threshold_gb: float = 4.0
     progress_reporting: bool = True
     min_chunk_size: int = 1000
@@ -66,7 +67,7 @@ class MemoryConfig:
                     f"gpu_memory_fraction must be between 0.0 and 1.0, got {self.gpu_memory_fraction}",
                 )
 
-        if not 0.1 <= self.safety_factor <= 1.0:
+        if self.safety_factor is not None and not 0.1 <= self.safety_factor <= 1.0:
             raise ValueError(
                 f"safety_factor must be between 0.1 and 1.0, got {self.safety_factor}",
             )
@@ -648,7 +649,7 @@ def get_memory_config() -> MemoryConfig:
 def set_memory_limits(
     memory_limit_gb: float | None,
     gpu_memory_fraction: float | None = None,
-    safety_factor: float = 0.8,
+    safety_factor: float | None = None,
 ):
     """Set memory limits for NLSQ operations.
 
@@ -660,7 +661,8 @@ def set_memory_limits(
     gpu_memory_fraction : float, optional
         Fraction of GPU memory to use (0.0-1.0)
     safety_factor : float, optional
-        Safety factor for memory calculations (default: 0.8)
+        Fraction of the limit that strategy selection may use. ``None``
+        (default) keeps the current setting.
 
     Examples
     --------
@@ -676,7 +678,9 @@ def set_memory_limits(
             if gpu_memory_fraction is not None
             else current_config.gpu_memory_fraction
         ),
-        safety_factor=safety_factor,
+        safety_factor=(
+            safety_factor if safety_factor is not None else current_config.safety_factor
+        ),
         chunk_size_mb=current_config.chunk_size_mb,
         out_of_memory_strategy=current_config.out_of_memory_strategy,
         auto_chunk_threshold_gb=current_config.auto_chunk_threshold_gb,

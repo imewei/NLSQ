@@ -1290,7 +1290,7 @@ def _fit_with_auto_global(
         )
 
     # FR-000: Select memory strategy with detailed logging
-    selector = MemoryBudgetSelector(safety_factor=0.75)
+    selector = MemoryBudgetSelector()
 
     n_features = _infer_n_features(xdata)
 
