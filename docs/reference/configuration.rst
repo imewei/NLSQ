@@ -55,8 +55,8 @@ Environment Variables
      - ``MemoryConfig.out_of_memory_strategy`` (``fallback``, ``reduce``, or ``error``)
      - ``fallback``
    * - ``NLSQ_SAFETY_FACTOR``
-     - ``MemoryConfig.safety_factor``
-     - ``0.8``
+     - ``MemoryConfig.safety_factor``; fraction of the memory limit strategy selection may use (0.1-1.0)
+     - unset (workflow default ``0.75``)
    * - ``NLSQ_DISABLE_PROGRESS_REPORTING``
      - Disable progress reporting for large operations
      - unset (enabled)
