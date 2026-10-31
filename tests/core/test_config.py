@@ -264,7 +264,7 @@ class TestMemoryConfig(unittest.TestCase):
         self.assertIsNone(config.gpu_memory_fraction)
         self.assertIsNone(config.chunk_size_mb)
         self.assertEqual(config.out_of_memory_strategy, "fallback")
-        self.assertEqual(config.safety_factor, 0.8)
+        self.assertIsNone(config.safety_factor)
         self.assertEqual(config.auto_chunk_threshold_gb, 4.0)
         self.assertTrue(config.progress_reporting)
         self.assertEqual(config.min_chunk_size, 1000)

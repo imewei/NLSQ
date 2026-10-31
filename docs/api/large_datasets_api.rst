@@ -188,7 +188,7 @@ For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` i
 **Parameters:**
 
 - ``memory_limit_gb``: Maximum memory in GB
-- ``safety_factor``: Safety factor for memory calculations (default: 0.8)
+- ``safety_factor``: Safety factor for memory calculations, in (0, 1] (default: 0.8)
 - ``min_chunk_size``: Minimum chunk size (default: 1000)
 - ``max_chunk_size``: Maximum chunk size (default: 1000000)
 - ``min_success_rate``: Minimum success rate for chunked fitting (default: 0.5)

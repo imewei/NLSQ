@@ -124,6 +124,25 @@ class OptimizationGoal(Enum):
 _CHUNKED_SAFETY_MARGIN = 0.9
 
 
+DEFAULT_SAFETY_FACTOR = 0.75
+
+
+def _check_safety_factor(safety_factor: float) -> float:
+    """Return ``safety_factor`` if it is in (0, 1]; NaN is rejected too."""
+    if not 0.0 < safety_factor <= 1.0:
+        raise ValueError("safety_factor must be in (0, 1]")
+    return safety_factor
+
+
+def _resolve_safety_factor(
+    safety_factor: float | None, configured: float | None
+) -> float:
+    """An explicit value wins, then the configured one, then the default."""
+    if safety_factor is not None:
+        return _check_safety_factor(safety_factor)
+    return DEFAULT_SAFETY_FACTOR if configured is None else configured
+
+
 @dataclass(slots=True, frozen=True)
 class MemoryBudget:
     """Computed memory budget for optimizer selection.
@@ -212,7 +231,7 @@ class MemoryBudget:
         n_params: int,
         n_features: int = 1,
         dtype_bytes: int = 8,
-        safety_factor: float = 0.75,
+        safety_factor: float | None = None,
         memory_limit_gb: float | None = None,
         use_gpu: bool = False,
     ) -> "MemoryBudget":
@@ -228,8 +247,9 @@ class MemoryBudget:
             Number of features in x_data (dimensions).
         dtype_bytes : int, default=8
             Bytes per element (8 for float64, 4 for float32).
-        safety_factor : float, default=0.75
-            Memory safety factor (0.75 means use 75% of available).
+        safety_factor : float | None, default=None
+            Memory safety factor (0.75 means use 75% of available). If None,
+            use the configured ``MemoryConfig.safety_factor``, else 0.75.
         memory_limit_gb : float | None, default=None
             Override memory limit in GB. If None, use the configured limit
             (``NLSQ_MEMORY_LIMIT_GB``, ``set_memory_limits``, ``memory_context``),
@@ -253,18 +273,19 @@ class MemoryBudget:
         >>> budget.fits_in_memory
         True
         """
-        if memory_limit_gb is None:
-            from nlsq.config import JAXConfig
+        # One snapshot, so a concurrent set_memory_config cannot mix two configs.
+        from nlsq.config import JAXConfig
 
-            memory_limit_gb = JAXConfig.get_memory_config().memory_limit_gb
+        config = JAXConfig.get_memory_config()
+        if memory_limit_gb is None:
+            memory_limit_gb = config.memory_limit_gb
 
         # Validation
         if n_points <= 0:
             raise ValueError("n_points must be positive")
         if n_params <= 0:
             raise ValueError("n_params must be positive")
-        if safety_factor <= 0 or safety_factor > 1.0:
-            raise ValueError("safety_factor must be in (0, 1]")
+        safety_factor = _resolve_safety_factor(safety_factor, config.safety_factor)
         if memory_limit_gb is not None and memory_limit_gb <= 0:
             raise ValueError("memory_limit_gb must be positive")
 
@@ -351,8 +372,10 @@ class MemoryBudgetSelector:
 
     Parameters
     ----------
-    safety_factor : float, default=0.75
-        Memory safety factor (0.75 means use 75% of available memory).
+    safety_factor : float | None, default=None
+        Memory safety factor (0.75 means use 75% of available memory). If
+        None, use the configured ``MemoryConfig.safety_factor``, else 0.75,
+        looked up each time ``select`` runs.
 
     Examples
     --------
@@ -369,15 +392,27 @@ class MemoryBudgetSelector:
     ...     pass
     """
 
-    def __init__(self, safety_factor: float = 0.75) -> None:
+    def __init__(self, safety_factor: float | None = None) -> None:
         """Initialize selector with safety factor.
 
         Parameters
         ----------
-        safety_factor : float, default=0.75
-            Memory safety factor (0.75 means use 75% of available memory).
+        safety_factor : float | None, default=None
+            Memory safety factor (0.75 means use 75% of available memory). If
+            None, use the configured ``MemoryConfig.safety_factor``, else 0.75.
         """
-        self.safety_factor = safety_factor
+        if safety_factor is not None:
+            _check_safety_factor(safety_factor)
+        self._safety_factor = safety_factor
+
+    @property
+    def safety_factor(self) -> float:
+        """The factor ``select`` applies, resolved at call time."""
+        from nlsq.config import JAXConfig
+
+        return _resolve_safety_factor(
+            self._safety_factor, JAXConfig.get_memory_config().safety_factor
+        )
 
     def select(
         self,
@@ -440,7 +475,7 @@ class MemoryBudgetSelector:
                 n_points=n_points,
                 n_params=n_params,
                 n_features=n_features,
-                safety_factor=self.safety_factor,
+                safety_factor=self._safety_factor,
                 memory_limit_gb=memory_limit_gb,
                 use_gpu=use_gpu,
             )
