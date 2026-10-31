@@ -76,6 +76,13 @@ print("Including advanced memory management and algorithm selection")
 
 
 # Define our model functions
+def format_limit(config):
+    """Memory limit for display; None means unset (detected system memory)."""
+    if config.memory_limit_gb is None:
+        return "auto (detected)"
+    return f"{config.memory_limit_gb} GB"
+
+
 def exponential_decay(x, a, b, c):
     """Exponential decay model with offset: y = a * exp(-b * x) + c"""
     return a * jnp.exp(-b * x) + c
@@ -155,7 +162,7 @@ def demo_advanced_configuration():
     # Current memory configuration
     current_config = get_memory_config()
     print("Current memory configuration:")
-    print(f"  Memory limit: {current_config.memory_limit_gb} GB")
+    print(f"  Memory limit: {format_limit(current_config)}")
 
     # Automatically configure for large datasets
     print("\nConfiguring for large dataset processing...")
@@ -163,7 +170,7 @@ def demo_advanced_configuration():
 
     # Show updated configuration
     new_config = get_memory_config()
-    print(f"Updated memory limit: {new_config.memory_limit_gb} GB")
+    print(f"Updated memory limit: {format_limit(new_config)}")
 
     # Generate test dataset for algorithm selection
     print("\n=== Algorithm Selection Demo ===")
@@ -292,7 +299,7 @@ def demo_context_managers():
 
     # Show current configuration
     original_mem_config = get_memory_config()
-    print(f"Original memory limit: {original_mem_config.memory_limit_gb} GB")
+    print(f"Original memory limit: {format_limit(original_mem_config)}")
 
     # Generate test data
     np.random.seed(555)
@@ -312,7 +319,7 @@ def demo_context_managers():
 
     with memory_context(constrained_config):
         temp_config = get_memory_config()
-        print(f"Inside context memory limit: {temp_config.memory_limit_gb} GB")
+        print(f"Inside context memory limit: {format_limit(temp_config)}")
 
         start_time = time.time()
         result1 = fit_large_dataset(
@@ -328,7 +335,7 @@ def demo_context_managers():
 
     # Check that configuration is restored
     restored_config = get_memory_config()
-    print(f"After context memory limit: {restored_config.memory_limit_gb} GB")
+    print(f"After context memory limit: {format_limit(restored_config)}")
 
     # Test 2: Large dataset context for optimized processing
     print("\n--- Test 2: Large dataset optimization ---")
