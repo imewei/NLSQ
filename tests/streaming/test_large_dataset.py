@@ -294,18 +294,18 @@ class TestDataChunker(unittest.TestCase):
 
         chunks = list(DataChunker.create_chunks(x, y, chunk_size=1000))
 
-        self.assertEqual(len(chunks), 6)  # 5 full + 1 partial
+        self.assertEqual(len(chunks), 6)  # ceil(5500 / 1000), evenly sized
 
         # Check all chunks have uniform size (padding fix for JIT recompilation)
         # Now returns 4 values: x, y, idx, valid_length
         x_chunk, _y_chunk, _idx, valid_length = chunks[-1]
         self.assertEqual(
             len(x_chunk), 1024
-        )  # Padded to power-of-2 bucket (1024 >= 500)
-        self.assertEqual(valid_length, 500)  # Original 500 points
+        )  # Padded to power-of-2 bucket (1024 >= 916)
+        self.assertEqual(valid_length, 916)  # 5500 = 4 * 917 + 2 * 916
 
         # The valid portion should contain real data points
-        self.assertTrue(len(x_chunk[:valid_length]) == 500)
+        self.assertTrue(len(x_chunk[:valid_length]) == 916)
 
 
 @pytest.mark.serial
