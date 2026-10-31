@@ -110,7 +110,7 @@ Memory settings
 
    # Inspect the current configuration
    config = get_memory_config()
-   print(config.memory_limit_gb)
+   print(config.memory_limit_gb)  # 16.0 here; None until a limit is set
 
    # Temporarily override for a block of code
    with memory_context(MemoryConfig(memory_limit_gb=32.0)):
