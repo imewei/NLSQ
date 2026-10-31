@@ -1017,6 +1017,8 @@ def curve_fit_large(
             memory_limit_gb = 8.0  # Conservative default
 
     # Create memory configuration
+    if chunk_size is not None and chunk_size <= 0:
+        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
     max_chunk_size = (
         max(1, min(1_000_000, n_points // 10)) if chunk_size is None else chunk_size
     )
