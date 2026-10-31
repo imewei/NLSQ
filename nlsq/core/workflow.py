@@ -127,13 +127,21 @@ _CHUNKED_SAFETY_MARGIN = 0.9
 DEFAULT_SAFETY_FACTOR = 0.75
 
 
+def _check_safety_factor(safety_factor: float) -> float:
+    """Return ``safety_factor`` if it is in (0, 1]; NaN is rejected too."""
+    if not 0.0 < safety_factor <= 1.0:
+        raise ValueError("safety_factor must be in (0, 1]")
+    return safety_factor
+
+
 def _resolve_safety_factor(safety_factor: float | None) -> float:
     """An explicit value wins, then the configured one, then the default."""
-    if safety_factor is None:
-        from nlsq.config import JAXConfig
+    if safety_factor is not None:
+        return _check_safety_factor(safety_factor)
+    from nlsq.config import JAXConfig
 
-        safety_factor = JAXConfig.get_memory_config().safety_factor
-    return DEFAULT_SAFETY_FACTOR if safety_factor is None else safety_factor
+    configured = JAXConfig.get_memory_config().safety_factor
+    return DEFAULT_SAFETY_FACTOR if configured is None else configured
 
 
 @dataclass(slots=True, frozen=True)
@@ -277,8 +285,6 @@ class MemoryBudget:
         if n_params <= 0:
             raise ValueError("n_params must be positive")
         safety_factor = _resolve_safety_factor(safety_factor)
-        if safety_factor <= 0 or safety_factor > 1.0:
-            raise ValueError("safety_factor must be in (0, 1]")
         if memory_limit_gb is not None and memory_limit_gb <= 0:
             raise ValueError("memory_limit_gb must be positive")
 
@@ -366,7 +372,9 @@ class MemoryBudgetSelector:
     Parameters
     ----------
     safety_factor : float | None, default=None
-        Memory safety factor (0.75 means use 75% of available memory).
+        Memory safety factor (0.75 means use 75% of available memory). If
+        None, use the configured ``MemoryConfig.safety_factor``, else 0.75,
+        looked up each time ``select`` runs.
 
     Examples
     --------
@@ -392,6 +400,8 @@ class MemoryBudgetSelector:
             Memory safety factor (0.75 means use 75% of available memory). If
             None, use the configured ``MemoryConfig.safety_factor``, else 0.75.
         """
+        if safety_factor is not None:
+            _check_safety_factor(safety_factor)
         self._safety_factor = safety_factor
 
     @property
