@@ -40,8 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (they differ by at most one point and never exceed `chunk_size`). A ragged tail such as
   1000 + 1 points, or 4 + 4 + 2 for three parameters, gave a rank-deficient chunk whose
   covariance skewed the combined estimate (a 1,001-point linear fit returned
-  `[-5.3, 28.9]` instead of `[2.3, 3.4]`). An explicit `chunk_size` that leaves chunks with fewer points than
-  parameters now raises `ValueError` instead of returning a wrong fit, and empty input yields no chunks.
+  `[-5.3, 28.9]` instead of `[2.3, 3.4]`). Chunk counts are also capped so every chunk has more points than
+  parameters (the chunks are enlarged and a warning is logged, instead of fitting an
+  underdetermined chunk), and empty input yields no chunks.
 - `NLSQ_MEMORY_LIMIT_GB`, `set_memory_limits()`, `configure_for_large_datasets()` and
   `memory_context()` now reach strategy selection. They were stored but never read, so
   `MemoryBudget.compute()` (and `workflow="auto"`) always used detected system memory.
