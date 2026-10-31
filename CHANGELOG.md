@@ -54,9 +54,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_memory_config().memory_limit_gb` must now handle `None`. An
   out-of-range `NLSQ_MEMORY_LIMIT_GB` (or other `NLSQ_*` memory variable) now warns and
   is ignored instead of raising from every fit. `curve_fit_large` no longer replaces
-  the global memory configuration for the duration of the fit. Still not wired: the
-  configured `safety_factor`, `gpu_memory_fraction`, chunk-size and
-  `out_of_memory_strategy` fields.
+  the global memory configuration for the duration of the fit. Still not wired:
+  `gpu_memory_fraction`, chunk-size and `out_of_memory_strategy` fields.
+- The configured `safety_factor` (`NLSQ_SAFETY_FACTOR`, `set_memory_limits()`,
+  `memory_context()`) now reaches `MemoryBudget.compute()` and `MemoryBudgetSelector`,
+  including `workflow="auto"` and `"auto_global"`. Precedence: explicit argument >
+  configured value > 0.75. **Behavior change:** `MemoryConfig.safety_factor` now defaults
+  to `None` (was `0.8`, which nothing read), `set_memory_limits(safety_factor=None)`
+  keeps the current value instead of resetting it to 0.8, and `MemoryBudgetSelector.
+  safety_factor` is a read-only property resolved when `select()` runs.
+- `LDMemoryConfig` now rejects `safety_factor` above 1 (a value above 1 inflated the
+  chunk budget); `MemoryConfig` and `MemoryBudget` already did.
 - A default `import nlsq` + fit no longer prints `INFO:`/`PERFORMANCE:` log
   lines to stderr. `nlsq/config.py` logged through the root logger
   (`logging.debug(...)`), which ran `logging.basicConfig()` and installed a
