@@ -646,7 +646,7 @@ def get_memory_config() -> MemoryConfig:
 
 
 def set_memory_limits(
-    memory_limit_gb: float,
+    memory_limit_gb: float | None,
     gpu_memory_fraction: float | None = None,
     safety_factor: float = 0.8,
 ):
@@ -654,8 +654,9 @@ def set_memory_limits(
 
     Parameters
     ----------
-    memory_limit_gb : float
-        Maximum memory to use in GB
+    memory_limit_gb : float | None
+        Maximum memory to use in GB (0.1-1024). ``None`` clears the configured
+        limit, so strategy selection uses the detected system memory.
     gpu_memory_fraction : float, optional
         Fraction of GPU memory to use (0.0-1.0)
     safety_factor : float, optional
