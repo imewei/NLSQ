@@ -222,16 +222,14 @@ class TestDataChunkerPaddingOptimization:
 
         chunks = list(DataChunker.create_chunks(x, y, chunk_size))
 
-        # First chunk should be padded to bucket size
+        # 1050 points split evenly into 525 + 525, each padded to its bucket
         x_chunk1, _y_chunk1, _idx1, valid_len1 = chunks[0]
-        expected_bucket = get_bucket_size(chunk_size)
-        assert len(x_chunk1) == expected_bucket
-        assert valid_len1 == chunk_size  # Valid length should be the actual chunk size
+        assert len(x_chunk1) == get_bucket_size(525)
+        assert valid_len1 == 525  # Valid length is the actual points count
 
-        # Last chunk is also padded to bucket size
         x_chunk2, _y_chunk2, _idx2, valid_len2 = chunks[1]
-        assert len(x_chunk2) == get_bucket_size(50)  # 50 points padded to bucket
-        assert valid_len2 == 50  # Valid length is the actual points count
+        assert len(x_chunk2) == get_bucket_size(525)
+        assert valid_len2 == 525
 
     def test_resize_cyclic_repetition(self):
         """Test that padding uses cyclic repetition (np.resize behavior)."""

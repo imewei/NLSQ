@@ -662,9 +662,6 @@ class MemoryEstimator:
             n_chunks = 1
         else:
             n_chunks = (n_points + chunk_size - 1) // chunk_size
-            # Same chunk count, evenly sized: a ragged tail (e.g. 1000 + 1) is
-            # rank-deficient and skews the precision-weighted combination.
-            chunk_size = (n_points + n_chunks - 1) // n_chunks
 
         # Calculate total memory estimate
         total_memory_gb = (n_points * memory_per_point) / (1024**3)
@@ -767,6 +764,24 @@ class DataChunker:
     """Utility for creating and managing data chunks."""
 
     @staticmethod
+    def chunk_bounds(n_points: int, chunk_size: int) -> list[tuple[int, int]]:
+        """(start, end) of each chunk: ceil(n / chunk_size) chunks of near-equal size.
+
+        A ragged tail (1000 + 1 points, or 4 + 4 + 2 for three parameters) is
+        rank-deficient and skews the precision-weighted combination of chunk
+        fits, so sizes differ by at most one and never exceed ``chunk_size``.
+        """
+        n_chunks = (n_points + chunk_size - 1) // chunk_size
+        base, extra = divmod(n_points, n_chunks)
+        bounds = []
+        start = 0
+        for i in range(n_chunks):
+            end = start + base + (i < extra)
+            bounds.append((start, end))
+            start = end
+        return bounds
+
+    @staticmethod
     def create_chunks(
         xdata: np.ndarray,
         ydata: np.ndarray,
@@ -813,11 +828,9 @@ class DataChunker:
             rng = np.random.default_rng(random_seed)
             rng.shuffle(indices)
 
-        n_chunks = (n_points + chunk_size - 1) // chunk_size
-
-        for i in range(n_chunks):
-            start_idx = i * chunk_size
-            end_idx = min(start_idx + chunk_size, n_points)
+        for i, (start_idx, end_idx) in enumerate(
+            DataChunker.chunk_bounds(n_points, chunk_size)
+        ):
             chunk_indices = indices[start_idx:end_idx]
 
             # PERFORMANCE FIX: Pad to power-of-2 bucket sizes for JIT cache efficiency
@@ -2733,7 +2746,9 @@ class LargeDatasetFitter:
                         # enabled here, x_valid stops matching this slice of
                         # xdata and sigma would silently misalign with the data
                         # it's meant to weight -- fail loudly instead.
-                        start_idx = chunk_idx * stats.recommended_chunk_size
+                        start_idx = DataChunker.chunk_bounds(
+                            len(xdata), stats.recommended_chunk_size
+                        )[chunk_idx][0]
                         if not np.array_equal(
                             x_valid,
                             np.asarray(xdata)[start_idx : start_idx + valid_length],
