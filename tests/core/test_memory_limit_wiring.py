@@ -253,3 +253,31 @@ def test_safety_factor_outside_the_unit_interval_is_rejected(bad):
         MemoryBudget.compute(n_points=N, n_params=P, safety_factor=bad)
     with pytest.raises(ValueError, match="safety_factor"):
         MemoryBudgetSelector(safety_factor=bad)
+
+
+def _swap_between_reads(monkeypatch, first, second):
+    """get_memory_config returns `first` once, then `second` (a concurrent swap)."""
+    configs = iter([first, second])
+    monkeypatch.setattr(
+        JAXConfig, "get_memory_config", classmethod(lambda cls: next(configs, second))
+    )
+
+
+def test_budget_resolves_limit_and_safety_factor_from_one_snapshot(monkeypatch):
+    _swap_between_reads(
+        monkeypatch,
+        MemoryConfig(memory_limit_gb=10.0, safety_factor=0.1),
+        MemoryConfig(memory_limit_gb=1.0, safety_factor=1.0),
+    )
+    budget = MemoryBudget.compute(n_points=N, n_params=P)
+    assert (budget.available_gb, budget.threshold_gb) == (10.0, pytest.approx(1.0))
+
+
+def test_selector_resolves_limit_and_safety_factor_from_one_snapshot(monkeypatch):
+    # Consistent first config -> "chunked"; mixing in the second -> "standard".
+    _swap_between_reads(
+        monkeypatch,
+        MemoryConfig(memory_limit_gb=LIMIT_GB, safety_factor=0.75),
+        MemoryConfig(memory_limit_gb=100.0, safety_factor=1.0),
+    )
+    assert MemoryBudgetSelector().select(n_points=N, n_params=P)[0] == "chunked"
