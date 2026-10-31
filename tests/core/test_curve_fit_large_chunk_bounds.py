@@ -105,3 +105,31 @@ def test_non_positive_chunk_size_is_rejected_by_name(bad):
             auto_size_detection=False,
             chunk_size=bad,
         )
+
+
+@pytest.mark.parametrize(("n", "ceiling"), [(1001, 1000), (10_001, 1000), (2500, 1000)])
+def test_chunks_are_balanced_so_no_tail_is_tiny(n, ceiling):
+    from nlsq.streaming.large_dataset import LDMemoryConfig, MemoryEstimator
+
+    config = LDMemoryConfig(min_chunk_size=ceiling, max_chunk_size=ceiling)
+    chunk_size, stats = MemoryEstimator.calculate_optimal_chunk_size(
+        n, 2, memory_config=config
+    )
+    assert stats.n_chunks == -(-n // ceiling)  # chunk count is unchanged
+    assert chunk_size <= ceiling
+    assert n - (stats.n_chunks - 1) * chunk_size >= chunk_size - stats.n_chunks
+
+
+def test_one_point_tail_does_not_corrupt_the_combined_fit():
+    # 1001 points used to split 1000 + 1; the rank-deficient tail skewed the result.
+    from scipy.optimize import curve_fit
+
+    def line(x, a, b):
+        return a * x + b
+
+    x = np.linspace(0, 5, 1001)
+    y = 2 * x + 3
+    y[607] += 1000
+    popt, _ = curve_fit_large(line, x, y, p0=[1.0, 1.0], auto_size_detection=False)
+    expected, _ = curve_fit(line, x, y, p0=[1.0, 1.0])
+    np.testing.assert_allclose(popt, expected, rtol=0.05)

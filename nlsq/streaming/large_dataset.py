@@ -662,6 +662,9 @@ class MemoryEstimator:
             n_chunks = 1
         else:
             n_chunks = (n_points + chunk_size - 1) // chunk_size
+            # Same chunk count, evenly sized: a ragged tail (e.g. 1000 + 1) is
+            # rank-deficient and skews the precision-weighted combination.
+            chunk_size = (n_points + n_chunks - 1) // n_chunks
 
         # Calculate total memory estimate
         total_memory_gb = (n_points * memory_per_point) / (1024**3)
