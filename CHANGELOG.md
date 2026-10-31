@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make dev` or `uv sync`.
 
 ### Fixed
+- `curve_fit_large(..., auto_size_detection=False)` no longer raises
+  `ValueError: min_chunk_size (1000) cannot be larger than max_chunk_size` for inputs under
+  10,000 points or an explicit `chunk_size` below 1000. The minimum chunk size is now
+  capped at the maximum.
 - `NLSQ_MEMORY_LIMIT_GB`, `set_memory_limits()`, `configure_for_large_datasets()` and
   `memory_context()` now reach strategy selection. They were stored but never read, so
   `MemoryBudget.compute()` (and `workflow="auto"`) always used detected system memory.
