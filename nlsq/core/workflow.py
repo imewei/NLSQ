@@ -134,13 +134,12 @@ def _check_safety_factor(safety_factor: float) -> float:
     return safety_factor
 
 
-def _resolve_safety_factor(safety_factor: float | None) -> float:
+def _resolve_safety_factor(
+    safety_factor: float | None, configured: float | None
+) -> float:
     """An explicit value wins, then the configured one, then the default."""
     if safety_factor is not None:
         return _check_safety_factor(safety_factor)
-    from nlsq.config import JAXConfig
-
-    configured = JAXConfig.get_memory_config().safety_factor
     return DEFAULT_SAFETY_FACTOR if configured is None else configured
 
 
@@ -274,17 +273,19 @@ class MemoryBudget:
         >>> budget.fits_in_memory
         True
         """
-        if memory_limit_gb is None:
-            from nlsq.config import JAXConfig
+        # One snapshot, so a concurrent set_memory_config cannot mix two configs.
+        from nlsq.config import JAXConfig
 
-            memory_limit_gb = JAXConfig.get_memory_config().memory_limit_gb
+        config = JAXConfig.get_memory_config()
+        if memory_limit_gb is None:
+            memory_limit_gb = config.memory_limit_gb
 
         # Validation
         if n_points <= 0:
             raise ValueError("n_points must be positive")
         if n_params <= 0:
             raise ValueError("n_params must be positive")
-        safety_factor = _resolve_safety_factor(safety_factor)
+        safety_factor = _resolve_safety_factor(safety_factor, config.safety_factor)
         if memory_limit_gb is not None and memory_limit_gb <= 0:
             raise ValueError("memory_limit_gb must be positive")
 
@@ -407,7 +408,11 @@ class MemoryBudgetSelector:
     @property
     def safety_factor(self) -> float:
         """The factor ``select`` applies, resolved at call time."""
-        return _resolve_safety_factor(self._safety_factor)
+        from nlsq.config import JAXConfig
+
+        return _resolve_safety_factor(
+            self._safety_factor, JAXConfig.get_memory_config().safety_factor
+        )
 
     def select(
         self,
@@ -470,7 +475,7 @@ class MemoryBudgetSelector:
                 n_points=n_points,
                 n_params=n_params,
                 n_features=n_features,
-                safety_factor=self.safety_factor,
+                safety_factor=self._safety_factor,
                 memory_limit_gb=memory_limit_gb,
                 use_gpu=use_gpu,
             )
