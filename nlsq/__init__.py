@@ -1017,12 +1017,14 @@ def curve_fit_large(
             memory_limit_gb = 8.0  # Conservative default
 
     # Create memory configuration
+    max_chunk_size = (
+        max(1, min(1_000_000, n_points // 10)) if chunk_size is None else chunk_size
+    )
     memory_config = MemoryConfig(
         progress_reporting=show_progress,
-        min_chunk_size=max(1000, n_points // 10000),  # Dynamic min chunk size
-        max_chunk_size=min(1_000_000, n_points // 10)
-        if chunk_size is None
-        else chunk_size,
+        # The floor must not exceed the ceiling (small n_points or chunk_size)
+        min_chunk_size=min(max(1000, n_points // 10000), max_chunk_size),
+        max_chunk_size=max_chunk_size,
     )
 
     # Create large dataset configuration (v0.2.0: no more sampling params)
