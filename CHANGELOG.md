@@ -30,6 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make dev` or `uv sync`.
 
 ### Fixed
+- `curve_fit_large(..., auto_size_detection=False)` no longer raises
+  `ValueError: min_chunk_size (1000) cannot be larger than max_chunk_size` for inputs under
+  10,000 points or an explicit `chunk_size` below 1000. The minimum chunk size is now
+  capped at the maximum, and the default maximum is never below `min(1000, n_points)`, so
+  inputs under 1,000 points run as one chunk instead of being fit point by point. A `chunk_size` of zero or less now raises
+  `ValueError: chunk_size must be positive` instead of an error about `min_chunk_size`.
+- `DataChunker.create_chunks` now cuts `ceil(n / chunk_size)` chunks of near-equal size
+  (they differ by at most one point and never exceed `chunk_size`). A ragged tail such as
+  1000 + 1 points, or 4 + 4 + 2 for three parameters, gave a rank-deficient chunk whose
+  covariance skewed the combined estimate (a 1,001-point linear fit returned
+  `[-5.3, 28.9]` instead of `[2.3, 3.4]`). An explicit `chunk_size` that leaves chunks with fewer points than
+  parameters now raises `ValueError` instead of returning a wrong fit, and empty input yields no chunks.
 - `NLSQ_MEMORY_LIMIT_GB`, `set_memory_limits()`, `configure_for_large_datasets()` and
   `memory_context()` now reach strategy selection. They were stored but never read, so
   `MemoryBudget.compute()` (and `workflow="auto"`) always used detected system memory.

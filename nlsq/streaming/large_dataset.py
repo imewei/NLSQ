@@ -764,6 +764,39 @@ class DataChunker:
     """Utility for creating and managing data chunks."""
 
     @staticmethod
+    def chunk_bounds(n_points: int, chunk_size: int) -> list[tuple[int, int]]:
+        """(start, end) of each chunk: ceil(n / chunk_size) chunks of near-equal size.
+
+        A ragged tail (1000 + 1 points, or 4 + 4 + 2 for three parameters) is
+        rank-deficient and skews the precision-weighted combination of chunk
+        fits, so sizes differ by at most one and never exceed ``chunk_size``.
+        """
+        if n_points == 0:
+            return []
+        n_chunks = (n_points + chunk_size - 1) // chunk_size
+        base, extra = divmod(n_points, n_chunks)
+        bounds = []
+        start = 0
+        for i in range(n_chunks):
+            end = start + base + (i < extra)
+            bounds.append((start, end))
+            start = end
+        return bounds
+
+    @staticmethod
+    def check_chunks_determined(
+        chunk_bounds: list[tuple[int, int]], n_params: int
+    ) -> None:
+        """Raise if a multi-chunk split has a chunk with fewer points than parameters."""
+        smallest = min((end - start for start, end in chunk_bounds), default=0)
+        if len(chunk_bounds) > 1 and smallest < n_params:
+            raise ValueError(
+                f"chunk_size gives chunks of {smallest} points, fewer than the "
+                f"{n_params} parameters, so each chunk fit is underdetermined; "
+                "use a larger chunk_size"
+            )
+
+    @staticmethod
     def create_chunks(
         xdata: np.ndarray,
         ydata: np.ndarray,
@@ -810,11 +843,9 @@ class DataChunker:
             rng = np.random.default_rng(random_seed)
             rng.shuffle(indices)
 
-        n_chunks = (n_points + chunk_size - 1) // chunk_size
-
-        for i in range(n_chunks):
-            start_idx = i * chunk_size
-            end_idx = min(start_idx + chunk_size, n_points)
+        for i, (start_idx, end_idx) in enumerate(
+            DataChunker.chunk_bounds(n_points, chunk_size)
+        ):
             chunk_indices = indices[start_idx:end_idx]
 
             # PERFORMANCE FIX: Pad to power-of-2 bucket sizes for JIT cache efficiency
@@ -2679,6 +2710,9 @@ class LargeDatasetFitter:
             "biased per-chunk fits on ordered x",
         )
 
+        chunk_bounds = DataChunker.chunk_bounds(n_points, stats.recommended_chunk_size)
+        DataChunker.check_chunks_determined(chunk_bounds, stats.n_params)
+
         # Initialize state variables
         (
             progress,
@@ -2730,7 +2764,7 @@ class LargeDatasetFitter:
                         # enabled here, x_valid stops matching this slice of
                         # xdata and sigma would silently misalign with the data
                         # it's meant to weight -- fail loudly instead.
-                        start_idx = chunk_idx * stats.recommended_chunk_size
+                        start_idx = chunk_bounds[chunk_idx][0]
                         if not np.array_equal(
                             x_valid,
                             np.asarray(xdata)[start_idx : start_idx + valid_length],
