@@ -280,7 +280,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     memory_limit_gb : float
         Maximum memory to use in GB (default: 8.0)
     safety_factor : float
-        Safety factor for memory calculations (default: 0.8)
+        Safety factor for memory calculations, in (0, 1] (default: 0.8)
     min_chunk_size : int
         Minimum chunk size in data points (default: 1000)
     max_chunk_size : int
@@ -326,6 +326,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
 
         validate_positive(self.memory_limit_gb, "memory_limit_gb")
         validate_positive(self.safety_factor, "safety_factor")
+        validate_range(self.safety_factor, 0.0, 1.0, "safety_factor")
         validate_positive_int(self.min_chunk_size, "min_chunk_size")
         validate_positive_int(self.max_chunk_size, "max_chunk_size")
         validate_positive_int(self.streaming_batch_size, "streaming_batch_size")
