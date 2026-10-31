@@ -7,11 +7,17 @@ from nlsq.config import JAXConfig, MemoryConfig, memory_context, set_memory_limi
 from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
 
 N, P = 1_000_000, 3
+DETECTED_GB = 12.5  # pinned: live free memory drifts between two reads
 
 
 @pytest.fixture(autouse=True)
-def _restore_global_memory_config():
+def _restore_global_memory_config(monkeypatch):
     """Isolate each test from the process-wide JAXConfig singleton."""
+    monkeypatch.setattr(
+        MemoryBudget,
+        "_detect_available_memory",
+        staticmethod(lambda use_gpu=False: DETECTED_GB),
+    )
     inst = JAXConfig()
     saved = (inst._memory_config, getattr(inst, "_memory_limit_override", None))
     inst._memory_config = None
@@ -21,7 +27,7 @@ def _restore_global_memory_config():
 
 
 def _detected() -> float:
-    return MemoryBudget._detect_available_memory()
+    return DETECTED_GB
 
 
 def test_set_memory_limits_reaches_the_budget():
