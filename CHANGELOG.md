@@ -33,9 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `NLSQ_MEMORY_LIMIT_GB`, `set_memory_limits()`, `configure_for_large_datasets()` and
   `memory_context()` now reach strategy selection. They were stored but never read, so
   `MemoryBudget.compute()` (and `workflow="auto"`) always used detected system memory.
-  Precedence: per-call `memory_limit_gb` > configured limit > detected memory. The
-  8 GB `MemoryConfig` default is not treated as a configured limit. Still not wired:
-  the configured `safety_factor`, `gpu_memory_fraction`, chunk-size and
+  Precedence: per-call `memory_limit_gb` > configured limit > detected memory.
+  **Behavior change:** `MemoryConfig.memory_limit_gb` now defaults to `None` (unset;
+  was `8.0`, which nothing read), and `configure_for_large_datasets()` takes
+  `memory_limit_gb=None`, so neither pins an 8 GB cap on a larger machine. An
+  out-of-range `NLSQ_MEMORY_LIMIT_GB` (or other `NLSQ_*` memory variable) now warns and
+  is ignored instead of raising from every fit. `curve_fit_large` no longer replaces
+  the global memory configuration for the duration of the fit. Still not wired: the
+  configured `safety_factor`, `gpu_memory_fraction`, chunk-size and
   `out_of_memory_strategy` fields.
 - A default `import nlsq` + fit no longer prints `INFO:`/`PERFORMANCE:` log
   lines to stderr. `nlsq/config.py` logged through the root logger
