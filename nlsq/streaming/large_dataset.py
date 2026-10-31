@@ -771,6 +771,8 @@ class DataChunker:
         rank-deficient and skews the precision-weighted combination of chunk
         fits, so sizes differ by at most one and never exceed ``chunk_size``.
         """
+        if n_points == 0:
+            return []
         n_chunks = (n_points + chunk_size - 1) // chunk_size
         base, extra = divmod(n_points, n_chunks)
         bounds = []
@@ -780,6 +782,19 @@ class DataChunker:
             bounds.append((start, end))
             start = end
         return bounds
+
+    @staticmethod
+    def check_chunks_determined(
+        chunk_bounds: list[tuple[int, int]], n_params: int
+    ) -> None:
+        """Raise if a multi-chunk split has a chunk with fewer points than parameters."""
+        smallest = min((end - start for start, end in chunk_bounds), default=0)
+        if len(chunk_bounds) > 1 and smallest < n_params:
+            raise ValueError(
+                f"chunk_size gives chunks of {smallest} points, fewer than the "
+                f"{n_params} parameters, so each chunk fit is underdetermined; "
+                "use a larger chunk_size"
+            )
 
     @staticmethod
     def create_chunks(
@@ -2695,6 +2710,9 @@ class LargeDatasetFitter:
             "biased per-chunk fits on ordered x",
         )
 
+        chunk_bounds = DataChunker.chunk_bounds(n_points, stats.recommended_chunk_size)
+        DataChunker.check_chunks_determined(chunk_bounds, stats.n_params)
+
         # Initialize state variables
         (
             progress,
@@ -2746,9 +2764,7 @@ class LargeDatasetFitter:
                         # enabled here, x_valid stops matching this slice of
                         # xdata and sigma would silently misalign with the data
                         # it's meant to weight -- fail loudly instead.
-                        start_idx = DataChunker.chunk_bounds(
-                            len(xdata), stats.recommended_chunk_size
-                        )[chunk_idx][0]
+                        start_idx = chunk_bounds[chunk_idx][0]
                         if not np.array_equal(
                             x_valid,
                             np.asarray(xdata)[start_idx : start_idx + valid_length],

@@ -169,3 +169,47 @@ def test_one_point_tail_does_not_corrupt_the_combined_fit():
     popt, _ = curve_fit_large(line, x, y, p0=[1.0, 1.0], auto_size_detection=False)
     expected, _ = curve_fit(line, x, y, p0=[1.0, 1.0])
     np.testing.assert_allclose(popt, expected, rtol=0.05)
+
+
+def test_chunks_smaller_than_the_parameter_count_are_rejected():
+    def quad(x, a, b, c):
+        return a * x * x + b * x + c
+
+    x = np.linspace(0, 5, 10)
+    y = 2 * x * x + 3 * x + 4
+    with pytest.raises(ValueError, match=r"chunk_size.*parameters"):
+        curve_fit_large(
+            quad, x, y, p0=[1.0, 1.0, 1.0], chunk_size=2, auto_size_detection=False
+        )
+
+
+def test_empty_input_yields_no_chunks():
+    from nlsq.streaming.large_dataset import DataChunker
+
+    assert DataChunker.chunk_bounds(0, 1000) == []
+    assert list(DataChunker.create_chunks(np.array([]), np.array([]), 1000)) == []
+
+
+def test_chunk_bounds_are_computed_once_per_fit(monkeypatch):
+    from nlsq.streaming.large_dataset import DataChunker
+
+    calls = []
+    original = DataChunker.chunk_bounds
+
+    def spy(n_points, chunk_size):
+        calls.append((n_points, chunk_size))
+        return original(n_points, chunk_size)
+
+    monkeypatch.setattr(DataChunker, "chunk_bounds", staticmethod(spy))
+    x = np.linspace(0, 5, 3000)
+    y = 2 * x + 3
+    sigma = np.full_like(x, 0.1)
+    curve_fit_large(
+        lambda x, a, b: a * x + b,
+        x,
+        y,
+        p0=[1.0, 1.0],
+        sigma=sigma,
+        auto_size_detection=False,
+    )
+    assert len(calls) <= 2  # one for the loop's sigma slices, one inside create_chunks
