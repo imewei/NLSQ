@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     free device memory and, with `memory_limit_gb`, the data plus chunk workspace fit
     that budget; the chunk is sized from the budget first, so under a limit placement
     happens only for small inputs. A `jax.Array` already on a device stays there.
+  - **Chunk factories:** `curve_fit_large(f, factory, None, p0=..., method="exact_streaming",
+    n_points=N)`, where `factory(chunk_size)` yields `(x, y)` or `(x, y, sigma)` blocks
+    of at most `chunk_size` points. The factory must be replayable (called once per
+    full-data pass, same data in the same order each call). `n_points` is optional
+    (counted on the first pass when omitted) and accepted only with a factory; every
+    pass verifies the point count and raises `ValueError` on a mismatch. Blocks are
+    validated as they arrive (1-D, equal non-zero lengths, at most `chunk_size`, finite
+    on the first pass unless `check_finite=False`) and padded to one compiled shape.
   - **Weights:** 1-D `sigma` (per-point standard deviations, residuals `(y - f)/sigma`
     as in `curve_fit`) is supported; `absolute_sigma` selects whether `pcov` is scaled
     by the weighted residual variance. A `sigma` that is not 1-D (correlated 2-D
@@ -44,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `rescale_data`, `max_jacobian_elements_for_svd`, `auto_size_detection` or
     `size_threshold` raise `ValueError` naming the argument; extra keyword arguments
     other than `ftol`, `xtol`, `gtol`, `max_nfev` (full-data passes, default
-    `100 * len(p0)`) raise `TypeError`.
+    `100 * len(p0)`) and `n_points` (factories only) raise `TypeError`.
   - **Failure behaviour:** a fit that stalls or exhausts `max_nfev` raises
     `nlsq.streaming.ExactSolverError` (a `RuntimeError`) carrying the full result as
     `.result` (`termination`, `nfev`, `cost`, `x`, ...). Non-finite data raises

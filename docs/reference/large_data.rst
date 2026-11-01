@@ -91,10 +91,29 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   workspace fit that budget; the chunk is sized from the budget first, so under
   a limit placement happens only for small inputs. A ``jax.Array`` already on a
   device stays there regardless of the limit.
+- **Chunk factories:** pass a callable as ``xdata`` and ``None`` as ``ydata``:
+  ``curve_fit_large(model, factory, None, p0=..., method="exact_streaming",
+  n_points=N)``. ``factory(chunk_size)`` returns an iterator of ``(x, y)`` or
+  ``(x, y, sigma)`` blocks (every block the same form). Contract: it is
+  **replayable** (called once per full-data pass, each call yields the same
+  data in the same deterministic order) and each block holds at most
+  ``chunk_size`` points; blocks may differ in size and are padded to one
+  compiled shape. ``chunk_size`` is the derived chunk (``chunk_size`` if
+  given, else ``1 << 22`` reduced to fit ``memory_limit_gb``; clamped to
+  ``n_points`` when that is given). ``n_points`` is optional: when omitted the
+  points are counted on the first pass; every pass (the first too, when
+  ``n_points`` is given) verifies the count and a mismatch raises
+  ``ValueError``. Each block is validated as it arrives (1-D parts of equal,
+  non-zero length, at most ``chunk_size`` points, finite on the first pass
+  unless ``check_finite=False``, ``sigma`` finite and positive); the model
+  probe uses the first block. ``sigma`` must then come from the blocks
+  (``sigma=`` raises ``ValueError``), and ``n_points`` with an array source
+  raises ``ValueError``. Exceptions raised by the factory propagate unchanged.
 - **Accepted arguments:** ``sigma`` (1-D only), ``bounds``, ``chunk_size``,
   ``check_finite``, ``show_progress``, ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
-  ``xtol``, ``gtol`` and ``max_nfev`` (full-data passes, default
-  ``100 * len(p0)``). Any other keyword argument raises ``TypeError``.
+  ``xtol``, ``gtol``, ``max_nfev`` (full-data passes, default
+  ``100 * len(p0)``) and ``n_points`` (chunk factories only). Any other
+  keyword argument raises ``TypeError``.
 - **Weights:** a 1-D ``sigma`` divides residuals and Jacobian rows, as in
   ``curve_fit``. A ``sigma`` that is 2-D (correlated errors), of the wrong
   length, non-finite or non-positive raises ``ValueError``; finiteness and

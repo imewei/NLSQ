@@ -15,6 +15,7 @@ shortcut: normal equations square cond(J); the Stage 3 TSQR study decides whethe
 
 from __future__ import annotations
 
+import sys
 import warnings
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any, NamedTuple
@@ -185,17 +186,122 @@ def iter_blocks(
         if m == chunk:
             yield xc, yc, sc, full
             continue
-        pad = (0, chunk - m)
-        yield (
-            (jnp if isinstance(xc, jax.Array) else np).pad(xc, pad, mode="edge"),
-            (jnp if isinstance(yc, jax.Array) else np).pad(yc, pad, mode="edge"),
-            None
-            if sc is None
-            else (jnp if isinstance(sc, jax.Array) else np).pad(
-                sc, pad, constant_values=1.0
-            ),
-            jnp.arange(chunk) < m,
-        )
+        yield _padded(xc, yc, sc, chunk)
+
+
+def _padded(xc: Any, yc: Any, sc: Any, chunk: int) -> tuple[Any, Any, Any, jax.Array]:
+    """A short block edge-padded to ``chunk`` rows (sigma with 1) plus its mask."""
+    m = xc.shape[0]
+    pad = (0, chunk - m)
+    return (
+        (jnp if isinstance(xc, jax.Array) else np).pad(xc, pad, mode="edge"),
+        (jnp if isinstance(yc, jax.Array) else np).pad(yc, pad, mode="edge"),
+        None
+        if sc is None
+        else (jnp if isinstance(sc, jax.Array) else np).pad(
+            sc, pad, constant_values=1.0
+        ),
+        jnp.arange(chunk) < m,
+    )
+
+
+def _as64(a: Any) -> Any:
+    """Float64 block: on device for a JAX array, else a host array (a view if float64)."""
+    if isinstance(a, jax.Array):
+        return jnp.asarray(a, dtype=jnp.float64)
+    return np.asarray(a, dtype=np.float64)
+
+
+class FactorySource:
+    """A replayable chunk factory ``factory(chunk) -> Iterator[(x, y) | (x, y, sigma)]``
+    as a :func:`run_pass` source.
+
+    The factory is called once per full data pass. Pass 1 is opened at construction and
+    its first block is validated and kept (``first_x`` for the model probe; whether the
+    blocks carry ``sigma`` fixes the kernel), so the probe costs no extra factory call.
+    Each block is validated as it arrives: a tuple of 2 or 3 parts, the same number as
+    the first block, every part 1-D with equal lengths, ``0 < len <= chunk``. Short blocks
+    are padded to ``chunk`` and masked, so every block has the compiled shape. At the end
+    of every pass the point count is checked against ``n`` (``n_points`` or the count of
+    pass 1): a factory that replays different data raises ``ValueError``.
+    """
+
+    def __init__(self, factory: Callable[[int], Any], chunk: int, n: int | None):
+        self.factory, self.chunk, self.n = factory, chunk, n
+        self._from_n_points = n is not None
+        self.passes = 0
+        self._pending: Iterator[Any] | None = iter(factory(chunk))
+        first = next(self._pending, None)
+        if first is None:
+            raise ValueError("chunk factory yielded no blocks")
+        self.weighted = isinstance(first, tuple) and len(first) == 3
+        self._first = self._check(first)
+        self.first_x = self._first[0]
+
+    def _check(self, item: Any) -> tuple[Any, ...]:
+        if not isinstance(item, tuple) or len(item) not in (2, 3):
+            raise ValueError(
+                "chunk factory must yield (x, y) or (x, y, sigma) tuples, got "
+                f"{type(item).__name__}"
+                + (f" of length {len(item)}" if isinstance(item, tuple) else "")
+            )
+        if (len(item) == 3) != self.weighted:
+            raise ValueError(
+                f"chunk factory block has {len(item)} parts; every block must have the "
+                f"same parts as the first ({3 if self.weighted else 2})"
+            )
+        parts = tuple(_as64(a) for a in item)
+        for name, a in zip(("x", "y", "sigma"), parts, strict=False):
+            if a.ndim != 1:
+                raise ValueError(f"block {name} must be 1-D, got shape {a.shape}")
+        lengths = [a.shape[0] for a in parts]
+        if len(set(lengths)) != 1:
+            raise ValueError(f"block parts must have equal lengths, got {lengths}")
+        if lengths[0] == 0:
+            raise ValueError("chunk factory yielded an empty block")
+        if lengths[0] > self.chunk:
+            raise ValueError(
+                f"chunk factory yielded a block of {lengths[0]} points, more than "
+                f"chunk_size={self.chunk}"
+            )
+        return parts
+
+    def blocks(self) -> Iterator[tuple[Any, Any, Any, jax.Array]]:
+        """One full pass: validated, padded ``(x, y, sigma, mask)`` blocks."""
+        if self._pending is None:
+            items: Iterator[Any] = iter(self.factory(self.chunk))
+            first = None
+        else:  # pass 1, opened at construction
+            items, first, self._pending = self._pending, self._first, None
+        self.passes += 1
+        full = jnp.ones(self.chunk, dtype=bool)
+        count = 0
+        while True:
+            if first is not None:
+                parts, first = first, None
+            else:
+                item = next(items, None)
+                if item is None:
+                    break
+                parts = self._check(item)
+            xc, yc = parts[0], parts[1]
+            sc = parts[2] if self.weighted else None
+            m = xc.shape[0]
+            count += m
+            yield (
+                (xc, yc, sc, full)
+                if m == self.chunk
+                else _padded(xc, yc, sc, self.chunk)
+            )
+        if self.n is None:
+            self.n = count
+        elif count != self.n:
+            origin = "n_points" if self._from_n_points else "pass 1"
+            raise ValueError(
+                f"chunk factory yielded {count} points on pass {self.passes}, expected "
+                f"{self.n} ({origin}); the factory must replay identical data on every "
+                "call"
+            )
 
 
 @jax.jit
@@ -213,13 +319,15 @@ def _sigma_ok(s: jax.Array) -> tuple[jax.Array, jax.Array]:
 def run_pass(
     stats: Callable[..., tuple[jax.Array, jax.Array, jax.Array]],
     theta: Any,
-    source: tuple[Any, Any, Any],
+    source: tuple[Any, Any, Any] | FactorySource,
     chunk: int,
     *,
     check_finite: bool = False,
     check_sigma: bool = False,
 ) -> PassStats:
-    """One full pass over ``source = (x, y, sigma)``: summed statistics on the host.
+    """One full pass over ``source = (x, y, sigma)`` or a :class:`FactorySource`.
+
+    Returns the summed statistics on the host.
 
     ``stats`` must be the weighted kernel when ``sigma`` is not None. The finite and
     sigma checks and the point count are reduced on device alongside the statistics, so
@@ -229,7 +337,12 @@ def run_pass(
     acc: tuple[jax.Array, ...] | None = None
     finite = s_fin = s_pos = jnp.asarray(True)
     count = jnp.asarray(0)
-    for xc, yc, sc, mask in iter_blocks(*source, chunk):
+    blocks = (
+        source.blocks()
+        if isinstance(source, FactorySource)
+        else iter_blocks(*source, chunk)
+    )
+    for xc, yc, sc, mask in blocks:
         out = stats(th, xc, yc, mask) if sc is None else stats(th, xc, yc, sc, mask)
         acc = (
             out if acc is None else tuple(a + b for a, b in zip(acc, out, strict=True))
@@ -639,6 +752,36 @@ def compute_covariance(
     return pcov
 
 
+def _check_factory_inputs(
+    y: Any,
+    p0: Sequence[float] | np.ndarray,
+    sigma: Any,
+    bounds: tuple[Any, Any],
+    n_points: int | None,
+) -> tuple[int | None, int, np.ndarray, np.ndarray]:
+    """Argument checks for a chunk factory source; return ``(n_points, p, lo, hi)``."""
+    if not 0 < LAM0 <= LAMBDA_MAX:
+        raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
+    if y is not None:
+        raise ValueError(
+            "ydata must be None when xdata is a chunk factory (callable): the factory "
+            "yields (x, y) or (x, y, sigma) blocks"
+        )
+    if sigma is not None:
+        raise ValueError(
+            "sigma must be None with a chunk factory: yield (x, y, sigma) blocks instead"
+        )
+    if n_points is not None and (
+        isinstance(n_points, bool)
+        or not isinstance(n_points, int | np.integer)
+        or n_points < 1
+    ):
+        raise ValueError(f"n_points must be a positive integer, got {n_points!r}")
+    p = len(p0)
+    lo, hi = check_bounds(bounds, p)
+    return (None if n_points is None else int(n_points)), p, lo, hi
+
+
 def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     model: Callable[..., Any],
     x: Any,
@@ -692,22 +835,39 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     happens only when data plus workspace fit (in practice, small inputs). A
     ``jax.Array`` already on a device stays there regardless of the limit.
 
+    ``x`` may instead be a chunk factory (``y`` and ``sigma`` None), see
+    :class:`FactorySource`: ``x(chunk) -> Iterator[(x, y) | (x, y, sigma)]``, replayable
+    (called once per full pass, same data in the same order), at most ``chunk`` points per
+    block. ``chunk`` is :func:`derive_chunk_size` of ``n_points``, or, with ``n_points``
+    None, of an unbounded length (``chunk_size`` as given, else ``1 << 22`` reduced to the
+    budget, never clamped to the unknown length). ``n_points`` is then optional: the count
+    of pass 1 is used when it is None, and every pass verifies the count (``ValueError``
+    naming both counts on a mismatch). With an array source ``n_points`` must match its
+    length.
+
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
     that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
     gradient or Hessian at ``p0``, and for ``bounds`` of the wrong shape or with
     ``lb >= ub`` anywhere (equal, inverted or NaN bounds).
     """
-    # lists and tuples have no .shape; array-likes (ndarray, JAX, memmap, ...) are never copied
-    x = x if hasattr(x, "shape") else np.asarray(x)
-    y = y if hasattr(y, "shape") else np.asarray(y)
-    if sigma is not None and not hasattr(sigma, "shape"):
-        sigma = np.asarray(sigma)
-    n, p, lo, hi = _check_inputs(x, y, p0, sigma, bounds, n_points)
+    factory = callable(x) and not hasattr(x, "shape")
+    source: tuple[Any, Any, Any] | FactorySource
+    if factory:
+        n, p, lo, hi = _check_factory_inputs(y, p0, sigma, bounds, n_points)
+        # n unknown: no clamp to n (the default or budget chunk, or chunk_size as given)
+        chunk = derive_chunk_size(
+            sys.maxsize if n is None else n, p, memory_limit_gb, chunk_size
+        )
+    else:
+        # lists and tuples have no .shape; array-likes (ndarray, JAX, memmap, ...) are never copied
+        x = x if hasattr(x, "shape") else np.asarray(x)
+        y = y if hasattr(y, "shape") else np.asarray(y)
+        if sigma is not None and not hasattr(sigma, "shape"):
+            sigma = np.asarray(sigma)
+        n, p, lo, hi = _check_inputs(x, y, p0, sigma, bounds, n_points)
+        chunk = derive_chunk_size(n, p, memory_limit_gb, chunk_size)
     if max_nfev is None:
         max_nfev = 100 * p
-    chunk = derive_chunk_size(n, p, memory_limit_gb, chunk_size)
-    source = _place(x, y, sigma, chunk * p * 8 * WORKSPACE_FACTOR, memory_limit_gb)
-    stats = make_chunk_stats(model, weighted=sigma is not None)
 
     def evaluate(theta: np.ndarray, nfev: int, first: bool = False) -> PassStats:
         st = run_pass(
@@ -723,8 +883,18 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         return st
 
     theta = np.clip(np.asarray(p0, np.float64), lo, hi)
-    check_model_contract(model, theta, _block(x, 0, chunk))
+    if factory:
+        source = FactorySource(x, chunk, n)  # opens pass 1 and reads its first block
+        check_model_contract(model, theta, source.first_x)
+        weighted = source.weighted
+    else:
+        source = _place(x, y, sigma, chunk * p * 8 * WORKSPACE_FACTOR, memory_limit_gb)
+        check_model_contract(model, theta, _block(x, 0, chunk))
+        weighted = sigma is not None
+    stats = make_chunk_stats(model, weighted=weighted)
     st = evaluate(theta, 1, first=True)
+    if isinstance(source, FactorySource):
+        n = source.n  # counted (or verified against n_points) during pass 1
     if check_finite and not st.data_finite:
         raise ValueError("x and y must be finite (found NaN or inf)")
     if not st.sigma_finite:

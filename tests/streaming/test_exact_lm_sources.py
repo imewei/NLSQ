@@ -449,3 +449,256 @@ def test_tracemalloc_peak_bounded(tmp_path):
     finally:
         for p in paths:
             p.unlink(missing_ok=True)
+
+
+# ---- replayable chunk factories ---------------------------------------------------------
+
+
+def make_factory(x, y, s=None, sizes=None, calls=None):
+    """Replayable factory over in-memory arrays; ``sizes`` cycles block lengths (each
+    capped by the requested chunk) so blocks can differ in size within a pass."""
+
+    def factory(chunk):
+        if calls is not None:
+            calls.append(chunk)
+        lengths = sizes or [chunk]
+        i = k = 0
+        while i < len(x):
+            e = min(i + min(lengths[k % len(lengths)], chunk), len(x))
+            yield (x[i:e], y[i:e]) if s is None else (x[i:e], y[i:e], s[i:e])
+            i, k = e, k + 1
+
+    return factory
+
+
+SIG = 0.01 * (1.0 + np.arange(N) % 7)
+
+
+@pytest.mark.parametrize("sizes", [None, [700], [1000, 300, 1024, 17]])
+@pytest.mark.parametrize("variant", ["plain", "weighted", "bounded"])
+def test_factory_equals_array_source(data, variant, sizes):
+    x, y = data
+    kw = {"chunk_size": CHUNK}
+    s = SIG if variant == "weighted" else None
+    if variant == "bounded":
+        prob = PROBLEMS["bounded_exp"]
+        x, y = prob.data(N)
+        kw["bounds"] = prob.bounds
+
+        def model(x, a, b, c):
+            return prob.model(jnp, x, a, b, c)
+
+        p0 = prob.p0
+    else:
+        model, p0 = exp_model, EXP.p0
+    ref = lm.exact_lm_fit(model, x, y, p0, sigma=s, **kw)
+    calls = []
+    out = lm.exact_lm_fit(model, make_factory(x, y, s, sizes, calls), None, p0, **kw)
+    assert ref["success"] and out["success"]
+    _assert_same(out, ref)
+    np.testing.assert_allclose(out["pcov"], ref["pcov"], rtol=1e-9, atol=0)
+    assert out["n_points"] == N
+    assert calls == [CHUNK] * out["nfev"]  # exactly one factory call per full pass
+
+
+def test_factory_with_and_without_n_points(data):
+    f = make_factory(*data)
+    a = lm.exact_lm_fit(exp_model, f, None, EXP.p0, chunk_size=CHUNK)
+    b = lm.exact_lm_fit(exp_model, f, None, EXP.p0, chunk_size=CHUNK, n_points=N)
+    np.testing.assert_array_equal(a["x"], b["x"])
+    assert a["cost"] == b["cost"] and a["n_points"] == b["n_points"] == N
+    np.testing.assert_array_equal(a["pcov"], b["pcov"])
+    with pytest.raises(
+        ValueError, match=rf"yielded {N} points on pass 1, expected {N + 1}"
+    ):
+        lm.exact_lm_fit(exp_model, f, None, EXP.p0, chunk_size=CHUNK, n_points=N + 1)
+
+
+@pytest.mark.parametrize(
+    ("change", "count"), [("drop", N - (N % CHUNK)), ("add", N + CHUNK)]
+)
+def test_replay_count_mismatch_raises(data, change, count):
+    inner = make_factory(*data)
+    calls = []
+
+    def factory(chunk):
+        calls.append(chunk)
+        blocks = list(inner(chunk))
+        if len(calls) >= 2:  # replays differ from the first pass
+            blocks = blocks[:-1] if change == "drop" else [*blocks, blocks[0]]
+        yield from blocks
+
+    with pytest.raises(
+        ValueError, match=rf"yielded {count} points on pass 2, expected {N} \(pass 1\)"
+    ):
+        lm.exact_lm_fit(exp_model, factory, None, EXP.p0, chunk_size=CHUNK)
+
+
+def _with_block(data, i, block):
+    blocks = list(make_factory(*data)(CHUNK))
+    blocks[i] = block
+    return lambda chunk: iter(blocks)
+
+
+@pytest.mark.parametrize(
+    ("i", "block", "pattern"),
+    [
+        (
+            1,
+            (np.ones(CHUNK + 1), np.ones(CHUNK + 1)),
+            rf"{CHUNK + 1} points.*chunk_size={CHUNK}",
+        ),
+        (2, (np.ones(5), np.ones(4)), r"equal lengths, got \[5, 4\]"),
+        (
+            1,
+            (np.ones((4, 2)), np.ones((4, 2))),
+            r"block x must be 1-D, got shape \(4, 2\)",
+        ),
+        (0, (np.ones(4), np.ones(4), np.ones((4, 1))), r"block sigma must be 1-D"),
+        (1, (np.ones(0), np.ones(0)), r"yielded an empty block"),
+        (1, (np.ones(4),), r"must yield \(x, y\) or \(x, y, sigma\) tuples"),
+        (1, (np.ones(4), np.ones(4), np.ones(4)), r"same parts as the first"),
+        (2, (np.r_[1.0, np.nan], np.ones(2)), r"^x and y must be finite"),
+        (2, (np.ones(2), np.r_[1.0, np.inf]), r"^x and y must be finite"),
+    ],
+)
+def test_block_validation(data, i, block, pattern):
+    with pytest.raises(ValueError, match=pattern):
+        lm.exact_lm_fit(
+            exp_model, _with_block(data, i, block), None, EXP.p0, chunk_size=CHUNK
+        )
+
+
+@pytest.mark.parametrize(
+    ("bad", "pattern"),
+    [(-1.0, r"^sigma must be positive"), (np.nan, r"^sigma must be finite")],
+)
+def test_block_validation_sigma(data, bad, pattern):
+    s = SIG.copy()
+    s[-1] = bad  # last (non-first) block only
+    f = make_factory(*data, s)
+    with pytest.raises(ValueError, match=pattern):
+        lm.exact_lm_fit(exp_model, f, None, EXP.p0, chunk_size=CHUNK)
+
+
+def test_factory_variable_block_sizes_single_trace(data):
+    def traced_model():
+        traces = []
+
+        def model(x, a, b, c):
+            if isinstance(x, jax.core.Tracer):
+                traces.append(x.shape)
+            return EXP.model(jnp, x, a, b, c)
+
+        return model, traces
+
+    m1, uniform = traced_model()
+    lm.exact_lm_fit(m1, make_factory(*data), None, EXP.p0, chunk_size=CHUNK)
+    m2, varied = traced_model()
+    out = lm.exact_lm_fit(
+        m2,
+        make_factory(*data, sizes=[1000, 300, 1024, 17, 512]),
+        None,
+        EXP.p0,
+        chunk_size=CHUNK,
+    )
+    assert out["success"] and out["nfev"] > 1
+    assert uniform and varied == uniform  # one trace at the padded shape, not per size
+    assert set(varied) == {(CHUNK,)}
+
+
+class Boom(Exception):
+    pass
+
+
+def test_factory_exception_propagates(data):
+    inner = make_factory(*data)
+
+    def factory(chunk):
+        yield from list(inner(chunk))[:1]
+        raise Boom("disk gone")
+
+    with pytest.raises(Boom, match="disk gone"):
+        lm.exact_lm_fit(exp_model, factory, None, EXP.p0, chunk_size=CHUNK)
+
+
+def test_factory_yields_nothing_raises():
+    with pytest.raises(ValueError, match=r"chunk factory yielded no blocks"):
+        lm.exact_lm_fit(
+            exp_model, lambda chunk: iter(()), None, EXP.p0, chunk_size=CHUNK
+        )
+
+
+@pytest.mark.parametrize(
+    ("kw", "expected"),
+    [
+        ({"chunk_size": 777}, 777),
+        ({"chunk_size": 777, "n_points": 500}, 500),  # clamped to a known n
+        ({"n_points": N}, N),
+        ({}, 1 << 22),  # n unknown: default chunk, never clamped to n
+        ({"memory_limit_gb": 2048 * 3 * 8 * 4 / 2**30}, 2048),  # budget rule
+        ({"n_points": 10**9, "memory_limit_gb": 2048 * 3 * 8 * 4 / 2**30}, 2048),
+    ],
+)
+def test_factory_chunk_size_argument(kw, expected):
+    seen = []
+
+    def factory(chunk):
+        seen.append(chunk)
+        raise Boom("stop after recording the chunk")
+
+    with pytest.raises(Boom):
+        lm.exact_lm_fit(exp_model, factory, None, EXP.p0, **kw)
+    assert seen == [expected]
+
+
+def test_factory_check_finite_false(data, passes):
+    out = lm.exact_lm_fit(
+        exp_model,
+        make_factory(*data),
+        None,
+        EXP.p0,
+        chunk_size=CHUNK,
+        check_finite=False,
+    )
+    assert out["success"] and not any(k["check_finite"] for k in passes)
+    x = data[0].copy()
+    x[-1] = np.nan  # with the check off, the NaN surfaces through the cost instead
+    with pytest.raises(ValueError, match=r"not finite at p0"):
+        lm.exact_lm_fit(
+            exp_model,
+            make_factory(x, data[1]),
+            None,
+            EXP.p0,
+            chunk_size=CHUNK,
+            check_finite=False,
+        )
+
+
+def test_factory_probe_first_block_only(data, monkeypatch):
+    probes = []
+    real = lm.check_model_contract
+
+    def spy(model, theta, x_chunk):
+        probes.append(len(x_chunk))
+        return real(model, theta, x_chunk)
+
+    monkeypatch.setattr(lm, "check_model_contract", spy)
+    out = lm.exact_lm_fit(
+        exp_model, make_factory(*data, sizes=[700]), None, EXP.p0, chunk_size=CHUNK
+    )
+    assert out["nfev"] > 1 and probes == [700]
+
+
+@pytest.mark.parametrize(
+    ("kw", "pattern"),
+    [
+        ({"y": np.ones(3)}, r"^ydata must be None when xdata is a chunk factory"),
+        ({"sigma": np.ones(3)}, r"^sigma must be None with a chunk factory"),
+        ({"n_points": 0}, r"^n_points must be a positive integer, got 0"),
+    ],
+)
+def test_factory_argument_errors(data, kw, pattern):
+    y = kw.pop("y", None)
+    with pytest.raises(ValueError, match=pattern):
+        lm.exact_lm_fit(exp_model, make_factory(*data), y, EXP.p0, **kw)

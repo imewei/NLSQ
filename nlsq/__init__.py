@@ -733,7 +733,7 @@ _EXACT_DEFAULTS: dict[str, Any] = {
     "auto_size_detection": True,
     "size_threshold": 1_000_000,
 }
-_EXACT_SOLVER_KWARGS = frozenset({"ftol", "xtol", "gtol", "max_nfev"})
+_EXACT_SOLVER_KWARGS = frozenset({"ftol", "xtol", "gtol", "max_nfev", "n_points"})
 _NOT_EXACT = "is not supported by method='exact_streaming'"
 
 
@@ -759,6 +759,8 @@ def _curve_fit_exact_streaming(
     Validates from ``shape``/``len`` only, so array-like sources (``np.memmap``,
     ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len`` and slicing) are
     never read whole here; objects without ``shape`` (lists, tuples) are converted.
+    A callable ``xdata`` is a chunk factory: ``ydata`` and ``sigma`` must be None and
+    ``n_points`` (accepted only then) is optional; blocks are validated as they arrive.
     """
     from nlsq.core.least_squares import prepare_bounds
     from nlsq.streaming import exact_lm
@@ -775,9 +777,29 @@ def _curve_fit_exact_streaming(
     if multistart:
         raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
 
+    factory = callable(xdata) and not hasattr(xdata, "shape")
+    if factory:
+        if ydata is not None:
+            raise ValueError(
+                "ydata must be None when xdata is a chunk factory (callable): the "
+                "factory yields (x, y) or (x, y, sigma) blocks"
+            )
+        if sigma is not None:
+            raise ValueError(
+                "sigma must be None with a chunk factory: yield (x, y, sigma) blocks "
+                "instead"
+            )
+    elif solver_kwargs.get("n_points") is not None:
+        raise ValueError(
+            "n_points is accepted only with a chunk factory (callable xdata); array "
+            "sources take their length from their shape"
+        )
+    else:
+        solver_kwargs = {k: v for k, v in solver_kwargs.items() if k != "n_points"}
+
     shapes = {}
     for name, a in (("xdata", xdata), ("ydata", ydata), ("sigma", sigma)):
-        if name == "sigma" and a is None:  # unweighted
+        if factory or (name == "sigma" and a is None):  # factory: checked per block
             continue
         shape = a.shape if hasattr(a, "shape") else np.shape(a)
         if len(shape) != 1:
@@ -790,13 +812,14 @@ def _curve_fit_exact_streaming(
                 f"{name} must be 1-D for method='exact_streaming', got shape {shape}{why}"
             )
         shapes[name] = shape[0]
-    n_x, n_y = shapes["xdata"], shapes["ydata"]
-    if n_x != n_y:
-        raise ValueError(
-            f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
-        )
-    if n_x < 2:
-        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
+    if not factory:
+        n_x, n_y = shapes["xdata"], shapes["ydata"]
+        if n_x != n_y:
+            raise ValueError(
+                f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
+            )
+        if n_x < 2:
+            raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
 
     p0_arr = _default_p0(f) if p0 is None else np.atleast_1d(np.asarray(p0, float))
     # (p,) shapes and lb < ub elementwise; prepare_bounds only broadcasts scalars
@@ -899,7 +922,12 @@ def curve_fit_large(
         ``sigma`` may be out-of-memory array-likes (``np.memmap``,
         ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len``
         and slicing): they are read one chunk at a time on every pass and
-        never loaded whole. 1-D ``sigma``
+        never loaded whole. ``xdata`` may instead be a replayable chunk
+        factory, ``factory(chunk_size) -> Iterator[(x, y) | (x, y, sigma)]``
+        called once per full-data pass (same data, same order, at most
+        ``chunk_size`` points per block), with ``ydata=None``; the optional
+        keyword ``n_points`` (factories only) is verified, and the point
+        count is checked on every pass. 1-D ``sigma``
         and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
         handled by an active set, not Coleman-Li TRF: the returned point is a
         KKT point of the box-constrained problem, reached by a different path
@@ -907,8 +935,8 @@ def curve_fit_large(
         ``max_jacobian_elements_for_svd``, ``auto_size_detection`` and
         ``size_threshold`` must stay at their defaults (``ValueError``
         otherwise), and the only extra keyword arguments accepted are
-        ``ftol``, ``xtol``, ``gtol`` and ``max_nfev`` (full-data passes,
-        default ``100 * len(p0)``). A failed fit (stalled or out of passes)
+        ``ftol``, ``xtol``, ``gtol``, ``max_nfev`` (full-data passes,
+        default ``100 * len(p0)``) and ``n_points``. A failed fit (stalled or out of passes)
         raises :class:`nlsq.streaming.ExactSolverError` with the full result
         as ``.result``. ``pcov`` is computed from the normal equations
         ``J^T J``, which squares ``cond(J)``: expect about ``1e-6`` relative

@@ -284,3 +284,55 @@ def test_default_chunked_path_unchanged(monkeypatch, spy):
     (res,) = results
     assert res["equivalent_to_full_batch"] is (res["n_chunks"] == 1)
     np.testing.assert_allclose(popt, [2.0, 1.0], rtol=1e-2)
+
+
+# ---- chunk factories (callable xdata) ---------------------------------------------------
+
+
+def _factory(x, y):
+    def factory(chunk):
+        for s in range(0, len(x), chunk):
+            yield x[s : s + chunk], y[s : s + chunk]
+
+    return factory
+
+
+@pytest.mark.parametrize("n_points", [None, N])
+def test_factory_through_curve_fit_large(data, spy, n_points):
+    kw = {} if n_points is None else {"n_points": n_points}
+    popt, pcov = curve_fit_large(
+        exp_model, _factory(*data), None, p0=EXP.p0, method=M, chunk_size=1024, **kw
+    )
+    assert callable(spy[0][0][1]) and spy[0][0][2] is None
+    assert spy[0][1].get("n_points") == n_points
+    direct = lm.exact_lm_fit(exp_model, *data, EXP.p0, chunk_size=1024)
+    np.testing.assert_allclose(popt, direct["x"], rtol=1e-9, atol=0)
+    np.testing.assert_allclose(pcov, direct["pcov"], rtol=1e-9, atol=0)
+
+
+def test_callable_xdata_with_ydata_raises(data, spy):
+    with pytest.raises(
+        ValueError, match=r"^ydata must be None when xdata is a chunk factory"
+    ):
+        curve_fit_large(exp_model, _factory(*data), data[1], p0=EXP.p0, method=M)
+    with pytest.raises(ValueError, match=r"^sigma must be None with a chunk factory"):
+        curve_fit_large(
+            exp_model, _factory(*data), None, p0=EXP.p0, sigma=np.ones(N), method=M
+        )
+    assert not spy
+
+
+@pytest.mark.parametrize("n_points", [N, 0])
+def test_n_points_rejected_without_factory(data, spy, n_points):
+    with pytest.raises(
+        ValueError, match=r"^n_points is accepted only with a chunk factory"
+    ):
+        curve_fit_large(exp_model, *data, p0=EXP.p0, method=M, n_points=n_points)
+    assert not spy
+
+
+def test_n_points_none_allowed_without_factory(data, spy):
+    curve_fit_large(
+        exp_model, *data, p0=EXP.p0, method=M, chunk_size=1024, n_points=None
+    )
+    assert len(spy) == 1 and "n_points" not in spy[0][1]
