@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `curve_fit_large(..., method="exact_streaming")` (opt-in; the default path is
+  unchanged): an exact full-data Levenberg-Marquardt fit (`nlsq/streaming/exact_lm.py`)
+  that accumulates `J^T J`, `J^T r` and the cost over chunks in float64, so the result
+  does not depend on chunking (up to rounding) and equals a full-batch fit (unlike the default chunked
+  path's precision-weighted combination). It runs at any dataset size, regardless of
+  `size_threshold`, and returns `(popt, pcov)`.
+  - **Model contract:** `model(x, *params)` written with `jax.numpy`, pointwise and
+    deterministic in `x` (checked by a probe on the first chunk); 1-D `xdata` only.
+  - **Scope (Stage 1):** unweighted and unbounded. `sigma`, finite `bounds`,
+    `multistart=True`/`global_search=True`, 2-D `xdata`, and non-default `stability`,
+    `rescale_data`, `max_jacobian_elements_for_svd`, `auto_size_detection` or
+    `size_threshold` raise `ValueError` naming the argument; extra keyword arguments
+    other than `ftol`, `xtol`, `gtol`, `max_nfev` (full-data passes, default
+    `100 * len(p0)`) raise `TypeError`.
+  - **Failure behaviour:** a fit that stalls or exhausts `max_nfev` raises
+    `nlsq.streaming.ExactSolverError` (a `RuntimeError`) carrying the full result as
+    `.result` (`termination`, `nfev`, `cost`, `x`, ...). Non-finite data raises
+    `ValueError` after the first pass when `check_finite=True`.
+  - **Covariance caveat:** `pcov` follows the `curve_fit` contract but is computed from
+    the normal equations `J^T J`, which squares `cond(J)`. Agreement with `curve_fit` is
+    about `1e-6` relative for `cond(J) <= 1e4` and `1e-3` for `cond(J) <= 1e6`; beyond
+    `1e4` a `UserWarning` is emitted, and an uncomputable covariance is all-`inf` with
+    an `OptimizeWarning`.
+  - `nlsq.fit(..., method="exact_streaming")` raises `ValueError` pointing to
+    `curve_fit_large` at every dataset size.
 - `benchmarks/compare/`: library comparison harness (NLSQ vs SciPy, lmfit, JAXopt,
   Optimistix) with shared tolerances, per-case fresh-process cold timing, an
   optimum-reached gate, and a Markdown report. CPU baselines committed under `benchmarks/baselines/`: the pre-optimisation run

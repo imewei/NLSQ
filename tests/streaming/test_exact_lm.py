@@ -617,6 +617,7 @@ def test_n_le_p_gives_inf_with_warning():
 
 
 def test_ill_conditioned_warns():
+    # effectively rank-deficient: k1 ~ k2 gives cond(J) ~ 1e16 at the fitted point
     prob = PROBLEMS["two_exp"]
     p_true = (2.0, 1.0, 1.5, 1.0001)
     x = np.linspace(0.0, 4.0, N)
@@ -646,6 +647,7 @@ def test_compute_covariance_contract():
     overflow = np.diag([1e-310, 1e-310])  # finite H whose inverse overflows
     for H in (np.zeros((2, 2)), np.array([[1.0, np.nan], [np.nan, 1.0]]), overflow):
         with pytest.warns(OptimizeWarning, match=COV_WARN):
+            warnings.simplefilter("error", RuntimeWarning)  # no numpy overflow noise
             pc = lm.compute_covariance(H, 0.4, 10, 2, False)
         assert np.all(np.isposinf(pc))
     # conditioning warning threshold: sqrt(cond H) = 3162 quiet, 31623 warns

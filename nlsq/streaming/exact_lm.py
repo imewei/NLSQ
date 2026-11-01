@@ -402,11 +402,13 @@ def compute_covariance(
                     stacklevel=3,
                 )
             Vk = V[:, keep]
-            cov = (Vk / w[keep]) @ Vk.T
-            if absolute_sigma:
-                pcov = cov
-            elif n > p:
-                pcov = cov * (2.0 * cost / (n - p))
+            # overflow is caught below as all-inf + OptimizeWarning; silence numpy's own
+            with np.errstate(over="ignore", invalid="ignore"):
+                cov = (Vk / w[keep]) @ Vk.T
+                if absolute_sigma:
+                    pcov = cov
+                elif n > p:
+                    pcov = cov * (2.0 * cost / (n - p))
     if not np.isfinite(pcov).all():
         pcov = np.full((p, p), np.inf)
     if np.isinf(pcov).any():

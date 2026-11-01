@@ -542,6 +542,12 @@ def fit(
     curve_fit_large : Specialized API for large datasets
     MemoryBudgetSelector : Memory-based optimizer selection
     """
+    if method == "exact_streaming":  # not in MethodLiteral, but reachable untyped
+        raise ValueError(
+            "method='exact_streaming' is available only through curve_fit_large(); "
+            "fit() does not dispatch to it at any dataset size"
+        )
+
     # NEW WORKFLOW SYSTEM (v0.6.3)
     # If workflow parameter is specified, delegate to minpack.fit()
     if workflow is not None:
@@ -710,6 +716,109 @@ def fit(
     )
 
 
+def _default_p0(f: ModelFunction) -> np.ndarray:
+    """Ones for every parameter after ``x`` in ``f``'s signature (curve_fit's p0=None)."""
+    from inspect import signature
+
+    args = signature(f).parameters
+    if len(args) < 2:
+        raise ValueError("Unable to determine number of fit parameters.")
+    return np.ones(len(args) - 1)
+
+
+_EXACT_DEFAULTS: dict[str, Any] = {
+    "stability": False,
+    "rescale_data": True,
+    "max_jacobian_elements_for_svd": 10_000_000,
+    "auto_size_detection": True,
+    "size_threshold": 1_000_000,
+}
+_EXACT_SOLVER_KWARGS = frozenset({"ftol", "xtol", "gtol", "max_nfev"})
+_NOT_EXACT = "is not supported by method='exact_streaming'"
+
+
+def _curve_fit_exact_streaming(
+    f: ModelFunction,
+    xdata: Any,
+    ydata: Any,
+    p0: ArrayLike | None,
+    *,
+    sigma: Any,
+    absolute_sigma: bool,
+    check_finite: bool,
+    bounds: Any,
+    memory_limit_gb: float | None,
+    show_progress: bool,
+    chunk_size: int | None,
+    multistart: bool,
+    unsupported: dict[str, Any],
+    solver_kwargs: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """``curve_fit_large(method="exact_streaming")``: argument policy, then exact_lm_fit.
+
+    Validates from ``shape``/``len`` only, so array-like sources are never read whole here.
+    """
+    from nlsq.core.least_squares import prepare_bounds
+    from nlsq.streaming import exact_lm
+
+    extra = sorted(set(solver_kwargs) - _EXACT_SOLVER_KWARGS)
+    if extra:
+        raise TypeError(
+            f"Unrecognized keyword argument(s) for method='exact_streaming': {extra}. "
+            f"Accepted: {sorted(_EXACT_SOLVER_KWARGS)}.",
+        )
+    for name, value in unsupported.items():
+        if value != _EXACT_DEFAULTS[name]:
+            raise ValueError(f"{name}={value!r} {_NOT_EXACT}; leave it at its default")
+    if multistart:
+        raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
+    if sigma is not None:
+        raise ValueError(f"sigma {_NOT_EXACT} yet (added in Stage 2)")
+
+    shapes = {}
+    for name, a in (("xdata", xdata), ("ydata", ydata)):
+        shape = a.shape if hasattr(a, "shape") else np.shape(a)
+        if len(shape) != 1:
+            raise ValueError(
+                f"{name} must be 1-D for method='exact_streaming', got shape {shape}"
+            )
+        shapes[name] = shape[0]
+    n_x, n_y = shapes["xdata"], shapes["ydata"]
+    if n_x != n_y:
+        raise ValueError(
+            f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
+        )
+    if n_x < 2:
+        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
+
+    p0_arr = _default_p0(f) if p0 is None else np.atleast_1d(np.asarray(p0, float))
+    lb, ub = prepare_bounds(bounds, len(p0_arr))
+    if np.isfinite(lb).any() or np.isfinite(ub).any():
+        raise ValueError(
+            "finite bounds are not supported by method='exact_streaming' yet "
+            "(added in Stage 2)"
+        )
+
+    res = exact_lm.exact_lm_fit(
+        f,
+        xdata,
+        ydata,
+        p0_arr,
+        chunk_size=chunk_size,
+        check_finite=check_finite,
+        absolute_sigma=absolute_sigma,
+        memory_limit_gb=memory_limit_gb,
+        show_progress=show_progress,
+        **solver_kwargs,
+    )
+    if not res["success"]:
+        raise exact_lm.ExactSolverError(
+            f"exact_streaming fit failed ({res['termination']}): {res['message']}",
+            res,
+        )
+    return res["x"], res["pcov"]
+
+
 # Convenience function for large dataset curve fitting
 def curve_fit_large(
     f: ModelFunction,
@@ -720,7 +829,7 @@ def curve_fit_large(
     absolute_sigma: bool = False,
     check_finite: bool = True,
     bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
-    method: MethodLiteral | None = None,
+    method: MethodLiteral | Literal["exact_streaming"] | None = None,
     # Stability parameters
     stability: Literal["auto", "check", False] = False,
     rescale_data: bool = True,
@@ -775,7 +884,23 @@ def curve_fit_large(
     bounds : tuple, optional
         Parameter bounds as (lower, upper).
     method : str, optional
-        Optimization algorithm ('trf', 'lm', or None for auto).
+        Optimization algorithm ('trf', 'lm', or None for auto), or
+        ``'hybrid_streaming'``, or ``'exact_streaming'`` (opt-in): an exact
+        full-data Levenberg-Marquardt fit whose result does not depend on
+        chunking, for any dataset size (``size_threshold`` is not consulted).
+        It requires a pointwise, deterministic model written with
+        ``jax.numpy``, 1-D ``xdata``, no ``sigma``, infinite ``bounds`` and
+        ``multistart=False``; ``stability``, ``rescale_data``,
+        ``max_jacobian_elements_for_svd``, ``auto_size_detection`` and
+        ``size_threshold`` must stay at their defaults (``ValueError``
+        otherwise), and the only extra keyword arguments accepted are
+        ``ftol``, ``xtol``, ``gtol`` and ``max_nfev`` (full-data passes,
+        default ``100 * len(p0)``). A failed fit (stalled or out of passes)
+        raises :class:`nlsq.streaming.ExactSolverError` with the full result
+        as ``.result``. ``pcov`` is computed from the normal equations
+        ``J^T J``, which squares ``cond(J)``: expect about ``1e-6`` relative
+        agreement with ``curve_fit`` up to ``cond(J) ~ 1e4``, ``1e-3`` up to
+        ``1e6``, and a ``UserWarning`` beyond ``1e4``.
     memory_limit_gb : float, optional
         Maximum memory usage in GB.
     auto_size_detection : bool, optional
@@ -874,6 +999,31 @@ def curve_fit_large(
                 "This parameter was removed in v0.2.0. Use streaming instead.",
             )
 
+    # Hoisted above np.asarray: a lazy source must not be read whole
+    if method == "exact_streaming":
+        return _curve_fit_exact_streaming(
+            f,
+            xdata,
+            ydata,
+            p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            memory_limit_gb=memory_limit_gb,
+            show_progress=show_progress,
+            chunk_size=chunk_size,
+            multistart=multistart,
+            unsupported={
+                "stability": stability,
+                "rescale_data": rescale_data,
+                "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
+                "auto_size_detection": auto_size_detection,
+                "size_threshold": size_threshold,
+            },
+            solver_kwargs=kwargs,
+        )
+
     # Input validation
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
@@ -922,14 +1072,7 @@ def curve_fit_large(
 
         # Prepare p0 and bounds
         if p0 is None:
-            from inspect import signature
-
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
-                raise ValueError("Unable to determine number of fit parameters.")
-            n_params = len(args) - 1
-            p0 = np.ones(n_params)
+            p0 = _default_p0(f)
 
         p0 = np.atleast_1d(p0)
         from nlsq.core.least_squares import prepare_bounds

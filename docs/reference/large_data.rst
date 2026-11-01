@@ -53,6 +53,52 @@ Automatically chunks data to fit within GPU memory.
        model, x, y, p0=[1.0, 0.1, 0.0], memory_limit_gb=8.0  # Limit to 8 GB
    )
 
+Exact streaming (``method="exact_streaming"``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The default chunked path fits each chunk separately and combines the results,
+which is exact only for linear models. ``method="exact_streaming"`` (opt-in)
+instead runs one Levenberg-Marquardt fit over the whole dataset: each trial
+point costs one pass that accumulates ``J^T J``, ``J^T r`` and the cost in
+float64 chunk by chunk, so the result does not depend on the chunk size (up to rounding). It
+runs at any dataset size (``size_threshold`` is not consulted) and returns
+``(popt, pcov)``.
+
+.. code-block:: python
+
+   from nlsq import curve_fit_large
+   from nlsq.streaming import ExactSolverError
+
+   try:
+       popt, pcov = curve_fit_large(
+           model, x, y, p0=[1.0, 0.1, 0.0], method="exact_streaming", ftol=1e-10
+       )
+   except ExactSolverError as err:
+       print(err.result["termination"], err.result["nfev"])
+
+- **Model contract:** ``model(x, *params)`` must be written with
+  ``jax.numpy`` and be pointwise and deterministic in ``x`` (row ``i`` of the
+  output depends only on ``x[i]``); a probe on the first chunk checks this.
+- **Accepted arguments:** ``chunk_size``, ``check_finite``, ``show_progress``,
+  ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
+  ``xtol``, ``gtol`` and ``max_nfev`` (full-data passes, default
+  ``100 * len(p0)``). Any other keyword argument raises ``TypeError``.
+- **Not yet supported (``ValueError`` naming the argument):** ``sigma``, finite
+  ``bounds``, ``multistart=True`` / ``global_search=True``, 2-D ``xdata``, and
+  non-default ``stability``, ``rescale_data``,
+  ``max_jacobian_elements_for_svd``, ``auto_size_detection`` or
+  ``size_threshold``. ``nlsq.fit`` does not dispatch to this method.
+- **Failure behaviour:** a fit that stalls or runs out of passes raises
+  ``nlsq.streaming.ExactSolverError`` (a ``RuntimeError``) with the full
+  result, including ``termination`` (``"stalled"`` or ``"max_nfev"``), as
+  ``.result``.
+- **Covariance caveat:** ``pcov`` follows the ``curve_fit`` contract
+  (pseudo-inverse, scaled by the residual variance unless ``absolute_sigma``)
+  but is computed from the normal equations ``J^T J``, which squares
+  ``cond(J)``. Expect about ``1e-6`` relative agreement with ``curve_fit`` for
+  ``cond(J) <= 1e4`` and ``1e-3`` for ``cond(J) <= 1e6``; a ``UserWarning`` is
+  issued beyond ``1e4``.
+
 LargeDatasetFitter
 ------------------
 
