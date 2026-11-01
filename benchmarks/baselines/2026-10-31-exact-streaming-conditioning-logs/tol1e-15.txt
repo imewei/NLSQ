@@ -1,0 +1,109 @@
+
+GPU AVAILABLE BUT NOT USED
+===========================
+  GPU: NVIDIA GeForce RTX 4090 Laptop GPU (SM 8.9)
+  System CUDA: 13.4
+  JAX backend: CPU-only
+
+Enable 20-100x speedup:
+  make install-jax-gpu
+
+Or manually:
+  pip uninstall -y jax jaxlib jax-cuda13-plugin jax-cuda13-pjrt jax-cuda12-plugin jax-cuda12-pjrt
+  pip install "jax[cuda13-local]"
+
+Note: GPU acceleration is supported on Linux only.
+See README.md for details.
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! accuracy two_exp_1e-2 seed 0: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 2.14e+16)
+!! accuracy two_exp_1e-2 seed 1: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 3.14e+04)
+!! accuracy two_exp_1e-2 seed 2: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.99e+16)
+!! accuracy two_exp_1e-2 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.6e+16)
+!! accuracy two_exp_1e-2 seed 4: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.02e+16)
+!! accuracy two_exp_1e-3 seed 0: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.94e+07)
+!! accuracy two_exp_1e-3 seed 2: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 2.09e+15)
+!! accuracy two_exp_1e-3 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 3.84e+06)
+!! accuracy two_exp_1e-3 seed 4: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 3.36e+08)
+!! accuracy two_exp_1e-4 seed 0: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 6.44e+04)
+!! accuracy two_exp_1e-4 seed 1: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 3.57e+15)
+!! accuracy two_exp_1e-4 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.82e+08)
+!! accuracy two_exp_1e-4 seed 4: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 2.29e+08)
+!! accuracy two_exp_1e-5 seed 0: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.14e+05)
+!! accuracy two_exp_1e-5 seed 1: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 8.8e+04)
+!! accuracy two_exp_1e-5 seed 2: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 9.44e+15)
+!! accuracy two_exp_1e-5 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 8.9e+15)
+!! accuracy two_exp_1e-5 seed 4: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 1.12e+16)
+!! accuracy gauss3 seed 3: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 1.98e+04)
+!! rows above are EXCLUDED from the rule; in-range ones make it UNDECIDED
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+7 accuracy row(s) above kappa 1e4 with basin mismatch
+
+== accuracy set: worst end-to-end errors versus mpmath reference ==
+problem        rows  kappa max  candidate         param_err    cov_err rank!= basin! terminations
+two_exp_1e-1      5   5.06e+04  normal_equations    3.7e-06   9.31e-06      0      0 ftol
+two_exp_1e-1      5   5.06e+04  tsqr                3.7e-06   9.25e-06      0      0 ftol
+two_exp_1e-1      5   5.06e+04  scipy                  12.8          1      1      1 2,3
+two_exp_1e-3      1   1.52e+17  normal_equations      0.563   5.63e+07      0      1 max_nfev
+two_exp_1e-3      1   1.52e+17  tsqr                  1e+04   4.58e+24      1      1 ftol
+two_exp_1e-3      1   1.52e+17  scipy              3.83e+09   2.36e+35      1      1 0
+two_exp_1e-4      1    8.8e+04  normal_equations      0.123      0.325      0      1 max_nfev
+two_exp_1e-4      1    8.8e+04  tsqr                  0.123      0.325      0      1 max_nfev
+two_exp_1e-4      1    8.8e+04  scipy                 0.421       1.39      0      1 0
+poly8             5      7e+05  normal_equations   6.19e-06   4.96e-06      0      0 ftol
+poly8             5      7e+05  tsqr                6.2e-06   6.17e-12      0      0 ftol
+poly8             5      7e+05  scipy              1.55e-09   2.37e-12      0      0 3
+poly12            5   7.46e+08  normal_equations     0.0687   0.000497      0      4 stalled,xtol
+poly12            5   7.46e+08  tsqr                   4.05    0.00209      0      5 ftol
+poly12            5   7.46e+08  scipy              5.35e-06   5.17e-11      0      0 3
+gauss3            4    3.7e+04  normal_equations   5.66e-08   3.98e-07      0      0 ftol
+gauss3            4    3.7e+04  tsqr               5.66e-08   4.31e-07      0      0 ftol
+gauss3            4    3.7e+04  scipy                  1.13      0.925      0      1 2,3
+
+== scale set: worst end-to-end errors versus SciPy ==
+problem        rows  kappa max  candidate         param_err    cov_err rank!= basin! terminations
+two_exp_1e-1      5   4.95e+04  normal_equations   7.56e-07   1.56e-06      0      0 ftol
+two_exp_1e-1      5   4.95e+04  tsqr               7.56e-07   1.52e-06      0      0 ftol
+two_exp_1e-2      5   1.04e+16  normal_equations        2.5   5.39e+13      4      4 ftol,max_nfev
+two_exp_1e-2      5   1.04e+16  tsqr                    2.5   5.25e+13      4      4 ftol,max_nfev
+two_exp_1e-3      5   6.56e+15  normal_equations   1.02e+04   3.91e+10      3      5 ftol
+two_exp_1e-3      5   6.56e+15  tsqr               1.02e+04   3.91e+10      3      5 ftol,stalled
+two_exp_1e-4      5   2.21e+16  normal_equations       3.46   1.23e+11      2      4 ftol
+two_exp_1e-4      5   2.21e+16  tsqr                   3.46   1.23e+11      2      5 ftol,stalled,xtol
+two_exp_1e-5      5   2.26e+16  normal_equations       19.4   1.47e+09      1      5 ftol
+two_exp_1e-5      5   2.26e+16  tsqr                   19.4   1.47e+09      1      5 ftol,stalled
+poly8             5   7.02e+05  normal_equations    4.8e-07   3.11e-05      0      0 ftol
+poly8             5   7.02e+05  tsqr               4.77e-07   2.78e-12      0      0 ftol
+poly12            5    7.5e+08  normal_equations    0.00248   0.000928      0      2 max_nfev,stalled,xtol
+poly12            5    7.5e+08  tsqr                   2.94   0.000367      0      5 ftol
+gauss3            5   3.23e+04  normal_equations       6.52       6.42      0      1 ftol
+gauss3            5   3.23e+04  tsqr                   6.52       6.42      0      1 ftol
+
+== accuracy rows: end-to-end errors next to tolerance-independent diagnostics ==
+problem        seed     kappa |            NE p/cov |          TSQR p/cov |   sameθ NE step/cov | sameθ TSQR step/cov | mp-step err NE/TSQR
+two_exp_1e-1      0  5.06e+04 |  3.33e-06/ 2.18e-06 |  3.33e-06/ 4.42e-06 |  2.93e-11/ 8.95e-08 |  1.61e-11/ 4.58e-13 | 1.04e-11/1.94e-12
+two_exp_1e-1      1  8.54e+03 |  3.77e-08/ 5.85e-08 |  1.25e-08/ 3.01e-08 |  1.62e-12/ 1.52e-08 |  8.35e-15/ 2.02e-13 | 2.33e-14/1.54e-12
+two_exp_1e-1      2  2.67e+04 |  1.78e-06/ 4.07e-06 |  1.78e-06/ 4.16e-06 |  1.08e-11/ 3.21e-10 |  1.55e-11/ 5.59e-13 | 2.61e-11/1.63e-11
+two_exp_1e-1      3  2.17e+04 |  3.70e-06/ 9.31e-06 |  3.70e-06/ 9.25e-06 |  1.42e-11/ 6.44e-08 |  2.76e-13/ 1.53e-13 | 3.51e-12/5.77e-13
+two_exp_1e-1      4   2.1e+04 |  2.55e-07/ 5.32e-07 |  2.55e-07/ 6.18e-07 |  8.24e-13/ 4.65e-07 |  2.84e-12/ 2.83e-13 | 3.33e-12/3.36e-12
+two_exp_1e-3      1  1.52e+17 |  5.63e-01/ 5.63e+07 |  1.00e+04/ 4.58e+24 |  8.91e-15/ 2.71e-15 |  3.46e-18/ 2.67e-15 | 4.27e-13/2.60e+00
+two_exp_1e-4      2   8.8e+04 |  1.23e-01/ 3.25e-01 |  1.23e-01/ 3.25e-01 |  5.63e-10/ 4.11e-06 |  3.78e-11/ 4.74e-13 | 1.17e-07/2.98e-11
+poly8             0     7e+05 |  4.93e-07/ 4.96e-06 |  4.93e-07/ 6.16e-12 |  1.53e-10/ 4.96e-06 |  5.35e-11/ 6.15e-12 | 2.14e-10/5.30e-11
+poly8             1     7e+05 |  6.19e-06/ 4.96e-06 |  6.20e-06/ 6.16e-12 |  1.34e-10/ 4.96e-06 |  4.97e-11/ 6.15e-12 | 5.33e-10/5.33e-11
+poly8             2     7e+05 |  2.76e-06/ 4.96e-06 |  2.76e-06/ 6.17e-12 |  1.03e-10/ 4.96e-06 |  9.44e-12/ 6.15e-12 | 2.53e-10/9.24e-12
+poly8             3     7e+05 |  1.89e-07/ 4.96e-06 |  1.89e-07/ 6.16e-12 |  4.84e-11/ 4.96e-06 |  1.42e-11/ 6.15e-12 | 2.20e-11/1.41e-11
+poly8             4     7e+05 |  2.17e-06/ 4.96e-06 |  2.18e-06/ 6.14e-12 |  6.80e-11/ 4.96e-06 |  5.00e-11/ 6.15e-12 | 1.47e-10/4.95e-11
+poly12            0  7.46e+08 |  3.86e-03/ 4.97e-04 |  4.05e+00/ 2.74e-04 |  3.29e-09/ 4.97e-04 |  9.17e-11/ 2.98e-11 | 4.12e-03/3.87e-03
+poly12            1  7.46e+08 |  6.87e-02/ 4.97e-04 |  2.38e+00/ 2.09e-03 |  1.80e-07/ 4.97e-04 |  1.19e-10/ 2.98e-11 | 7.10e-02/6.43e-02
+poly12            2  7.46e+08 |  1.66e-02/ 4.97e-04 |  1.68e+00/ 1.28e-04 |  1.42e-07/ 4.97e-04 |  9.52e-11/ 2.98e-11 | 1.77e-02/1.63e-02
+poly12            3  7.46e+08 |  2.54e-03/ 4.97e-04 |  1.01e+00/ 5.66e-05 |  1.64e-08/ 4.97e-04 |  3.61e-11/ 2.98e-11 | 2.82e-03/2.54e-03
+poly12            4  7.46e+08 |  1.35e-03/ 4.97e-04 |  1.00e+00/ 5.25e-04 |  1.48e-09/ 4.97e-04 |  2.61e-11/ 2.98e-11 | 1.50e-03/1.35e-03
+gauss3            0  2.99e+04 |  3.12e-09/ 1.25e-08 |  3.12e-09/ 2.19e-08 |  2.78e-15/ 3.92e-08 |  4.98e-14/ 6.47e-13 | 3.44e-14/1.72e-15
+gauss3            1  2.68e+04 |  2.82e-08/ 1.45e-07 |  2.82e-08/ 1.82e-07 |  2.60e-15/ 1.96e-08 |  1.20e-14/ 3.72e-14 | 2.85e-14/1.06e-14
+gauss3            2  2.31e+04 |  1.87e-08/ 1.57e-07 |  1.87e-08/ 1.08e-07 |  5.52e-15/ 8.92e-09 |  1.42e-14/ 3.22e-13 | 7.86e-15/1.94e-14
+gauss3            4   3.7e+04 |  5.66e-08/ 3.98e-07 |  5.66e-08/ 4.31e-07 |  1.27e-13/ 1.30e-07 |  2.74e-14/ 6.36e-13 | 1.76e-14/4.19e-14
+
+premise: TSQR meets the same criteria on 1/1 rows with kappa <= 1e4
+verdict = normal_equations_stay

@@ -72,6 +72,8 @@ EPS = float(np.finfo(np.float64).eps)
 BASIN_COST_RTOL = 1e-10  # basin_ok: |cost - cost_ref| <= 1e-10 * cost_ref
 BASIN_PARAM_TOL = 1e-2  # basin_ok: param_err < 1e-2 (after the term sort)
 CANDIDATES = ("normal_equations", "tsqr", "scipy")
+# SciPy is a float64 baseline, not a judged candidate: its basin must not gate the rule.
+JUDGED = ("normal_equations", "tsqr")
 
 Chunks = list[tuple[np.ndarray, np.ndarray]]
 
@@ -541,7 +543,7 @@ def run_row(
             row["mp_step_at_ne_theta"] = mp_step_at(prob, x, y, chunk, ne["x"])
     for name, fit in cands.items():
         row[name] = compare(prob, fit, ref)
-    row["basin_ok"] = all(row[name]["basin_ok"] for name in cands)
+    row["basin_ok"] = all(row[name]["basin_ok"] for name in JUDGED)
     row["status"] = "ok"
     return row
 
@@ -620,6 +622,8 @@ def _tables(rows: list[dict], acc: list[dict]) -> None:
 def summarize(rows: list[dict], missing: list[str]) -> None:
     failed = [r for r in rows if r["status"] != "ok"]
     acc = [r for r in rows if r["set"] == "accuracy" and r["status"] == "ok"]
+    for r in acc:  # recompute so rows stored by an older run use the same definition
+        r["basin_ok"] = all(r[c]["basin_ok"] for c in JUDGED)
     basin_bad = [r for r in acc if not r["basin_ok"]]
     blocking = [
         *(f"missing {m}" for m in missing),
@@ -645,7 +649,7 @@ def summarize(rows: list[dict], missing: list[str]) -> None:
             )
         for r in basin_bad:
             if _in_range(r["kappa"]):
-                off = [c for c in CANDIDATES if not r[c]["basin_ok"]]
+                off = [c for c in JUDGED if not r[c]["basin_ok"]]
                 print(
                     f"!! accuracy {r['problem']} seed {r['seed']}: BASIN MISMATCH "
                     f"({', '.join(off)}) at kappa {r['kappa']:.3g} <= 1e4"
