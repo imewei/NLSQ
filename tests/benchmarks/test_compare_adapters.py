@@ -57,8 +57,7 @@ def test_core_dependencies_are_available(name):
 @pytest.mark.parametrize("name", NAMES)
 def test_unbounded_libraries_decline_the_bounded_problem(name):
     ok, reason = ADAPTERS[name].supports(PROBLEMS["bounded_exp"])
-    # nlsq_exact declines bounds until Task 9 (Stage 2) adds them
-    if name in ("jaxopt", "optimistix", "nlsq_exact"):
+    if name in ("jaxopt", "optimistix"):
         assert not ok
         assert "bounds" in reason
     else:
@@ -80,6 +79,24 @@ def test_bounded_fit_respects_bounds(name):
     params = np.asarray(out.params)
     assert np.all(params >= lo - 1e-9)
     assert np.all(params <= hi + 1e-9)
+
+
+def test_nlsq_exact_solves_bounded_exp():
+    p = PROBLEMS["bounded_exp"]
+    adapter = ADAPTERS["nlsq_exact"]
+    assert adapter.capabilities.bounds is True
+    assert adapter.supports(p) == (True, "")
+    x, y = p.data(1000)
+    out = adapter.prepare(p, x, y, "end_to_end")()
+    ref = ADAPTERS["scipy"].prepare(p, x, y, "end_to_end")()
+    assert out.converged
+    lo, hi = np.asarray(p.bounds)
+    assert np.all(lo <= out.params) and np.all(out.params <= hi)
+    assert out.params[0] == hi[0]  # `a` is held on its upper bound (truth 2.5 > 2.0)
+    np.testing.assert_allclose(out.params, ref.params, rtol=1e-4)
+    assert residual_cost(p, x, y, out.params) == pytest.approx(
+        residual_cost(p, x, y, ref.params), rel=1e-6
+    )
 
 
 @pytest.mark.parametrize(("name", "mode"), _cases())

@@ -15,6 +15,7 @@ import nlsq.streaming.exact_lm as lm
 from benchmarks.compare.problems import PROBLEMS
 from nlsq import curve_fit
 from nlsq.result.optimize_warning import OptimizeWarning
+from tests.streaming.exact_lm_kkt import assert_kkt
 
 EXP = PROBLEMS["exp_decay"]
 N = 3000
@@ -294,9 +295,7 @@ def test_derive_chunk_size_precedence():
         lm.derive_chunk_size(10**9, 4, floor_gb * 0.5, None)
 
 
-def test_stage2_inputs_rejected(data):
-    with pytest.raises(ValueError, match=r"finite bounds .*Stage 2"):
-        run(exp_model, *data, EXP.p0, bounds=(0.0, np.inf))
+def test_n_points_mismatch_rejected(data):
     with pytest.raises(ValueError, match="n_points"):
         run(exp_model, *data, EXP.p0, n_points=N + 1)
 
@@ -870,3 +869,187 @@ def test_bad_sigma_raises(data, make, pattern, check_finite):
     s = make(np.full(N, 0.05))
     with pytest.raises(ValueError, match=pattern):
         run(exp_model, *data, EXP.p0, sigma=s, check_finite=check_finite)
+
+
+# --- Task 9: box bounds by active set, KKT at the returned point ----------------------
+
+BEXP = PROBLEMS["bounded_exp"]
+BLO, BHI = (np.asarray(b, dtype=np.float64) for b in BEXP.bounds)
+
+
+def scipy_bounded(prob, x, y, p0, lo, hi):
+    return least_squares(
+        lambda th: y - prob.model(np, x, *th),
+        p0,
+        bounds=(lo, hi),
+        xtol=1e-12,
+        ftol=1e-12,
+        gtol=1e-12,
+    )
+
+
+def snap_to_box(theta, lo, hi, tol=1e-9):
+    """SciPy's TRF stays strictly inside the box: put near-bound coordinates on it."""
+    t = np.array(theta, dtype=np.float64)
+    for b in (lo, hi):
+        near = np.isfinite(b) & (np.abs(t - b) <= tol * (1 + np.abs(b)))
+        t[near] = b[near]
+    return t
+
+
+def test_bounded_exp_matches_scipy_trf():
+    x, y = BEXP.data(N)
+    model = model_of(BEXP)
+    ref = scipy_bounded(BEXP, x, y, BEXP.p0, BLO, BHI)
+    out = run(model, x, y, BEXP.p0, bounds=BEXP.bounds, **TIGHT)
+    assert out["success"]
+    assert out["x"][0] == BHI[0]  # premise: the upper bound on `a` is active
+    assert_close(out["cost"], ref.cost, 1e-6)
+    assert_close(out["x"], ref.x, 1e-4)
+    assert_kkt(out, model, x, y, BLO, BHI)
+
+
+def _random_box(seed):
+    """Box around a random truth; ``seed % 4`` parameters get a bound that excludes it."""
+    rng = np.random.default_rng(seed)
+    p_true = np.array(
+        [rng.uniform(1.0, 4.0), rng.uniform(0.5, 2.0), rng.uniform(-1.0, 1.0)]
+    )
+    x = np.linspace(0.0, 4.0, 2000)
+    y = EXP.model(np, x, *p_true) + 0.05 * rng.standard_normal(x.size)
+    lo, hi = p_true - rng.uniform(0.5, 2.0, 3), p_true + rng.uniform(0.5, 2.0, 3)
+    for i in rng.permutation(3)[: seed % 4]:
+        if rng.random() < 0.5:
+            hi[i] = p_true[i] - rng.uniform(0.05, 0.3)
+        else:
+            lo[i] = p_true[i] + rng.uniform(0.05, 0.3)
+    lo[1] = max(lo[1], 0.1)  # a negative rate opens other local minima (growth fits)
+    p0 = rng.uniform(lo, hi)
+    return x, y, lo, hi, p0
+
+
+def test_randomized_bounded_kkt():
+    on_bound = set()
+    for seed in range(48):  # seed 42 stalls at the optimum without the box certificate
+        x, y, lo, hi, p0 = _random_box(seed)
+        ref = scipy_bounded(EXP, x, y, p0, lo, hi)
+        out = run(exp_model, x, y, p0, bounds=(lo, hi), **TIGHT)
+        assert out["success"], (seed, out["termination"], out["message"])
+        assert_close(out["cost"], ref.cost, 1e-6)
+        assert_close(out["x"], ref.x, 1e-4, 1e-8)
+        assert_kkt(out, exp_model, x, y, lo, hi)
+        on_bound.add(int(np.sum((out["x"] == lo) | (out["x"] == hi))))
+    assert {0, 1, 3} <= on_bound, on_bound  # none, one and every parameter on a bound
+
+
+def test_free_set_both_signs():
+    lo, hi = np.array([0.0, 0.0, 0.0, 0.0]), np.array([1.0, 1.0, 1.0, 1.0])
+    theta = np.array([0.0, 0.0, 1.0, 1.0])
+    # g = J^T r is the descent direction: g<0 pushes below lb, g>0 pushes above ub
+    g = np.array([-1.0, 1.0, 1.0, -1.0])
+    np.testing.assert_array_equal(
+        lm.free_set(theta, g, lo, hi), [False, True, False, True]
+    )
+    # g == 0 at a bound is held; interior points are always free
+    np.testing.assert_array_equal(
+        lm.free_set(np.array([0.0, 1.0, 0.5]), np.zeros(3), lo[:3], hi[:3]),
+        [False, False, True],
+    )
+
+
+def test_start_on_bound():
+    x, y = BEXP.data(N)
+    p0 = np.array([BHI[0], BLO[1], 0.3])  # a on its (active) upper bound, b on lb = 0
+    ref = scipy_bounded(BEXP, x, y, p0, BLO, BHI)
+    out = run(model_of(BEXP), x, y, p0, bounds=BEXP.bounds, **TIGHT)
+    assert out["success"]
+    assert_close(out["cost"], ref.cost, 1e-6)
+    assert_kkt(out, model_of(BEXP), x, y, BLO, BHI)
+
+
+def nan_outside_box_model(x, a, b, c):
+    """bounded_exp model that is NaN off the box: an unclipped p0 cannot be evaluated."""
+    ok = (a >= 0) & (a <= 2) & (b >= 0) & (b <= 3) & (c >= 0) & (c <= 1)
+    return jnp.where(ok, BEXP.model(jnp, x, a, b, c), jnp.nan)
+
+
+def test_start_outside_box_is_clipped():
+    x, y = BEXP.data(N)
+    p0 = np.array([5.0, -1.0, 0.5])
+    # at the clipped b = 0 the a and c columns coincide: singular H, warned covariance
+    with pytest.warns(UserWarning, match="ill-conditioned"):
+        one = run(nan_outside_box_model, x, y, p0, bounds=BEXP.bounds, max_nfev=1)
+    np.testing.assert_array_equal(one["x"], np.clip(p0, BLO, BHI))
+    out = run(nan_outside_box_model, x, y, p0, bounds=BEXP.bounds, **TIGHT)
+    assert out["success"]
+    assert_kkt(out, model_of(BEXP), x, y, BLO, BHI)
+    ref = scipy_bounded(BEXP, x, y, np.clip(p0, BLO, BHI), BLO, BHI)
+    assert_close(out["cost"], ref.cost, 1e-6)
+
+
+def test_bound_cutting_flat_valley():
+    prob = PROBLEMS["two_exp"]  # flat valley, kappa(J) ~ 4e2
+    x, y = prob.data(N)
+    lo = np.array([0.0, 0.0, 0.0, 1.2])
+    hi = np.array([np.inf, 1.4, np.inf, np.inf])  # cuts between k1 = 1.0 and k2 = 1.5
+    p0 = np.array([1.0, 0.5, 1.0, 2.0])
+    ref = scipy_bounded(prob, x, y, p0, lo, hi)
+    out = run(model_of(prob), x, y, p0, bounds=(lo, hi), **TIGHT)
+    assert out["success"], out["message"]
+    assert_close(out["cost"], ref.cost, 1e-6)
+    assert_close(out["x"], ref.x, 1e-4, 1e-8)
+    assert_kkt(out, model_of(prob), x, y, lo, hi)
+
+
+# random boxes 21 and 23 end with one and two parameters on a bound; without the
+# constrained model-decrease certificate both stall at the optimum (gradient noise > gtol)
+@pytest.mark.parametrize(("case", "n_active"), [(None, 1), (21, 1), (23, 2)])
+@pytest.mark.parametrize("tight", [False, True])
+def test_bounded_start_at_constrained_optimum_succeeds(case, n_active, tight):
+    if case is None:
+        x, y = BEXP.data(N)
+        lo, hi, model, prob, p0 = BLO, BHI, model_of(BEXP), BEXP, BEXP.p0
+    else:
+        x, y, lo, hi, p0 = _random_box(case)
+        model, prob = exp_model, EXP
+    start = snap_to_box(scipy_bounded(prob, x, y, p0, lo, hi).x, lo, hi)
+    assert np.sum((start == lo) | (start == hi)) == n_active  # premise: on the bounds
+    out = run(model, x, y, start, bounds=(lo, hi), **(TIGHT if tight else {}))
+    assert out["success"], (out["termination"], out["nfev"])
+    assert_kkt(out, model, x, y, lo, hi)
+
+
+def test_stationary_does_not_certify_from_free_subspace():
+    """A held variable whose release pays: free-subspace decrement 2, feasible gain >> 2."""
+    H = np.array([[1.0, -0.9], [-0.9, 1.0]])
+    g = np.array([0.0, 2.0])  # var 0 at its lower bound with g <= 0: held
+    theta, lo, hi = np.zeros(2), np.array([0.0, -np.inf]), np.full(2, np.inf)
+    free = lm.free_set(theta, g, lo, hi)
+    assert free.tolist() == [False, True]
+    # free-subspace decrement 0.5*g1^2/H11 = 2; the coupled step s = (9.47, 10.5) gains 10.5
+    F = 3.0 / 1e-8  # ftol*F = 3 sits between the two
+    assert lm.newton_certificate(g[free], H[np.ix_(free, free)], F, 1e-8)  # the trap
+    assert lm._stationary(F, g, H, free, theta, lo, hi, 1e-8, 1e-8) is None
+    # a tiny free gradient (above gtol) and an outward held one: the box certificate fires
+    g0 = np.array([-1.0, 1e-9])
+    assert lm._stationary(F, g0, H, free, theta, lo, hi, 1e-12, 1e-8) == "ftol"
+
+
+@pytest.mark.parametrize(
+    ("bounds", "pattern"),
+    [
+        ((1.0, 0.0), r"^each lower bound must be strictly less"),
+        ((0.0, 0.0), r"^each lower bound must be strictly less"),
+        (
+            ([0.0, 0.0, 0.0], [1.0, 0.0, 1.0]),
+            r"^each lower bound must be strictly less",
+        ),
+        ((np.inf, -np.inf), r"^each lower bound must be strictly less"),
+        ((np.nan, np.inf), r"^each lower bound must be strictly less"),
+        (([0.0, 0.0], [1.0, 1.0, 1.0]), r"^lower bound has shape \(2,\), expected"),
+        ((0.0, np.ones((3, 1))), r"^upper bound has shape \(3, 1\), expected"),
+    ],
+)
+def test_lb_ge_ub_raises(data, bounds, pattern):
+    with pytest.raises(ValueError, match=pattern):
+        run(exp_model, *data, EXP.p0, bounds=bounds)

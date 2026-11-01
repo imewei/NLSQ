@@ -170,9 +170,13 @@ class _NLSQExact(_Base):
     """`curve_fit_large(method="exact_streaming")`: exact full-data LM."""
 
     name, dist = "nlsq_exact", "nlsq"
-    # bounds=False until Task 9 (Stage 2) adds them to the exact solver
     capabilities = Capabilities(
-        False, False, True, False, True, "exact full-data LM; bounds/sigma in Stage 2"
+        True,
+        True,
+        True,
+        False,
+        True,
+        "exact full-data LM; bounds by active set (KKT point, not Coleman-Li TRF)",
     )
 
     def _fit(self, problem, x, y):
@@ -182,6 +186,7 @@ class _NLSQExact(_Base):
                 x,
                 y,
                 p0=problem.p0,
+                bounds=_bounds(problem),
                 method="exact_streaming",
                 ftol=TOL,
                 xtol=TOL,

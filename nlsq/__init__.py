@@ -792,18 +792,15 @@ def _curve_fit_exact_streaming(
         raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
 
     p0_arr = _default_p0(f) if p0 is None else np.atleast_1d(np.asarray(p0, float))
-    lb, ub = prepare_bounds(bounds, len(p0_arr))
-    if np.isfinite(lb).any() or np.isfinite(ub).any():
-        raise ValueError(
-            "finite bounds are not supported by method='exact_streaming' yet "
-            "(added in Stage 2)"
-        )
+    # (p,) shapes and lb < ub elementwise; prepare_bounds only broadcasts scalars
+    lb, ub = exact_lm.check_bounds(prepare_bounds(bounds, len(p0_arr)), len(p0_arr))
 
     res = exact_lm.exact_lm_fit(
         f,
         xdata,
         ydata,
         p0_arr,
+        bounds=(lb, ub),
         chunk_size=chunk_size,
         check_finite=check_finite,
         sigma=sigma,
@@ -890,8 +887,11 @@ def curve_fit_large(
         full-data Levenberg-Marquardt fit whose result does not depend on
         chunking, for any dataset size (``size_threshold`` is not consulted).
         It requires a pointwise, deterministic model written with
-        ``jax.numpy``, 1-D ``xdata``, no ``sigma``, infinite ``bounds`` and
-        ``multistart=False``; ``stability``, ``rescale_data``,
+        ``jax.numpy``, 1-D ``xdata`` and ``multistart=False``. 1-D ``sigma``
+        and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
+        handled by an active set, not Coleman-Li TRF: the returned point is a
+        KKT point of the box-constrained problem, reached by a different path
+        than ``method='trf'``. ``stability``, ``rescale_data``,
         ``max_jacobian_elements_for_svd``, ``auto_size_detection`` and
         ``size_threshold`` must stay at their defaults (``ValueError``
         otherwise), and the only extra keyword arguments accepted are

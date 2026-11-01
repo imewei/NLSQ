@@ -76,7 +76,10 @@ def test_weighted_dispatch_matches_module(data):
     direct = lm.exact_lm_fit(exp_model, x, y, EXP.p0, sigma=s, chunk_size=1024)
     assert direct["success"]
     for a in (False, True):
-        popt, _ = curve_fit_large(
+        ref = lm.exact_lm_fit(
+            exp_model, x, y, EXP.p0, sigma=s, absolute_sigma=a, chunk_size=1024
+        )
+        popt, pcov = curve_fit_large(
             exp_model,
             x,
             y,
@@ -87,6 +90,7 @@ def test_weighted_dispatch_matches_module(data):
             chunk_size=1024,
         )
         np.testing.assert_array_equal(popt, direct["x"])
+        np.testing.assert_array_equal(pcov, ref["pcov"])
     unweighted = curve_fit_large(exp_model, x, y, p0=EXP.p0, method=M, chunk_size=1024)
     assert not np.array_equal(unweighted[0], popt)
 
@@ -160,14 +164,47 @@ def test_unsupported_arguments_valueerror(data, spy, name, value):
         ({"multistart": True}, r"^multistart=True is not supported by "),
         ({"global_search": True}, r"^multistart=True is not supported by "),
         ({"sigma": Lazy1D((N, N))}, r"^sigma must be 1-D for method='exact_streaming'"),
-        ({"bounds": (0.0, np.inf)}, r"^finite bounds are not supported by "),
-        ({"bounds": ([-np.inf] * 3, [np.inf, 5.0, np.inf])}, r"^finite bounds are "),
+        ({"bounds": (1.0, 0.0)}, r"^each lower bound must be strictly less"),
+        ({"bounds": (0.0, 0.0)}, r"^each lower bound must be strictly less"),
+        ({"bounds": (np.inf, -np.inf)}, r"^each lower bound must be strictly less"),
+        ({"bounds": ([0.0] * 3, [1.0, 0.0, 1.0])}, r"^each lower bound must be"),
+        (
+            {"bounds": ([0.0] * 2, [1.0] * 3)},
+            r"^lower bound has shape \(2,\), expected",
+        ),
+        ({"bounds": (0.0, [1.0] * 4)}, r"^upper bound has shape \(4,\), expected"),
     ],
 )
 def test_stage_scoped_arguments_valueerror(data, spy, kwargs, pattern):
     with pytest.raises(ValueError, match=pattern):
         curve_fit_large(exp_model, *data, p0=EXP.p0, method=M, **kwargs)
     assert not spy
+
+
+def test_bounded_dispatch_matches_module(spy):
+    prob = PROBLEMS["bounded_exp"]
+    x, y = prob.data(N)
+
+    def model(x, a, b, c):
+        return prob.model(jnp, x, a, b, c)
+
+    popt, pcov = curve_fit_large(
+        model, x, y, p0=prob.p0, bounds=prob.bounds, method=M, chunk_size=1024
+    )
+    lo, hi = spy[0][1]["bounds"]
+    np.testing.assert_array_equal(lo, prob.bounds[0])
+    np.testing.assert_array_equal(hi, prob.bounds[1])
+    direct = lm.exact_lm_fit(model, x, y, prob.p0, bounds=prob.bounds, chunk_size=1024)
+    np.testing.assert_array_equal(popt, direct["x"])
+    np.testing.assert_array_equal(pcov, direct["pcov"])
+    assert popt[0] == 2.0  # the upper bound on `a` is active
+
+
+def test_exact_defaults_match_curve_fit_large_signature():
+    import inspect
+
+    params = inspect.signature(curve_fit_large).parameters
+    assert {k: params[k].default for k in nlsq._EXACT_DEFAULTS} == nlsq._EXACT_DEFAULTS
 
 
 def test_multistart_suboptions_ignored_when_off(data, spy):

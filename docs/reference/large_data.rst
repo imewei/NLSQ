@@ -79,7 +79,7 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
 - **Model contract:** ``model(x, *params)`` must be written with
   ``jax.numpy`` and be pointwise and deterministic in ``x`` (row ``i`` of the
   output depends only on ``x[i]``); a probe on the first chunk checks this.
-- **Accepted arguments:** ``sigma`` (1-D only), ``chunk_size``,
+- **Accepted arguments:** ``sigma`` (1-D only), ``bounds``, ``chunk_size``,
   ``check_finite``, ``show_progress``, ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
   ``xtol``, ``gtol`` and ``max_nfev`` (full-data passes, default
   ``100 * len(p0)``). Any other keyword argument raises ``TypeError``.
@@ -87,8 +87,19 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   ``curve_fit``. A ``sigma`` that is 2-D (correlated errors), of the wrong
   length, non-finite or non-positive raises ``ValueError``; finiteness and
   positivity are checked during the first pass, whatever ``check_finite`` says.
-- **Not yet supported (``ValueError`` naming the argument):** finite
-  ``bounds``, ``multistart=True`` / ``global_search=True``, 2-D ``xdata``, and
+- **Bounds:** box ``bounds`` as in ``curve_fit`` (scalars or length-``p``
+  arrays, ``lb < ub`` elementwise; equal, inverted or NaN bounds raise
+  ``ValueError``). They are handled by an active set, not Coleman-Li TRF:
+  ``p0`` is clipped into the box, a parameter on a bound whose gradient points
+  outward is held, the rest take a damped step that is projected back onto the
+  box. The fit is exact for the box-constrained problem and the returned point
+  satisfies the KKT conditions; it differs from ``method="trf"`` in the path
+  taken, not in what a solution is (on a non-convex problem the two may still
+  reach different local minima). While a bound is active, stationarity is
+  certified by the exact maximum decrease of the Gauss-Newton model over the
+  box (a small host-side bounded least-squares solve, no extra data pass).
+- **Not yet supported (``ValueError`` naming the argument):**
+  ``multistart=True`` / ``global_search=True``, 2-D ``xdata``, and
   non-default ``stability``, ``rescale_data``,
   ``max_jacobian_elements_for_svd``, ``auto_size_detection`` or
   ``size_threshold``. ``nlsq.fit`` does not dispatch to this method.

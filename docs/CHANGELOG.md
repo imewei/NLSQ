@@ -3,7 +3,8 @@
 ## Unreleased
 - `reference/large_data.rst`: new "Exact streaming" section for
   `curve_fit_large(method="exact_streaming")` (model contract, accepted and
-  rejected arguments, 1-D `sigma` weights, `ExactSolverError`, covariance caveat).
+  rejected arguments, 1-D `sigma` weights, box `bounds` by active set,
+  `ExactSolverError`, covariance caveat).
 
 ## v0.7.6 (2026-09-04)
 - No documentation content changes; version-output examples bumped to match

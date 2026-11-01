@@ -21,7 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     by the weighted residual variance. A `sigma` that is not 1-D (correlated 2-D
     `sigma` included), of the wrong length, non-finite or non-positive raises
     `ValueError`; finiteness and positivity are checked during the first pass.
-  - **Scope:** unbounded. Finite `bounds`, `multistart=True`/`global_search=True`, 2-D `xdata`, and non-default `stability`,
+  - **Bounds:** box `bounds` (scalars or length-`p` arrays, `lb < ub` elementwise;
+    equal, inverted or NaN bounds raise `ValueError`) by an active set, not Coleman-Li
+    TRF: `p0` is clipped into the box, parameters on a bound with an outward gradient
+    are held, and trial steps are projected onto the box. The result is exact for the
+    box-constrained problem and satisfies the KKT conditions at the returned point; it
+    differs from `method="trf"` in the path, not in what counts as a solution. With a
+    bound active, stationarity is certified by the exact maximum decrease of the
+    Gauss-Newton model over the box (host-side, no extra data pass).
+  - **Scope:** `multistart=True`/`global_search=True`, 2-D `xdata`, and non-default `stability`,
     `rescale_data`, `max_jacobian_elements_for_svd`, `auto_size_detection` or
     `size_threshold` raise `ValueError` naming the argument; extra keyword arguments
     other than `ftol`, `xtol`, `gtol`, `max_nfev` (full-data passes, default

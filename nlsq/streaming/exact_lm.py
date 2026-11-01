@@ -7,7 +7,8 @@ next iterate's, so no pass is spent re-evaluating an accepted point.
 
 Ported from ``benchmarks/prototypes/exact_accumulated_lm.py`` (Stage 0, kept frozen as the
 independent baseline). Stage 2a adds 1-D ``sigma`` (weights ``1/sigma`` on residuals and
-Jacobian rows); finite ``bounds`` raise ``ValueError`` until Stage 2b.
+Jacobian rows); Stage 2b adds box ``bounds`` by an active set (not Coleman-Li TRF): the
+result is a KKT point of the box-constrained problem, reached by a different path than TRF.
 
 shortcut: normal equations square cond(J); the Stage 3 TSQR study decides whether to upgrade.
 """
@@ -21,6 +22,7 @@ from typing import Any, NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from scipy.optimize import lsq_linear
 
 from nlsq.config import JAXConfig
 from nlsq.result import OptimizeResult
@@ -40,8 +42,6 @@ LAMBDA_MAX = 1e14  # damping ceiling
 ATTEMPT_CAP = 20  # solve attempts per iteration
 DAMPING_FLOOR = 1e-10  # D_ii >= DAMPING_FLOOR * max_j D_jj
 LAM0 = 1e-3  # initial damping; read at call time (tests move it near a limit)
-
-_STAGE2 = "is not supported yet by exact_streaming (added in Stage 2)"
 
 _MESSAGES = {
     "gtol": "gradient below gtol (or exact fit)",
@@ -290,11 +290,61 @@ def newton_certificate(
     return delta_n <= ftol * F
 
 
+def box_certificate(
+    g: np.ndarray,
+    H: np.ndarray,
+    F: float,
+    ftol: float,
+    theta: np.ndarray,
+    lo: np.ndarray,
+    hi: np.ndarray,
+) -> bool:
+    """Constrained stationarity: no feasible step can gain ``ftol*F`` on the GN model.
+
+    The bounded counterpart of :func:`newton_certificate` (spec, Termination (iii)): the
+    exact maximum of ``m(s) = s^T g - s^T H s / 2`` over ``lo <= theta + s <= hi``, solved
+    in the same Jacobi-scaled coordinates (``H^ = R^T R`` from its eigendecomposition, so
+    the maximiser is the bounded least-squares solution of ``R u = R^-T g^``; no data
+    pass), with the same truncation guard. Zero columns have ``g_i = 0`` and do not move.
+    """
+    if F == 0:
+        return True
+    if not (np.all(np.isfinite(g)) and np.all(np.isfinite(H))):
+        return False
+    gs, w, U, truncated = _scaled_eig(g, H)
+    if truncated:
+        return False
+    if gs.size == 0:
+        return True
+    keep = np.diag(H) > 0
+    root = np.sqrt(np.diag(H)[keep])
+    R = np.sqrt(w)[:, None] * U.T
+    c = (U.T @ gs) / np.sqrt(w)
+    box = ((lo - theta)[keep] * root, (hi - theta)[keep] * root)
+    u = lsq_linear(R, c, bounds=box, method="bvls").x
+    gain = float(u @ gs - 0.5 * np.sum((R @ u) ** 2))  # direct: no O(F) cancellation
+    return gain <= ftol * F
+
+
+def free_set(
+    theta: np.ndarray, g: np.ndarray, lo: np.ndarray, hi: np.ndarray
+) -> np.ndarray:
+    """Variables the next step may move: a variable at a bound is held when ``g`` points out.
+
+    ``g = J^T r`` is the descent direction of ``F``, so ``g <= 0`` pushes below ``lo`` and
+    ``g >= 0`` above ``hi``.
+    """
+    return ~(((theta <= lo) & (g <= 0)) | ((theta >= hi) & (g >= 0)))
+
+
 def _stationary(
     cost: float,
     g: np.ndarray,
     H: np.ndarray,
     free: np.ndarray,
+    theta: np.ndarray,
+    lo: np.ndarray,
+    hi: np.ndarray,
     gtol: float,
     ftol: float,
 ) -> str | None:
@@ -302,7 +352,11 @@ def _stationary(
         return "gtol"
     if not free.any() or np.max(np.abs(g[free])) < gtol:
         return "gtol"
-    if newton_certificate(g, H, cost, ftol, bounds_active=not free.all()):
+    active = not free.all()
+    if newton_certificate(g, H, cost, ftol, bounds_active=active):
+        return "ftol"
+    # with a bound active only the constrained decrease certifies (unbounded path: skipped)
+    if active and box_certificate(g, H, cost, ftol, theta, lo, hi):
         return "ftol"
     return None
 
@@ -401,6 +455,27 @@ def check_model_contract(
         raise bad
 
 
+def check_bounds(bounds: tuple[Any, Any], p: int) -> tuple[np.ndarray, np.ndarray]:
+    """``(lo, hi)`` as float64 arrays of shape ``(p,)``; each bound is a scalar or ``(p,)``.
+
+    Raises ``ValueError`` on any other shape and unless ``lo < hi`` elementwise, so
+    ``lo == hi``, inverted infinite bounds such as ``(inf, -inf)`` and NaN are rejected.
+    """
+    lo, hi = (np.asarray(b, dtype=np.float64) for b in bounds)
+    for name, b in (("lower", lo), ("upper", hi)):
+        if b.ndim != 0 and b.shape != (p,):
+            raise ValueError(
+                f"{name} bound has shape {b.shape}, expected a scalar or ({p},)"
+            )
+    lo, hi = np.broadcast_to(lo, (p,)), np.broadcast_to(hi, (p,))
+    if not np.all(lo < hi):
+        raise ValueError(
+            "each lower bound must be strictly less than its upper bound (lb < ub "
+            "elementwise; equal, inverted or NaN bounds are rejected)"
+        )
+    return lo, hi
+
+
 def _check_inputs(
     x: Any,
     y: Any,
@@ -427,12 +502,7 @@ def _check_inputs(
         raise ValueError("x and y must be non-empty")
     if n_points is not None and n_points != n:
         raise ValueError(f"n_points={n_points} does not match len(x)={n}")
-    lo = np.broadcast_to(np.asarray(bounds[0], float), (p,))
-    hi = np.broadcast_to(np.asarray(bounds[1], float), (p,))
-    if np.any(lo >= hi):
-        raise ValueError("each lower bound must be strictly less than its upper bound")
-    if np.isfinite(lo).any() or np.isfinite(hi).any():
-        raise ValueError(f"finite bounds {_STAGE2}")
+    lo, hi = check_bounds(bounds, p)
     return n, p, lo, hi
 
 
@@ -525,9 +595,19 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     positivity are reduced on device during the first pass (always, regardless of
     ``check_finite``, because a negative ``sigma`` would otherwise square away silently).
 
+    ``bounds = (lb, ub)`` (scalars or length-``p`` arrays, ``lb < ub`` elementwise) are
+    handled by an active set: ``p0`` is clipped into the box; each iteration holds the
+    variables of :func:`free_set` (on a bound, gradient pointing out), solves the damped
+    system on the rest, projects the trial onto the box and predicts the decrease from
+    the projected step. ``gtol`` applies to the free gradient; while a bound is active
+    the free-subspace Newton certificate is not used and :func:`box_certificate` (the
+    exact constrained model decrease) takes its place. ``pcov`` uses all ``p``
+    parameters for the degrees of freedom, as the legacy path.
+
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
     that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
-    gradient or Hessian at ``p0``, and for finite ``bounds`` (Stage 2b).
+    gradient or Hessian at ``p0``, and for ``bounds`` of the wrong shape or with
+    ``lb >= ub`` anywhere (equal, inverted or NaN bounds).
     """
     # lists and tuples have no .shape; array-likes (ndarray, JAX, memmap, ...) are never copied
     x = x if hasattr(x, "shape") else np.asarray(x)
@@ -571,9 +651,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     nfev, lam, nu = 1, LAM0, 2.0
     D = np.zeros(p)  # Moré running maximum of diag(H)
     while True:
-        # g = J^T r is the descent direction; a variable at a bound with g pointing out is fixed
-        free = ~(((theta <= lo) & (g <= 0)) | ((theta >= hi) & (g >= 0)))
-        termination = _stationary(cost, g, H, free, gtol, ftol)
+        free = free_set(theta, g, lo, hi)
+        termination = _stationary(cost, g, H, free, theta, lo, hi, gtol, ftol)
         if termination:
             break
         if nfev >= max_nfev:
