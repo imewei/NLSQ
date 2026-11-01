@@ -212,6 +212,9 @@ def _as64(a: Any) -> Any:
     return np.asarray(a, dtype=np.float64)
 
 
+_END = object()  # end of a factory pass; a yielded None is a bad block, not the end
+
+
 class FactorySource:
     """A replayable chunk factory ``factory(chunk) -> Iterator[(x, y) | (x, y, sigma)]``
     as a :func:`run_pass` source.
@@ -231,12 +234,12 @@ class FactorySource:
         self._from_n_points = n is not None
         self.passes = 0
         self._pending: Iterator[Any] | None = iter(factory(chunk))
-        first = next(self._pending, None)
-        if first is None:
+        first = next(self._pending, _END)
+        if first is _END:
             raise ValueError("chunk factory yielded no blocks")
         self.weighted = isinstance(first, tuple) and len(first) == 3
-        self._first = self._check(first)
-        self.first_x = self._first[0]
+        self._first: tuple[Any, ...] | None = self._check(first)
+        self.first_x: Any = self._first[0]
 
     def _check(self, item: Any) -> tuple[Any, ...]:
         if not isinstance(item, tuple) or len(item) not in (2, 3):
@@ -273,6 +276,7 @@ class FactorySource:
             first = None
         else:  # pass 1, opened at construction
             items, first, self._pending = self._pending, self._first, None
+            self._first = self.first_x = None  # not retained for the whole fit
         self.passes += 1
         full = jnp.ones(self.chunk, dtype=bool)
         count = 0
@@ -280,8 +284,8 @@ class FactorySource:
             if first is not None:
                 parts, first = first, None
             else:
-                item = next(items, None)
-                if item is None:
+                item = next(items, _END)
+                if item is _END:
                     break
                 parts = self._check(item)
             xc, yc = parts[0], parts[1]
@@ -843,7 +847,10 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     budget, never clamped to the unknown length). ``n_points`` is then optional: the count
     of pass 1 is used when it is None, and every pass verifies the count (``ValueError``
     naming both counts on a mismatch). With an array source ``n_points`` must match its
-    length.
+    length. Without ``n_points`` and ``chunk_size`` every block is padded to the derived
+    chunk (default 4,194,304 rows), so pass one of them for small factories. The model
+    contract probe runs on the first block, which should hold at least 2 points; a factory
+    yielding fewer than 2 points in total raises ``ValueError``.
 
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
     that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
@@ -895,6 +902,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     st = evaluate(theta, 1, first=True)
     if isinstance(source, FactorySource):
         n = source.n  # counted (or verified against n_points) during pass 1
+        if n < 2:
+            raise ValueError(f"Need at least 2 data points for fitting, got {n}.")
     if check_finite and not st.data_finite:
         raise ValueError("x and y must be finite (found NaN or inf)")
     if not st.sigma_finite:

@@ -558,6 +558,8 @@ def _with_block(data, i, block):
         (1, (np.ones(0), np.ones(0)), r"yielded an empty block"),
         (1, (np.ones(4),), r"must yield \(x, y\) or \(x, y, sigma\) tuples"),
         (1, (np.ones(4), np.ones(4), np.ones(4)), r"same parts as the first"),
+        (1, None, r"must yield \(x, y\) or \(x, y, sigma\) tuples, got NoneType"),
+        (0, None, r"must yield \(x, y\) or \(x, y, sigma\) tuples, got NoneType"),
         (2, (np.r_[1.0, np.nan], np.ones(2)), r"^x and y must be finite"),
         (2, (np.ones(2), np.r_[1.0, np.inf]), r"^x and y must be finite"),
     ],
@@ -702,3 +704,32 @@ def test_factory_argument_errors(data, kw, pattern):
     y = kw.pop("y", None)
     with pytest.raises(ValueError, match=pattern):
         lm.exact_lm_fit(exp_model, make_factory(*data), y, EXP.p0, **kw)
+
+
+@pytest.mark.parametrize("n", [1, 2])
+def test_factory_needs_two_points(n):
+    x = np.linspace(0.0, 1.0, n)
+    f = make_factory(x, 2.0 * np.exp(-0.5 * x) + 0.3)
+    if n == 1:
+        with pytest.raises(
+            ValueError, match=r"Need at least 2 data points for fitting, got 1\."
+        ):
+            lm.exact_lm_fit(exp_model, f, None, EXP.p0, chunk_size=CHUNK)
+    else:  # 2 points pass the count check (the fit itself may or may not succeed)
+        assert (
+            lm.exact_lm_fit(exp_model, f, None, EXP.p0, chunk_size=CHUNK)["n_points"]
+            == 2
+        )
+
+
+def test_factory_first_block_released(data, monkeypatch):
+    made = []
+
+    class Spy(lm.FactorySource):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            made.append(self)
+
+    monkeypatch.setattr(lm, "FactorySource", Spy)
+    lm.exact_lm_fit(exp_model, make_factory(*data), None, EXP.p0, chunk_size=CHUNK)
+    assert made[0]._first is None and made[0].first_x is None
