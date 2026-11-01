@@ -335,7 +335,7 @@ def _bench(problem, n, host, repeats=3, impl="prototype"):
         times.append(time.perf_counter() - t)
     cost = residual_cost(pr, x, y, out["x"])
     print(
-        f"impl={impl} {problem} n={n:,} backend={jax.default_backend()} data={'host' if host else 'device'} "
+        f"impl={impl}{'(finite_check=off)' if impl == 'module' else ''} {problem} n={n:,} backend={jax.default_backend()} data={'host' if host else 'device'} "
         f"cold={times[0]:.2f}s warm_median={np.median(times[1:]):.2f}s passes={out['nfev']} "
         f"cost={cost!r} params={np.round(out['x'], 5).tolist()} ({out['message']})"
     )

@@ -116,6 +116,24 @@ def test_nlsq_exact_reports_solver_failure_as_unconverged_outcome(monkeypatch):
     np.testing.assert_array_equal(out.params, [1.0, 2.0, 3.0])
 
 
+@pytest.mark.parametrize(
+    ("name", "method"), [("nlsq_large", None), ("nlsq_exact", "exact_streaming")]
+)
+def test_nlsq_adapters_reach_the_path_they_are_named_for(monkeypatch, name, method):
+    calls = []
+
+    def recorder(*args, **kwargs):
+        calls.append(kwargs)
+        return np.asarray(EXP.p_true), np.eye(3)
+
+    monkeypatch.setattr("benchmarks.compare.adapters.nlsq.curve_fit_large", recorder)
+    x, y = EXP.data(100)
+    ADAPTERS[name].prepare(EXP, x, y, "end_to_end")()
+    assert len(calls) == 1
+    assert calls[0].get("method") == method  # nlsq_large passes no method at all
+    assert ("method" in calls[0]) == (method is not None)
+
+
 def test_jaxopt_capability_records_unmaintained():
     assert ADAPTERS["jaxopt"].capabilities.maintained is False
 
