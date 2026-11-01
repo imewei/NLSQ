@@ -8,6 +8,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `curve_fit_large(..., method="exact_streaming")` (opt-in; the default path is
+  unchanged): an exact full-data Levenberg-Marquardt fit (`nlsq/streaming/exact_lm.py`)
+  that accumulates `J^T J`, `J^T r` and the cost over chunks in float64, so the result
+  does not depend on chunking (up to rounding) and equals a full-batch fit (unlike the default chunked
+  path's precision-weighted combination). It runs at any dataset size, regardless of
+  `size_threshold`, and returns `(popt, pcov)`.
+  - **Model contract:** `model(x, *params)` written with `jax.numpy`, pointwise and
+    deterministic in `x` (checked by a probe on the first chunk); 1-D `xdata` only
+    (multi-feature 2-D `xdata` raises `ValueError`).
+  - **Out-of-memory sources:** `xdata`, `ydata` and `sigma` may be `np.memmap`,
+    `h5py.Dataset`, `zarr.Array` or any array-like with `shape`, `len` and slicing.
+    They are validated from `shape`, read by slice one chunk at a time in order (no
+    whole-array copy, no shuffle, no device placement), so each pass reads the data
+    exactly once, plus one chunk of `xdata` for the model probe. With the default
+    `check_finite=True`, non-finite `xdata`/`ydata` in any chunk is caught during the
+    first pass. In-memory arrays are placed on an accelerator only if they fit 50% of
+    free device memory and, with `memory_limit_gb`, the data plus chunk workspace fit
+    that budget; the chunk is sized from the budget first, so under a limit placement
+    happens only for small inputs. A `jax.Array` already on a device stays there.
+  - **Chunk factories:** `curve_fit_large(f, factory, None, p0=..., method="exact_streaming",
+    n_points=N)`, where `factory(chunk_size)` yields `(x, y)` or `(x, y, sigma)` blocks
+    of at most `chunk_size` points. The factory must be replayable (called once per
+    full-data pass, same data in the same order each call). `n_points` is optional
+    (counted on the first pass when omitted) and accepted only with a factory; every
+    pass verifies the point count and raises `ValueError` on a mismatch. Blocks are
+    validated as they arrive (1-D, equal non-zero lengths, at most `chunk_size`, finite
+    on the first pass unless `check_finite=False`) and padded to one compiled shape.
+  - **Weights:** 1-D `sigma` (per-point standard deviations, residuals `(y - f)/sigma`
+    as in `curve_fit`) is supported; `absolute_sigma` selects whether `pcov` is scaled
+    by the weighted residual variance. A `sigma` that is not 1-D (correlated 2-D
+    `sigma` included), of the wrong length, non-finite or non-positive raises
+    `ValueError`; finiteness and positivity are checked during the first pass.
+  - **Bounds:** box `bounds` (scalars or length-`p` arrays, `lb < ub` elementwise;
+    equal, inverted or NaN bounds raise `ValueError`) by an active set, not Coleman-Li
+    TRF: `p0` is clipped into the box, parameters on a bound with an outward gradient
+    are held, and trial steps are projected onto the box. The result is exact for the
+    box-constrained problem and the returned point is a KKT point to within the stopping
+    tolerances; it
+    differs from `method="trf"` in the path, not in what counts as a solution. With a
+    bound active, stationarity is certified by the exact maximum decrease of the
+    Gauss-Newton model over the box (host-side, no extra data pass).
+  - **Scope:** `multistart=True`/`global_search=True`, 2-D `xdata`, and non-default `stability`,
+    `rescale_data`, `max_jacobian_elements_for_svd`, `auto_size_detection` or
+    `size_threshold` raise `ValueError` naming the argument; extra keyword arguments
+    other than `ftol`, `xtol`, `gtol`, `max_nfev` (full-data passes, default
+    `100 * len(p0)`) and `n_points` (factories only) raise `TypeError`.
+  - **Failure behaviour:** a fit that stalls or exhausts `max_nfev` raises
+    `nlsq.streaming.ExactSolverError` (a `RuntimeError`) carrying the full result as
+    `.result` (`termination`, `nfev`, `cost`, `x`, ...). Non-finite data raises
+    `ValueError` after the first pass when `check_finite=True`.
+  - **Covariance caveat:** `pcov` follows the `curve_fit` contract but is computed from
+    the normal equations `J^T J`, which squares `cond(J)`. Agreement with `curve_fit` is
+    about `1e-6` relative for `cond(J) <= 1e4` and, for well-determined problems, `1e-3`
+    for `cond(J) <= 1e6` (degenerate two_exp rows with `cond(J)` 6e4-9e4 showed covariance
+    errors of 1.0 and 0.33). Beyond `1e4` a `UserWarning` is emitted: the fitted parameters
+    can also stop short there (poly12, `cond(J) = 7.5e8`: parameter error O(1) with
+    `success=True` for both candidates), so check such results. An uncomputable covariance
+    is all-`inf` with an `OptimizeWarning`.
+  - `nlsq.fit(..., method="exact_streaming")` raises `ValueError` pointing to
+    `curve_fit_large` at every dataset size.
+  - **Verified at scale:** a 1,000,000,000-point exp_decay fit read from HDF5 (16 GB of `x`/`y`)
+    on a 16 GB GPU recovers the generating parameters to 7e-16 (noiseless), lands within
+    1.3 sigma of the truth (noisy), counts all 1e9 points on every pass, matches an independent
+    streaming NumPy cost to 2e-16, shifts under a 1,000-point sentinel offset by the predicted amount,
+    and peaks at 1.8 GiB host RSS; a pass takes 4-10 s depending on the page cache
+    (`benchmarks/baselines/2026-10-31-exact-streaming-1b.md`).
+  - **Conditioning study (normal equations vs TSQR):** the pre-registered rule returns `tsqr_default` at tol 1e-12 (a stopping artifact shared by TSQR) and `normal_equations_stay` at 1e-15;
+    normal equations were kept on that interpretation with thin evidence (1 of 40 rows);
+    the `cond(J) > 1e4` covariance warning stays and the covariance caveat above is the user-facing
+    guidance
+    (`benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md`).
 - `benchmarks/compare/`: library comparison harness (NLSQ vs SciPy, lmfit, JAXopt,
   Optimistix) with shared tolerances, per-case fresh-process cold timing, an
   optimum-reached gate, and a Markdown report. CPU baselines committed under `benchmarks/baselines/`: the pre-optimisation run

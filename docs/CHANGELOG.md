@@ -1,6 +1,13 @@
 # Documentation Changelog
 
 ## Unreleased
+- `reference/large_data.rst`: new "Exact streaming" section for
+  `curve_fit_large(method="exact_streaming")` (model contract, accepted and
+  rejected arguments, 1-D `sigma` weights, box `bounds` by active set,
+  `ExactSolverError`, covariance caveat, out-of-memory array-like sources such as
+  memmap/HDF5/Zarr read chunk by chunk; chunk-factory sources: replayable
+  `factory(chunk_size)`, optional `n_points`, per-pass count check).
+  Added the 1B-point run result and the conditioning-study outcome to the covariance caveat.
 
 ## v0.7.6 (2026-09-04)
 - No documentation content changes; version-output examples bumped to match

@@ -53,6 +53,122 @@ Automatically chunks data to fit within GPU memory.
        model, x, y, p0=[1.0, 0.1, 0.0], memory_limit_gb=8.0  # Limit to 8 GB
    )
 
+Exact streaming (``method="exact_streaming"``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The default chunked path fits each chunk separately and combines the results,
+which is exact only for linear models. ``method="exact_streaming"`` (opt-in)
+instead runs one Levenberg-Marquardt fit over the whole dataset: each trial
+point costs one pass that accumulates ``J^T J``, ``J^T r`` and the cost in
+float64 chunk by chunk, so the result does not depend on the chunk size (up to rounding). It
+runs at any dataset size (``size_threshold`` is not consulted) and returns
+``(popt, pcov)``.
+
+.. code-block:: python
+
+   from nlsq import curve_fit_large
+   from nlsq.streaming import ExactSolverError
+
+   try:
+       popt, pcov = curve_fit_large(
+           model, x, y, p0=[1.0, 0.1, 0.0], method="exact_streaming", ftol=1e-10
+       )
+   except ExactSolverError as err:
+       print(err.result["termination"], err.result["nfev"])
+
+- **Model contract:** ``model(x, *params)`` must be written with
+  ``jax.numpy`` and be pointwise and deterministic in ``x`` (row ``i`` of the
+  output depends only on ``x[i]``); a probe on the first chunk checks this.
+- **Out-of-memory sources:** ``xdata``, ``ydata`` and ``sigma`` may be
+  ``np.memmap``, ``h5py.Dataset``, ``zarr.Array`` or any array-like with
+  ``shape``, ``len`` and slicing. They are validated from ``shape`` and read by
+  slice, one chunk at a time and in order, on every pass: each pass reads the
+  data once (plus one chunk of ``xdata`` for the model probe), and nothing is
+  loaded or placed on a device whole. With the default ``check_finite=True``,
+  non-finite ``xdata``/``ydata`` in any chunk is caught during the first pass.
+  In-memory NumPy/JAX arrays are placed on an accelerator once only if they fit
+  50% of free device memory and, with ``memory_limit_gb``, the data plus chunk
+  workspace fit that budget; the chunk is sized from the budget first, so under
+  a limit placement happens only for small inputs. A ``jax.Array`` already on a
+  device stays there regardless of the limit.
+- **Chunk factories:** pass a callable as ``xdata`` and ``None`` as ``ydata``:
+  ``curve_fit_large(model, factory, None, p0=..., method="exact_streaming",
+  n_points=N)``. ``factory(chunk_size)`` returns an iterator of ``(x, y)`` or
+  ``(x, y, sigma)`` blocks (every block the same form). Contract: it is
+  **replayable** (called once per full-data pass, each call yields the same
+  data in the same deterministic order) and each block holds at most
+  ``chunk_size`` points; blocks may differ in size and are padded to one
+  compiled shape. ``chunk_size`` is the derived chunk (``chunk_size`` if
+  given, else ``1 << 22`` reduced to fit ``memory_limit_gb``; clamped to
+  ``n_points`` when that is given). ``n_points`` is optional: when omitted the
+  points are counted on the first pass; every pass (the first too, when
+  ``n_points`` is given) verifies the count and a mismatch raises
+  ``ValueError``. Each block is validated as it arrives (1-D parts of equal,
+  non-zero length, at most ``chunk_size`` points, finite on the first pass
+  unless ``check_finite=False``, ``sigma`` finite and positive); the model
+  probe uses the leading blocks of the first pass, joined until they hold at
+  least 2 points. ``sigma`` must then come from the blocks
+  (``sigma=`` raises ``ValueError``), and ``n_points`` with an array source
+  raises ``ValueError``. Replay must yield identical data on every pass; only the
+  point count is verified, so a factory that reorders, resamples or alters its
+  data between passes is not detected. Exceptions raised by the factory propagate
+  unchanged.
+  With neither ``n_points`` nor ``chunk_size``, every block is padded to the
+  derived chunk (default 4,194,304 rows), so pass one of them for small
+  factories. Fewer than 2 points in total raises ``ValueError``.
+- **Accepted arguments:** ``sigma`` (1-D only), ``bounds``, ``chunk_size``,
+  ``check_finite``, ``show_progress``, ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
+  ``xtol``, ``gtol``, ``max_nfev`` (full-data passes, default
+  ``100 * len(p0)``) and ``n_points`` (chunk factories only). Any other
+  keyword argument raises ``TypeError``.
+- **Weights:** a 1-D ``sigma`` divides residuals and Jacobian rows, as in
+  ``curve_fit``. A ``sigma`` that is 2-D (correlated errors), of the wrong
+  length, non-finite or non-positive raises ``ValueError``; finiteness and
+  positivity are checked during the first pass, whatever ``check_finite`` says.
+- **Bounds:** box ``bounds`` as in ``curve_fit`` (scalars or length-``p``
+  arrays, ``lb < ub`` elementwise; equal, inverted or NaN bounds raise
+  ``ValueError``). They are handled by an active set, not Coleman-Li TRF:
+  ``p0`` is clipped into the box, a parameter on a bound whose gradient points
+  outward is held, the rest take a damped step that is projected back onto the
+  box. The fit is exact for the box-constrained problem and the returned point
+  is a KKT point to within the stopping tolerances; it differs from ``method="trf"`` in the path
+  taken, not in what a solution is (on a non-convex problem the two may still
+  reach different local minima). While a bound is active, stationarity is
+  certified by the exact maximum decrease of the Gauss-Newton model over the
+  box (a small host-side bounded least-squares solve, no extra data pass).
+- **Not yet supported (``ValueError`` naming the argument):**
+  ``multistart=True`` / ``global_search=True``, 2-D ``xdata``, and
+  non-default ``stability``, ``rescale_data``,
+  ``max_jacobian_elements_for_svd``, ``auto_size_detection`` or
+  ``size_threshold``. ``nlsq.fit`` does not dispatch to this method.
+- **Failure behaviour:** a fit that stalls or runs out of passes raises
+  ``nlsq.streaming.ExactSolverError`` (a ``RuntimeError``) with the full
+  result, including ``termination`` (``"stalled"`` or ``"max_nfev"``), as
+  ``.result``.
+- **Covariance caveat:** ``pcov`` follows the ``curve_fit`` contract
+  (pseudo-inverse, scaled by the residual variance unless ``absolute_sigma``)
+  but is computed from the normal equations ``J^T J``, which squares
+  ``cond(J)``. Expect about ``1e-6`` relative agreement with ``curve_fit`` for
+  ``cond(J) <= 1e4`` and, for well-determined problems, ``1e-3`` for
+  ``cond(J) <= 1e6`` (degenerate two_exp rows with ``cond(J)`` 6e4-9e4 showed
+  covariance errors of 1.0 and 0.33). A ``UserWarning`` is issued beyond
+  ``1e4``: there the fitted *parameters* can also stop short (poly12,
+  ``cond(J) = 7.5e8``: parameter error O(1) with ``success=True`` for both
+  candidates in the study), so check such results.
+  In a conditioning study against a 50-digit reference, the pre-registered rule
+  returns ``tsqr_default`` at tol 1e-12 (a stopping artifact shared by TSQR) and
+  ``normal_equations_stay`` at 1e-15; normal equations (no QR/TSQR accumulation)
+  were kept on that interpretation with thin evidence (1 of 40 rows), see
+  ``benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md``. At the
+  same parameters the accumulated ``J^T J`` step and covariance were accurate to
+  about 2e-12 and 2e-8 (one problem) for ``cond(J) <= 1e4``; beyond that the
+  covariance error grows with ``cond(J)``; ``cond(J)^2 * eps`` is the
+  worst-case bound (about 1e-4 at ``cond(J) = 7e5``; the poly8 study row at that
+  conditioning measured 5e-6). Treat the warning as the
+  guidance for ill-conditioned fits.
+- **Scale:** the method has been run on one billion points (16 GB of ``x`` and
+  ``y`` in an HDF5 file) with 1.8 GiB peak host memory; each pass reads the file once.
+
 LargeDatasetFitter
 ------------------
 

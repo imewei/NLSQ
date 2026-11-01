@@ -109,6 +109,7 @@ except ImportError:
     __version__ = "0.0.0+unknown"
 
 # Standard library imports needed at module level
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any, Literal
 
 from nlsq.callbacks import (
@@ -542,6 +543,12 @@ def fit(
     curve_fit_large : Specialized API for large datasets
     MemoryBudgetSelector : Memory-based optimizer selection
     """
+    if method == "exact_streaming":  # not in MethodLiteral, but reachable untyped
+        raise ValueError(
+            "method='exact_streaming' is available only through curve_fit_large(); "
+            "fit() does not dispatch to it at any dataset size"
+        )
+
     # NEW WORKFLOW SYSTEM (v0.6.3)
     # If workflow parameter is specified, delegate to minpack.fit()
     if workflow is not None:
@@ -710,17 +717,148 @@ def fit(
     )
 
 
+def _default_p0(f: ModelFunction) -> np.ndarray:
+    """Ones for every parameter after ``x`` in ``f``'s signature (curve_fit's p0=None)."""
+    from inspect import signature
+
+    args = signature(f).parameters
+    if len(args) < 2:
+        raise ValueError("Unable to determine number of fit parameters.")
+    return np.ones(len(args) - 1)
+
+
+_EXACT_DEFAULTS: dict[str, Any] = {
+    "stability": False,
+    "rescale_data": True,
+    "max_jacobian_elements_for_svd": 10_000_000,
+    "auto_size_detection": True,
+    "size_threshold": 1_000_000,
+}
+_EXACT_SOLVER_KWARGS = frozenset({"ftol", "xtol", "gtol", "max_nfev", "n_points"})
+_NOT_EXACT = "is not supported by method='exact_streaming'"
+
+
+def _curve_fit_exact_streaming(
+    f: ModelFunction,
+    xdata: Any,
+    ydata: Any,
+    p0: ArrayLike | None,
+    *,
+    sigma: Any,
+    absolute_sigma: bool,
+    check_finite: bool,
+    bounds: Any,
+    memory_limit_gb: float | None,
+    show_progress: bool,
+    chunk_size: int | None,
+    multistart: bool,
+    unsupported: dict[str, Any],
+    solver_kwargs: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """``curve_fit_large(method="exact_streaming")``: argument policy, then exact_lm_fit.
+
+    Validates from ``shape``/``len`` only, so array-like sources (``np.memmap``,
+    ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len`` and slicing) are
+    never read whole here; objects without ``shape`` (lists, tuples) are converted.
+    A callable ``xdata`` is a chunk factory: ``ydata`` and ``sigma`` must be None and
+    ``n_points`` (accepted only then) is optional; blocks are validated as they arrive.
+    """
+    from nlsq.core.least_squares import prepare_bounds
+    from nlsq.streaming import exact_lm
+
+    extra = sorted(set(solver_kwargs) - _EXACT_SOLVER_KWARGS)
+    if extra:
+        raise TypeError(
+            f"Unrecognized keyword argument(s) for method='exact_streaming': {extra}. "
+            f"Accepted: {sorted(_EXACT_SOLVER_KWARGS)}.",
+        )
+    for name, value in unsupported.items():
+        if value != _EXACT_DEFAULTS[name]:
+            raise ValueError(f"{name}={value!r} {_NOT_EXACT}; leave it at its default")
+    if multistart:
+        raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
+
+    factory = exact_lm.is_chunk_factory(xdata)
+    if factory:
+        if ydata is not None:
+            raise ValueError(
+                "ydata must be None when xdata is a chunk factory (callable): the "
+                "factory yields (x, y) or (x, y, sigma) blocks"
+            )
+        if sigma is not None:
+            raise ValueError(
+                "sigma must be None with a chunk factory: yield (x, y, sigma) blocks "
+                "instead"
+            )
+    elif solver_kwargs.get("n_points") is not None:
+        raise ValueError(
+            "n_points is accepted only with a chunk factory (callable xdata); array "
+            "sources take their length from their shape"
+        )
+    else:
+        solver_kwargs = {k: v for k, v in solver_kwargs.items() if k != "n_points"}
+
+    shapes = {}
+    for name, a in (("xdata", xdata), ("ydata", ydata), ("sigma", sigma)):
+        if factory or (name == "sigma" and a is None):  # factory: checked per block
+            continue
+        shape = a.shape if hasattr(a, "shape") else np.shape(a)
+        if len(shape) != 1:
+            why = (
+                "; multi-feature (2-D) xdata is not supported by exact_streaming"
+                if name == "xdata" and len(shape) > 1
+                else ""
+            )
+            raise ValueError(
+                f"{name} must be 1-D for method='exact_streaming', got shape {shape}{why}"
+            )
+        shapes[name] = shape[0]
+    if not factory:
+        n_x, n_y = shapes["xdata"], shapes["ydata"]
+        if n_x != n_y:
+            raise ValueError(
+                f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
+            )
+        if n_x < 2:
+            raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
+
+    p0_arr = _default_p0(f) if p0 is None else np.atleast_1d(np.asarray(p0, float))
+    # (p,) shapes and lb < ub elementwise; prepare_bounds only broadcasts scalars
+    lb, ub = exact_lm.check_bounds(prepare_bounds(bounds, len(p0_arr)), len(p0_arr))
+
+    res = exact_lm.exact_lm_fit(
+        f,
+        xdata,
+        ydata,
+        p0_arr,
+        bounds=(lb, ub),
+        chunk_size=chunk_size,
+        check_finite=check_finite,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        memory_limit_gb=memory_limit_gb,
+        show_progress=show_progress,
+        **solver_kwargs,
+    )
+    if not res["success"]:
+        raise exact_lm.ExactSolverError(
+            f"exact_streaming fit failed ({res['termination']}): {res['message']}",
+            res,
+        )
+    return res["x"], res["pcov"]
+
+
 # Convenience function for large dataset curve fitting
 def curve_fit_large(
     f: ModelFunction,
-    xdata: ArrayLike,
-    ydata: ArrayLike,
+    xdata: ArrayLike | Callable[[int], Iterator[tuple[Any, ...]]],
+    ydata: ArrayLike | None,
     p0: ArrayLike | None = None,
     sigma: ArrayLike | None = None,
     absolute_sigma: bool = False,
     check_finite: bool = True,
     bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
-    method: MethodLiteral | None = None,
+    method: MethodLiteral | Literal["exact_streaming"] | None = None,
     # Stability parameters
     stability: Literal["auto", "check", False] = False,
     rescale_data: bool = True,
@@ -754,16 +892,19 @@ def curve_fit_large(
     the full-dataset streaming optimizer (``AdaptiveHybridStreamingOptimizer``,
     which accumulates Gauss-Newton statistics across the whole dataset
     instead of fitting each chunk independently) explicitly, pass
-    ``method="hybrid_streaming"``.
+    ``method="hybrid_streaming"``, or ``method="exact_streaming"`` for an exact,
+    chunk-independent Levenberg-Marquardt fit.
 
     Parameters
     ----------
     f : callable
         Model function f(x, \\*params) -> y. Must use jax.numpy operations.
-    xdata : array_like
-        Independent variable data.
-    ydata : array_like
-        Dependent variable data.
+    xdata : array_like or callable
+        Independent variable data. With ``method="exact_streaming"`` it may be a
+        replayable chunk factory ``factory(chunk_size) -> Iterator[(x, y) | (x, y,
+        sigma)]``; then ``ydata`` must be None (see ``method``).
+    ydata : array_like or None
+        Dependent variable data; None only when ``xdata`` is a chunk factory.
     p0 : array_like, optional
         Initial parameter guess.
     sigma : array_like, optional
@@ -775,7 +916,39 @@ def curve_fit_large(
     bounds : tuple, optional
         Parameter bounds as (lower, upper).
     method : str, optional
-        Optimization algorithm ('trf', 'lm', or None for auto).
+        Optimization algorithm ('trf', 'lm', or None for auto), or
+        ``'hybrid_streaming'``, or ``'exact_streaming'`` (opt-in): an exact
+        full-data Levenberg-Marquardt fit whose result does not depend on
+        chunking, for any dataset size (``size_threshold`` is not consulted).
+        It requires a pointwise, deterministic model written with
+        ``jax.numpy``, 1-D ``xdata`` (multi-feature 2-D ``xdata`` raises
+        ``ValueError``) and ``multistart=False``. ``xdata``, ``ydata`` and
+        ``sigma`` may be out-of-memory array-likes (``np.memmap``,
+        ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len``
+        and slicing): they are read one chunk at a time on every pass and
+        never loaded whole. ``xdata`` may instead be a replayable chunk
+        factory, ``factory(chunk_size) -> Iterator[(x, y) | (x, y, sigma)]``
+        called once per full-data pass (same data, same order, at most
+        ``chunk_size`` points per block), with ``ydata=None``; the optional
+        keyword ``n_points`` (factories only) is verified, and the point
+        count is checked on every pass. 1-D ``sigma``
+        and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
+        handled by an active set, not Coleman-Li TRF: the returned point is a
+        KKT point of the box-constrained problem to within the stopping
+        tolerances, reached by a different path
+        than ``method='trf'``. ``stability``, ``rescale_data``,
+        ``max_jacobian_elements_for_svd``, ``auto_size_detection`` and
+        ``size_threshold`` must stay at their defaults (``ValueError``
+        otherwise), and the only extra keyword arguments accepted are
+        ``ftol``, ``xtol``, ``gtol``, ``max_nfev`` (full-data passes,
+        default ``100 * len(p0)``) and ``n_points``. A failed fit (stalled or out of passes)
+        raises :class:`nlsq.streaming.ExactSolverError` with the full result
+        as ``.result``. ``pcov`` is computed from the normal equations
+        ``J^T J``, which squares ``cond(J)``: expect about ``1e-6`` relative
+        agreement with ``curve_fit`` up to ``cond(J) ~ 1e4``, ``1e-3`` up to
+        ``1e6`` for well-determined problems, and a ``UserWarning`` beyond
+        ``1e4``, where the fitted parameters can also stop short: check such
+        results.
     memory_limit_gb : float, optional
         Maximum memory usage in GB.
     auto_size_detection : bool, optional
@@ -799,7 +972,9 @@ def curve_fit_large(
     scale_factor : float, optional
         Scale factor for exploration region. Default: 1.0.
     **kwargs
-        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
+        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss). With
+        ``method="exact_streaming"`` only ftol, xtol, gtol, max_nfev and n_points are
+        accepted (``loss`` raises ``TypeError``).
 
     Returns
     -------
@@ -874,6 +1049,39 @@ def curve_fit_large(
                 "This parameter was removed in v0.2.0. Use streaming instead.",
             )
 
+    # Hoisted above np.asarray: a lazy source must not be read whole
+    if method == "exact_streaming":
+        return _curve_fit_exact_streaming(
+            f,
+            xdata,
+            ydata,
+            p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            memory_limit_gb=memory_limit_gb,
+            show_progress=show_progress,
+            chunk_size=chunk_size,
+            multistart=multistart,
+            unsupported={
+                "stability": stability,
+                "rescale_data": rescale_data,
+                "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
+                "auto_size_detection": auto_size_detection,
+                "size_threshold": size_threshold,
+            },
+            solver_kwargs=kwargs,
+        )
+
+    from nlsq.streaming.exact_lm import is_chunk_factory
+
+    if is_chunk_factory(xdata) or ydata is None:
+        raise ValueError(
+            "a chunk factory (callable xdata, ydata=None) requires "
+            "method='exact_streaming'; pass xdata and ydata arrays otherwise"
+        )
+
     # Input validation
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
@@ -922,14 +1130,7 @@ def curve_fit_large(
 
         # Prepare p0 and bounds
         if p0 is None:
-            from inspect import signature
-
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
-                raise ValueError("Unable to determine number of fit parameters.")
-            n_params = len(args) - 1
-            p0 = np.ones(n_params)
+            p0 = _default_p0(f)
 
         p0 = np.atleast_1d(p0)
         from nlsq.core.least_squares import prepare_bounds
