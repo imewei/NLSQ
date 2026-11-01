@@ -20,6 +20,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from nlsq.result.optimize_result import OptimizeResult
+
 jax.config.update("jax_enable_x64", True)
 
 CHUNK = 1 << 22  # 4M points: J chunk is 4M x p float64 (about 130 MB for p=4)
@@ -70,6 +72,52 @@ def _pass(stats, theta, x, y, chunk):
     return float(c), np.asarray(g), np.asarray(H)
 
 
+def step_termination(dF, F, rho, s_norm, x_norm, ftol, xtol):
+    """Step-based criteria after an accepted step; F is the cost before the step."""
+    if dF < ftol * F and rho > 0.25:
+        return "ftol"
+    if s_norm < xtol * (xtol + x_norm):
+        return "xtol"
+    return None
+
+
+def _scaled_eig(g, H):
+    """Jacobi-scaled (g_hat, eigvals, eigvecs, truncated) over columns with H_ii > 0."""
+    d = np.diag(H)
+    keep = d > 0
+    s = 1.0 / np.sqrt(d[keep])
+    Hs = H[np.ix_(keep, keep)] * s[:, None] * s[None, :]
+    gs = g[keep] * s
+    if gs.size == 0:
+        return gs, gs, np.zeros((0, 0)), False
+    w, U = np.linalg.eigh(Hs)
+    truncated = not w[0] > len(g) * np.finfo(float).eps * w[-1]
+    return gs, w, U, truncated
+
+
+def newton_certificate(g, H, F, ftol, bounds_active=False):
+    """Damping-independent stationarity: undamped GN step cannot gain ftol*F (spec)."""
+    if F == 0:
+        return True
+    if bounds_active or not (np.all(np.isfinite(g)) and np.all(np.isfinite(H))):
+        return False
+    gs, w, U, truncated = _scaled_eig(g, H)
+    if truncated:
+        return False
+    delta_n = 0.5 * float(np.sum((U.T @ gs) ** 2 / w)) if gs.size else 0.0
+    return delta_n <= ftol * F
+
+
+def _stationary(cost, g, H, free, gtol, ftol):
+    if cost == 0:  # exact fit: decided before any division
+        return "gtol"
+    if not free.any() or np.max(np.abs(g[free])) < gtol:
+        return "gtol"
+    if newton_certificate(g, H, cost, ftol, bounds_active=not free.all()):
+        return "ftol"
+    return None
+
+
 def fit(
     model,
     x,
@@ -80,32 +128,40 @@ def fit(
     ftol=1e-8,
     xtol=1e-8,
     gtol=1e-8,
-    max_nfev=100,
+    max_nfev=None,
 ):
-    """Exact full-data LM. Returns dict(x, cost, pcov, nfev=passes, success, message)."""
+    """Exact full-data LM. `max_nfev` counts full-data passes (default 100*p)."""
     x_dev_ok = hasattr(x, "shape")
     if not x_dev_ok or x.ndim != 1 or y.shape != x.shape:
         raise ValueError("x and y must be 1-D arrays of equal length")
     n = len(x)
     p = len(p0)
+    if max_nfev is None:
+        max_nfev = 100 * p
     lo = np.broadcast_to(np.asarray(bounds[0], float), (p,))
     hi = np.broadcast_to(np.asarray(bounds[1], float), (p,))
     stats = make_stats(model)
     theta = np.clip(np.asarray(p0, float), lo, hi)
     cost, g, H = _pass(stats, theta, x, y, chunk)
     nfev, lam, nu = 1, 1e-3, 2.0
-    g0 = max(np.max(np.abs(g)), 1e-300)
-    message = "max_nfev reached"
-    success = False
-    while nfev < max_nfev:
+    messages = {
+        "gtol": "gradient below gtol (or exact fit)",
+        "ftol": "cost decrease below ftol",
+        "xtol": "step below xtol",
+        "max_nfev": "maximum number of data passes reached",
+    }
+    while True:
         # g = J^T r is the descent direction; a variable at a bound with g pointing out is fixed
         free = ~(((theta <= lo) & (g <= 0)) | ((theta >= hi) & (g >= 0)))
-        if not free.any() or np.max(np.abs(g[free])) <= gtol * g0:
-            message, success = "gtol", True
+        termination = _stationary(cost, g, H, free, gtol, ftol)
+        if termination:
+            break
+        if nfev >= max_nfev:
+            termination = "max_nfev"
             break
         Hf, gf = H[np.ix_(free, free)], g[free]
         accepted = False
-        while nfev < max_nfev:
+        while nfev < max_nfev and lam <= 1e14:
             try:
                 d = np.linalg.solve(Hf + lam * np.diag(np.diag(Hf)), gf)
             except np.linalg.LinAlgError:
@@ -119,38 +175,44 @@ def fit(
             c_new, g_new, H_new = _pass(stats, new, x, y, chunk)
             nfev += 1
             actual = cost - c_new
-            if np.isfinite(c_new) and actual > 0 and pred > 0:
+            finite = np.isfinite(c_new) and np.isfinite(g_new).all()
+            if finite and np.isfinite(H_new).all() and actual > 0 and pred > 0:
                 rho = actual / pred
                 lam = max(lam * max(1 / 3, 1 - (2 * rho - 1) ** 3), 1e-14)
                 nu = 2.0
                 accepted = True
                 break
             lam, nu = lam * nu, nu * 2
-            if lam > 1e14:
-                break
         if not accepted:
-            message = "no further progress" if lam > 1e14 else message
-            success = lam > 1e14  # at the numerical floor, not a failure to run
+            termination = "max_nfev" if lam <= 1e14 else "stalled"
             break
-        small_step = np.linalg.norm(s) <= xtol * (xtol + np.linalg.norm(theta))
-        small_cost = actual <= ftol * cost
+        step = step_termination(
+            actual, cost, rho, np.linalg.norm(s), np.linalg.norm(theta), ftol, xtol
+        )
         theta, cost, g, H = new, c_new, g_new, H_new
-        if small_cost or small_step:
-            message, success = ("ftol" if small_cost else "xtol"), True
+        if step:
+            termination = step
             break
+    if termination == "stalled":
+        message = "no further progress: trials rejected until damping reached 1e14"
+        if _scaled_eig(g, H)[3]:
+            message += "; rank cannot be certified from normal equations"
+    else:
+        message = messages[termination]
     s2 = 2.0 * cost / max(n - p, 1)
     try:
         pcov = s2 * np.linalg.inv(H)
     except np.linalg.LinAlgError:
         pcov = np.full((p, p), np.inf)
-    return {
-        "x": theta,
-        "cost": cost,
-        "pcov": pcov,
-        "nfev": nfev,
-        "success": success,
-        "message": message,
-    }
+    return OptimizeResult(
+        x=theta,
+        cost=cost,
+        pcov=pcov,
+        nfev=nfev,
+        success=termination in ("gtol", "ftol", "xtol"),
+        message=message,
+        termination=termination,
+    )
 
 
 def _selftest():
