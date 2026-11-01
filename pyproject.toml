@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=80.0", "setuptools-scm>=9.0"]  # Tested on 82.0.1, 9.2.2
+requires = ["setuptools>=80.0", "setuptools-scm>=9.0"]  # Tested on 84.2.1, 10.3.4
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -92,33 +92,33 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Core scientific computing
-    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.4.3)
-    "scipy>=1.16.0",          # Tested on 1.17.1
+    "numpy>=2.2",             # Requires NumPy 2.x (tested on 2.5.4)
+    "scipy>=1.16.0",          # Tested on 1.18.1
 
     # JAX ecosystem (>=0.8.0)
     # GPU users: see GPU ACCELERATION section above for installation
     # IMPORTANT: CUDA plugin versions must exactly match jaxlib version
-    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.9.1)
-    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.9.1)
-    "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.7)
+    "jax>=0.8.0",             # JAX >=0.8.0 (tested on 0.12.0.1)
+    "jaxlib>=0.8.0",          # JAXlib >=0.8.0 (tested on 0.12.0.1)
+    "optax>=0.2.6",           # Gradient transformations for warmup optimization (tested on 0.2.8)
     "optimistix>=0.1.0",      # JAX-native least-squares/root-finding solvers (tested on 0.1.0)
 
     # Visualization and monitoring
-    "matplotlib>=3.10.0",     # Tested on 3.10.8
+    "matplotlib>=3.10.0",     # Tested on 3.11.2
     "psutil>=7.2.0",          # For memory monitoring (tested on 7.2.2)
-    "tqdm>=4.67.0",           # For progress bars (tested on 4.67.3)
+    "tqdm>=4.67.0",           # For progress bars (tested on 4.70.1)
 
     # Large dataset support
     "h5py>=3.15.0",           # Required for streaming large datasets (tested on 3.16.0)
 
     # Performance
-    "xxhash>=3.6.0",          # 10x faster hashing for cache keys (tested on 3.6.0)
+    "xxhash>=3.6.0",          # 10x faster hashing for cache keys (tested on 4.0.2)
 
     # Configuration
     "pyyaml>=6.0.3",          # YAML configuration file support (tested on 6.0.3)
 
     # Global optimization
-    "evosax>=0.2.0",          # JAX-based CMA-ES with built-in BIPOP restart conditions
+    "evosax>=0.2.0",          # JAX-based CMA-ES with built-in BIPOP restart conditions (tested on 0.3.2)
 ]
 
 # GPU extras remain optional — they are mutually exclusive (only ONE can be active).
@@ -127,7 +127,7 @@ dependencies = [
 [project.optional-dependencies]
 gui = [
     # Qt desktop application (nlsq-gui); not installed by default
-    "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.10.2)
+    "PySide6>=6.10.0",        # Qt bindings (LGPL license, tested on 6.12.0)
     "pyqtgraph>=0.14.0",      # GPU-accelerated scientific plotting (tested on 0.14.0)
 ]
 gpu_cuda13 = [
@@ -146,48 +146,48 @@ gpu_cuda12 = [
 dev = [
     "nlsq[gui]",              # GUI toolkit for the Qt test suite
     # Testing
-    "pytest>=9.0.0,!=9.2.0",  # Tested on 9.0.2; 9.2.0 breaks pytest-benchmark 5.3.0 (_nodeid), later releases allowed
-    "pytest-cov>=7.0.0",      # Tested on 7.0.0
+    "pytest>=9.0.0,!=9.2.0",  # Tested on 9.1.1; 9.2.0 breaks pytest-benchmark 5.3.0 (_nodeid), later releases allowed
+    "pytest-cov>=7.0.0",      # Tested on 7.1.0
     "pytest-xdist>=3.8.0",    # Tested on 3.8.0
-    "pytest-benchmark>=5.2.3", # Tested on 5.2.3
-    "pytest-rerunfailures>=16.0",  # Retry flaky tests (tested on 16.1)
+    "pytest-benchmark>=5.2.3", # Tested on 5.3.0
+    "pytest-rerunfailures>=16.0",  # Retry flaky tests (tested on 16.7)
     "pytest-timeout>=2.4.0",  # Tested on 2.4.0
     "pytest-qt>=4.5.0",       # Qt widget testing (tested on 4.5.0)
-    "hypothesis>=6.148.0",    # Property-based testing (tested on 6.151.9)
+    "hypothesis>=6.148.0",    # Property-based testing (tested on 6.170.13)
 
     # Lint / type-check / hooks
-    "black>=25.0.0",          # Tested on 26.3.1 (CalVer)
-    "ruff>=0.14.0",           # Tested on 0.15.5
-    "mypy>=1.19.0",           # Static type checker (tested on 1.19.1)
-    "pre-commit>=4.5.0",      # Tested on 4.5.1
-    "ipython>=9.0.0",         # Tested on 9.11.0
+    "black>=25.0.0",          # Tested on 26.10.1 (CalVer)
+    "ruff>=0.14.0",           # Tested on 0.17.3
+    "mypy>=1.19.0",           # Static type checker (tested on 2.4.1)
+    "pre-commit>=4.5.0",      # Tested on 4.7.0
+    "ipython>=9.0.0",         # Tested on 9.17.1
     "bandit>=1.9.0",          # Tested on 1.9.4
-    "pip-audit>=2.9.0",       # Dependency vulnerability scanning (tested on 2.9.0)
-    "pyupgrade>=3.21.0",      # Tested on 3.21.2
+    "pip-audit>=2.9.0",       # Dependency vulnerability scanning (tested on 2.10.1)
+    "pyupgrade>=3.21.0",      # Tested on 3.22.0
 
     # Documentation
-    "sphinx>=9.0.0",                    # Tested on 9.1.0
+    "sphinx>=9.0.0",                    # Tested on 9.2.0
     "furo>=2025.0.0",                   # Modern Sphinx theme (tested on 2025.12.19)
     "sphinx-copybutton>=0.5.2",         # Copy button for code blocks
-    "sphinx-autodoc-typehints>=3.5.0",  # Tested on 3.9.8
+    "sphinx-autodoc-typehints>=3.5.0",  # Tested on 3.17.4
     "sphinx-design>=0.6.0",             # For grid cards and tabs (tested on 0.7.0)
-    "myst-parser>=5.0.0",               # Tested on 5.0.0
+    "myst-parser>=5.0.0",               # Tested on 5.1.0
 
     # Benchmark
-    "asv>=0.6.5",             # Tested on 0.6.5
+    "asv>=0.6.5",             # Tested on 0.6.6
     "memory-profiler>=0.61.0", # Tested on 0.61.0
 
     # Jupyter
-    "jupyterlab>=4.5.0",      # Tested on 4.5.5
-    "ipykernel>=7.0.0",       # Tested on 7.2.0
-    "notebook>=7.5.0",        # Tested on 7.5.4
+    "jupyterlab>=4.5.0",      # Tested on 4.6.5
+    "ipykernel>=7.0.0",       # Tested on 7.4.0
+    "notebook>=7.5.0",        # Tested on 7.6.3
 
     # Build tools
-    "build>=1.3.0",           # Build frontend (tested on 1.4.0)
-    "twine>=6.2.0",           # PyPI upload tool (tested on 6.2.0)
-    "setuptools>=80.0.0",     # Build backend (tested on 82.0.1)
-    "setuptools-scm>=9.2.0",  # Version management (tested on 9.2.2)
-    "wheel>=0.46.2",          # Wheel builder (tested on 0.46.3)
+    "build>=1.3.0",           # Build frontend (tested on 1.6.1)
+    "twine>=6.2.0",           # PyPI upload tool (tested on 7.0.0)
+    "setuptools>=80.0.0",     # Build backend (tested on 84.2.1)
+    "setuptools-scm>=9.2.0",  # Version management (tested on 10.3.4)
+    "wheel>=0.46.2",          # Wheel builder (tested on 0.48.0)
 ]
 # Comparison libraries for the benchmark harness (`uv sync --group bench`).
 bench = [
@@ -207,12 +207,14 @@ nlsq = "nlsq.cli.main:main"
 nlsq-gui = "nlsq.gui_qt:run_desktop"
 
 [tool.setuptools]
-packages = ["nlsq"]
 include-package-data = true
 zip-safe = false  # Required for type stubs and package data
 
+[tool.setuptools.packages.find]
+include = ["nlsq", "nlsq.*"]  # explicit: without it only top-level modules ship from a tree without .git
+
 [tool.setuptools.package-data]
-nlsq = ["py.typed", "*.pyi"]
+nlsq = ["py.typed", "*.pyi", "cli/templates/*.yaml"]
 
 [tool.setuptools_scm]
 write_to = "nlsq/_version.py"
@@ -243,7 +245,7 @@ override-dependencies = [
 
 [tool.black]
 line-length = 88
-target-version = ['py313']
+target-version = ['py312']  # lowest supported Python (requires-python >=3.12)
 preview = true
 # Exclude generated files and caches
 extend-exclude = '''
@@ -263,7 +265,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py312"  # lowest supported Python (requires-python >=3.12)
 fix = true
 # Exclude generated files and caches for better performance
 extend-exclude = [
@@ -320,18 +322,14 @@ max-complexity = 15
 "nlsq/core/least_squares.py" = ["PLR0912", "PLR0913", "PLR0915", "C901"]
 "nlsq/core/sparse_jacobian.py" = ["PLR0913", "PLR0912"]
 "nlsq/core/workflow.py" = ["C901"]  # _select_tier_and_options CC=18 (known tech debt)
-"nlsq/core/optimizer_base.py" = ["PLR0913", "PLR0912"]
 # Streaming subpackage
 "nlsq/streaming/large_dataset.py" = ["PLR0913", "PLR0912", "PLR0915"]
 "nlsq/streaming/adaptive_hybrid.py" = ["PLR0913", "PLR0912", "PLR0915", "PLR2004", "C901"]
 # Caching subpackage
 "nlsq/caching/memory_manager.py" = ["PLR0913", "PLR0912", "PLR0915"]
-"nlsq/caching/smart_cache.py" = ["PLR0913", "PLR0912", "PLR2004"]
-"nlsq/caching/memory_pool.py" = ["PLR0913", "PLR0912"]
 # Stability subpackage
 "nlsq/stability/guard.py" = ["PLR0913", "PLR0912", "PLR2004", "C901"]
 "nlsq/stability/recovery.py" = ["PLR0913", "PLR0912", "PLR0915"]
-"nlsq/stability/robust_decomposition.py" = ["PLR0913", "PLR0912", "PLR0915"]
 # Precision subpackage
 "nlsq/precision/algorithm_selector.py" = ["PLR0913", "PLR0912", "PLR0915"]
 "nlsq/precision/parameter_normalizer.py" = ["PLR0913", "PLR0912"]
@@ -429,10 +427,6 @@ ignore_errors = true  # Interface with complex types
 module = "nlsq.core.trf"
 ignore_errors = true  # Complex optimization algorithm
 
-[[tool.mypy.overrides]]
-module = "nlsq.core.optimizer_base"
-ignore_errors = true  # Base optimizer class
-
 # Streaming subpackage
 [[tool.mypy.overrides]]
 module = "nlsq.streaming.large_dataset"
@@ -508,7 +502,7 @@ venvPath = "."
 venv = ".venv"
 
 [tool.pytest.ini_options]
-minversion = "9.0"  # Updated to match installed version (9.0.2)
+minversion = "9.0"  # Locked version: 9.1.1
 testpaths = ["tests"]
 pythonpath = ["."]
 # Modern pytest features for better performance
@@ -526,8 +520,8 @@ addopts = [
     "-n", "2",  # Fixed 2 workers to prevent memory exhaustion (was: 4)
     "--dist", "loadscope",  # Group by test module/class for better isolation
     # Coverage disabled for faster CI (enable locally with pytest --cov)
-    # Test suite: 3,777 tests (as of 2026-03-12)
-    # Current coverage: 82% (exceeds 80% target)
+    # Test suite: 4,426 tests collected (as of 2026-11-01)
+    # Coverage: 82% when last measured (2026-03-12), target 80%; not re-measured since
     # "--cov=nlsq",
     # "--cov-report=term-missing",
     # "--cov-report=html",
@@ -593,8 +587,8 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Test suite: 3,777 tests (as of 2026-03-12)
-# Current coverage: 82% (exceeds 80% target)
+# Test suite: 4,426 tests collected (as of 2026-11-01)
+# Coverage: 82% when last measured (2026-03-12), target 80%; not re-measured since
 # Industry-standard for scientific computing libraries: 70-80%
 precision = 2
 show_missing = true
@@ -612,6 +606,6 @@ exclude_lines = [
 [tool.bandit]
 # Security linting: only fail on Medium/High severity issues
 # Low severity warnings (B404, B603, B607, B110, B101) are informational only
-exclude_dirs = ["tests", "examples", "docs", "benchmark", "scripts"]
+exclude_dirs = ["tests", "examples", "docs", "benchmarks", "scripts"]
 # Only fail on MEDIUM and HIGH severity issues
 skips = ["B404", "B603", "B607", "B110", "B101"]

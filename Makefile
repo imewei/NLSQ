@@ -708,11 +708,11 @@ publish-test:
 # ===================
 benchmark:
 	@echo "$(BOLD)$(BLUE)Running performance benchmarks...$(RESET)"
-	$(RUN_CMD) $(PYTHON) benchmarks/benchmark.py
+	$(RUN_CMD) $(PYTHON) benchmarks/run_benchmarks.py
 
 benchmark-large:
 	@echo "$(BOLD)$(BLUE)Running large dataset benchmarks...$(RESET)"
-	$(RUN_CMD) $(PYTHON) benchmarks/benchmark.py --large-datasets
+	$(RUN_CMD) $(PYTHON) benchmarks/run_benchmarks.py --sizes 100000 1000000
 
 # ===================
 # Cleanup targets

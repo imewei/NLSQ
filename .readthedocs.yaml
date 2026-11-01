@@ -1,6 +1,6 @@
 # ReadTheDocs configuration for NLSQ
-# Updated: 2026-08-06
-# Requires: Python 3.12+ (tested on 3.13), Sphinx 9.1.0, JAX 0.9.1, NumPy 2.4.3, SciPy 1.17.1
+# Updated: 2026-11-01
+# Requires: Python 3.12+ (tested on 3.13), Sphinx 9.2.0, JAX 0.12.0.1, NumPy 2.5.4, SciPy 1.18.1
 # Doc tooling is pinned in docs/requirements.txt (floors mirror the `dev` dependency
 # group); the `gui` extra supplies PySide6 for autodoc of nlsq.gui_qt.
 #
@@ -17,7 +17,7 @@ build:
   jobs:
     pre_build:
       - echo "Building NLSQ documentation..."
-      - echo "This build requires Sphinx 9.1.0, JAX 0.9.1, NumPy 2.4.3, SciPy 1.17.1"
+      - echo "This build requires Sphinx 9.2.0, JAX 0.12.0.1, NumPy 2.5.4, SciPy 1.18.1"
     post_build:
       - echo "Documentation build complete"
 
