@@ -140,3 +140,96 @@ def test_convergence_beats_budget(data, default_run):
     assert out["success"] is True
     assert out["nfev"] == k
     assert out["termination"] == default_run["termination"]
+
+
+def zero_col_model(x, a, b, c, d):
+    return EXP.model(jnp, x, a, b, c) + 0.0 * d
+
+
+def collinear_model(x, a1, a2, b):  # columns 1 and 2 of J identical, H has rank 2
+    return (a1 + a2) * jnp.exp(-b * x)
+
+
+def test_zero_jacobian_column_converges(data):
+    p0 = (*EXP.p0, 1.7)
+    out = run(zero_col_model, *data, p0)
+    assert out["success"] is True
+    assert out["x"][3] == 1.7  # untouched, exactly
+    assert np.all(np.isfinite(out["x"]))
+
+
+def test_nan_in_H_stalls_within_attempt_cap(data, monkeypatch):
+    real = lm._pass
+    first = {}
+
+    def fake(stats, theta, x, y, chunk):
+        if not first:
+            first["v"] = real(stats, theta, x, y, chunk)
+            return first["v"]
+        c, g, H = first["v"]
+        return c * 0.5, g, np.full_like(H, np.nan)
+
+    monkeypatch.setattr(lm, "_pass", fake)
+    out = run(exp_model, *data, EXP.p0)
+    assert out["termination"] == "stalled"
+    assert out["success"] is False
+    assert out["nfev"] <= 1 + 20
+
+
+def test_rank_two_h_for_p3_converges(data):
+    x, y = data
+    out = run(collinear_model, x, y - 0.5, (1.0, 0.5, 1.0))
+    assert out["success"] is True
+
+
+def test_noisy_collinear_start_at_optimum_success_or_stall(data):
+    x, y = data
+    first = run(collinear_model, x, y - 0.5, (1.0, 0.5, 1.0))
+    assert first["success"]
+    out = run(collinear_model, x, y - 0.5, first["x"])
+    ok = out["success"] and out["termination"] in ("gtol", "ftol", "xtol")
+    stalled = out["termination"] == "stalled" and "rank" in out["message"]
+    assert ok or stalled, (out["termination"], out["message"])
+
+
+def test_float32_input_equals_float64_input(data):
+    x32, y32 = (np.asarray(a, dtype=np.float32) for a in data)
+    a = run(exp_model, x32, y32, EXP.p0)
+    b = run(exp_model, x32.astype(np.float64), y32.astype(np.float64), EXP.p0)
+    assert np.array_equal(a["x"], b["x"])
+    assert a["nfev"] == b["nfev"]
+
+
+def test_nonfinite_data_raises(data):
+    x, y = data
+    y_bad = y.copy()
+    y_bad[7] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        run(exp_model, x, y_bad, EXP.p0)
+    x_bad = x.copy()
+    x_bad[2999] = np.inf  # in the padded tail chunk
+    with pytest.raises(ValueError, match="finite"):
+        run(exp_model, x_bad, y, EXP.p0)
+    with pytest.raises(ValueError, match="finite"):  # model is inf at p0
+        run(lambda x, a, b, c: jnp.full_like(x, jnp.inf) + a, x, y, EXP.p0)
+
+
+def test_accepted_step_cannot_push_lambda_past_ceiling(data, monkeypatch):
+    # Every trial gains a vanishing cost, so rho ~ 0 and Nielsen's factor is ~2. Starting at
+    # lam = 0.9e14 the update would reach 1.8e14, above the ceiling; an uncapped lam makes the
+    # next iteration skip its trials and report "stalled" after 2 passes without trying a step.
+    real = lm._pass
+    calls = []
+
+    def fake(stats, theta, x, y, chunk):
+        if not calls:
+            calls.append(real(stats, theta, x, y, chunk))
+            return calls[0]
+        c, g, H = calls[0]
+        calls.append(None)
+        return c * (1.0 - 1e-15 * len(calls)), g, H
+
+    monkeypatch.setattr(lm, "_pass", fake)
+    out = run(exp_model, *data, EXP.p0, lam0=0.9e14, ftol=0.0, xtol=0.0, max_nfev=4)
+    assert out["termination"] == "max_nfev"
+    assert out["nfev"] == 4

@@ -25,10 +25,13 @@ from nlsq.result.optimize_result import OptimizeResult
 jax.config.update("jax_enable_x64", True)
 
 CHUNK = 1 << 22  # 4M points: J chunk is 4M x p float64 (about 130 MB for p=4)
+LAMBDA_MAX = 1e14  # damping ceiling
+ATTEMPT_CAP = 20  # solve attempts per iteration
+DAMPING_FLOOR = 1e-10  # D_ii >= DAMPING_FLOOR * max_j D_jj
 
 
 def make_stats(model):
-    """Jitted (theta, x, y, w) -> (0.5*sum w r^2, J^T r, J^T J); r = y - model."""
+    """Jitted (theta, x, y, w) -> (0.5*sum w r^2, J^T r, J^T J, data_finite); r = y - model."""
 
     def stats(theta, x, y, w):
         def f(p):
@@ -36,7 +39,10 @@ def make_stats(model):
 
         r = (y - f(theta)) * w
         J = jax.jacfwd(f)(theta) * w[:, None]
-        return 0.5 * jnp.sum(r * r), J.T @ r, J.T @ J
+        finite = jnp.all(
+            jnp.isfinite(x) & jnp.isfinite(y)
+        )  # padded rows copy real rows
+        return 0.5 * jnp.sum(r * r), J.T @ r, J.T @ J, finite
 
     return jax.jit(stats)
 
@@ -46,7 +52,8 @@ def _chunks(x, y, chunk):
     n = len(x)
     ones = jnp.ones(chunk)
     for s in range(0, n, chunk):
-        xc, yc = jnp.asarray(x[s : s + chunk]), jnp.asarray(y[s : s + chunk])
+        xc = jnp.asarray(x[s : s + chunk], dtype=jnp.float64)
+        yc = jnp.asarray(y[s : s + chunk], dtype=jnp.float64)
         m = xc.shape[0]
         if m == chunk:
             yield xc, yc, ones
@@ -60,15 +67,22 @@ def _chunks(x, y, chunk):
 
 
 def _pass(stats, theta, x, y, chunk):
-    """One full pass: summed (cost, g, H) on the host."""
-    th = jnp.asarray(theta)
+    """One full pass: summed (cost, g, H) on the host; raises if x or y is non-finite."""
+    th = jnp.asarray(theta, dtype=jnp.float64)
     acc = None
     for xc, yc, w in _chunks(x, y, chunk):
         out = stats(th, xc, yc, w)
         acc = (
-            out if acc is None else tuple(a + b for a, b in zip(acc, out, strict=True))
+            out
+            if acc is None
+            else (
+                *(a + b for a, b in zip(acc[:3], out[:3], strict=True)),
+                acc[3] & out[3],
+            )
         )
-    c, g, H = jax.device_get(acc)
+    c, g, H, data_finite = jax.device_get(acc)
+    if not data_finite:
+        raise ValueError("x and y must be finite (found NaN or inf)")
     return float(c), np.asarray(g), np.asarray(H)
 
 
@@ -118,6 +132,38 @@ def _stationary(cost, g, H, free, gtol, ftol):
     return None
 
 
+_MESSAGES = {
+    "gtol": "gradient below gtol (or exact fit)",
+    "ftol": "cost decrease below ftol",
+    "xtol": "step below xtol",
+    "max_nfev": "maximum number of data passes reached",
+    "stalled": (
+        f"no further progress: trials rejected until damping reached {LAMBDA_MAX:g}"
+        f" or the {ATTEMPT_CAP}-attempt cap"
+    ),
+}
+
+
+def _damping(D_prev, H):
+    """Moré running maximum of diag(H), floored; identity if every diagonal is zero."""
+    D = np.maximum(D_prev, np.diag(H))
+    top = D.max()
+    return np.maximum(D, DAMPING_FLOOR * top) if top > 0 else np.ones_like(D)
+
+
+def _finite(c, g, H):
+    return bool(np.isfinite(c) and np.isfinite(g).all() and np.isfinite(H).all())
+
+
+def _solve(Hf, lam, Df, gf):
+    """Damped step, or None if the solve fails or is non-finite."""
+    try:
+        d = np.linalg.solve(Hf + lam * np.diag(Df), gf)
+    except np.linalg.LinAlgError:
+        return None
+    return d if np.isfinite(d).all() else None
+
+
 def fit(
     model,
     x,
@@ -129,6 +175,7 @@ def fit(
     xtol=1e-8,
     gtol=1e-8,
     max_nfev=None,
+    lam0=1e-3,
 ):
     """Exact full-data LM. `max_nfev` counts full-data passes (default 100*p)."""
     x_dev_ok = hasattr(x, "shape")
@@ -141,15 +188,12 @@ def fit(
     lo = np.broadcast_to(np.asarray(bounds[0], float), (p,))
     hi = np.broadcast_to(np.asarray(bounds[1], float), (p,))
     stats = make_stats(model)
-    theta = np.clip(np.asarray(p0, float), lo, hi)
+    theta = np.clip(np.asarray(p0, np.float64), lo, hi)
     cost, g, H = _pass(stats, theta, x, y, chunk)
-    nfev, lam, nu = 1, 1e-3, 2.0
-    messages = {
-        "gtol": "gradient below gtol (or exact fit)",
-        "ftol": "cost decrease below ftol",
-        "xtol": "step below xtol",
-        "max_nfev": "maximum number of data passes reached",
-    }
+    if not _finite(cost, g, H):
+        raise ValueError("model cost, gradient or Hessian is not finite at p0")
+    nfev, lam, nu = 1, lam0, 2.0
+    D = np.zeros(p)  # Moré running maximum of diag(H)
     while True:
         # g = J^T r is the descent direction; a variable at a bound with g pointing out is fixed
         free = ~(((theta <= lo) & (g <= 0)) | ((theta >= hi) & (g >= 0)))
@@ -160,11 +204,16 @@ def fit(
             termination = "max_nfev"
             break
         Hf, gf = H[np.ix_(free, free)], g[free]
-        accepted = False
-        while nfev < max_nfev and lam <= 1e14:
-            try:
-                d = np.linalg.solve(Hf + lam * np.diag(np.diag(Hf)), gf)
-            except np.linalg.LinAlgError:
+        D = _damping(D, H)
+        accepted = out_of_budget = False
+        attempts = 0
+        while attempts < ATTEMPT_CAP and lam <= LAMBDA_MAX:
+            if nfev >= max_nfev:
+                out_of_budget = True
+                break
+            attempts += 1
+            d = _solve(Hf, lam, D[free], gf)
+            if d is None:  # failed solve: no data pass, still an attempt
                 lam, nu = lam * nu, nu * 2
                 continue
             new = theta.copy()
@@ -175,16 +224,18 @@ def fit(
             c_new, g_new, H_new = _pass(stats, new, x, y, chunk)
             nfev += 1
             actual = cost - c_new
-            finite = np.isfinite(c_new) and np.isfinite(g_new).all()
-            if finite and np.isfinite(H_new).all() and actual > 0 and pred > 0:
+            if _finite(c_new, g_new, H_new) and actual > 0 and pred > 0:
                 rho = actual / pred
-                lam = max(lam * max(1 / 3, 1 - (2 * rho - 1) ** 3), 1e-14)
+                # cap: an acceptance must not leave lam above the ceiling (next iteration would skip its trials)
+                lam = min(
+                    max(lam * max(1 / 3, 1 - (2 * rho - 1) ** 3), 1e-14), LAMBDA_MAX
+                )
                 nu = 2.0
                 accepted = True
                 break
             lam, nu = lam * nu, nu * 2
         if not accepted:
-            termination = "max_nfev" if lam <= 1e14 else "stalled"
+            termination = "max_nfev" if out_of_budget else "stalled"
             break
         step = step_termination(
             actual, cost, rho, np.linalg.norm(s), np.linalg.norm(theta), ftol, xtol
@@ -193,12 +244,9 @@ def fit(
         if step:
             termination = step
             break
-    if termination == "stalled":
-        message = "no further progress: trials rejected until damping reached 1e14"
-        if _scaled_eig(g, H)[3]:
-            message += "; rank cannot be certified from normal equations"
-    else:
-        message = messages[termination]
+    message = _MESSAGES[termination]
+    if termination == "stalled" and _scaled_eig(g, H)[3]:
+        message += "; rank cannot be certified from normal equations"
     s2 = 2.0 * cost / max(n - p, 1)
     try:
         pcov = s2 * np.linalg.inv(H)
