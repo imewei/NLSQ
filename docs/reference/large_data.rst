@@ -128,7 +128,7 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   ``p0`` is clipped into the box, a parameter on a bound whose gradient points
   outward is held, the rest take a damped step that is projected back onto the
   box. The fit is exact for the box-constrained problem and the returned point
-  satisfies the KKT conditions; it differs from ``method="trf"`` in the path
+  is a KKT point to within the stopping tolerances; it differs from ``method="trf"`` in the path
   taken, not in what a solution is (on a non-convex problem the two may still
   reach different local minima). While a bound is active, stationarity is
   certified by the exact maximum decrease of the Gauss-Newton model over the
@@ -146,14 +146,22 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   (pseudo-inverse, scaled by the residual variance unless ``absolute_sigma``)
   but is computed from the normal equations ``J^T J``, which squares
   ``cond(J)``. Expect about ``1e-6`` relative agreement with ``curve_fit`` for
-  ``cond(J) <= 1e4`` and ``1e-3`` for ``cond(J) <= 1e6``; a ``UserWarning`` is
-  issued beyond ``1e4``.
-  A conditioning study against a 50-digit reference kept the normal equations
-  (no QR/TSQR accumulation): at the same parameters the accumulated ``J^T J`` step
-  and covariance were accurate to 1e-12 and 1e-8 for ``cond(J) <= 1e4``, and the
-  covariance error grew as expected with ``cond(J)^2`` beyond that (about 5e-6 at
-  ``cond(J) = 7e5``). Only one problem fell inside the rule's ``cond(J) <= 1e4``
-  range, so treat the warning as the guidance for ill-conditioned fits.
+  ``cond(J) <= 1e4`` and, for well-determined problems, ``1e-3`` for
+  ``cond(J) <= 1e6`` (degenerate two_exp rows with ``cond(J)`` 6e4-9e4 showed
+  covariance errors of 1.0 and 0.33). A ``UserWarning`` is issued beyond
+  ``1e4``: there the fitted *parameters* can also stop short (poly12,
+  ``cond(J) = 7.5e8``: parameter error O(1) with ``success=True`` for both
+  candidates in the study), so check such results.
+  In a conditioning study against a 50-digit reference, the pre-registered rule
+  returns ``tsqr_default`` at tol 1e-12 (a stopping artifact shared by TSQR) and
+  ``normal_equations_stay`` at 1e-15; normal equations (no QR/TSQR accumulation)
+  were kept on that interpretation with thin evidence (1 of 40 rows), see
+  ``benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md``. At the
+  same parameters the accumulated ``J^T J`` step and covariance were accurate to
+  about 2e-12 and 2e-8 (one problem) for ``cond(J) <= 1e4``; beyond that the
+  covariance error grows with ``cond(J)``; ``cond(J)^2 * eps`` is the
+  worst-case bound (about 5e-6 at ``cond(J) = 7e5``). Treat the warning as the
+  guidance for ill-conditioned fits.
 - **Scale:** the method has been run on one billion points (16 GB of ``x`` and
   ``y`` in an HDF5 file) with 1.8 GiB peak host memory; each pass reads the file once.
 

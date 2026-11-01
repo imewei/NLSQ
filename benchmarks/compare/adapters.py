@@ -176,7 +176,7 @@ class _NLSQExact(_Base):
         True,
         False,
         True,
-        "exact full-data LM; bounds by active set (KKT point, not Coleman-Li TRF)",
+        "exact full-data LM; bounds by active set (KKT point to within the stopping tolerances, not Coleman-Li TRF)",
     )
 
     def _fit(self, problem, x, y):

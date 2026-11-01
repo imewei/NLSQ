@@ -327,7 +327,6 @@ def machine_state() -> dict[str, Any]:
         "jax": jax.__version__,
         "numpy": np.__version__,
         "python": platform.python_version(),
-        "host": platform.node(),
     }
 
 
@@ -380,7 +379,10 @@ def run(a: argparse.Namespace) -> int:
         )
     d = Path(a.data_dir)
     d.mkdir(parents=True, exist_ok=True)
-    report: dict[str, Any] = {"args": vars(a), "machine": machine_state()}
+    # no local paths or host name in the record: basenames only, the --out path dropped
+    args = {k: v for k, v in vars(a).items() if k != "out"}
+    args["data_dir"] = Path(a.data_dir).name
+    report: dict[str, Any] = {"args": args, "machine": machine_state()}
     paths = {
         "noiseless": d / f"exp_decay_n{n}_c{chunk}_s{a.seed}_noise0.h5",
         "noisy": d / f"exp_decay_n{n}_c{chunk}_s{a.seed}_noise{a.noise:g}.h5",
@@ -389,7 +391,7 @@ def run(a: argparse.Namespace) -> int:
         t = time.perf_counter()
         st = write_dataset(paths[key], n, a.seed, noise, chunk)
         report[f"generate_{key}"] = {
-            "path": str(paths[key]),
+            "path": paths[key].name,
             "status": st,
             "s": time.perf_counter() - t,
         }

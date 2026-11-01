@@ -4,9 +4,8 @@
   "n": 100000000,
   "seed": 0,
   "chunk_rows": 4194304,
-  "data_dir": "/home/wei/exact_1b_data/data1e8",
-  "noise": 0.05,
-  "out": "/tmp/claude-1000/-home-wei-Documents-GitHub-NLSQ/ec4e384c-676f-4c01-b3d1-4e4a9264e788/scratchpad/gate/exact_1e8.json"
+  "data_dir": "data1e8",
+  "noise": 0.05
  },
  "machine": {
   "governor": "powersave",
@@ -25,12 +24,12 @@
   "python": "3.13.7"
  },
  "generate_noiseless": {
-  "path": "/home/wei/exact_1b_data/data1e8/exp_decay_n100000000_c4194304_s0_noise0.h5",
+  "path": "exp_decay_n100000000_c4194304_s0_noise0.h5",
   "status": "written",
   "s": 1.913494578038808
  },
  "generate_noisy": {
-  "path": "/home/wei/exact_1b_data/data1e8/exp_decay_n100000000_c4194304_s0_noise0.05.h5",
+  "path": "exp_decay_n100000000_c4194304_s0_noise0.05.h5",
   "status": "written",
   "s": 3.0524357249960303
  },

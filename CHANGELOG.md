@@ -44,7 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     equal, inverted or NaN bounds raise `ValueError`) by an active set, not Coleman-Li
     TRF: `p0` is clipped into the box, parameters on a bound with an outward gradient
     are held, and trial steps are projected onto the box. The result is exact for the
-    box-constrained problem and satisfies the KKT conditions at the returned point; it
+    box-constrained problem and the returned point is a KKT point to within the stopping
+    tolerances; it
     differs from `method="trf"` in the path, not in what counts as a solution. With a
     bound active, stationarity is certified by the exact maximum decrease of the
     Gauss-Newton model over the box (host-side, no extra data pass).
@@ -59,9 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `ValueError` after the first pass when `check_finite=True`.
   - **Covariance caveat:** `pcov` follows the `curve_fit` contract but is computed from
     the normal equations `J^T J`, which squares `cond(J)`. Agreement with `curve_fit` is
-    about `1e-6` relative for `cond(J) <= 1e4` and `1e-3` for `cond(J) <= 1e6`; beyond
-    `1e4` a `UserWarning` is emitted, and an uncomputable covariance is all-`inf` with
-    an `OptimizeWarning`.
+    about `1e-6` relative for `cond(J) <= 1e4` and, for well-determined problems, `1e-3`
+    for `cond(J) <= 1e6` (degenerate two_exp rows with `cond(J)` 6e4-9e4 showed covariance
+    errors of 1.0 and 0.33). Beyond `1e4` a `UserWarning` is emitted: the fitted parameters
+    can also stop short there (poly12, `cond(J) = 7.5e8`: parameter error O(1) with
+    `success=True` for both candidates), so check such results. An uncomputable covariance
+    is all-`inf` with an `OptimizeWarning`.
   - `nlsq.fit(..., method="exact_streaming")` raises `ValueError` pointing to
     `curve_fit_large` at every dataset size.
   - **Verified at scale:** a 1,000,000,000-point exp_decay fit read from HDF5 (16 GB of `x`/`y`)
@@ -70,9 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     streaming NumPy cost to 2e-16, shifts under a 1,000-point sentinel offset by the predicted amount,
     and peaks at 1.8 GiB host RSS; a pass takes 4-10 s depending on the page cache
     (`benchmarks/baselines/2026-10-31-exact-streaming-1b.md`).
-  - **Conditioning study (normal equations vs TSQR):** the pre-registered study kept normal equations;
-    the `cond(J) > 1e4` covariance warning stays. Only one of 40 accuracy rows fell in the rule's
-    range, so the evidence is thin and the covariance caveat above is the user-facing guidance
+  - **Conditioning study (normal equations vs TSQR):** the pre-registered rule returns `tsqr_default` at tol 1e-12 (a stopping artifact shared by TSQR) and `normal_equations_stay` at 1e-15;
+    normal equations were kept on that interpretation with thin evidence (1 of 40 rows);
+    the `cond(J) > 1e4` covariance warning stays and the covariance caveat above is the user-facing
+    guidance
     (`benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md`).
 - `benchmarks/compare/`: library comparison harness (NLSQ vs SciPy, lmfit, JAXopt,
   Optimistix) with shared tolerances, per-case fresh-process cold timing, an

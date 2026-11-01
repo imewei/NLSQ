@@ -16,6 +16,10 @@ NLSQ_FORCE_CPU=1 JAX_PLATFORMS=cpu PYTHONPATH=. .venv/bin/python -m benchmarks.s
 Seeds 0-4, accuracy set `n = 2000`, scale set `n = 2e4`, chunk 512, 50-digit mpmath reference.
 i9-13900H (20 logical CPUs), governor `powersave`, no GPU. Full printed output of both runs:
 `benchmarks/baselines/2026-10-31-exact-streaming-conditioning-logs/tol1e-12.txt` and `tol1e-15.txt`.
+The "eligible failed rows ... make the verdict UNDECIDED" banner line in those logs
+(`tol1e-12.txt:140`, `tol1e-15.txt:137`) is a static footer that printed even though every failed
+row was excluded (the script now prints it only when a row blocks the verdict); the verdict lines
+are authoritative.
 Candidates: normal equations = the library path `exact_lm_fit`; TSQR = a loop in the study script that
 mirrors the module's LM loop (same damping, Nielsen update, representable-step prediction and stopping),
 whose step comes from the augmented `[J | r]` R-factor (`tsqr_solve`). Both run on identical float64
@@ -57,7 +61,8 @@ build TSQR. The tolerance was not chosen on the verdict; both are reported.
   1e4 (smallest 1.98e4, gauss3 seed 3), so none belongs to the rule's range. A `κ` evaluated at an
   approximate solution of a degenerate problem is itself uncertain (for the one row with a valid
   reference, SciPy's value was 1.4e16 against the true 8.5e3), which is why the rule is judged on one row.
-- Above the rule's range the expected `κ²` scaling appears in the normal-equation covariance: poly8
+- Above the rule's range the normal-equation covariance error grows with `κ(J)`; `κ(J)²·eps` is the
+  worst-case bound. poly8
   (`κ = 7e5`) covariance error 5.0e-6 against 6e-12 for TSQR at the same parameters; poly12
   (`κ = 7.5e8`) 5.0e-4 against 6e-5 to 2.1e-3 for TSQR (TSQR is not uniformly better there: one seed
   exceeds 1e-3). In those poly rows the normal-equation covariance error stays under 1e-3. It does not

@@ -721,9 +721,11 @@ def summarize(rows: list[dict], missing: list[str]) -> None:
                 f"CONFLICT at kappa {r['kappa']:.3g} (costs {r['ref_costs']}, "
                 f"kept {r['ref_start']})"
             )
-        print(
-            "!! eligible failed rows and in-range mismatches make the verdict UNDECIDED"
-        )
+        if blocking:  # only then is the verdict UNDECIDED
+            print(
+                "!! eligible failed rows and in-range mismatches make the verdict "
+                "UNDECIDED"
+            )
         print("!" * 78)
     out_basin = [r for r in basin_bad if not _in_range(r["kappa"])]
     if out_basin:
