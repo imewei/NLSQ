@@ -151,6 +151,11 @@ def _damping(D_prev, H):
     return np.maximum(D, DAMPING_FLOOR * top) if top > 0 else np.ones_like(D)
 
 
+def _check_lam0(lam0):
+    if not 0 < lam0 <= LAMBDA_MAX:
+        raise ValueError(f"lam0 must satisfy 0 < lam0 <= {LAMBDA_MAX:g}")
+
+
 def _finite(c, g, H):
     return bool(np.isfinite(c) and np.isfinite(g).all() and np.isfinite(H).all())
 
@@ -177,7 +182,11 @@ def fit(
     max_nfev=None,
     lam0=1e-3,
 ):
-    """Exact full-data LM. `max_nfev` counts full-data passes (default 100*p)."""
+    """Exact full-data LM. `max_nfev` counts full-data passes (default 100*p).
+
+    `lam0` is the initial damping (0 < lam0 <= 1e14); tests use it to place lambda near a limit.
+    """
+    _check_lam0(lam0)
     x_dev_ok = hasattr(x, "shape")
     if not x_dev_ok or x.ndim != 1 or y.shape != x.shape:
         raise ValueError("x and y must be 1-D arrays of equal length")

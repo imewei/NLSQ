@@ -170,10 +170,21 @@ def test_nan_in_H_stalls_within_attempt_cap(data, monkeypatch):
         return c * 0.5, g, np.full_like(H, np.nan)
 
     monkeypatch.setattr(lm, "_pass", fake)
-    out = run(exp_model, *data, EXP.p0)
+    # lam0=1e-300 needs ~46 rejections to reach the 1e14 ceiling, so the cap stops the run
+    out = run(exp_model, *data, EXP.p0, lam0=1e-300)
     assert out["termination"] == "stalled"
     assert out["success"] is False
-    assert out["nfev"] <= 1 + 20
+    assert out["nfev"] == 1 + 20
+
+
+def test_failed_solves_count_as_attempts_without_data_passes(data, monkeypatch):
+    calls = []
+    monkeypatch.setattr(lm, "_solve", lambda *a: calls.append(1))  # returns None
+    out = run(exp_model, *data, EXP.p0, lam0=1e-300)
+    assert out["termination"] == "stalled"
+    assert out["success"] is False
+    assert out["nfev"] == 1  # no trial reached the data
+    assert len(calls) == 20  # one failed solve per attempt, then the cap
 
 
 def test_rank_two_h_for_p3_converges(data):
@@ -193,9 +204,12 @@ def test_noisy_collinear_start_at_optimum_success_or_stall(data):
 
 
 def test_float32_input_equals_float64_input(data):
+    def model(x, a, b, c):  # sqrt(x + 1) is rounded in float32 unless x is cast first
+        return a * jnp.exp(-b * jnp.sqrt(x + 1.0)) + c
+
     x32, y32 = (np.asarray(a, dtype=np.float32) for a in data)
-    a = run(exp_model, x32, y32, EXP.p0)
-    b = run(exp_model, x32.astype(np.float64), y32.astype(np.float64), EXP.p0)
+    a = run(model, x32, y32, EXP.p0)
+    b = run(model, x32.astype(np.float64), y32.astype(np.float64), EXP.p0)
     assert np.array_equal(a["x"], b["x"])
     assert a["nfev"] == b["nfev"]
 
