@@ -699,6 +699,38 @@ def test_compute_covariance_overflow_safe():
     assert np.isposinf(pc).all()
 
 
+def _reference_covariance(H, cost, n, p, absolute_sigma):
+    """Unscaled reference (the pre-scaling implementation) for finite, moderate H."""
+    w, V = np.linalg.eigh((H + H.T) / 2)
+    keep = w > p * np.finfo(np.float64).eps * w[-1]
+    cov = (V[:, keep] / w[keep]) @ V[:, keep].T
+    return cov if absolute_sigma else cov * (2.0 * cost / (n - p))
+
+
+def test_compute_covariance_matches_unscaled_reference():
+    # H of an arbitrary non-power-of-two magnitude, cond up to 1e8: scaling must be exact
+    rng = np.random.default_rng(0)
+    p, n, cost = 4, 50, 1.7
+    for k in range(10):
+        Q, _ = np.linalg.qr(rng.standard_normal((p, p)))
+        ev = np.logspace(0, rng.uniform(1, 8), p)
+        H = (Q * ev) @ Q.T * rng.uniform(0.3, 7.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)  # ill-conditioned notice
+            got = lm.compute_covariance(H, cost, n, p, False)
+        np.testing.assert_allclose(
+            got, _reference_covariance(H, cost, n, p, False), rtol=1e-12, atol=0.0
+        )
+
+
+def test_compute_covariance_cond_overflow_no_runtime_warning():
+    # lam_max / lam_min = 1e320 overflows float64: still the documented cond UserWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        with pytest.warns(UserWarning, match=r"ill-conditioned \(sqrt\(cond\(H\)\)"):
+            lm.compute_covariance(np.diag([1.0, 1e-320]), 0.4, 10, 2, False)
+
+
 # ---- Task 8: 1-D sigma (weights) and weighted covariance -------------------------------
 
 

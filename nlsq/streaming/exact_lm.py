@@ -452,14 +452,20 @@ def compute_covariance(
     H = np.asarray(H, dtype=np.float64)
     pcov = np.full((p, p), np.inf)
     if np.isfinite(H).all():
-        # eigh on H/s (entries <= 1): H + H.T would overflow for |H| > 1e308 / 2
-        s = np.max(np.abs(H)) or 1.0
+        # eigh on H/s with s a power of two (scaling is exact, entries < 2): H + H.T would
+        # overflow for |H| > 1e308 / 2
+        top = np.max(np.abs(H))
+        s = np.ldexp(1.0, int(np.frexp(top)[1]) - 1) if top > 0 else 1.0
         Hs = H / s
         w, V = np.linalg.eigh((Hs + Hs.T) / 2)  # ascending
         keep = w > p * np.finfo(np.float64).eps * w[-1]
         if keep.any():
             lam_min = w[0] if w[0] > 0 else 0.0
-            if lam_min == 0.0 or np.sqrt(w[-1] / lam_min) > COND_WARN:
+            with np.errstate(
+                over="ignore", divide="ignore"
+            ):  # cond may overflow to inf
+                ill = lam_min == 0.0 or np.sqrt(w[-1] / lam_min) > COND_WARN
+            if ill:
                 warnings.warn(
                     f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
                     f"{COND_WARN:.0e}); the covariance may be inaccurate",
