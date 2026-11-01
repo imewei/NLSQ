@@ -309,7 +309,15 @@ def _selftest():
         print(f"{name:12s} ok  passes={small['nfev']:2d}  cost={small['cost']:.6f}")
 
 
-def _bench(problem, n, host, repeats=3):
+def _module_fit(model, x, y, p0, b):
+    """`--impl module`: the library engine with this prototype's chunk and tolerances."""
+    from nlsq.streaming.exact_lm import exact_lm_fit
+
+    # check_finite=False: the prototype has no finite-data pass, so time the solver alone
+    return exact_lm_fit(model, x, y, p0, bounds=b, chunk_size=CHUNK, check_finite=False)
+
+
+def _bench(problem, n, host, repeats=3, impl="prototype"):
     from benchmarks.compare.problems import PROBLEMS
     from benchmarks.compare.timing import residual_cost
 
@@ -319,28 +327,41 @@ def _bench(problem, n, host, repeats=3):
     b = pr.bounds if pr.bounds is not None else (-np.inf, np.inf)
     xd, yd = (x, y) if host else (jnp.asarray(x), jnp.asarray(y))
     jax.block_until_ready(jnp.ones(3) + 1)
+    run = fit if impl == "prototype" else _module_fit
     times, out = [], None
     for _ in range(repeats + 1):  # first call is cold
         t = time.perf_counter()
-        out = fit(model, xd, yd, pr.p0, b)
+        out = run(model, xd, yd, pr.p0, b)
         times.append(time.perf_counter() - t)
     cost = residual_cost(pr, x, y, out["x"])
     print(
-        f"{problem} n={n:,} backend={jax.default_backend()} data={'host' if host else 'device'} "
+        f"impl={impl} {problem} n={n:,} backend={jax.default_backend()} data={'host' if host else 'device'} "
         f"cold={times[0]:.2f}s warm_median={np.median(times[1:]):.2f}s passes={out['nfev']} "
         f"cost={cost!r} params={np.round(out['x'], 5).tolist()} ({out['message']})"
     )
+    return {"impl": impl, "cost": cost, "nfev": out["nfev"], "x": out["x"]}
 
 
-if __name__ == "__main__":
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--bench", nargs=2, metavar=("PROBLEM", "N"))
     ap.add_argument(
         "--host", action="store_true", help="keep data on host, stream chunks"
     )
-    a = ap.parse_args()
+    ap.add_argument(
+        "--impl",
+        choices=("prototype", "module"),
+        default="prototype",
+        help="--bench only: time this file's fit or nlsq.streaming.exact_lm.exact_lm_fit",
+    )
+    ap.add_argument("--repeats", type=int, default=3, help="--bench warm repeats")
+    a = ap.parse_args(argv)
     if a.selftest:
         _selftest()
     if a.bench:
-        _bench(a.bench[0], int(a.bench[1]), a.host)
+        return _bench(a.bench[0], int(a.bench[1]), a.host, a.repeats, a.impl)
+
+
+if __name__ == "__main__":
+    main()

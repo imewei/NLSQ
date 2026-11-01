@@ -18,6 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import nlsq
+from nlsq.streaming.exact_lm import ExactSolverError
 
 from .problems import PROBLEMS, Problem
 from .types import FitOutcome
@@ -132,6 +133,67 @@ class _NLSQ(_Base):
         )
         popt, _, info, _, ier = r
         return FitOutcome(np.asarray(popt), ier in (1, 2, 3, 4), int(info["nfev"]))
+
+
+class _NLSQLarge(_Base):
+    """`curve_fit_large` default path (chunked precision-weighted GLS above 1M points)."""
+
+    name, dist = "nlsq_large", "nlsq"
+    capabilities = Capabilities(
+        True,
+        True,
+        True,
+        False,
+        True,
+        "chunked GLS above 1M points: not a full-batch fit; reports no convergence flag",
+    )
+
+    def _fit(self, problem, x, y):
+        # same call as benchmarks/results/2026-10-31/nlsq_large.py: library defaults for
+        # memory_limit_gb and chunking. The chunked path returns no status, so
+        # `converged` is True unless it raises.
+        popt, _ = nlsq.curve_fit_large(
+            _jnp_model(problem),
+            x,
+            y,
+            p0=problem.p0,
+            bounds=_bounds(problem),
+            ftol=TOL,
+            xtol=TOL,
+            gtol=TOL,
+            max_nfev=MAX_ITER,
+        )
+        return FitOutcome(np.asarray(popt), True, None)
+
+
+class _NLSQExact(_Base):
+    """`curve_fit_large(method="exact_streaming")`: exact full-data LM."""
+
+    name, dist = "nlsq_exact", "nlsq"
+    # bounds=False until Task 9 (Stage 2) adds them to the exact solver
+    capabilities = Capabilities(
+        False, False, True, False, True, "exact full-data LM; bounds/sigma in Stage 2"
+    )
+
+    def _fit(self, problem, x, y):
+        try:
+            popt, _ = nlsq.curve_fit_large(
+                _jnp_model(problem),
+                x,
+                y,
+                p0=problem.p0,
+                method="exact_streaming",
+                ftol=TOL,
+                xtol=TOL,
+                gtol=TOL,
+                max_nfev=MAX_ITER,
+            )
+        except (
+            ExactSolverError
+        ) as e:  # stalled / out of passes: a failed fit, not a crash
+            r = e.result
+            return FitOutcome(np.asarray(r["x"]), False, int(r["nfev"]))
+        return FitOutcome(np.asarray(popt), True, None)
 
 
 class _SciPy(_Base):
@@ -317,5 +379,14 @@ class _Optimistix(_JaxBase):
 
 
 ADAPTERS: dict[str, Adapter] = {
-    a.name: a for a in (_NLSQ(), _SciPy(), _LMFit(), _JAXopt(), _Optimistix())
+    a.name: a
+    for a in (
+        _NLSQ(),
+        _NLSQLarge(),
+        _NLSQExact(),
+        _SciPy(),
+        _LMFit(),
+        _JAXopt(),
+        _Optimistix(),
+    )
 }

@@ -15,8 +15,16 @@ def _cases():
     return [(n, m) for n, a in ADAPTERS.items() for m in a.modes]
 
 
-def test_registry_has_the_five_libraries():
-    assert set(ADAPTERS) == {"nlsq", "scipy", "lmfit", "jaxopt", "optimistix"}
+def test_registry_has_the_seven_adapters():
+    assert set(ADAPTERS) == {
+        "nlsq",
+        "nlsq_large",
+        "nlsq_exact",
+        "scipy",
+        "lmfit",
+        "jaxopt",
+        "optimistix",
+    }
 
 
 @pytest.mark.parametrize("name", NAMES)
@@ -49,7 +57,8 @@ def test_core_dependencies_are_available(name):
 @pytest.mark.parametrize("name", NAMES)
 def test_unbounded_libraries_decline_the_bounded_problem(name):
     ok, reason = ADAPTERS[name].supports(PROBLEMS["bounded_exp"])
-    if name in ("jaxopt", "optimistix"):
+    # nlsq_exact declines bounds until Task 9 (Stage 2) adds them
+    if name in ("jaxopt", "optimistix", "nlsq_exact"):
         assert not ok
         assert "bounds" in reason
     else:
@@ -85,6 +94,26 @@ def test_batch_cost_matches_single_fit_cost(name, mode):
     cb = residual_cost(EXP, x, Y[0], batch[0].params)
     cs = residual_cost(EXP, x, Y[0], single.params)
     assert cb == pytest.approx(cs, rel=1e-6)
+
+
+def test_nlsq_exact_reports_solver_failure_as_unconverged_outcome(monkeypatch):
+    """ExactSolverError (stalled / max_nfev) becomes converged=False, not a crash."""
+    from nlsq.result.optimize_result import OptimizeResult
+    from nlsq.streaming.exact_lm import ExactSolverError
+
+    res = OptimizeResult(
+        x=np.array([1.0, 2.0, 3.0]), nfev=7, success=False, termination="max_nfev"
+    )
+
+    def boom(*a, **k):
+        raise ExactSolverError("exact_streaming fit failed (max_nfev)", res)
+
+    monkeypatch.setattr("benchmarks.compare.adapters.nlsq.curve_fit_large", boom)
+    x, y = EXP.data(100)
+    out = ADAPTERS["nlsq_exact"].prepare(EXP, x, y, "end_to_end")()
+    assert out.converged is False
+    assert out.nfev == 7
+    np.testing.assert_array_equal(out.params, [1.0, 2.0, 3.0])
 
 
 def test_jaxopt_capability_records_unmaintained():
