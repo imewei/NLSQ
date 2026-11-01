@@ -44,6 +44,7 @@ from nlsq.precision.parameter_normalizer import (
 )
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
+from nlsq.streaming.normal_equations import NormalEquations
 from nlsq.streaming.telemetry import (
     DefenseLayerTelemetry,
     get_defense_telemetry,
@@ -228,6 +229,10 @@ class AdaptiveHybridStreamingOptimizer:
         # Pre-compiled Jacobian function (set up in _setup_jacobian_fn)
         # This avoids recompilation overhead in _compute_jacobian_chunk
         self._jacobian_fn_compiled: Callable | None = None
+
+        # (normalized_model, _jacobian_fn_compiled, NormalEquations) built by
+        # _get_normal_eq; rebuilt when either object is reassigned
+        self._normal_eq: tuple[Any, Any, NormalEquations] | None = None
 
         # User progress callback set by fit(); invoked every
         # config.callback_frequency iterations in Phase 1 and Phase 2.
@@ -2425,6 +2430,33 @@ class AdaptiveHybridStreamingOptimizer:
         jac_fn = jax.vmap(lambda x: jax.jacrev(model_at_x, argnums=0)(params, x))
         return jac_fn(x_chunk)
 
+    def _get_normal_eq(self) -> NormalEquations:
+        """Shared chunk kernel for ``normalized_model``, keeping the hybrid Jacobian.
+
+        Built lazily and rebuilt whenever ``normalized_model`` or
+        ``_jacobian_fn_compiled`` is a different object than at the last build.
+        """
+        model, jac = self.normalized_model, self._jacobian_fn_compiled
+        cached = self._normal_eq
+        if cached is not None and cached[0] is model and cached[1] is jac:
+            return cached[2]
+
+        def jacobian(theta: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
+            if jac is not None:
+                return jac(theta, x)
+
+            # same inline fallback as _compute_jacobian_chunk
+            def model_at_x(p, x_single):
+                return jnp.atleast_1d(model(x_single[None], *p))[0]
+
+            return jax.vmap(lambda xi: jax.jacrev(model_at_x, argnums=0)(theta, xi))(x)
+
+        ne = NormalEquations(
+            model, chunk=self.config.chunk_size, jacobian=jacobian
+        )  # chunk only sizes run_pass; chunk_stats takes any length
+        self._normal_eq = (model, jac, ne)
+        return ne
+
     def _accumulate_jtj_jtr(
         self,
         x_chunk: jnp.ndarray,
@@ -2471,23 +2503,14 @@ class AdaptiveHybridStreamingOptimizer:
         - J^T r_new = J^T r_prev + J_chunk^T @ r_chunk
         where r_chunk = y_chunk - f(x_chunk, params)
         """
-        # Compute predictions for chunk
-        predictions = self.normalized_model(x_chunk, *params)
+        mask = jnp.ones(len(x_chunk), dtype=bool)  # production chunks are unpadded
+        F, g, H = self._get_normal_eq().chunk_stats(params, x_chunk, y_chunk, mask)
 
-        # Compute residuals
-        residuals = y_chunk - predictions
+        JTJ_new = JTJ_prev + H
+        JTr_new = JTr_prev + g
 
-        # Compute Jacobian for chunk
-        J_chunk = self._compute_jacobian_chunk(x_chunk, params)
-
-        # Accumulate J^T J: (n_params, n_params)
-        JTJ_new = JTJ_prev + J_chunk.T @ J_chunk
-
-        # Accumulate J^T r: (n_params,)
-        JTr_new = JTr_prev + J_chunk.T @ residuals
-
-        # Compute residual sum of squares for this chunk
-        residual_sum_sq = float(jnp.sum(residuals**2))
+        # kernel cost is 0.5*sum r^2; this method returns sum r^2
+        residual_sum_sq = float(2.0 * F)
 
         # Store accumulators for checkpointing
         self.phase2_JTJ_accumulator = JTJ_new

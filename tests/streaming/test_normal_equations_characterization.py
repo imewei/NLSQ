@@ -423,3 +423,25 @@ def test_hybrid_padded_tail_finite():
     for g, r in zip(got, ref, strict=True):
         assert np.all(np.isfinite(np.asarray(g)))
         np.testing.assert_allclose(g, r, rtol=RTOL, atol=ATOL)
+
+
+def test_hybrid_chunk_cost_convention():
+    """Hybrid chunk cost is sum(r^2), not the kernel's 0.5 * sum(r^2)."""
+    opt, _, p0_norm = _setup(_config())
+    x_chunk, y_chunk, params, jtj0, jtr0 = _chunk_inputs(opt, p0_norm)
+    _, _, cost = opt._accumulate_jtj_jtr(x_chunk, y_chunk, params, jtj0, jtr0)
+    expected = float(jnp.sum((y_chunk - opt.normalized_model(x_chunk, *params)) ** 2))
+    assert float(cost) == pytest.approx(expected, rel=1e-12)
+
+
+def test_hybrid_kernel_follows_reassigned_jacobian():
+    """Dropping _jacobian_fn_compiled rebuilds the kernel on the inline fallback."""
+    opt, _, p0_norm = _setup(_config())
+    args = _chunk_inputs(opt, p0_norm)
+    ref = opt._accumulate_jtj_jtr(*args)
+    first = opt._get_normal_eq()
+    opt._jacobian_fn_compiled = None
+    assert opt._get_normal_eq() is not first
+    got = opt._accumulate_jtj_jtr(*args)
+    for g, r in zip(got, ref, strict=True):
+        np.testing.assert_allclose(g, r, rtol=RTOL, atol=ATOL)
