@@ -367,7 +367,9 @@ def check_model_contract(
     false alarm. A model that behaves differently only on later chunks is not detected.
     """
     m = len(x_chunk)
-    th = [float(t) for t in theta]
+    # the real fit passes JAX float64 arrays/tracers: probe with the same types
+    th = [jnp.asarray(t, dtype=jnp.float64) for t in theta]
+    x_chunk = jnp.asarray(x_chunk, dtype=jnp.float64)
 
     # compared on the model's own device: a host round trip of the 4M-point chunk and
     # three np.allclose passes cost ~0.2 s per fit on GPU
@@ -450,7 +452,10 @@ def compute_covariance(
     H = np.asarray(H, dtype=np.float64)
     pcov = np.full((p, p), np.inf)
     if np.isfinite(H).all():
-        w, V = np.linalg.eigh((H + H.T) / 2)  # ascending
+        # eigh on H/s (entries <= 1): H + H.T would overflow for |H| > 1e308 / 2
+        s = np.max(np.abs(H)) or 1.0
+        Hs = H / s
+        w, V = np.linalg.eigh((Hs + Hs.T) / 2)  # ascending
         keep = w > p * np.finfo(np.float64).eps * w[-1]
         if keep.any():
             lam_min = w[0] if w[0] > 0 else 0.0
@@ -464,7 +469,7 @@ def compute_covariance(
             Vk = V[:, keep]
             # overflow is caught below as all-inf + OptimizeWarning; silence numpy's own
             with np.errstate(over="ignore", invalid="ignore"):
-                cov = (Vk / w[keep]) @ Vk.T
+                cov = ((Vk / w[keep]) @ Vk.T) / s  # pinv(H) = pinv(H/s) / s
                 if absolute_sigma:
                     pcov = cov
                 elif n > p:

@@ -400,6 +400,7 @@ def test_randomized_problems_match_scipy(seed):
     assert out["success"]
     assert_close(out["x"], ref.x, 1e-6, 1e-8)
     assert_close(out["cost"], ref.cost, 1e-9)
+    assert np.max(scaled_gradient(exp_model, x, y, out["x"])) <= 1e-6
 
 
 def test_non_pointwise_model_raises(data):
@@ -420,6 +421,23 @@ def test_check_model_contract_accepts_pointwise_and_flags_reversal_only(data):
     # a scalar output cannot be pointwise either
     with pytest.raises(ValueError, match="not pointwise"):
         lm.check_model_contract(lambda x, a: a * jnp.sum(x), (1.0,), x[:1024])
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        lambda x, a: x.at[:].multiply(a),  # needs a JAX array x
+        lambda x, a: a.astype(jnp.float64) * x,  # needs a JAX scalar a
+    ],
+    ids=["x_at", "a_astype"],
+)
+def test_contract_probe_uses_jax_float64_inputs(model):
+    x = np.linspace(0.0, 2.0, 500)
+    y = 3.0 * x
+    lm.check_model_contract(model, (1.0,), x)  # NumPy chunk, as the caller may pass
+    out = run(model, x, y, (1.0,), chunk_size=128)
+    assert out["success"]
+    assert_close(out["x"], [3.0], 1e-8)
 
 
 def test_check_finite_flag(data):
@@ -654,6 +672,31 @@ def test_compute_covariance_contract():
         lm.compute_covariance(np.diag([1.0, 1e-7]), 0.4, 10, 2, False)
     with pytest.warns(UserWarning, match="ill-conditioned"):
         lm.compute_covariance(np.diag([1.0, 1e-9]), 0.4, 10, 2, False)
+
+
+def test_compute_covariance_overflow_safe():
+    n, p, cost = 10, 1, 0.4
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # no RuntimeWarning, no OptimizeWarning
+        pc = lm.compute_covariance(np.array([[1e308]]), cost, n, p, True)
+        np.testing.assert_allclose(pc, [[1e-308]], rtol=1e-12)
+        # 2x2 with entries 1e188..1e200, both directions kept (sqrt cond ~ 1e6 warns)
+        warnings.simplefilter("ignore", UserWarning)
+        H = np.array([[1e200, 1e190], [1e190, 1e188]])
+        pc = lm.compute_covariance(H, cost, n, 2, True)
+    s = 1e200
+    expect = np.linalg.pinv(H / s, rcond=2 * np.finfo(float).eps) / s
+    assert np.linalg.matrix_rank(H / s) == 2
+    np.testing.assert_allclose(pc, expect, rtol=1e-9, atol=0.0)
+    # tiny H (1e-300) is representable: the covariance 1e300 stays finite
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pc = lm.compute_covariance(np.array([[1e-300]]), cost, n, p, True)
+    np.testing.assert_allclose(pc, [[1e300]], rtol=1e-12)
+    # a covariance beyond float64 range is still the documented all-inf + OptimizeWarning
+    with pytest.warns(OptimizeWarning, match=COV_WARN):
+        pc = lm.compute_covariance(np.array([[1e-310]]), cost, n, p, True)
+    assert np.isposinf(pc).all()
 
 
 # ---- Task 8: 1-D sigma (weights) and weighted covariance -------------------------------
