@@ -15,7 +15,10 @@ shortcut: normal equations square cond(J); the Stage 3 TSQR study decides whethe
 
 from __future__ import annotations
 
+import contextlib
+import queue
 import sys
+import threading
 import warnings
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any, NamedTuple
@@ -308,6 +311,59 @@ class FactorySource:
             )
 
 
+_PREFETCH = (
+    True  # read the next block of a lazy source or factory on a background thread
+)
+
+
+def _prefetch[T](iterator: Iterator[T], depth: int = 1) -> Iterator[T]:
+    """Yield the items of ``iterator`` in order, produced up to ``depth`` ahead on one thread.
+
+    An exception raised by ``iterator`` is re-raised here after the items before it. When
+    the consumer stops early or closes the generator, the reader is stopped and joined
+    (it may finish the one read already in flight), so no thread outlives the generator.
+    """
+    q: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=depth)
+    stop = threading.Event()
+
+    def put(msg: tuple[str, Any]) -> bool:
+        while not stop.is_set():
+            try:
+                q.put(msg, timeout=0.05)
+                return True
+            except queue.Full:
+                pass
+        return False
+
+    def read() -> None:
+        try:
+            for item in iterator:
+                if not put(("item", item)):
+                    return
+            put(("end", None))
+        except BaseException as exc:  # delivered to the consumer at this position
+            put(("err", exc))
+        finally:  # the reader owns the iterator, so it is the one to close it
+            getattr(iterator, "close", lambda: None)()
+
+    thread = threading.Thread(target=read, name="exact_lm-prefetch", daemon=True)
+    thread.start()
+    try:
+        while True:
+            kind, val = q.get()
+            if kind == "end":
+                return
+            if kind == "err":
+                raise val
+            yield val
+    finally:
+        stop.set()
+        with contextlib.suppress(queue.Empty):
+            while True:
+                q.get_nowait()
+        thread.join()
+
+
 @jax.jit
 def _block_finite(x: jax.Array, y: jax.Array) -> jax.Array:
     return jnp.all(jnp.isfinite(x) & jnp.isfinite(y))
@@ -341,22 +397,37 @@ def run_pass(
     acc: tuple[jax.Array, ...] | None = None
     finite = s_fin = s_pos = jnp.asarray(True)
     count = jnp.asarray(0)
-    blocks = (
+    blocks: Iterator[tuple[Any, Any, Any, jax.Array]] = (
         source.blocks()
         if isinstance(source, FactorySource)
         else iter_blocks(*source, chunk)
     )
-    for xc, yc, sc, mask in blocks:
-        out = stats(th, xc, yc, mask) if sc is None else stats(th, xc, yc, sc, mask)
-        acc = (
-            out if acc is None else tuple(a + b for a, b in zip(acc, out, strict=True))
+    # in-memory ndarray / JAX chunks are views or resident: nothing to overlap
+    if _PREFETCH and (
+        isinstance(source, FactorySource)
+        or any(
+            not (isinstance(a, jax.Array) or type(a) is np.ndarray)
+            for a in source
+            if a is not None
         )
-        count = count + jnp.sum(mask)
-        if check_finite:
-            finite = finite & _block_finite(xc, yc)
-        if check_sigma and sc is not None:
-            f_ok, p_ok = _sigma_ok(sc)
-            s_fin, s_pos = s_fin & f_ok, s_pos & p_ok
+    ):
+        blocks = _prefetch(blocks)
+    try:  # a failing consumer must stop the reader thread, not leave it blocked
+        for xc, yc, sc, mask in blocks:
+            out = stats(th, xc, yc, mask) if sc is None else stats(th, xc, yc, sc, mask)
+            acc = (
+                out
+                if acc is None
+                else tuple(a + b for a, b in zip(acc, out, strict=True))
+            )
+            count = count + jnp.sum(mask)
+            if check_finite:
+                finite = finite & _block_finite(xc, yc)
+            if check_sigma and sc is not None:
+                f_ok, p_ok = _sigma_ok(sc)
+                s_fin, s_pos = s_fin & f_ok, s_pos & p_ok
+    finally:
+        blocks.close()  # type: ignore[attr-defined]
     if acc is None:
         raise ValueError("x and y must be non-empty")
     c, g, H, ok, n_seen, sf, sp = jax.device_get((*acc, finite, count, s_fin, s_pos))
