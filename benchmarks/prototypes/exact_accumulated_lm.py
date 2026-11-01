@@ -313,8 +313,9 @@ def _module_fit(model, x, y, p0, b):
     """`--impl module`: the library engine with this prototype's chunk and tolerances."""
     from nlsq.streaming.exact_lm import exact_lm_fit
 
-    # check_finite=False: the prototype has no finite-data pass, so time the solver alone
-    return exact_lm_fit(model, x, y, p0, bounds=b, chunk_size=CHUNK, check_finite=False)
+    # default check_finite=True: the prototype's make_stats also returns a fused `finite`
+    # flag on every pass, so the matched comparison keeps the module's default check
+    return exact_lm_fit(model, x, y, p0, bounds=b, chunk_size=CHUNK)
 
 
 def _bench(problem, n, host, repeats=3, impl="prototype"):
@@ -335,7 +336,7 @@ def _bench(problem, n, host, repeats=3, impl="prototype"):
         times.append(time.perf_counter() - t)
     cost = residual_cost(pr, x, y, out["x"])
     print(
-        f"impl={impl}{'(finite_check=off)' if impl == 'module' else ''} {problem} n={n:,} backend={jax.default_backend()} data={'host' if host else 'device'} "
+        f"impl={impl} {problem} n={n:,} backend={jax.default_backend()} data={'host' if host else 'device'} "
         f"cold={times[0]:.2f}s warm_median={np.median(times[1:]):.2f}s passes={out['nfev']} "
         f"cost={cost!r} params={np.round(out['x'], 5).tolist()} ({out['message']})"
     )

@@ -19,7 +19,8 @@ def test_bench_impls_agree_on_cost():
 
 def test_bench_prints_which_impl_ran(capsys):
     lm.main(["--bench", "exp_decay", "20000", "--repeats", "1", "--impl", "module"])
-    assert "impl=module" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "impl=module " in out and "finite_check" not in out
 
 
 def test_bench_rejects_unknown_impl(capsys):
