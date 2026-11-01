@@ -754,6 +754,9 @@ def test_masked_rows_ignore_sigma(bad):
     # and the weight is applied to both r and J: F = 0.5 sum((y - f)/s)^2, H = J_w^T J_w
     f = EXP.model(np, x[:40], *EXP.p0)
     assert_close(float(want[0]), 0.5 * np.sum(((y[:40] - f) / s[:40]) ** 2), 1e-12)
+    J = jax.jacfwd(lambda q: EXP.model(jnp, x[:40], *q))(jnp.asarray(EXP.p0))
+    Jw = np.asarray(J) / s[:40, None]
+    assert_close(np.asarray(want[2]), Jw.T @ Jw, 1e-12)
 
 
 def test_jax_and_list_sigma_equal_numpy_sigma():
