@@ -281,7 +281,9 @@ def peak_rss_bytes() -> int:
     except ImportError:
         peak = 0
     else:
-        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024  # KiB on Linux
+        # ru_maxrss is KiB on Linux but bytes on macOS
+        unit = 1 if sys.platform == "darwin" else 1024
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit
     try:
         for line in Path("/proc/self/status").read_text().splitlines():
             if line.startswith("VmHWM:"):
