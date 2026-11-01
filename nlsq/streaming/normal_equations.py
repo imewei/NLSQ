@@ -1,0 +1,385 @@
+"""Chunked normal-equation accumulation: ``F = 0.5 sum r^2``, ``g = J^T r``, ``H = J^T J``.
+
+Shared by the exact streaming LM solver (:mod:`nlsq.streaming.exact_lm`). A data pass
+sums the per-chunk statistics of a jitted kernel over equal-shape, masked chunks read
+from array-likes or a replayable chunk factory; :class:`NormalEquations` bundles the
+kernel and the pass.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from typing import Any, NamedTuple, TypeGuard
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+from nlsq.config import JAXConfig
+
+_jax_config = JAXConfig()  # enables jax_enable_x64, as every nlsq module does
+
+
+class PassStats(NamedTuple):
+    """Summed statistics of one full data pass at one parameter vector."""
+
+    cost: float  # 0.5 * sum r^2
+    g: np.ndarray  # J^T r
+    H: np.ndarray  # J^T J
+    n_seen: int  # real (unpadded) points that contributed
+    data_finite: bool  # all x, y finite (True when the check is off)
+    sigma_finite: bool = True  # all sigma finite (True when unchecked or unweighted)
+    sigma_positive: bool = (
+        True  # all finite sigma > 0 (True when unchecked or unweighted)
+    )
+
+
+def make_chunk_stats(
+    model: Callable[..., Any],
+    weighted: bool = False,
+    *,
+    jacobian: Callable[[Any, Any], Any] | None = None,
+) -> Callable[..., tuple[jax.Array, jax.Array, jax.Array]]:
+    """Jitted ``(theta, x, y, mask) -> (F, g, H)`` for one chunk; ``r = y - model``.
+
+    With ``weighted=True`` the signature is ``(theta, x, y, sigma, mask)`` and residuals
+    and Jacobian rows are divided by ``sigma``. Rows where ``mask`` is False (the padded
+    tail) are removed with ``jnp.where`` after weighting, never by multiplication, so a
+    non-finite model value or weight on a padded row cannot leak in.
+
+    ``jacobian=None`` differentiates the chunk with ``jax.jacfwd``; a callable
+    ``jacobian(theta, x_chunk) -> (n_chunk, p)`` replaces it (``d model / d theta``, for
+    models ``jacfwd`` cannot differentiate), with the same masking and weighting.
+    """
+
+    def jac(f: Callable[[jax.Array], jax.Array], theta: jax.Array, x: jax.Array) -> Any:
+        return jax.jacfwd(f)(theta) if jacobian is None else jacobian(theta, x)
+
+    if weighted:
+        # separate kernel: the unweighted one below stays free of any per-row weight
+
+        def wstats(
+            theta: jax.Array, x: jax.Array, y: jax.Array, s: jax.Array, mask: jax.Array
+        ) -> tuple[jax.Array, jax.Array, jax.Array]:
+            def f(q: jax.Array) -> jax.Array:
+                return model(x, *q)
+
+            r = jnp.where(mask, (y - f(theta)) / s, 0.0)
+            J = jnp.where(mask[:, None], jac(f, theta, x) / s[:, None], 0.0)
+            return 0.5 * jnp.sum(r * r), J.T @ r, J.T @ J
+
+        return jax.jit(wstats)
+
+    def stats(
+        theta: jax.Array, x: jax.Array, y: jax.Array, mask: jax.Array
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        def f(q: jax.Array) -> jax.Array:
+            return model(x, *q)
+
+        r = jnp.where(mask, y - f(theta), 0.0)
+        J = jnp.where(mask[:, None], jac(f, theta, x), 0.0)
+        return 0.5 * jnp.sum(r * r), J.T @ r, J.T @ J
+
+    return jax.jit(stats)
+
+
+def _source_len(a: Any) -> int:
+    """Length of a 1-D source from ``shape`` (zarr v3 arrays have no ``__len__``)."""
+    return int(a.shape[0]) if hasattr(a, "shape") else len(a)
+
+
+def _block(a: Any, s: int, e: int) -> Any:
+    """Float64 slice ``a[s:e]``: a host view if already float64, on device for JAX.
+
+    Callers keep ``e <= len(a)``: a strict array-like may raise on a slice past the end.
+    """
+    return _as64(a[s:e])
+
+
+def iter_blocks(
+    source_x: Any, source_y: Any, source_sigma: Any, chunk: int
+) -> Iterator[tuple[Any, Any, Any, jax.Array]]:
+    """Yield equal-shape float64 ``(x, y, sigma, mask)`` chunks of array-like inputs.
+
+    Every source is read by slice ``a[s:min(s+chunk, n)]``, in order, never whole and never
+    shuffled: host float64 arrays give views, lazy sources (memmap, HDF5, Zarr) read one
+    chunk, and JAX arrays stay on their device. The tail
+    is edge-padded (a padded row has the finiteness of a real row) and masked out; a
+    ``sigma`` tail is padded with 1, which is valid, so the sigma checks need no mask.
+    ``sigma`` is ``None`` (unweighted) or a 1-D array of the same length.
+    """
+    n = _source_len(source_x)
+    full = jnp.ones(chunk, dtype=bool)
+    for s in range(0, n, chunk):
+        e = min(s + chunk, n)
+        xc, yc = _block(source_x, s, e), _block(source_y, s, e)
+        sc = None if source_sigma is None else _block(source_sigma, s, e)
+        m = xc.shape[0]
+        got = {"x": m, "y": yc.shape[0]} | (
+            {} if sc is None else {"sigma": sc.shape[0]}
+        )
+        if any(v != e - s for v in got.values()):  # a short slice would be edge-padded
+            raise ValueError(
+                f"source slice [{s}:{e}] returned {got} rows, expected {e - s} each: "
+                "x, y and sigma must all have the same length on every pass"
+            )
+        if m == chunk:
+            yield xc, yc, sc, full
+            continue
+        yield _padded(xc, yc, sc, chunk)
+
+
+def _padded(xc: Any, yc: Any, sc: Any, chunk: int) -> tuple[Any, Any, Any, jax.Array]:
+    """A short block edge-padded to ``chunk`` rows (sigma with 1) plus its mask."""
+    m = xc.shape[0]
+    pad = (0, chunk - m)
+    return (
+        (jnp if isinstance(xc, jax.Array) else np).pad(xc, pad, mode="edge"),
+        (jnp if isinstance(yc, jax.Array) else np).pad(yc, pad, mode="edge"),
+        None
+        if sc is None
+        else (jnp if isinstance(sc, jax.Array) else np).pad(
+            sc, pad, constant_values=1.0
+        ),
+        jnp.arange(chunk) < m,
+    )
+
+
+def _as64(a: Any) -> Any:
+    """Float64 block: on device for a JAX array, else a host array (a view if float64)."""
+    if isinstance(a, jax.Array):
+        return jnp.asarray(a, dtype=jnp.float64)
+    return np.asarray(a, dtype=np.float64)
+
+
+def is_chunk_factory(
+    x: Any,
+) -> TypeGuard[Callable[[int], Iterator[tuple[Any, ...]]]]:
+    """True for a replayable chunk factory: a callable that is not an array-like."""
+    return callable(x) and not hasattr(x, "shape")
+
+
+_END = object()  # end of a factory pass; a yielded None is a bad block, not the end
+
+
+class FactorySource:
+    """A replayable chunk factory ``factory(chunk) -> Iterator[(x, y) | (x, y, sigma)]``
+    as a :func:`run_pass` source.
+
+    The factory is called once per full data pass. Pass 1 is opened at construction and
+    its leading blocks are validated and kept until they hold at least 2 points (or the
+    stream ends): ``first_x``, their ``x`` joined and cut to ``chunk``, feeds the model
+    probe, which cannot detect a non-pointwise model from one point; the first block's
+    arity (``sigma`` or not) fixes the kernel. Pass 1 then replays those blocks in order
+    before reading on, so the probe costs no extra factory call.
+    Each block is validated as it arrives: a tuple of 2 or 3 parts, the same number as
+    the first block, every part 1-D with equal lengths, ``0 < len <= chunk``. Short blocks
+    are padded to ``chunk`` and masked, so every block has the compiled shape. At the end
+    of every pass the point count is checked against ``n`` (``n_points`` or the count of
+    pass 1): a factory that replays different data raises ``ValueError``.
+    """
+
+    def __init__(self, factory: Callable[[int], Any], chunk: int, n: int | None):
+        self.factory, self.chunk, self.n = factory, chunk, n
+        self._from_n_points = n is not None
+        self.passes = 0
+        self._pending: Iterator[Any] | None = iter(factory(chunk))
+        first = next(self._pending, _END)
+        if first is _END:
+            raise ValueError("chunk factory yielded no blocks")
+        self.weighted = isinstance(first, tuple) and len(first) == 3
+        self._head: list[tuple[Any, ...]] = [self._check(first)]
+        seen = self._head[0][0].shape[0]
+        while seen < 2:  # a 1-point probe cannot see a non-pointwise model
+            item = next(self._pending, _END)
+            if item is _END:  # < 2 points in all: the fit raises after pass 1
+                break
+            self._head.append(self._check(item))
+            seen += self._head[-1][0].shape[0]
+        xs = [b[0] for b in self._head]
+        self.first_x: Any = (
+            xs[0]
+            if len(xs) == 1
+            else jnp.concatenate([jnp.asarray(a) for a in xs])[:chunk]
+        )
+
+    def _check(self, item: Any) -> tuple[Any, ...]:
+        if not isinstance(item, tuple) or len(item) not in (2, 3):
+            raise ValueError(
+                "chunk factory must yield (x, y) or (x, y, sigma) tuples, got "
+                f"{type(item).__name__}"
+                + (f" of length {len(item)}" if isinstance(item, tuple) else "")
+            )
+        if (len(item) == 3) != self.weighted:
+            raise ValueError(
+                f"chunk factory block has {len(item)} parts; every block must have the "
+                f"same parts as the first ({3 if self.weighted else 2})"
+            )
+        parts = tuple(_as64(a) for a in item)
+        for name, a in zip(("x", "y", "sigma"), parts, strict=False):
+            if a.ndim != 1:
+                raise ValueError(f"block {name} must be 1-D, got shape {a.shape}")
+        lengths = [a.shape[0] for a in parts]
+        if len(set(lengths)) != 1:
+            raise ValueError(f"block parts must have equal lengths, got {lengths}")
+        if lengths[0] == 0:
+            raise ValueError("chunk factory yielded an empty block")
+        if lengths[0] > self.chunk:
+            raise ValueError(
+                f"chunk factory yielded a block of {lengths[0]} points, more than "
+                f"chunk_size={self.chunk}"
+            )
+        return parts
+
+    def blocks(self) -> Iterator[tuple[Any, Any, Any, jax.Array]]:
+        """One full pass: validated, padded ``(x, y, sigma, mask)`` blocks."""
+        if self._pending is None:
+            items: Iterator[Any] = iter(self.factory(self.chunk))
+            head: list[tuple[Any, ...]] = []
+        else:  # pass 1, opened at construction: replay the probed blocks first
+            items, head, self._pending = self._pending, self._head, None
+            self._head, self.first_x = [], None  # not retained for the whole fit
+        self.passes += 1
+        full = jnp.ones(self.chunk, dtype=bool)
+        count = 0
+        while True:
+            if head:
+                parts = head.pop(0)
+            else:
+                item = next(items, _END)
+                if item is _END:
+                    break
+                parts = self._check(item)
+            xc, yc = parts[0], parts[1]
+            sc = parts[2] if self.weighted else None
+            m = xc.shape[0]
+            count += m
+            yield (
+                (xc, yc, sc, full)
+                if m == self.chunk
+                else _padded(xc, yc, sc, self.chunk)
+            )
+        if self.n is None:
+            self.n = count
+        elif count != self.n:
+            origin = "n_points" if self._from_n_points else "pass 1"
+            raise ValueError(
+                f"chunk factory yielded {count} points on pass {self.passes}, expected "
+                f"{self.n} ({origin}); the factory must replay identical data on every "
+                "call"
+            )
+
+
+@jax.jit
+def _block_finite(x: jax.Array, y: jax.Array) -> jax.Array:
+    return jnp.all(jnp.isfinite(x) & jnp.isfinite(y))
+
+
+@jax.jit
+def _sigma_ok(s: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """``(all finite, all finite values > 0)``: NaN/inf is reported as non-finite only."""
+    fin = jnp.isfinite(s)
+    return jnp.all(fin), jnp.all(jnp.where(fin, s > 0, True))
+
+
+def run_pass(
+    stats: Callable[..., tuple[jax.Array, jax.Array, jax.Array]],
+    theta: Any,
+    source: tuple[Any, Any, Any] | FactorySource,
+    chunk: int,
+    *,
+    check_finite: bool = False,
+    check_sigma: bool = False,
+) -> PassStats:
+    """One full pass over ``source = (x, y, sigma)`` or a :class:`FactorySource`.
+
+    Returns the summed statistics on the host.
+
+    ``stats`` must be the weighted kernel when ``sigma`` is not None. The finite and
+    sigma checks and the point count are reduced on device alongside the statistics, so
+    the only host sync is the final ``device_get``.
+    """
+    th = jnp.asarray(theta, dtype=jnp.float64)
+    acc: tuple[jax.Array, ...] | None = None
+    finite = s_fin = s_pos = jnp.asarray(True)
+    count = jnp.asarray(0)
+    blocks = (
+        source.blocks()
+        if isinstance(source, FactorySource)
+        else iter_blocks(*source, chunk)
+    )
+    for xc, yc, sc, mask in blocks:
+        out = stats(th, xc, yc, mask) if sc is None else stats(th, xc, yc, sc, mask)
+        acc = (
+            out if acc is None else tuple(a + b for a, b in zip(acc, out, strict=True))
+        )
+        count = count + jnp.sum(mask)
+        if check_finite:
+            finite = finite & _block_finite(xc, yc)
+        if check_sigma and sc is not None:
+            f_ok, p_ok = _sigma_ok(sc)
+            s_fin, s_pos = s_fin & f_ok, s_pos & p_ok
+    if acc is None:
+        raise ValueError("x and y must be non-empty")
+    c, g, H, ok, n_seen, sf, sp = jax.device_get((*acc, finite, count, s_fin, s_pos))
+    return PassStats(
+        float(c),
+        np.asarray(g),
+        np.asarray(H),
+        int(n_seen),
+        bool(ok),
+        bool(sf),
+        bool(sp),
+    )
+
+
+class NormalEquations:
+    """Chunked accumulator of ``F = 0.5 sum r^2``, ``g = J^T r`` and ``H = J^T J``.
+
+    Holds the jitted per-chunk kernel of :func:`make_chunk_stats` for ``model(x, *theta)``
+    (``r = y - model``) and the chunk length every pass uses. ``jacobian`` is an optional
+    ``(theta, x_chunk) -> (n_chunk, p)`` callable replacing the default chunk-wide
+    ``jax.jacfwd``; masking, weighting and accumulation are identical either way.
+    """
+
+    def __init__(
+        self,
+        model: Callable[..., Any],
+        *,
+        weighted: bool = False,
+        chunk: int,
+        jacobian: Callable[[Any, Any], Any] | None = None,
+    ) -> None:
+        self.chunk = chunk
+        self._stats = make_chunk_stats(model, weighted, jacobian=jacobian)
+
+    def chunk_stats(
+        self,
+        theta: jax.Array,
+        x: jax.Array,
+        y: jax.Array,
+        mask: jax.Array,
+        sigma: jax.Array | None = None,
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        """``(F, g, H)`` of one chunk; ``sigma`` only for a ``weighted=True`` instance."""
+        if sigma is None:
+            return self._stats(theta, x, y, mask)
+        return self._stats(theta, x, y, sigma, mask)
+
+    def accumulate(
+        self,
+        theta: Any,
+        source: tuple[Any, Any, Any] | FactorySource,
+        *,
+        check_finite: bool = False,
+        check_sigma: bool = False,
+    ) -> PassStats:
+        """One full pass over ``source``; see :func:`run_pass`."""
+        return run_pass(
+            self._stats,
+            theta,
+            source,
+            self.chunk,
+            check_finite=check_finite,
+            check_sigma=check_sigma,
+        )
