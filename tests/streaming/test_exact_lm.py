@@ -223,13 +223,13 @@ def test_nonfinite_data_raises(data):
     x, y = data
     y_bad = y.copy()
     y_bad[7] = np.nan
-    with pytest.raises(ValueError, match="finite"):
+    with pytest.raises(ValueError, match="x and y must be finite"):
         run(exp_model, x, y_bad, EXP.p0)
     x_bad = x.copy()
     x_bad[2999] = np.inf  # in the padded tail chunk
-    with pytest.raises(ValueError, match="finite"):
+    with pytest.raises(ValueError, match="x and y must be finite"):
         run(exp_model, x_bad, y, EXP.p0)
-    with pytest.raises(ValueError, match="finite"):  # model is inf at p0
+    with pytest.raises(ValueError, match="not finite at p0"):  # model is inf at p0
         run(lambda x, a, b, c: jnp.full_like(x, jnp.inf) + a, x, y, EXP.p0)
 
 
@@ -280,9 +280,9 @@ def test_derive_chunk_size_precedence():
 
 
 def test_stage2_inputs_rejected(data):
-    with pytest.raises(ValueError, match="Stage 2"):
+    with pytest.raises(ValueError, match=r"sigma .*Stage 2"):
         run(exp_model, *data, EXP.p0, sigma=np.ones(N))
-    with pytest.raises(ValueError, match="Stage 2"):
+    with pytest.raises(ValueError, match=r"finite bounds .*Stage 2"):
         run(exp_model, *data, EXP.p0, bounds=(0.0, np.inf))
     with pytest.raises(ValueError, match="n_points"):
         run(exp_model, *data, EXP.p0, n_points=N + 1)
