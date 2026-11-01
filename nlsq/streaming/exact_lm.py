@@ -306,6 +306,43 @@ def _place(x: Any, y: Any) -> tuple[Any, Any]:
     return jnp.asarray(x, dtype=jnp.float64), jnp.asarray(y, dtype=jnp.float64)
 
 
+def check_model_contract(
+    model: Callable[..., Any], theta: Sequence[float] | np.ndarray, x_chunk: Any
+) -> None:
+    """Guard (not a proof) that ``model`` is pointwise: output ``i`` depends only on ``x[i]``.
+
+    Evaluates the model on ``x_chunk``, its first half and its reversed copy, and requires
+    ``f(x[:k]) == f(x)[:k]`` and ``f(x[::-1]) == f(x)[::-1]`` to relative 1e-12. Values
+    within 1e-12 of the largest ``|f|`` also pass, so a zero crossing cannot trigger a
+    false alarm. A model that behaves differently only on later chunks is not detected.
+    """
+    m = len(x_chunk)
+    th = [float(t) for t in theta]
+
+    def f(xs: Any) -> np.ndarray:
+        return np.asarray(model(xs, *th), dtype=np.float64)
+
+    full = f(x_chunk)
+    bad = ValueError(
+        "model is not pointwise: f(x, *theta)[i] must depend only on x[i] and theta, but "
+        "evaluating on a sub-batch or a reversed batch changed the output (batch "
+        "statistics, cumulative sums and randomness break exact_streaming's exactness)"
+    )
+    if full.shape != (m,):
+        raise bad
+    if m < 2:
+        return
+    scale = float(np.max(np.abs(full[np.isfinite(full)]), initial=0.0))
+    for got, want in (
+        (f(x_chunk[: m // 2]), full[: m // 2]),
+        (f(x_chunk[::-1]), full[::-1]),
+    ):
+        if got.shape != want.shape or not np.allclose(
+            got, want, rtol=1e-12, atol=1e-12 * scale, equal_nan=True
+        ):
+            raise bad
+
+
 def _check_inputs(
     x: Any,
     y: Any,
@@ -365,6 +402,9 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a non-finite
     cost, gradient or Hessian at ``p0``, and for ``sigma`` or finite ``bounds`` (Stage 2).
     """
+    # lists and tuples have no .shape; array-likes (ndarray, JAX, memmap, ...) are never copied
+    x = x if hasattr(x, "shape") else np.asarray(x)
+    y = y if hasattr(y, "shape") else np.asarray(y)
     n, p, lo, hi = _check_inputs(x, y, p0, sigma, bounds, n_points)
     if max_nfev is None:
         max_nfev = 100 * p
@@ -379,6 +419,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         return st
 
     theta = np.clip(np.asarray(p0, np.float64), lo, hi)
+    check_model_contract(model, theta, _block(x, 0, chunk))
     st = evaluate(theta, 1, first=True)
     if check_finite and not st.data_finite:
         raise ValueError("x and y must be finite (found NaN or inf)")

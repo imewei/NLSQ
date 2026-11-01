@@ -6,6 +6,7 @@ The same Stage 0 cases against the frozen prototype live in test_exact_lm_protot
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from scipy.optimize import least_squares
 
 import nlsq.streaming.exact_lm as lm
 from benchmarks.compare.problems import PROBLEMS
@@ -311,3 +312,204 @@ def test_jax_input_equals_numpy_input(data, default_run):
     out = run(exp_model, *(jnp.asarray(a) for a in data), EXP.p0)
     np.testing.assert_allclose(out["x"], default_run["x"], rtol=1e-12)
     assert out["nfev"] == default_run["nfev"]
+
+
+# --- Task 4: SciPy parity, chunk invariance, model contract, finite checks -----------
+
+TIGHT = {"ftol": 1e-12, "xtol": 1e-12, "gtol": 1e-12}
+UNBOUNDED = ["exp_decay", "gaussian", "two_exp"]
+
+
+def model_of(prob):
+    return lambda x, *th: prob.model(jnp, x, *th)
+
+
+def scipy_fit(prob, x, y, p0):
+    return least_squares(
+        lambda th: y - prob.model(np, x, *th),
+        p0,
+        xtol=1e-12,
+        ftol=1e-12,
+        gtol=1e-12,
+    )
+
+
+def by_rate(prob, theta):
+    """two_exp is symmetric under swapping (a1, k1) with (a2, k2): order terms by rate."""
+    t = np.asarray(theta).reshape(-1, 2) if prob.name == "two_exp" else None
+    return theta if t is None else t[np.argsort(t[:, 1])].ravel()
+
+
+def scaled_gradient(model, x, y, theta):
+    st = lm.run_pass(lm.make_chunk_stats(model), theta, (x, y, None), 1024)
+    return np.abs(st.g) / (np.sqrt(np.diag(st.H)) * np.sqrt(2.0 * st.cost))
+
+
+def assert_close(a, b, rtol, atol=0.0):
+    np.testing.assert_allclose(a, b, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize("name", UNBOUNDED)
+def test_matches_scipy(name):
+    prob = PROBLEMS[name]
+    x, y = prob.data(N)
+    ref = scipy_fit(prob, x, y, prob.p0)
+    out = run(model_of(prob), x, y, prob.p0, **TIGHT)
+    assert out["success"]
+    # two_exp is a flat valley (kappa(J) ~ 4e2): the spec table compares it at rtol 1e-4,
+    # and both costs still agree to 1e-9 below
+    rtol = 1e-4 if name == "two_exp" else 1e-6
+    assert_close(by_rate(prob, out["x"]), by_rate(prob, ref.x), rtol, 1e-8)
+    assert_close(out["cost"], ref.cost, 1e-9)
+    assert np.max(scaled_gradient(model_of(prob), x, y, out["x"])) <= 1e-6
+
+
+@pytest.mark.parametrize("name", UNBOUNDED)
+def test_chunk_size_independence(name):
+    prob = PROBLEMS[name]
+    x, y = prob.data(N)
+    outs = [
+        run(model_of(prob), x, y, prob.p0, chunk_size=c)
+        for c in (N, N // 2, 512, 513, 7)
+    ]
+    for o in outs[1:]:
+        assert_close(o["x"], outs[0]["x"], 1e-9)
+        assert_close(o["cost"], outs[0]["cost"], 1e-12)
+
+
+@pytest.mark.parametrize("seed", range(10))
+def test_randomized_problems_match_scipy(seed):
+    rng = np.random.default_rng(seed)
+    p_true = (rng.uniform(1.0, 4.0), rng.uniform(0.5, 2.0), rng.uniform(-1.0, 1.0))
+    x = np.linspace(0.0, 4.0, 2000)
+    y = EXP.model(np, x, *p_true) + 0.05 * rng.standard_normal(x.size)
+    ref = scipy_fit(EXP, x, y, EXP.p0)
+    out = run(exp_model, x, y, EXP.p0, **TIGHT)
+    assert out["success"]
+    assert_close(out["x"], ref.x, 1e-6, 1e-8)
+    assert_close(out["cost"], ref.cost, 1e-9)
+
+
+def test_non_pointwise_model_raises(data):
+    def centred(x, a, b):  # depends on the batch through x.mean()
+        return a * jnp.exp(-b * (x - x.mean()))
+
+    with pytest.raises(ValueError, match="not pointwise"):
+        run(centred, *data, (1.0, 1.0))
+
+
+def test_check_model_contract_accepts_pointwise_and_flags_reversal_only(data):
+    x, _ = data
+    lm.check_model_contract(exp_model, EXP.p0, x[:1024])
+    lm.check_model_contract(exp_model, EXP.p0, x[:1])  # nothing to compare on one point
+    # first half agrees with the full batch, the reversed copy does not
+    with pytest.raises(ValueError, match="not pointwise"):
+        lm.check_model_contract(lambda x, a: a * jnp.cumsum(x), (1.0,), x[:1024])
+    # a scalar output cannot be pointwise either
+    with pytest.raises(ValueError, match="not pointwise"):
+        lm.check_model_contract(lambda x, a: a * jnp.sum(x), (1.0,), x[:1024])
+
+
+def test_check_finite_flag(data):
+    x, y = data
+    y_bad = y.copy()
+    y_bad[7] = np.nan
+    with pytest.raises(ValueError, match="x and y must be finite"):
+        run(exp_model, x, y_bad, EXP.p0, check_finite=True)
+    with pytest.raises(ValueError, match="not finite at p0"):
+        run(exp_model, x, y_bad, EXP.p0, check_finite=False)
+
+
+def test_infinite_x_caught_by_fused_data_check_not_by_p0_cost(data):
+    x, y = data
+    x_bad = x.copy()
+    x_bad[3] = np.inf
+
+    def const(x, a, b, c):  # ignores x, so every statistic stays finite despite the inf
+        return (a + b + c) * jnp.ones_like(x)
+
+    stats = lm.make_chunk_stats(const)
+    st = lm.run_pass(stats, EXP.p0, (x_bad, y, None), 1024)
+    assert np.isfinite(st.cost) and np.isfinite(st.g).all() and np.isfinite(st.H).all()
+    with pytest.raises(ValueError, match="x and y must be finite"):
+        run(const, x_bad, y, EXP.p0)
+    # without the fused check the same data is accepted: the guard is the only line of defence
+    out = run(const, x_bad, y, EXP.p0, check_finite=False)
+    assert np.isfinite(out["cost"])
+
+
+def test_tiny_and_p1_cases():
+    def line(x, a):
+        return a * x
+
+    x, y = np.array([1.0, 2.0]), np.array([2.1, 3.9])
+    one = run(line, x, y, (1.0,), chunk_size=2, **TIGHT)
+    assert one["success"]
+    assert_close(one["x"], [x @ y / (x @ x)], 1e-9)  # linear least squares, closed form
+    assert_close(run(line, x, y, (1.0,), chunk_size=1, **TIGHT)["x"], one["x"], 1e-9)
+    assert_close(run(line, x, y, (1.0,), chunk_size=None, **TIGHT)["x"], one["x"], 1e-9)
+
+    x5 = np.linspace(0.0, 4.0, 5)  # n < the 1024-point chunk
+    y5 = EXP.model(np, x5, *EXP.p_true) + 0.01 * np.arange(5)
+    whole = run(exp_model, x5, y5, EXP.p0, chunk_size=5)
+    for c in (1024, 2, 3):  # clamped to n, and multi-chunk with a padded tail
+        other = run(exp_model, x5, y5, EXP.p0, chunk_size=c)
+        assert_close(other["x"], whole["x"], 1e-9)
+        assert_close(other["cost"], whole["cost"], 1e-12)
+
+
+def test_permutation_invariance(data):
+    x, y = data
+    perm = np.random.default_rng(1).permutation(N)
+    a = run(exp_model, x, y, EXP.p0, **TIGHT)
+    b = run(exp_model, x[perm], y[perm], EXP.p0, **TIGHT)
+    assert_close(b["x"], a["x"], 1e-9)
+
+
+def test_derive_chunk_size_budget_and_edges():
+    chunk = lm.derive_chunk_size(10**8, 4, 0.01, None)
+    assert chunk >= 1024 and chunk * 4 * 8 * 4 <= 0.01 * 2**30
+    assert lm.derive_chunk_size(10**8, 4, 0.01, 7) == 7
+    assert lm.derive_chunk_size(2, 4, None, None) == 2
+    with pytest.raises(ValueError, match="memory_limit_gb"):
+        lm.derive_chunk_size(10**8, 4, 1e-9, None)
+
+
+def test_cpu_chunks_are_views(data):
+    x, y = data
+    xc, yc, _, mask = next(lm.iter_blocks(x, y, None, 1000))
+    assert np.shares_memory(xc, x) and np.shares_memory(yc, y)
+    assert bool(mask.all())
+
+
+def test_list_and_int_inputs():
+    x = np.arange(0, 40)  # int64
+    y = np.rint(3.0 * np.exp(-0.05 * x) * 10) / 10 + 0.5
+
+    def model(x, a, b, c):
+        return a * jnp.exp(-b * x) + c
+
+    ref = run(model, x.astype(float), y, (1.0, 0.1, 0.0))
+    assert ref["success"]
+    for xs, ys in ((x, y), (x.tolist(), y.tolist()), (x.tolist(), y)):
+        out = run(model, xs, ys, (1.0, 0.1, 0.0))
+        assert np.array_equal(out["x"], ref["x"]) and out["nfev"] == ref["nfev"]
+
+
+@pytest.mark.serial
+@pytest.mark.slow
+def test_cpu_fit_peak_memory():
+    import tracemalloc
+
+    n, chunk = 20_000_000, 1_000_000
+    x = np.linspace(0.0, 4.0, n)
+    y = EXP.model(np, x, *EXP.p_true)
+    y += 0.05 * np.random.default_rng(0).standard_normal(n)
+    tracemalloc.start()
+    try:
+        out = run(exp_model, x, y, EXP.p0, chunk_size=chunk, max_nfev=3)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert out["n_points"] == n
+    assert peak < 8 * chunk * 8 + 64 * 2**20, peak  # a whole-array copy of x is 160 MB
