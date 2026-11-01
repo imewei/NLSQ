@@ -1,18 +1,24 @@
 """Unit tests for the Stage 3 1B-point run helpers (small scale only)."""
 
+import argparse
+import json
+
 import h5py
 import numpy as np
 import pytest
 
+import benchmarks.studies.exact_1b_run as run_mod
 from benchmarks.compare.timing import residual_cost
 from benchmarks.studies.exact_1b_run import (
     PROBLEM,
     THETA_TRUE,
     TailOffsetY,
+    _count_ok,
     calibrate_sentinel,
     hessian_at,
     model_jnp,
     model_np,
+    noisy_gate,
     rel_size,
     streaming_cost,
     write_dataset,
@@ -85,3 +91,59 @@ def test_calibrate_sentinel_gives_stated_displacement():
     assert sent_y.rows_read == n * sent["nfev"]
     np.testing.assert_array_equal(sent_y[0 : n - 1000], y[: n - 1000])
     np.testing.assert_array_equal(sent_y[n - 1500 : n][500:], y[-1000:] + delta)
+
+
+def test_noisy_gate_fails_without_a_covariance():
+    p = len(THETA_TRUE)
+    assert (
+        noisy_gate(THETA_TRUE, np.full((p, p), np.inf))[0] is False
+    )  # z = 0 is not a pass
+    assert noisy_gate(THETA_TRUE, np.full((p, p), np.nan))[0] is False
+    assert noisy_gate(THETA_TRUE, np.zeros((p, p)))[0] is False  # se = 0
+    good = np.diag(np.full(p, 1e-4))
+    assert noisy_gate(THETA_TRUE + 4e-2, good)[0] is True  # z = 4
+    assert noisy_gate(THETA_TRUE + 6e-2, good)[0] is False  # z = 6
+
+
+def test_count_ok_truth_table():
+    n = 100
+    ok = {"pass_n_seen": [n, n, n], "nfev": 3, "y_rows_read": 3 * n}
+    assert _count_ok(ok, n)
+    assert not _count_ok({**ok, "pass_n_seen": [n, n - 1, n]}, n)  # a short pass
+    assert not _count_ok({**ok, "y_rows_read": 3 * n - 1}, n)  # y rows missed
+    assert not _count_ok({**ok, "pass_n_seen": [n, n]}, n)  # pass log != nfev
+    assert not _count_ok({**ok, "nfev": 4}, n)
+
+
+def _args(tmp_path):
+    return argparse.Namespace(
+        n=20_000,
+        chunk_rows=4096,
+        seed=0,
+        noise=0.05,
+        data_dir=tmp_path,
+        out=str(tmp_path / "out.json"),
+    )
+
+
+def _verdicts(tmp_path):
+    return {
+        g["gate"]: g["pass"]
+        for g in json.loads((tmp_path / "out.json").read_text())["gates"]
+    }
+
+
+def test_run_small_scale_all_gates_pass(tmp_path):
+    assert run_mod.run(_args(tmp_path)) == 0
+    verdicts = _verdicts(tmp_path)
+    assert len(verdicts) == 8 and all(verdicts.values()), verdicts
+
+
+def test_run_fails_when_the_sentinel_is_not_felt(tmp_path, monkeypatch):
+    real = run_mod.TailOffsetY
+    # drops the tail offset: the fit cannot see the sentinel, so the gate must say so
+    monkeypatch.setattr(run_mod, "TailOffsetY", lambda y, offset=0.0: real(y, 0.0))
+    assert run_mod.run(_args(tmp_path)) == 1
+    verdicts = _verdicts(tmp_path)
+    assert verdicts["3iii sentinel"] is False
+    assert verdicts["1 noiseless recovery"] is True

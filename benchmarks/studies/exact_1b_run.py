@@ -25,7 +25,7 @@ device ``exp`` differ, so it is reported only); (3iii) the sentinel; (4) peak RS
 chunks equal ``--chunk-rows``.
 
 Pass counts are not exposed by the solver (``n_points`` is ``len(x)``; ``n_seen`` is
-checked on pass 1 only), so the script observes every pass by rebinding
+checked on every pass), so the script observes every pass by rebinding
 ``nlsq.streaming.exact_lm.run_pass`` during each fit and by counting the ``y`` rows read
 through :class:`TailOffsetY`. Costs: ``run`` adds one pass for ``H`` at the generating
 parameters and one host pass for :func:`streaming_cost`.
@@ -36,7 +36,6 @@ import json
 import math
 import os
 import platform
-import resource
 import shutil
 import subprocess
 import sys
@@ -49,6 +48,7 @@ from typing import Any
 import numpy as np
 
 from benchmarks.compare.problems import PROBLEMS
+from benchmarks.studies.conditioning_helpers import rel_size
 
 PROBLEM = PROBLEMS["exp_decay"]
 THETA_TRUE = np.asarray(PROBLEM.p_true, dtype=np.float64)
@@ -59,11 +59,6 @@ BYTES_PER_POINT = 16  # x and y float64
 
 def model_np(x: np.ndarray, *theta: float) -> np.ndarray:
     return PROBLEM.model(np, x, *theta)  # type: ignore[no-any-return]
-
-
-def rel_size(d: np.ndarray, theta: np.ndarray) -> float:
-    """Relative size of a displacement: ``max_i |d_i| / max(|theta_i|, 1e-12)``."""
-    return float(np.max(np.abs(d) / np.maximum(np.abs(theta), 1e-12)))
 
 
 # --------------------------------------------------------------------------- data
@@ -281,7 +276,12 @@ def record_passes():
 
 def peak_rss_bytes() -> int:
     """Peak resident set: max of ``ru_maxrss`` and ``VmHWM`` (both high-water marks)."""
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024  # KiB on Linux
+    try:
+        import resource  # POSIX only; the helpers are imported by tests on Windows
+    except ImportError:
+        peak = 0
+    else:
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024  # KiB on Linux
     try:
         for line in Path("/proc/self/status").read_text().splitlines():
             if line.startswith("VmHWM:"):
@@ -356,6 +356,18 @@ def _fit(x: Any, y: TailOffsetY, chunk: int) -> dict[str, Any]:
         "points_per_s": n / float(np.median(secs)),
         "y_rows_read": y.rows_read,
     }
+
+
+def noisy_gate(x: np.ndarray, pcov: np.ndarray) -> tuple[bool, str]:
+    """Gate 2: finite positive standard errors and ``|x - theta_true| <= 5 se``.
+
+    An unavailable covariance (all-inf ``pcov``) gives ``z = 0`` and must not pass.
+    """
+    with np.errstate(invalid="ignore", divide="ignore"):
+        se = np.sqrt(np.diag(pcov))
+        z = np.abs(x - THETA_TRUE) / se
+    ok = bool(np.all(np.isfinite(se)) and np.all(se > 0) and np.all(z <= 5))
+    return ok, f"|z| = {np.round(z, 3).tolist()}, se = {se.tolist()}"
 
 
 def _count_ok(fit: dict[str, Any], n: int) -> bool:
@@ -445,15 +457,8 @@ def run(a: argparse.Namespace) -> int:
 
         noisy = _fit(x1, TailOffsetY(y1), chunk)
         print(f"[noisy] {noisy['termination']} x={noisy['x']}", flush=True)
-        se = np.sqrt(np.diag(noisy["pcov"]))
-        z = np.abs(noisy["x"] - THETA_TRUE) / se
-        gates.append(
-            (
-                "2 noisy within 5 sigma",
-                noisy["success"] and bool(np.all(z <= 5)),
-                f"|z| = {np.round(z, 3).tolist()}",
-            )
-        )
+        ok2, detail2 = noisy_gate(noisy["x"], noisy["pcov"])
+        gates.append(("2 noisy within 5 sigma", noisy["success"] and ok2, detail2))
         gates.append(("3i count noisy", _count_ok(noisy, n), f"{noisy['nfev']} passes"))
 
         t = time.perf_counter()

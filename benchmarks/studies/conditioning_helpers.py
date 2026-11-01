@@ -27,6 +27,11 @@ PARAM_TOL = 1e-6
 COV_TOL = 1e-3
 
 
+def rel_size(d: np.ndarray, theta: np.ndarray) -> float:
+    """Relative size of a displacement: ``max_i |d_i| / max(|theta_i|, 1e-12)``."""
+    return float(np.max(np.abs(d) / np.maximum(np.abs(theta), 1e-12)))
+
+
 def _mp_system(
     mp: Any,
     model_mp: Callable[..., Any],

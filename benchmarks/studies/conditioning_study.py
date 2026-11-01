@@ -42,6 +42,7 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from benchmarks.studies.conditioning_helpers import (
+    _EPS,
     COV_TOL,
     KAPPA_MAX,
     PARAM_TOL,
@@ -51,6 +52,7 @@ from benchmarks.studies.conditioning_helpers import (
     mp_gn_step,
     mp_reference,
     reference_conflict,
+    rel_size,
     svd_covariance,
     tsqr_factor,
     tsqr_step,
@@ -70,7 +72,6 @@ from nlsq.streaming.exact_lm import (
 
 NOISE = 1e-3
 P0_SPREAD = 0.05  # p0 = truth * (1 + 0.05 * N(0, 1))
-EPS = float(np.finfo(np.float64).eps)
 BASIN_COST_RTOL = 1e-10  # basin_ok: |cost - cost_ref| <= 1e-10 * cost_ref
 BASIN_PARAM_TOL = 1e-2  # basin_ok: param_err < 1e-2 (after the term sort)
 CANDIDATES = ("normal_equations", "tsqr", "scipy")
@@ -297,7 +298,7 @@ def fit_tsqr(
         cn = np.linalg.norm(R, axis=0)
         if np.all(cn > 0):
             s = np.linalg.svd(R / cn, compute_uv=False)
-            if s[-1] ** 2 > p * EPS * s[0] ** 2 and 0.5 * float(c @ c) <= tol * F:
+            if s[-1] ** 2 > p * _EPS * s[0] ** 2 and 0.5 * float(c @ c) <= tol * F:
                 return "ftol"
         return None
 
@@ -442,10 +443,6 @@ def _steps_at(
     return st, d_ne, R, d_ts
 
 
-def _rel(d: np.ndarray, theta: np.ndarray) -> float:
-    return float(np.max(np.abs(d) / np.maximum(np.abs(theta), 1e-12)))
-
-
 def same_theta(
     prob: Problem,
     x: np.ndarray,
@@ -468,7 +465,7 @@ def same_theta(
         ("same_theta_tsqr", d_ts, cov_ts),
     ):
         cov_err = error_norms(theta, theta, cov, cov_ref, 0, 0)["cov_err"]
-        out[key] = {"step_rel": _rel(d, theta), "cov_err": cov_err}
+        out[key] = {"step_rel": rel_size(d, theta), "cov_err": cov_err}
     return out
 
 
@@ -479,9 +476,9 @@ def mp_step_at(
     d_mp = mp_gn_step(prob.model_mp, prob.jac_mp, x, y, theta)
     _, d_ne, _, d_ts = _steps_at(prob, x, y, chunk, theta)
     return {
-        "mp_step_rel": _rel(d_mp, theta),
-        "ne_step_err": _rel(d_ne - d_mp, theta),
-        "tsqr_step_err": _rel(d_ts - d_mp, theta),
+        "mp_step_rel": rel_size(d_mp, theta),
+        "ne_step_err": rel_size(d_ne - d_mp, theta),
+        "tsqr_step_err": rel_size(d_ts - d_mp, theta),
         "note": "steps only; a single mp step gives no reference covariance",
     }
 
@@ -510,7 +507,9 @@ def multi_start_reference(
             status[name] = "skipped: solver crashed"
             continue
         start = np.asarray(fit["x"])
-        dup = next((k for k, t in tried.items() if _rel(start - t, t) <= 1e-8), None)
+        dup = next(
+            (k for k, t in tried.items() if rel_size(start - t, t) <= 1e-8), None
+        )
         if dup is not None:
             status[name] = f"skipped: duplicate of {dup}"
             continue

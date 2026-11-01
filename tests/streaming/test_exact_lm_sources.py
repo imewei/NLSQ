@@ -103,6 +103,47 @@ def test_probe_first_block_only_finite_every_block(data, passes, monkeypatch):
     assert not any(k["check_finite"] for k in passes[1:])  # ...later passes do not
 
 
+# ---- source consistency: equal block lengths, same length on every pass --------------
+
+
+class Clipped:
+    """Array-like whose ``shape`` claims ``len(a)`` rows but whose slices stop at ``cut``."""
+
+    def __init__(self, a, cut):
+        self._a, self.shape, self._cut = a, a.shape, cut
+
+    def __len__(self):
+        return self.shape[0]
+
+    def __getitem__(self, k):
+        return self._a[: self._cut][k]
+
+
+@pytest.mark.parametrize("which", ["y", "sigma"])
+def test_short_slice_of_y_or_sigma_raises(data, which):
+    x, y = data
+    sigma = np.ones_like(y)
+    y, sigma = (
+        (Clipped(y, N - 10), sigma) if which == "y" else (y, Clipped(sigma, N - 10))
+    )
+    with pytest.raises(ValueError, match=r"same length on every pass"):
+        lm.exact_lm_fit(exp_model, x, y, EXP.p0, sigma=sigma, chunk_size=CHUNK)
+
+
+def test_source_length_change_between_passes_raises(data, monkeypatch):
+    x, y = (Counting(a, []) for a in data)
+    real = lm.run_pass
+
+    def shrink_after_first(*a, **k):
+        out = real(*a, **k)
+        x.shape = y.shape = (N - 100,)  # the dataset loses rows after pass 1
+        return out
+
+    monkeypatch.setattr(lm, "run_pass", shrink_after_first)
+    with pytest.raises(ValueError, match=r"changed length between passes"):
+        lm.exact_lm_fit(exp_model, x, y, EXP.p0, chunk_size=CHUNK)
+
+
 # ---- lazy sources: chunk-sized reads, one pass = one read of the data ----------------
 
 

@@ -11,7 +11,9 @@ Jacobian rows); Stage 2b adds box ``bounds`` by an active set (not Coleman-Li TR
 result is a KKT point of the box-constrained problem to within the stopping tolerances,
 reached by a different path than TRF.
 
-shortcut: normal equations square cond(J); the Stage 3 TSQR study decides whether to upgrade.
+shortcut: normal equations square cond(J). The Stage 3 conditioning study kept them
+(benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md); COND_WARN is the
+mitigation. Revisit with TSQR if accurate covariances at cond(J) > 1e5 are needed.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import os
 import sys
 import warnings
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple, TypeGuard
 
 import jax
 import jax.numpy as jnp
@@ -46,7 +48,10 @@ ATTEMPT_CAP = 20  # solve attempts per iteration
 DAMPING_FLOOR = 1e-10  # D_ii >= DAMPING_FLOOR * max_j D_jj
 LAM0 = 1e-3  # initial damping; read at call time (tests move it near a limit)
 
-_MESSAGES = {
+Termination = Literal["gtol", "ftol", "xtol", "max_nfev", "stalled"]
+_SUCCESS: frozenset[Termination] = frozenset({"gtol", "ftol", "xtol"})
+
+_MESSAGES: dict[Termination, str] = {
     "gtol": "gradient below gtol (or exact fit)",
     "ftol": "cost decrease below ftol",
     "xtol": "step below xtol",
@@ -66,8 +71,11 @@ class ExactSolverError(RuntimeError):
     """
 
     def __init__(self, message: str, result: OptimizeResult) -> None:
-        super().__init__(message)
+        super().__init__(message, result)  # args = both, so pickle can rebuild it
         self.result = result
+
+    def __str__(self) -> str:
+        return str(self.args[0])
 
 
 class PassStats(NamedTuple):
@@ -161,9 +169,7 @@ def _block(a: Any, s: int, e: int) -> Any:
 
     Callers keep ``e <= len(a)``: a strict array-like may raise on a slice past the end.
     """
-    if isinstance(a, jax.Array):
-        return jnp.asarray(a[s:e], dtype=jnp.float64)
-    return np.asarray(a[s:e], dtype=np.float64)
+    return _as64(a[s:e])
 
 
 def iter_blocks(
@@ -185,6 +191,14 @@ def iter_blocks(
         xc, yc = _block(source_x, s, e), _block(source_y, s, e)
         sc = None if source_sigma is None else _block(source_sigma, s, e)
         m = xc.shape[0]
+        got = {"x": m, "y": yc.shape[0]} | (
+            {} if sc is None else {"sigma": sc.shape[0]}
+        )
+        if any(v != e - s for v in got.values()):  # a short slice would be edge-padded
+            raise ValueError(
+                f"source slice [{s}:{e}] returned {got} rows, expected {e - s} each: "
+                "x, y and sigma must all have the same length on every pass"
+            )
         if m == chunk:
             yield xc, yc, sc, full
             continue
@@ -212,6 +226,13 @@ def _as64(a: Any) -> Any:
     if isinstance(a, jax.Array):
         return jnp.asarray(a, dtype=jnp.float64)
     return np.asarray(a, dtype=np.float64)
+
+
+def is_chunk_factory(
+    x: Any,
+) -> TypeGuard[Callable[[int], Iterator[tuple[Any, ...]]]]:
+    """True for a replayable chunk factory: a callable that is not an array-like."""
+    return callable(x) and not hasattr(x, "shape")
 
 
 _END = object()  # end of a factory pass; a yielded None is a bad block, not the end
@@ -396,7 +417,7 @@ def step_termination(
     x_norm: float,
     ftol: float,
     xtol: float,
-) -> str | None:
+) -> Termination | None:
     """Step-based criteria after an accepted step; ``F`` is the cost before the step."""
     if dF < ftol * F and rho > 0.25:
         return "ftol"
@@ -525,7 +546,7 @@ def _stationary(
     hi: np.ndarray,
     gtol: float,
     ftol: float,
-) -> str | None:
+) -> Termination | None:
     if cost == 0:  # exact fit: decided before any division
         return "gtol"
     if not free.any() or np.max(np.abs(g[free])) < gtol:
@@ -695,8 +716,6 @@ def _check_inputs(
     n_points: int | None,
 ) -> tuple[int, int, np.ndarray, np.ndarray]:
     """Validate shapes (from ``shape`` only, no data read) and scope; return ``(n, p, lo, hi)``."""
-    if not 0 < LAM0 <= LAMBDA_MAX:
-        raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
     if hasattr(x, "shape") and len(x.shape) > 1:
         raise ValueError(
             f"multi-feature (2-D) xdata is not supported by exact_streaming: x must be "
@@ -787,8 +806,6 @@ def _check_factory_inputs(
     n_points: int | None,
 ) -> tuple[int | None, int, np.ndarray, np.ndarray]:
     """Argument checks for a chunk factory source; return ``(n_points, p, lo, hi)``."""
-    if not 0 < LAM0 <= LAMBDA_MAX:
-        raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
     if y is not None:
         raise ValueError(
             "ydata must be None when xdata is a chunk factory (callable): the factory "
@@ -865,7 +882,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     ``x`` may instead be a chunk factory (``y`` and ``sigma`` None), see
     :class:`FactorySource`: ``x(chunk) -> Iterator[(x, y) | (x, y, sigma)]``, replayable
     (called once per full pass, same data in the same order), at most ``chunk`` points per
-    block. ``chunk`` is :func:`derive_chunk_size` of ``n_points``, or, with ``n_points``
+    block. Replay must yield identical data on every pass; only the point count is
+    verified. ``chunk`` is :func:`derive_chunk_size` of ``n_points``, or, with ``n_points``
     None, of an unbounded length (``chunk_size`` as given, else ``1 << 22`` reduced to the
     budget, never clamped to the unknown length). ``n_points`` is then optional: the count
     of pass 1 is used when it is None, and every pass verifies the count (``ValueError``
@@ -880,7 +898,9 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     gradient or Hessian at ``p0``, and for ``bounds`` of the wrong shape or with
     ``lb >= ub`` anywhere (equal, inverted or NaN bounds).
     """
-    factory = callable(x) and not hasattr(x, "shape")
+    if not 0 < LAM0 <= LAMBDA_MAX:
+        raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
+    factory = is_chunk_factory(x)
     source: tuple[Any, Any, Any] | FactorySource
     if factory:
         n, p, lo, hi = _check_factory_inputs(y, p0, sigma, bounds, n_points)
@@ -908,6 +928,13 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             check_finite=first and check_finite,
             check_sigma=first,
         )
+        if (
+            not factory and st.n_seen != n
+        ):  # factory sources verify their count per pass
+            raise ValueError(
+                f"pass {nfev} saw {st.n_seen} points, expected {n}: the source changed "
+                "length between passes"
+            )
         if show_progress:
             logger.info("exact_lm pass", nfev=nfev, cost=st.cost)
         return st
@@ -934,8 +961,6 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         raise ValueError("sigma must be finite (found NaN or inf)")
     if not st.sigma_positive:
         raise ValueError("sigma must be positive (found a zero or negative value)")
-    if st.n_seen != n:
-        raise RuntimeError(f"pass saw {st.n_seen} of {n} points")
     if not _finite(st):
         raise ValueError("model cost, gradient or Hessian is not finite at p0")
     cost, g, H = st.cost, st.g, st.H
@@ -999,7 +1024,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         cost=cost,
         pcov=pcov,
         nfev=nfev,
-        success=termination in ("gtol", "ftol", "xtol"),
+        success=termination in _SUCCESS,
         message=message,
         termination=termination,
         n_points=n,

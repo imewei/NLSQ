@@ -109,7 +109,10 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   probe uses the leading blocks of the first pass, joined until they hold at
   least 2 points. ``sigma`` must then come from the blocks
   (``sigma=`` raises ``ValueError``), and ``n_points`` with an array source
-  raises ``ValueError``. Exceptions raised by the factory propagate unchanged.
+  raises ``ValueError``. Replay must yield identical data on every pass; only the
+  point count is verified, so a factory that reorders, resamples or alters its
+  data between passes is not detected. Exceptions raised by the factory propagate
+  unchanged.
   With neither ``n_points`` nor ``chunk_size``, every block is padded to the
   derived chunk (default 4,194,304 rows), so pass one of them for small
   factories. Fewer than 2 points in total raises ``ValueError``.
@@ -160,7 +163,8 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   same parameters the accumulated ``J^T J`` step and covariance were accurate to
   about 2e-12 and 2e-8 (one problem) for ``cond(J) <= 1e4``; beyond that the
   covariance error grows with ``cond(J)``; ``cond(J)^2 * eps`` is the
-  worst-case bound (about 5e-6 at ``cond(J) = 7e5``). Treat the warning as the
+  worst-case bound (about 1e-4 at ``cond(J) = 7e5``; the poly8 study row at that
+  conditioning measured 5e-6). Treat the warning as the
   guidance for ill-conditioned fits.
 - **Scale:** the method has been run on one billion points (16 GB of ``x`` and
   ``y`` in an HDF5 file) with 1.8 GiB peak host memory; each pass reads the file once.

@@ -4,7 +4,7 @@ import jax
 import numpy as np
 
 
-def assert_kkt(result, model, x, y, lb, ub, tau=1e-6):
+def assert_kkt(result, model, x, y, lb, ub, tau=1e-6, sigma=None):
     """Assert first-order optimality of ``result["x"]`` for ``min 0.5*|y - model|^2`` on a box.
 
     ``g = J^T r`` (``r = y - f``, so ``grad F = -g``), ``H = J^T J``, ``F = 0.5*sum r^2`` are
@@ -13,7 +13,8 @@ def assert_kkt(result, model, x, y, lb, ub, tau=1e-6):
     ``F = 0``; for ``0 < F <= 1e-24*sum(y^2)`` the test is coordinatewise on
     ``g_i`` against ``1e-12*sqrt(sum y^2)*sqrt(H_ii)`` instead. Free: ``|g_i| <= tol``; at
     the lower bound: ``g_i <= tol``; at the upper bound: ``g_i >= -tol``. Feasibility
-    ``lb <= theta <= ub`` is exact.
+    ``lb <= theta <= ub`` is exact. With ``sigma`` the residuals, ``y`` and the Jacobian
+    rows are divided by it first (the weighted problem).
     """
     theta = np.asarray(result["x"], dtype=np.float64)
     p = theta.size
@@ -28,6 +29,9 @@ def assert_kkt(result, model, x, y, lb, ub, tau=1e-6):
         jax.jacfwd(lambda q: model(x, *q))(np.asarray(theta)), dtype=np.float64
     )
     r = y - f
+    if sigma is not None:
+        s = np.asarray(sigma, dtype=np.float64)
+        r, J, y = r / s, J / s[:, None], y / s
     F = 0.5 * float(r @ r)
     g = J.T @ r
     Hd = np.einsum("ij,ij->j", J, J)

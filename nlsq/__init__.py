@@ -778,7 +778,7 @@ def _curve_fit_exact_streaming(
     if multistart:
         raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
 
-    factory = callable(xdata) and not hasattr(xdata, "shape")
+    factory = exact_lm.is_chunk_factory(xdata)
     if factory:
         if ydata is not None:
             raise ValueError(
@@ -892,16 +892,19 @@ def curve_fit_large(
     the full-dataset streaming optimizer (``AdaptiveHybridStreamingOptimizer``,
     which accumulates Gauss-Newton statistics across the whole dataset
     instead of fitting each chunk independently) explicitly, pass
-    ``method="hybrid_streaming"``.
+    ``method="hybrid_streaming"``, or ``method="exact_streaming"`` for an exact,
+    chunk-independent Levenberg-Marquardt fit.
 
     Parameters
     ----------
     f : callable
         Model function f(x, \\*params) -> y. Must use jax.numpy operations.
-    xdata : array_like
-        Independent variable data.
-    ydata : array_like
-        Dependent variable data.
+    xdata : array_like or callable
+        Independent variable data. With ``method="exact_streaming"`` it may be a
+        replayable chunk factory ``factory(chunk_size) -> Iterator[(x, y) | (x, y,
+        sigma)]``; then ``ydata`` must be None (see ``method``).
+    ydata : array_like or None
+        Dependent variable data; None only when ``xdata`` is a chunk factory.
     p0 : array_like, optional
         Initial parameter guess.
     sigma : array_like, optional
@@ -969,7 +972,9 @@ def curve_fit_large(
     scale_factor : float, optional
         Scale factor for exploration region. Default: 1.0.
     **kwargs
-        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
+        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss). With
+        ``method="exact_streaming"`` only ftol, xtol, gtol, max_nfev and n_points are
+        accepted (``loss`` raises ``TypeError``).
 
     Returns
     -------
@@ -1069,7 +1074,9 @@ def curve_fit_large(
             solver_kwargs=kwargs,
         )
 
-    if callable(xdata) or ydata is None:
+    from nlsq.streaming.exact_lm import is_chunk_factory
+
+    if is_chunk_factory(xdata) or ydata is None:
         raise ValueError(
             "a chunk factory (callable xdata, ydata=None) requires "
             "method='exact_streaming'; pass xdata and ydata arrays otherwise"

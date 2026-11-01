@@ -1,5 +1,7 @@
 """curve_fit_large(method="exact_streaming") dispatch, argument policy and the fit() gate."""
 
+import pickle
+
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -111,6 +113,16 @@ def test_failure_raises_with_result(data):
         curve_fit_large(exp_model, *data, p0=EXP.p0, method=M, max_nfev=2)
     assert exc.value.result["termination"] == "max_nfev"
     assert exc.value.result["nfev"] == 2
+
+
+def test_exact_solver_error_pickles():
+    err = ExactSolverError(
+        "fit failed (stalled): m", nlsq.OptimizeResult(termination="stalled")
+    )
+    back = pickle.loads(pickle.dumps(err))
+    assert isinstance(back, ExactSolverError)
+    assert str(back) == "fit failed (stalled): m"
+    assert back.result["termination"] == "stalled"
 
 
 def test_solver_kwargs_are_forwarded(data, spy):
@@ -253,6 +265,25 @@ def test_p0_none_infers_parameter_count(data, spy):
         ValueError, match="Unable to determine number of fit parameters"
     ):
         curve_fit_large(lambda x: x, *data, method=M)
+
+
+def test_hybrid_streaming_default_p0(data, monkeypatch):
+    from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
+
+    seen = []
+
+    def fake_fit(self, *args, **kwargs):
+        seen.append(kwargs["p0"])
+        return {"x": kwargs["p0"], "pcov": np.eye(len(kwargs["p0"]))}
+
+    monkeypatch.setattr(AdaptiveHybridStreamingOptimizer, "fit", fake_fit)
+    curve_fit_large(exp_model, *data, method="hybrid_streaming")
+    np.testing.assert_array_equal(seen[0], np.ones(3))
+    with pytest.raises(
+        ValueError, match="Unable to determine number of fit parameters"
+    ):
+        curve_fit_large(lambda x: x, *data, method="hybrid_streaming")
+    assert len(seen) == 1  # the second call failed before reaching the optimizer
 
 
 @pytest.mark.parametrize("n", [100, 5000])

@@ -914,6 +914,25 @@ def test_bounded_exp_matches_scipy_trf():
     assert_kkt(out, model, x, y, BLO, BHI)
 
 
+def test_weighted_bounded_matches_scipy_trf():
+    x, y, s = weighted_data(BEXP)
+    model = model_of(BEXP)
+    ref = least_squares(
+        lambda th: (y - BEXP.model(np, x, *th)) / s,
+        BEXP.p0,
+        bounds=(BLO, BHI),
+        xtol=1e-12,
+        ftol=1e-12,
+        gtol=1e-12,
+    )
+    out = run(model, x, y, BEXP.p0, sigma=s, bounds=BEXP.bounds, **TIGHT)
+    assert out["success"]
+    assert out["x"][0] == BHI[0]  # premise: the upper bound on `a` is active
+    assert_close(out["cost"], ref.cost, 1e-6)
+    assert_close(out["x"], ref.x, 1e-4)
+    assert_kkt(out, model, x, y, BLO, BHI, sigma=s)
+
+
 def _random_box(seed):
     """Box around a random truth; ``seed % 4`` parameters get a bound that excludes it."""
     rng = np.random.default_rng(seed)
