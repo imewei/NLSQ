@@ -226,6 +226,9 @@ characterization test (Task C1).
 `exact_lm.compute_covariance` applies `2.0 * cost / (n - p)`; the shared functions keep
 that single meaning, with the factor of 2 applied in one place inside each.
 
+`pcov_from_jacobian` takes the SVD as an injected callable, because
+`CurveFit._compute_covariance` calls its instance hook `covariance_svd` (~:3449) and
+forwards it unchanged; a test replaces that hook and checks it is used.
 `exact_lm.compute_covariance` keeps returning a bare `ndarray` (a wrapper over
 `pcov_from_normal` that drops `warned`), because `tests/streaming/test_exact_lm.py` (~:653)
 and other callers depend on that return type.
