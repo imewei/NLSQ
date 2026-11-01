@@ -10,8 +10,10 @@ from scipy.optimize import least_squares
 mpmath = pytest.importorskip("mpmath")
 
 from benchmarks.studies.conditioning_helpers import (
+    eigh_rank,
     error_norms,
     mp_reference,
+    svd_covariance,
     tsqr_solve,
     verdict,
 )
@@ -151,3 +153,37 @@ def test_verdict_rule():
     )
     with pytest.raises(ValueError):
         verdict([_row(1e6)])
+
+
+def test_verdict_rejects_nan_kappa():
+    with pytest.raises(ValueError, match="NaN"):
+        verdict([_row(10.0), _row(float("nan"))])
+
+
+def test_svd_covariance_and_eigh_rank():
+    rng = np.random.default_rng(1)
+    J = rng.standard_normal((40, 3))
+    cov, rank = svd_covariance(J, cost=2.0, n=40)
+    np.testing.assert_allclose(cov, np.linalg.inv(J.T @ J) * (4.0 / 37), rtol=1e-12)
+    assert rank == 3 and eigh_rank(J.T @ J) == 3
+    Jc = np.column_stack([J[:, :2], J[:, 0]])  # exactly collinear third column
+    assert svd_covariance(Jc, cost=2.0, n=40)[1] == 2
+    assert eigh_rank(Jc.T @ Jc) == 2
+
+
+def test_mp_reference_analytic_jacobian_hook():
+    x, y = _data(n=50)
+
+    def f(xi, a, b):
+        return a * mpmath.exp(-b * xi)
+
+    def jac(xi, a, b):
+        e = mpmath.exp(-b * xi)
+        return [e, -a * xi * e]
+
+    p0 = np.array([2.4, 1.2])
+    out_diff = mp_reference(f, x, y, p0)
+    out_jac = mp_reference(f, x, y, p0, jac_mp=jac)
+    np.testing.assert_allclose(out_jac[0], out_diff[0], rtol=1e-14)
+    np.testing.assert_allclose(out_jac[2], out_diff[2], rtol=1e-12)
+    assert out_jac[3] == out_diff[3] == 2

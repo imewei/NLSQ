@@ -18,7 +18,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)  # float64 Jacobians, as exact_lm does
+# import-time side effect (process-wide): float64 Jacobians, as every nlsq module does
+jax.config.update("jax_enable_x64", True)
 
 _EPS = float(np.finfo(np.float64).eps)
 KAPPA_MAX = 1e4  # the rule covers accuracy-set rows with kappa(J) <= 1e4
@@ -32,11 +33,13 @@ def mp_reference(
     y: np.ndarray,
     p0: np.ndarray,
     digits: int = 50,
+    jac_mp: Callable[..., Sequence[Any]] | None = None,
 ) -> tuple[np.ndarray, float, np.ndarray, int]:
     """Extended-precision Gauss-Newton reference ``(theta, cost, cov, rank)``.
 
     ``model_mp(x_i, *params)`` is written with mpmath functions and evaluated pointwise
-    at ``digits`` decimal digits; the Jacobian is ``mpmath.diff`` per partial. Steps are
+    at ``digits`` decimal digits; the Jacobian is ``mpmath.diff`` per partial, or the
+    optional analytic ``jac_mp(x_i, *params) -> p partials`` (much faster). Steps are
     least-squares solves (``mpmath.qr_solve``) with step halving while the cost rises,
     iterated until the step is below ``10**-(digits-20)`` relative to ``max(|theta|, 1)``
     (far below float64 eps); ``RuntimeError`` if that does not happen in 200 iterations
@@ -66,6 +69,10 @@ def mp_reference(
         def jac(t: list[Any]) -> Any:
             J = mp.matrix(n, p)
             for i, xi in enumerate(xs):
+                if jac_mp is not None:
+                    for j, v in enumerate(jac_mp(xi, *t)):
+                        J[i, j] = v
+                    continue
                 for j in range(p):
                     J[i, j] = mp.diff(
                         lambda s, xi=xi, j=j: model_mp(xi, *t[:j], s, *t[j + 1 :]), t[j]
@@ -117,22 +124,17 @@ def mp_reference(
         return np.array([float(t) for t in th]), float(cost), cov, len(keep)
 
 
-def tsqr_solve(
+def tsqr_factor(
     chunks: Iterable[tuple[np.ndarray, np.ndarray]],
     theta: np.ndarray,
     model: Callable[..., Any],
-    lam: float,
-    d: np.ndarray,
-) -> tuple[np.ndarray, float]:
-    """Damped Gauss-Newton step and cost ``F`` from a TSQR of the augmented ``[J | r]``.
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """``(R, c, rho)`` of the TSQR of the augmented ``[J | r]`` at ``theta``.
 
     Each ``(x, y)`` chunk gives ``J`` (``jax.jacfwd`` of the pointwise jnp ``model``) and
     ``r = y - model(x, *theta)``; the running ``(p+1)x(p+1)`` triangle ``[[R, c], [0, rho]]``
-    is the R factor of the stacked previous triangle and the new block. ``F = 0.5*(|c|^2 +
-    rho^2)``, and the step solves ``min |[R; sqrt(lam*d)] s - [c; 0]|`` (equivalently
-    ``(J^T J + lam*diag(d)) s = J^T r``, the module's ``H + lam*diag(D)``) by SVD
-    truncated at ``s_i > sqrt(p*eps)*s_max``, i.e. the covariance cutoff on ``J^T J``.
-    ``d`` is the caller's running-maximum damping vector, used as given.
+    is the R factor of the stacked previous triangle and the new block, so ``R^T R = J^T J``,
+    ``R^T c = J^T r`` and ``|c|^2 + rho^2 = |r|^2``.
     """
     theta = np.asarray(theta, dtype=np.float64)
     p = theta.size
@@ -149,10 +151,59 @@ def tsqr_solve(
         T = np.linalg.qr(np.vstack([T, np.column_stack([J, r])]), mode="r")
     full = np.zeros((p + 1, p + 1))
     full[: T.shape[0]] = T  # fewer than p+1 rows in total
-    R, c, rho = full[:p, :p], full[:p, p], full[p, p]
+    return full[:p, :p], full[:p, p], float(full[p, p])
+
+
+def tsqr_step(R: np.ndarray, c: np.ndarray, lam: float, d: np.ndarray) -> np.ndarray:
+    """Solve ``min |[R; sqrt(lam*d)] s - [c; 0]|`` (``(J^T J + lam*diag(d)) s = J^T r``).
+
+    SVD-truncated at ``s_i > sqrt(p*eps)*s_max``, the covariance cutoff on ``J^T J``.
+    """
+    p = len(c)
     A = np.vstack([R, np.diag(np.sqrt(lam * np.asarray(d, dtype=np.float64)))])
-    step = np.linalg.lstsq(A, np.concatenate([c, np.zeros(p)]), rcond=np.sqrt(p * _EPS))
-    return step[0], float(0.5 * (c @ c + rho * rho))
+    b = np.concatenate([c, np.zeros(p)])
+    return np.linalg.lstsq(A, b, rcond=np.sqrt(p * _EPS))[0]
+
+
+def tsqr_solve(
+    chunks: Iterable[tuple[np.ndarray, np.ndarray]],
+    theta: np.ndarray,
+    model: Callable[..., Any],
+    lam: float,
+    d: np.ndarray,
+) -> tuple[np.ndarray, float]:
+    """Damped Gauss-Newton step and cost ``F = 0.5*(|c|^2 + rho^2)`` by TSQR.
+
+    :func:`tsqr_factor` then :func:`tsqr_step`; the damping is the module's
+    ``H + lam*diag(D)``, with ``d`` the caller's running-maximum vector used as given.
+    """
+    R, c, rho = tsqr_factor(chunks, theta, model)
+    return tsqr_step(R, c, lam, d), float(0.5 * (c @ c + rho * rho))
+
+
+def svd_covariance(A: np.ndarray, cost: float, n: int) -> tuple[np.ndarray, int]:
+    """Covariance and rank from a factor ``A`` with ``A^T A = J^T J`` (``J`` or ``R``).
+
+    ``V diag(1/s^2) V^T`` over ``s^2 > p*eps*s_max^2`` (the module's eigenvalue cutoff),
+    scaled by ``2*cost/(n-p)``.
+    """
+    p = A.shape[1]
+    _, s, Vt = np.linalg.svd(A, full_matrices=False)
+    keep = s**2 > p * _EPS * s[0] ** 2 if s.size and s[0] > 0 else np.zeros(0, bool)
+    Vk = Vt[keep].T
+    return (Vk / s[keep] ** 2) @ Vk.T * (2.0 * cost / (n - p)), int(keep.sum())
+
+
+def eigh_rank(H: np.ndarray) -> int:
+    """Retained-direction count of ``nlsq.streaming.exact_lm.compute_covariance`` for ``H``.
+
+    Same power-of-two scaling and ``w > p*eps*w_max`` cutoff; the module does not return it.
+    """
+    top = np.max(np.abs(H))
+    s = np.ldexp(1.0, int(np.frexp(top)[1]) - 1) if top > 0 else 1.0
+    Hs = H / s
+    w = np.linalg.eigvalsh((Hs + Hs.T) / 2)
+    return int(np.sum(w > len(w) * _EPS * w[-1]))
 
 
 def error_norms(
@@ -184,13 +235,18 @@ def error_norms(
 def verdict(
     rows: Sequence[Mapping[str, Any]],
 ) -> Literal["normal_equations_stay", "tsqr_default"]:
-    """Pre-registered decision rule over the accuracy-set rows.
+    """Pre-registered decision rule; ``rows`` must be accuracy-set rows only.
 
     Normal equations pass if, on every row with ``kappa <= 1e4``, their errors versus the
     mpmath reference satisfy ``param_err <= 1e-6``, ``cov_err <= 1e-3`` and
     ``rank_equal``; otherwise TSQR becomes the default. The TSQR and SciPy entries are
-    not part of the rule. A NaN or inf error fails. ``ValueError`` if no row is in range.
+    not part of the rule. A NaN or inf error fails. ``ValueError`` if any ``kappa`` is
+    NaN or if no row is in range.
     """
+    if any(np.isnan(row["kappa"]) for row in rows):
+        raise ValueError(
+            "a row has kappa = NaN; it cannot be placed inside or outside 1e4"
+        )
     covered = [row for row in rows if row["kappa"] <= KAPPA_MAX]
     if not covered:
         raise ValueError(
