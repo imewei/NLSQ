@@ -43,10 +43,10 @@ def _dataset():
     return x, y
 
 
-def _config(strategy="loop", penalty=False, **extra):
+def _config(strategy="loop", penalty=False, chunk=CHUNK, **extra):
     extra.setdefault("enable_checkpoints", False)
     return HybridStreamingConfig(
-        chunk_size=CHUNK,
+        chunk_size=chunk,
         loop_strategy=strategy,
         enable_group_variance_regularization=penalty,
         group_variance_lambda=0.01,
@@ -67,13 +67,14 @@ def _setup(config):
 
 def run_exact():
     x, y = _dataset()
-    res = exact_lm_fit(model, x, y, P0)
+    # chunk_size < n so the accumulation really spans several chunks.
+    res = exact_lm_fit(model, x, y, P0, chunk_size=CHUNK)
     return np.asarray(res.x), float(res.cost), np.asarray(res.pcov)
 
 
-def run_hybrid_phase2(penalty, strategy):
+def run_hybrid_phase2(penalty, strategy, chunk=CHUNK):
     """Phase 0 -> Phase 2 -> Phase 3 (Phase 1 warmup skipped for determinism)."""
-    opt, data, p0_norm = _setup(_config(strategy, penalty))
+    opt, data, p0_norm = _setup(_config(strategy, penalty, chunk))
     r2 = opt._run_phase2_gauss_newton(data, p0_norm)
     r3 = opt._run_phase3_finalize(
         r2["final_params"], r2["JTJ_final"], r2["residual_sum_sq"], N_POINTS
@@ -101,6 +102,23 @@ def run_hybrid_accumulate_chunk():
     opt, _, p0_norm = _setup(_config())
     jtj, jtr, cost = opt._accumulate_jtj_jtr(*_chunk_inputs(opt, p0_norm))
     return np.asarray(jtj), np.asarray(jtr), float(cost)
+
+
+def run_phases_iteration(penalty):
+    """One GaussNewtonPhase iteration (includes the penalty).
+
+    Starts off p0 by an uneven shift: at the normalized p0 both parameters
+    coincide, so the group variance, and hence its gradient, would be zero.
+    """
+    opt, (x, y), p0_norm = _setup(_config("loop", penalty))
+    phase = GaussNewtonPhase(_config("loop", penalty), opt.normalized_model)
+    start = p0_norm + jnp.array([0.3, -0.2])
+    r = phase._gauss_newton_iteration((x, y), start, 1.0)
+    return (
+        float(r["new_cost"]),
+        float(r["gradient_norm"]),
+        np.asarray(r["step"]),
+    )
 
 
 def run_phases_accumulate_chunk():
@@ -168,6 +186,34 @@ GOLDEN = {
         "jtr": [726.3339744285704, -40.16728089847266],
         "cost": 608.218483150702,
     },
+    # chunk_size=6000 -> chunks of 6000, 6000, 6000, 2000 (ragged tail), penalty on.
+    "hybrid_ragged_scan": {
+        "x": [1.9914201296045526, 1.2659764128226814],
+        "rss": 51.66824287612398,
+        "pcov": [
+            [3.2696704640810914e-06, 2.0791088435790344e-06],
+            [2.0791088435790344e-06, 2.644386116244809e-06],
+        ],
+    },
+    "hybrid_ragged_loop": {
+        "x": [1.9914201296045526, 1.2659764128226814],
+        "rss": 51.66824287612398,
+        "pcov": [
+            [3.269670464081091e-06, 2.07910884357903e-06],
+            [2.07910884357903e-06, 2.644386116244803e-06],
+        ],
+    },
+    # GaussNewtonPhase._gauss_newton_iteration from p0_norm + [0.3, -0.2], radius 1.0.
+    "phases_iter_nopen": {
+        "new_cost": 424.7557098754678,
+        "gradient_norm": 3432.7554333242992,
+        "step": [0.2393817160828744, 0.7716573655329735],
+    },
+    "phases_iter_pen": {
+        "new_cost": 424.8078163421925,
+        "gradient_norm": 3432.758834603918,
+        "step": [0.2393817356061301, 0.7716573477717127],
+    },
 }
 
 
@@ -206,6 +252,34 @@ def test_hybrid_phase2_golden(monkeypatch, penalty, strategy):
     _assert_close(x, g["x"])
     _assert_close(rss, g["rss"])
     _assert_close(pcov, g["pcov"])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("strategy", ["scan", "loop"])
+def test_hybrid_phase2_ragged_tail_golden(strategy):
+    x, rss, pcov = run_hybrid_phase2(True, strategy, chunk=6000)
+    g = GOLDEN[f"hybrid_ragged_{strategy}"]
+    _assert_close(x, g["x"])
+    _assert_close(rss, g["rss"])
+    _assert_close(pcov, g["pcov"])
+
+
+@pytest.mark.parametrize("penalty", [False, True], ids=["no_penalty", "penalty"])
+def test_phases_iteration_golden(penalty):
+    """phases/ scales the group-variance penalty differently from adaptive_hybrid
+    (no n_points, no 0.5); pin that as it is today."""
+    cost, gnorm, step = run_phases_iteration(penalty)
+    g = GOLDEN[f"phases_iter_{'pen' if penalty else 'nopen'}"]
+    _assert_close(cost, g["new_cost"])
+    _assert_close(gnorm, g["gradient_norm"])
+    _assert_close(step, g["step"])
+
+
+def test_phases_iteration_penalty_is_not_vacuous():
+    pen = run_phases_iteration(True)
+    nopen = run_phases_iteration(False)
+    assert abs(pen[0] - nopen[0]) > 1e-2
+    assert abs(pen[1] - nopen[1]) > 1e-4
 
 
 def test_hybrid_accumulate_chunk_golden():
@@ -271,9 +345,9 @@ def test_hybrid_checkpoint_roundtrip(tmp_path):
     for snap in phase2:
         state = manager.load(snap["path"])
         assert state.phase2_JTJ_accumulator is not None
-        np.testing.assert_allclose(state.phase2_JTJ_accumulator, snap["JTJ"])
-        np.testing.assert_allclose(state.phase2_JTr_accumulator, snap["JTr"])
-        np.testing.assert_allclose(state.normalized_params, snap["params"])
+        _assert_close(state.phase2_JTJ_accumulator, snap["JTJ"])
+        _assert_close(state.phase2_JTr_accumulator, snap["JTr"])
+        _assert_close(state.normalized_params, snap["params"])
 
 
 @pytest.mark.slow
@@ -294,9 +368,9 @@ def test_hybrid_phase2_resume_continues_from_checkpoint(tmp_path):
     opt2._setup_normalization(model, jnp.asarray(P0), None)
     opt2._load_checkpoint(ckpt["path"])
     restored = np.array(opt2.normalized_params)
-    np.testing.assert_allclose(restored, ckpt["params"])
-    np.testing.assert_allclose(opt2.phase2_JTJ_accumulator, ckpt["JTJ"])
-    np.testing.assert_allclose(opt2.phase2_JTr_accumulator, ckpt["JTr"])
+    _assert_close(restored, ckpt["params"])
+    _assert_close(opt2.phase2_JTJ_accumulator, ckpt["JTJ"])
+    _assert_close(opt2.phase2_JTr_accumulator, ckpt["JTr"])
 
     first_start = []
     orig = opt2._accumulate_jtj_jtr
@@ -310,7 +384,7 @@ def test_hybrid_phase2_resume_continues_from_checkpoint(tmp_path):
     resumed = opt2._run_phase2_gauss_newton(data, opt2.normalized_params)
 
     # Phase 2 started from exactly the restored parameters, not p0 or a warmup result.
-    np.testing.assert_allclose(first_start[0], restored)
+    _assert_close(first_start[0], restored)
     assert not np.allclose(restored, np.array(p0_norm))
 
     r3_full = opt._run_phase3_finalize(
