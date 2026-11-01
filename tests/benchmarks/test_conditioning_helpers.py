@@ -12,6 +12,7 @@ mpmath = pytest.importorskip("mpmath")
 from benchmarks.studies.conditioning_helpers import (
     eigh_rank,
     error_norms,
+    mp_gn_step,
     mp_reference,
     svd_covariance,
     tsqr_solve,
@@ -187,3 +188,20 @@ def test_mp_reference_analytic_jacobian_hook():
     np.testing.assert_allclose(out_jac[0], out_diff[0], rtol=1e-14)
     np.testing.assert_allclose(out_jac[2], out_diff[2], rtol=1e-12)
     assert out_jac[3] == out_diff[3] == 2
+
+
+def test_mp_gn_step_matches_float64_gauss_newton_step():
+    x, y = _data(n=60)
+    theta = np.array([2.3, 1.2])
+    J, r = _normal_equations(x, y, theta)
+
+    def f(xi, a, b):
+        return a * mpmath.exp(-b * xi)
+
+    def jac(xi, a, b):
+        e = mpmath.exp(-b * xi)
+        return [e, -a * xi * e]
+
+    expected = np.linalg.lstsq(J, r, rcond=None)[0]
+    np.testing.assert_allclose(mp_gn_step(f, jac, x, y, theta), expected, rtol=1e-10)
+    np.testing.assert_allclose(mp_gn_step(f, None, x, y, theta), expected, rtol=1e-10)

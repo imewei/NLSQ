@@ -27,6 +27,59 @@ PARAM_TOL = 1e-6
 COV_TOL = 1e-3
 
 
+def _mp_system(
+    mp: Any,
+    model_mp: Callable[..., Any],
+    jac_mp: Callable[..., Sequence[Any]] | None,
+    xs: list[Any],
+    ys: list[Any],
+    p: int,
+) -> tuple[Callable[[list[Any]], Any], Callable[[list[Any]], Any]]:
+    """``(resid, jac)`` closures in the current mpmath precision; ``r = y - f``."""
+
+    def resid(t: list[Any]) -> Any:
+        return mp.matrix([yi - model_mp(xi, *t) for xi, yi in zip(xs, ys, strict=True)])
+
+    def jac(t: list[Any]) -> Any:
+        J = mp.matrix(len(xs), p)
+        for i, xi in enumerate(xs):
+            if jac_mp is not None:
+                for j, v in enumerate(jac_mp(xi, *t)):
+                    J[i, j] = v
+                continue
+            for j in range(p):
+                J[i, j] = mp.diff(
+                    lambda s, xi=xi, j=j: model_mp(xi, *t[:j], s, *t[j + 1 :]), t[j]
+                )
+        return J
+
+    return resid, jac
+
+
+def mp_gn_step(
+    model_mp: Callable[..., Any],
+    jac_mp: Callable[..., Sequence[Any]] | None,
+    x: np.ndarray,
+    y: np.ndarray,
+    theta: np.ndarray,
+    digits: int = 50,
+) -> np.ndarray:
+    """One undamped Gauss-Newton step ``argmin |J s - r|`` at float64 ``theta``.
+
+    Residual, Jacobian and least-squares solve (``mpmath.qr_solve``) in ``digits``
+    digits from inputs converted exactly to mpf; the step is rounded to float64.
+    """
+    import mpmath as mp  # type: ignore[import-untyped]  # not a project dependency
+
+    with mp.workdps(digits):
+        xs = [mp.mpf(float(v)) for v in np.asarray(x, dtype=np.float64)]
+        ys = [mp.mpf(float(v)) for v in np.asarray(y, dtype=np.float64)]
+        th = [mp.mpf(float(v)) for v in np.asarray(theta, dtype=np.float64)]
+        resid, jac = _mp_system(mp, model_mp, jac_mp, xs, ys, len(th))
+        step = mp.qr_solve(jac(th), resid(th))[0]
+        return np.array([float(step[j]) for j in range(len(th))])
+
+
 def mp_reference(
     model_mp: Callable[..., Any],
     x: np.ndarray,
@@ -60,24 +113,7 @@ def mp_reference(
         xs = [mp.mpf(float(v)) for v in np.asarray(x, dtype=np.float64)]
         ys = [mp.mpf(float(v)) for v in np.asarray(y, dtype=np.float64)]
         th = [mp.mpf(float(v)) for v in np.asarray(p0, dtype=np.float64)]
-
-        def resid(t: list[Any]) -> Any:
-            return mp.matrix(
-                [yi - model_mp(xi, *t) for xi, yi in zip(xs, ys, strict=True)]
-            )
-
-        def jac(t: list[Any]) -> Any:
-            J = mp.matrix(n, p)
-            for i, xi in enumerate(xs):
-                if jac_mp is not None:
-                    for j, v in enumerate(jac_mp(xi, *t)):
-                        J[i, j] = v
-                    continue
-                for j in range(p):
-                    J[i, j] = mp.diff(
-                        lambda s, xi=xi, j=j: model_mp(xi, *t[:j], s, *t[j + 1 :]), t[j]
-                    )
-            return J
+        resid, jac = _mp_system(mp, model_mp, jac_mp, xs, ys, p)
 
         def half_ss(r: Any) -> Any:
             return sum(v * v for v in r) / 2
