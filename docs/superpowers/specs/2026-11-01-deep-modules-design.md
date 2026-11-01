@@ -114,13 +114,16 @@ derivatives that depend on batch composition. So the refactor changes no Jacobia
    of scan at the sizes the hybrid bench already uses, plus the existing 100M and 1B
    exact-streaming gates unchanged. If it is slower than that, keep scan as an internal
    strategy of `NormalEquations`, not as a second public method; otherwise delete it.
-6. **Redundant loops inside hybrid.** The scan/loop branches at :3039, :3544 and :4448 each
-   carry their own Python chunk loop. After the kernel is shared, those three loops are
-   collapsed into one private pass helper (`_accumulate_pass`) in `adaptive_hybrid.py`
-   that sets the checkpoint accumulators at pass boundaries. Using
-   `NormalEquations.accumulate` directly for hybrid (a pass-level seam) is a follow-up: it
-   needs hybrid's bucketed/padded chunk iteration expressed as blocks, which is not
-   attempted in this refactor.
+6. **Redundant loops inside hybrid.** Four loops in `adaptive_hybrid.py` each walk the data
+   with plain slices (`x_data[i : i + chunk_size]`): the scan/loop branches at ~:3039,
+   ~:3544 and ~:4448, plus the initial-J^T J loop at ~:3397, which also reports progress
+   every 10% / 50 chunks. (Production hybrid does **not** use bucket padding or
+   `valid_size`; that exists only in `phases/gauss_newton.py`.) After the kernel is shared,
+   the four loops are collapsed into one private pass helper (`_accumulate_pass`, with an
+   optional progress hook for the ~:3397 caller) that sets the checkpoint accumulators at
+   pass boundaries. `chunk_stats` is therefore the unified numeric kernel, and
+   `NormalEquations.accumulate` is the pass helper used by `exact_lm`; using `accumulate`
+   directly for hybrid (a pass-level seam) is a follow-up, not part of this refactor.
 
 ### Steps (each independently green)
 
@@ -140,9 +143,16 @@ hybrid Phase 2 gains sigma/residual-weight support (currently rejected in `fit`,
 ## 4. Opportunity 3: `prepare_problem`
 
 `prepare_problem(f, x, y, p0, bounds, sigma, data_mask, check_finite, nan_policy, method,
-solver, batch_size, flength, use_dynamic_sizing, kwargs) -> PreparedProblem`. The padding
-step needs `flength` and `use_dynamic_sizing`, which are `CurveFit` instance attributes
-today, so they are explicit parameters. `PreparedProblem` (frozen dataclass) carries
+solver, batch_size, kwargs, ctx) -> PreparedProblem`. The steps also read `CurveFit`
+instance state today: `flength` and `use_dynamic_sizing` (padding), and
+`enable_stability` plus the validator (method selection ~:3663, input validation ~:3739).
+They are passed as one `PrepareContext` (frozen dataclass:
+`flength=None, use_dynamic_sizing=False, enable_stability=False, validator=None, logger=None`),
+so callers that do not pad can omit it. `kwargs` is mutated in place exactly as today (the
+standard path relies on the leftovers), and a test pins that. **Hybrid passes
+`PrepareContext(flength=None, use_dynamic_sizing=False)` so no padding is introduced**, and
+the existing `data_mask` `NotImplementedError` in `_curve_fit_hybrid_streaming` (~:4367)
+stays in place before preparation. `PreparedProblem` (frozen dataclass) carries
 everything the current 13-tuple returns: `n, p0, x, y, mask, method, lb, ub, m_real,
 len_diff, should_pad, none_mask, sigma`, plus the derived `n_effective`. `none_mask`
 (whether `data_mask` was `None` on input) is consumed at `minpack.py` ~:5345. The order
@@ -202,9 +212,14 @@ Two functions, one contract: `pcov_from_jacobian(J, cost, n_eff, p, absolute_sig
 **Actual contract (verified in code; an earlier draft had this wrong):** a Moore-Penrose
 pseudo-inverse over the directions above the cutoff; dropped directions give zero rows and
 columns, so a **partially rank-deficient problem (for example a duplicate column) still
-returns a finite `pcov`**. All-`inf` plus one `OptimizeWarning` happens only when no
-direction survives, a value is non-finite, or `n_eff <= p` without `absolute_sigma`. The H-based
-version additionally emits a `UserWarning` when `sqrt(cond(H)) > 1e4`.
+returns a finite `pcov`**. All-`inf` plus one `OptimizeWarning` happens when no direction
+survives or `n_eff <= p` without `absolute_sigma`, in both. The two differ on non-finite
+input, and that difference is **preserved, not unified**: the J-based version goes
+all-`inf` only when a *singular value* is non-finite, so a finite `J` with a NaN cost gives
+a NaN `pcov` with no warning; the H-based version checks that `H` and the final `pcov` are
+finite and goes all-`inf` plus warning in either case. The H-based version additionally
+emits a `UserWarning` when `sqrt(cond(H)) > 1e4`. Both distinct behaviors get a
+characterization test (Task C1).
 
 **Cost convention (second trap):** both functions take `cost = 0.5 * sum(r^2)` (the library's
 `res.cost`). `minpack._compute_covariance` doubles it internally (`2 * res.cost`) and

@@ -85,19 +85,19 @@
 - [ ] **Step 4:** Run `uv run pytest tests/streaming -k "hybrid or phases or normal_equations" -n 2`. Expected: PASS within the golden tolerances (no Jacobian change, so differences come only from summation order; `rtol=1e-8` should hold, and any loosening needs a stated reason in the commit message).
 - [ ] **Step 5:** Commit `refactor(streaming): hybrid accumulation uses shared chunk kernel`.
 
-### Task A3b: Collapse hybrid's three redundant chunk loops
+### Task A3b: Collapse hybrid's four redundant chunk loops
 
 **Files:**
-- Modify: `nlsq/streaming/adaptive_hybrid.py` (loops at ~:3039-3065, ~:3544-3570, ~:4448-4470; each has a scan/loop branch)
+- Modify: `nlsq/streaming/adaptive_hybrid.py` (loops at ~:3039-3065, ~:3397-3410 with progress reporting, ~:3544-3570, ~:4448-4470; three of them have a scan/loop branch)
 - Test: `tests/streaming/test_normal_equations_characterization.py` (goldens from A1 unchanged)
 
 **Interfaces:**
 - Consumes: A3's `_accumulate_jtj_jtr`.
-- Produces: private `_accumulate_pass(self, params: jnp.ndarray, data_source: Any) -> tuple[jnp.ndarray, jnp.ndarray, float]` returning `(JTJ, JTr, residual_sum_sq)` with `residual_sum_sq = sum(r^2)` (same convention as today), setting `self.phase2_JTJ_accumulator` / `self.phase2_JTr_accumulator` once at the end of the pass. The three call sites call it; the group-variance penalty terms stay at the call sites.
+- Produces: private `_accumulate_pass(self, params: jnp.ndarray, x_data: Any, y_data: Any, *, on_chunk: Callable[[int, int], None] | None = None) -> tuple[jnp.ndarray, jnp.ndarray, float]` returning `(JTJ, JTr, residual_sum_sq)` with `residual_sum_sq = sum(r^2)` (same convention as today), walking `x_data`/`y_data` in plain `self.config.chunk_size` slices exactly as the loops do now (no bucket padding: that exists only in `phases/gauss_newton.py`), and setting `self.phase2_JTJ_accumulator` / `self.phase2_JTr_accumulator` once at the end of the pass. `on_chunk(chunk_idx, n_chunks)` is the hook the ~:3397 caller uses for its every-10%/50-chunks progress reporting. The four call sites call it; the group-variance penalty terms stay at the call sites.
 
 - [ ] **Step 1:** Run the A1 goldens; expected PASS (baseline).
-- [ ] **Step 2:** Implement `_accumulate_pass` by lifting one existing loop body unchanged, including bucket padding and the `valid_size`/mask handling; keep the scan branch for now (removed only in A4 if the gate passes).
-- [ ] **Step 3:** Replace the three loops with calls to it. Run `uv run pytest tests/streaming -k "hybrid or normal_equations" -n 2`. Expected: PASS within golden tolerances; the checkpoint test (A1 step 2) still passes with values equal to the pass-end accumulators.
+- [ ] **Step 2:** Implement `_accumulate_pass` by lifting one existing loop body unchanged; keep the scan branch for now (removed only in A4 if the gate passes).
+- [ ] **Step 3:** Replace the four loops with calls to it (the ~:3397 caller passes `on_chunk`). Run `uv run pytest tests/streaming -k "hybrid or normal_equations" -n 2`. Expected: PASS within golden tolerances; the checkpoint test (A1 step 2) still passes with values equal to the pass-end accumulators.
 - [ ] **Step 4:** Commit `refactor(streaming): single hybrid accumulation pass helper`.
 
 ### Task A4: Remove duplicate accumulators; route `phases/gauss_newton.py`
@@ -111,7 +111,7 @@
 
 - [ ] **Step 1:** Run the A5 benchmark first (Task A5 steps 1-2) with scan **forced** versus the migrated block loop **forced** (on GPU both `main` and the branch auto-select scan, so default runs would not time the loop); this task proceeds with deletion only if the loop is within 5% on CPU and GPU.
 - [ ] **Step 2:** Route `phases/gauss_newton.py::_accumulate_jtj_jtr` through `NormalEquations.chunk_stats`, converting `valid_size` to a boolean mask; run `tests/streaming/test_phases*.py`. Expected: PASS.
-- [ ] **Step 3:** If the gate passed, delete `_accumulate_jtj_jtr_scan` and make the three call sites use `_accumulate_jtj_jtr` only; otherwise keep scan as a private strategy inside `NormalEquations` (not a second public method). `grep -rn "_accumulate_jtj_jtr_scan" nlsq tests` must show no stale references (update tests that call it, stating the reason in the commit).
+- [ ] **Step 3:** If the gate passed, delete `_accumulate_jtj_jtr_scan` and remove the scan branch inside `_accumulate_pass` (its four call sites keep calling `_accumulate_pass`); otherwise keep scan as a private strategy inside `NormalEquations` (not a second public method). `grep -rn "_accumulate_jtj_jtr_scan" nlsq tests` must show no stale references (update tests that call it, stating the reason in the commit).
 - [ ] **Step 4:** Run `uv run pytest tests/streaming tests/regression -n 2`. Expected: PASS.
 - [ ] **Step 5:** Commit `refactor(streaming): drop duplicate J^T J accumulators`.
 
@@ -140,7 +140,7 @@
 **Interfaces:**
 - Produces: tests that pin, through `curve_fit` and `curve_fit(method="hybrid_streaming")` (not `curve_fit_large`, which rejects `nan_policy` at `nlsq/__init__.py` ~:1116): NaN rows with `nan_policy="omit"` give the same `popt` as the pre-filtered data; `data_mask` stays aligned after omission; `pcov` degrees of freedom use `sum(mask)`; the hybrid path accepts `nan_policy` once and still raises `TypeError` for a genuinely unknown keyword.
 
-- [ ] **Step 1:** Write `test_omit_matches_prefiltered`, `test_mask_alignment_after_omit`, `test_dof_uses_mask_sum_not_padded_length`, `test_hybrid_nan_policy_accepted_once`, `test_hybrid_unknown_kwarg_still_raises_typeerror`.
+- [ ] **Step 1:** Write `test_omit_matches_prefiltered`, `test_mask_alignment_after_omit`, `test_dof_uses_mask_sum_not_padded_length`, `test_hybrid_nan_policy_accepted_once`, `test_hybrid_unknown_kwarg_still_raises_typeerror`, `test_hybrid_data_mask_still_rejected` (`NotImplementedError`), `test_hybrid_does_not_pad`, `test_kwargs_leftovers_visible_to_caller` (keys consumed by preparation are gone, others remain).
 - [ ] **Step 2:** Run `uv run pytest tests/core/test_prepare_problem_characterization.py -v`. Expected: PASS on current code.
 - [ ] **Step 3:** Commit `test: characterize curve_fit input preparation`.
 
@@ -152,7 +152,7 @@
 - Test: `tests/core/test_problem.py`; repoint `tests/core/test_minpack_prepare_inputs_comprehensive.py`, `tests/core/test_minpack_coverage.py:1139`, `tests/core/test_pr29_regressions.py:139`
 
 **Interfaces:**
-- Produces: `@dataclass(frozen=True) class PreparedProblem: n: int; p0: np.ndarray; lb: np.ndarray; ub: np.ndarray; x: Any; y: Any; sigma: Any | None; mask: np.ndarray | None; method: str; m_real: int; n_effective: int; len_diff: int; should_pad: bool; none_mask: bool` and `def prepare_problem(f, x, y, p0, bounds, sigma, data_mask, check_finite, nan_policy, method, solver, batch_size, flength, use_dynamic_sizing, kwargs) -> PreparedProblem` (`flength`/`use_dynamic_sizing` are `CurveFit` attributes today, so they are explicit parameters). Together the fields cover every element of the legacy 13-tuple (`n, p0, xdata, ydata, data_mask, method, lb, ub, m, len_diff, should_pad, none_mask, sigma`). Ordering is omission, then method selection, then padding (spec section 4). `n_effective = int(mask.sum())` when a mask exists, else `m_real`; callers use `n_effective` where they used `ysize`; `none_mask` is still consumed at `minpack.py` ~:5345.
+- Produces: `@dataclass(frozen=True) class PreparedProblem: n: int; p0: np.ndarray; lb: np.ndarray; ub: np.ndarray; x: Any; y: Any; sigma: Any | None; mask: np.ndarray | None; method: str; m_real: int; n_effective: int; len_diff: int; should_pad: bool; none_mask: bool` and `def prepare_problem(f, x, y, p0, bounds, sigma, data_mask, check_finite, nan_policy, method, solver, batch_size, kwargs, ctx: PrepareContext = PrepareContext()) -> PreparedProblem`, where `@dataclass(frozen=True) class PrepareContext: flength: float | None = None; use_dynamic_sizing: bool = False; enable_stability: bool = False; validator: Any | None = None; logger: Any | None = None` carries the `CurveFit` state the steps read today (padding, `enable_stability` at `minpack.py` ~:3663 and ~:3739). `kwargs` is mutated in place exactly as today. Together the fields cover every element of the legacy 13-tuple (`n, p0, xdata, ydata, data_mask, method, lb, ub, m, len_diff, should_pad, none_mask, sigma`). Ordering is omission, then method selection, then padding (spec section 4). `n_effective = int(mask.sum())` when a mask exists, else `m_real`; callers use `n_effective` where they used `ysize`; `none_mask` is still consumed at `minpack.py` ~:5345.
 
 - [ ] **Step 1:** Write `test_problem.py::test_n_effective_counts_unmasked_rows`, `test_empty_input_raises_value_error`, `test_omit_realigns_mask`, `test_len_diff_is_padding_length`.
 - [ ] **Step 2:** Run; expected FAIL.
@@ -166,7 +166,7 @@
 - Modify: `nlsq/core/minpack.py` `_curve_fit_hybrid_streaming` (:4374-4407)
 - Test: B1 tests
 
-- [ ] **Step 1:** Replace the hybrid path's own `nan_policy`/`check_finite`/p0/bounds handling with one `prepare_problem(...)` call. The hybrid path pops `nan_policy` (and anything `prepare_problem` consumes) **before** its leftover-keyword `TypeError` check (`minpack.py` ~:4438), so a bare `get` does not make `nan_policy` fail that check.
+- [ ] **Step 1:** Replace the hybrid path's own `nan_policy`/`check_finite`/p0/bounds handling with one `prepare_problem(..., ctx=PrepareContext(flength=None, use_dynamic_sizing=False))` call, so no padding is introduced; the `data_mask` `NotImplementedError` (~:4367) stays before it. The hybrid path pops `nan_policy` (and anything `prepare_problem` consumes) **before** its leftover-keyword `TypeError` check (`minpack.py` ~:4438), so a bare `get` does not make `nan_policy` fail that check.
 - [ ] **Step 2:** Run `uv run pytest tests/core tests/streaming -n 2` and B1 tests. Expected: PASS, including `test_hybrid_unknown_kwarg_still_raises_typeerror`.
 - [ ] **Step 3:** `make verify`, `graphify update .`, changelog "Internal: prepare_problem; hybrid streaming no longer consumes nan_policy twice"; commit; draft PR.
 
@@ -181,9 +181,9 @@
 - Reference: `nlsq/core/minpack.py:3419` (`_compute_covariance`, SVD of J), `nlsq/streaming/exact_lm.py:748` (`compute_covariance`, eigh of H), `nlsq/streaming/adaptive_hybrid.py:3727` (bare `pinv`), `nlsq/streaming/large_dataset.py:2455` (GLS)
 
 **Interfaces:**
-- Produces: for a well-conditioned problem, a partially rank-deficient one (duplicate parameter column) and a fully degenerate one (all-zero Jacobian, or `n <= p` without `absolute_sigma`), recorded `pcov` golden values per site, plus the warning contract as it is today: standard and exact return a **finite pseudo-inverse `pcov` with zeroed dropped directions** for the duplicate-column case; they return all-`inf` plus exactly one `OptimizeWarning` only for the fully degenerate cases; exact additionally emits a `UserWarning` when `sqrt(cond(H)) > 1e4`; **hybrid gives its current finite `pcov` (pinned deliberately)**.
+- Produces: for a well-conditioned problem, a partially rank-deficient one (duplicate parameter column) and a fully degenerate one (all-zero Jacobian, or `n <= p` without `absolute_sigma`), recorded `pcov` golden values per site, plus the warning contract as it is today: standard and exact return a **finite pseudo-inverse `pcov` with zeroed dropped directions** for the duplicate-column case; they return all-`inf` plus exactly one `OptimizeWarning` only for the fully degenerate cases; exact additionally emits a `UserWarning` when `sqrt(cond(H)) > 1e4`; the two **differ on non-finite input and that is preserved**: standard with finite `J` and a NaN cost returns NaN `pcov` with no warning, exact with non-finite `H` or non-finite final `pcov` returns all-`inf` plus `OptimizeWarning`; **hybrid gives its current finite `pcov` (pinned deliberately)**.
 
-- [ ] **Step 1:** Write `test_standard_golden`, `test_exact_golden`, `test_hybrid_golden`, `test_*_partial_rank_deficient_contract`, `test_*_fully_degenerate_contract` (four sites incl. GLS golden on the well-conditioned problem).
+- [ ] **Step 1:** Write `test_standard_golden`, `test_exact_golden`, `test_hybrid_golden`, `test_*_partial_rank_deficient_contract`, `test_*_fully_degenerate_contract`, `test_standard_nonfinite_cost_gives_nan_no_warning`, `test_exact_nonfinite_input_gives_inf_and_warns` (four sites incl. GLS golden on the well-conditioned problem).
 - [ ] **Step 2:** Run; expected PASS on current code.
 - [ ] **Step 3:** Commit `test: characterize covariance contracts`.
 
@@ -243,4 +243,5 @@
 - Spec coverage: sections 3 (A1-A5, traps 1-5 -> A3 cost test, A1 checkpoint test, A1 goldens, A2 shapes plus A3 mask, A5 bench), 4 (B1-B3), 5 (D1-D2), 6 (C1-C2), 7 (global constraints), 8 deferred (not planned), 9 defaults (global constraints, A4 route-not-delete).
 - Open for the implementer: golden constants come from running current code once (A1, B1, C1); tolerances start at `rtol=1e-8`; any loosening needs a stated reason.
 - Review iteration 1 (Codex + Agy) changed: covariance contract (partial rank is finite), `jacobian=` hook and no `jacfwd` swap, dropped `cost()` method, `PreparedProblem` fields and `prepare_problem` parameters, `nan_policy` consumed before the unknown-keyword check, sequential PRs, forced scan-vs-loop benchmark, penalty-enabled goldens, new Task A3b, `Strategy.fit` returns native results, global-multistart construction sites in scope.
-- Risk: the hybrid chunk loops carry bucket padding and penalty terms at the call sites; A3b must lift an existing loop unchanged rather than rewrite it.
+- Review iteration 2 changed: A3b covers four loops with plain slices and a progress hook (bucket padding is `phases/` only); `PrepareContext` carries `CurveFit` state and hybrid passes no padding; the J-based vs H-based non-finite behaviors are preserved and tested; A4 step 3 refers to `_accumulate_pass`; spec clarifies `chunk_stats` is the unified kernel.
+- Risk: the hybrid chunk loops carry penalty terms and progress reporting at the call sites; A3b must lift an existing loop unchanged rather than rewrite it.
