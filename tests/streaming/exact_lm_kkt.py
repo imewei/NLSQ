@@ -31,6 +31,15 @@ def assert_kkt(result, model, x, y, lb, ub, tau=1e-6):
     F = 0.5 * float(r @ r)
     g = J.T @ r
     Hd = np.einsum("ij,ij->j", J, J)
+    # a NaN column norm would pass as a zero column below: the objective must be defined
+    for name, v in (
+        ("model", f),
+        ("Jacobian", J),
+        ("cost", F),
+        ("g", g),
+        ("diag H", Hd),
+    ):
+        assert np.all(np.isfinite(v)), f"{name} is not finite at {theta}"
     sy2 = float(y @ y)
 
     if F == 0:

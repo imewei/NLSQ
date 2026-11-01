@@ -1109,3 +1109,96 @@ def test_stationary_box_certificate_when_at_bound_but_free():
         g, H, 1.0, 1e-8
     )  # unconstrained step leaves the box
     assert lm._stationary(1.0, g, H, free, theta, lo, hi, 1e-8, 1e-8) == "ftol"
+
+
+# --- Task 9 fix round 2: scale-safe box certificate with a dual-residual bound ---------
+
+# Codex reproducer: near-exact scale (F = 1e-24); the feasible step (0, 8e-21) gains 32% of F
+CX_H = 1e16 * np.array([[1.0, -0.9], [-0.9, 1.0]])
+CX_G = 1e-4 * np.array([-1.1, 0.8])
+CX_THETA, CX_LO, CX_HI = np.zeros(2), np.zeros(2), np.ones(2)
+
+
+def box_qp_max(g, H, theta, lo, hi):
+    """Exact max of s^T g - s^T H s / 2 on the box, by enumerating the 3^p active sets."""
+    import itertools
+
+    p, best = len(g), 0.0
+    for pattern in itertools.product((-1, 0, 1), repeat=p):
+        s = np.zeros(p)
+        fixed = np.array(pattern) != 0
+        s[np.array(pattern) == -1] = (lo - theta)[np.array(pattern) == -1]
+        s[np.array(pattern) == 1] = (hi - theta)[np.array(pattern) == 1]
+        if not np.isfinite(s).all():
+            continue
+        fr = ~fixed
+        if fr.any():
+            rhs = g[fr] - H[np.ix_(fr, ~fr)] @ s[~fr]
+            s[fr] = np.linalg.solve(H[np.ix_(fr, fr)], rhs)
+        if np.all(theta + s >= lo) and np.all(theta + s <= hi):
+            best = max(best, s @ g - 0.5 * s @ H @ s)
+    return best
+
+
+def test_box_certificate_codex_near_exact_reproducer():
+    gain = box_qp_max(CX_G, CX_H, CX_THETA, CX_LO, CX_HI)
+    assert gain == pytest.approx(3.2e-25, rel=1e-9)  # 32% of F
+    got = lm.box_certificate(CX_G, CX_H, 1e-24, 1e-8, CX_THETA, CX_LO, CX_HI)
+    assert got is False
+
+
+@pytest.mark.parametrize("k", [1.0, 1e-8, 1e-16, 1e-24])
+def test_box_certificate_decision_is_scale_invariant(k):
+    gain = box_qp_max(CX_G, CX_H, CX_THETA, CX_LO, CX_HI)  # 3.2e-25 at k = 1
+    ftol = 1e-8
+    # g -> k g scales every gain by k^2; F scales with it, so the decision must not move
+    for factor, want in ((1.01, True), (0.99, False)):
+        F = factor * gain / ftol * k * k
+        got = lm.box_certificate(k * CX_G, CX_H, F, ftol, CX_THETA, CX_LO, CX_HI)
+        assert got is want, (k, factor)
+
+
+def test_box_certificate_does_not_trust_solver_status(monkeypatch):
+    from types import SimpleNamespace
+
+    # a "successful" solve that returns the feasible but suboptimal start (gain 0)
+    monkeypatch.setattr(
+        lm, "lsq_linear", lambda *a, **k: SimpleNamespace(status=1, x=np.zeros(2))
+    )
+    assert lm.box_certificate(CX_G, CX_H, 1e-24, 1e-8, CX_THETA, CX_LO, CX_HI) is False
+
+
+def test_near_exact_bounded_fit_does_not_stop_with_gain_left():
+    """F ~ 1e-24 bounded linear fit: one pass must not certify a 32% cost reduction away."""
+    cols = 1e8 * np.array([[1.0, 0.0, 0.0, 0.0], [-0.9, np.sqrt(0.19), 0.0, 0.0]])
+    c1, c2 = jnp.asarray(cols[0]), jnp.asarray(cols[1])
+
+    def model(x, a, b):
+        i = x.astype(jnp.int32)
+        return a * jnp.take(c1, i) + b * jnp.take(c2, i)
+
+    x = np.arange(4.0)
+    # unconstrained optimum (-2e-20, -1e-20) lies outside the box, so at theta = 0 the
+    # gradient is the reproducer's g = 1e-4*(-1.1, 0.8); e is orthogonal to both columns
+    e = np.array([0.0, 0.0, np.sqrt(6e-25), 0.0])
+    y = cols.T @ np.array([-2e-20, -1e-20]) + e
+    F0 = 0.5 * float(y @ y)
+    st = lm.run_pass(lm.make_chunk_stats(model), np.zeros(2), (x, y, None), 4)
+    np.testing.assert_allclose(st.g, CX_G, rtol=1e-9)
+    gain = box_qp_max(
+        st.g, st.H, CX_THETA, CX_LO, CX_HI
+    )  # constrained optimum (0, 8e-21)
+    F_opt = F0 - gain
+    assert pytest.approx(1e-24, rel=1e-9) == F0 and F_opt / F0 == pytest.approx(0.68)
+    out = run(model, x, y, [0.0, 0.0], bounds=([0.0, 0.0], [1.0, 1.0]))
+    assert out["nfev"] > 1
+    assert out["cost"] <= F_opt * (1 + 1e-6), (out["termination"], out["cost"])
+
+
+def test_assert_kkt_rejects_undefined_objective():
+    def sqrt_model(x, a):
+        return jnp.sqrt(a) * jnp.ones_like(x)
+
+    x = np.linspace(0.0, 1.0, 10)
+    with pytest.raises(AssertionError, match="not finite"):
+        assert_kkt({"x": np.array([-1.0])}, sqrt_model, x, np.ones(10), -2.0, 2.0)

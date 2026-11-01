@@ -309,10 +309,19 @@ def box_certificate(
     """Constrained stationarity: no feasible step can gain ``ftol*F`` on the GN model.
 
     The bounded counterpart of :func:`newton_certificate` (spec, Termination (iii)): the
-    exact maximum of ``m(s) = s^T g - s^T H s / 2`` over ``lo <= theta + s <= hi``, solved
-    in the same Jacobi-scaled coordinates (``H^ = R^T R`` from its eigendecomposition, so
-    the maximiser is the bounded least-squares solution of ``R u = R^-T g^``; no data
-    pass), with the same truncation guard. Zero columns have ``g_i = 0`` and do not move.
+    maximum of ``m(s) = s^T g - s^T H s / 2`` over ``lo <= theta + s <= hi``, in the same
+    Jacobi-scaled coordinates (``H^ = R^T R`` from its eigendecomposition; the maximiser
+    is the bounded least-squares solution of ``R u = R^-T g^``; no data pass), with the
+    same truncation guard. Zero columns have ``g_i = 0`` and do not move.
+
+    The solve runs on ``g^`` divided by a power of two near ``max|g^|`` (exact), so the
+    solver tolerance is relative and the decision does not depend on the scale of ``g``
+    and ``F``. The solver's answer ``u`` is not trusted: with ``r = g^ - H^ u`` and ``r~``
+    equal to ``r`` except where ``u`` sits on a bound with ``r`` pointing out of the box
+    (set to 0, as such a component cannot gain), concavity gives for every feasible ``v``
+    ``m(v) - m(u) <= r~.(v - u) - (v - u)^T H^ (v - u) / 2 <= r~^T H^-1 r~ / 2``, and also
+    ``<= sum_i max over the box of r~_i (v_i - u_i)``. Certified only if ``m(u)`` plus the
+    smaller bound is at most ``ftol*F``; solver failure gives no certificate.
     """
     if F == 0:
         return True
@@ -323,22 +332,37 @@ def box_certificate(
         return False
     if gs.size == 0:
         return True
+    top = np.max(np.abs(gs))
+    if top == 0:
+        return True
+    scale = np.ldexp(1.0, int(np.frexp(top)[1]))  # power of two: gn = gs/scale is exact
+    gn = gs / scale
     keep = np.diag(H) > 0
     root = np.sqrt(np.diag(H)[keep])
     R = np.sqrt(w)[:, None] * U.T
-    c = (U.T @ gs) / np.sqrt(w)
-    box = ((lo - theta)[keep] * root, (hi - theta)[keep] * root)
+    c = (U.T @ gn) / np.sqrt(w)
+    a, b = (lo - theta)[keep] * root / scale, (hi - theta)[keep] * root / scale
     try:
-        res = lsq_linear(R, c, bounds=box, method="bvls")
+        res = lsq_linear(R, c, bounds=(a, b), method="bvls")
     except Exception as exc:  # any solver failure: no certificate, iterate on
         logger.debug("exact_lm: box certificate solve failed", error=str(exc))
         return False
-    # status <= 0 (iteration cap): a suboptimal u under-estimates the gain
+    # status <= 0 (iteration cap): no certificate even before the dual bound
     if res.status <= 0 or not np.all(np.isfinite(res.x)):
         return False
-    u = res.x
-    gain = float(u @ gs - 0.5 * np.sum((R @ u) ** 2))  # direct: no O(F) cancellation
-    return gain <= ftol * F
+    u = np.clip(res.x, a, b)
+    Ru = R @ u
+    gain = float(u @ gn - 0.5 * (Ru @ Ru))  # direct: no O(F) cancellation
+    r = gn - R.T @ Ru
+    r[((u <= a) & (r <= 0)) | ((u >= b) & (r >= 0))] = 0.0  # KKT-satisfied: no gain
+    quad = 0.5 * float(np.sum((U.T @ r) ** 2 / w))
+    with np.errstate(invalid="ignore"):  # 0 * inf for components that cannot move
+        far = np.where(r > 0, r * (b - u), np.where(r < 0, r * (a - u), 0.0))
+    lin = float(np.sum(far))
+    bound = min(quad, lin)
+    if not np.isfinite(bound):
+        return False
+    return bool(gain + bound <= (ftol * F / scale) / scale)
 
 
 def free_set(
