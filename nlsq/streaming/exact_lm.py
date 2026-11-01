@@ -321,7 +321,15 @@ def box_certificate(
     R = np.sqrt(w)[:, None] * U.T
     c = (U.T @ gs) / np.sqrt(w)
     box = ((lo - theta)[keep] * root, (hi - theta)[keep] * root)
-    u = lsq_linear(R, c, bounds=box, method="bvls").x
+    try:
+        res = lsq_linear(R, c, bounds=box, method="bvls")
+    except Exception as exc:  # any solver failure: no certificate, iterate on
+        logger.debug("exact_lm: box certificate solve failed", error=str(exc))
+        return False
+    # status <= 0 (iteration cap): a suboptimal u under-estimates the gain
+    if res.status <= 0 or not np.all(np.isfinite(res.x)):
+        return False
+    u = res.x
     gain = float(u @ gs - 0.5 * np.sum((R @ u) ** 2))  # direct: no O(F) cancellation
     return gain <= ftol * F
 
@@ -352,11 +360,16 @@ def _stationary(
         return "gtol"
     if not free.any() or np.max(np.abs(g[free])) < gtol:
         return "gtol"
-    active = not free.all()
-    if newton_certificate(g, H, cost, ftol, bounds_active=active):
+    # spec Termination (iii): the unconstrained decrement certifies only when every
+    # variable is free; it is an upper bound on any feasible gain, so it stays valid
+    # when a free variable sits on a bound with an inward gradient
+    if newton_certificate(g, H, cost, ftol, bounds_active=not free.all()):
         return "ftol"
-    # with a bound active only the constrained decrease certifies (unbounded path: skipped)
-    if active and box_certificate(g, H, cost, ftol, theta, lo, hi):
+    # any variable on a bound (held or free): the box can cut the Newton step, so the
+    # exact constrained decrease decides; never reached on the unbounded path
+    if np.any((theta <= lo) | (theta >= hi)) and box_certificate(
+        g, H, cost, ftol, theta, lo, hi
+    ):
         return "ftol"
     return None
 

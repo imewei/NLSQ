@@ -1053,3 +1053,59 @@ def test_stationary_does_not_certify_from_free_subspace():
 def test_lb_ge_ub_raises(data, bounds, pattern):
     with pytest.raises(ValueError, match=pattern):
         run(exp_model, *data, EXP.p0, bounds=bounds)
+
+
+# --- Task 9 fix round 1: box scaling, BVLS guard, gating on any variable at a bound ----
+
+# H = D^1/2 [[1, .5], [.5, 1]] D^1/2 with D = diag(100, 0.01); unconstrained s = (0.2, 0)
+BOX_H = np.array([[100.0, 0.5], [0.5, 0.01]])
+BOX_G = BOX_H @ np.array([0.2, 0.0])  # (20, 0.1)
+BOX_THETA, BOX_LO, BOX_HI = (
+    np.zeros(2),
+    np.array([0.0, -np.inf]),
+    np.array([0.1, np.inf]),
+)
+# the far bound s0 <= 0.1 binds: s1 = (g1 - H10*0.1)/H11 = 5, gain 2 - 0.5 + 0.125
+BOX_GAIN = 0.1 * 20.0 - 0.5 * 100.0 * 0.1**2 + 0.5 * (0.1 - 0.5 * 0.1) ** 2 / 0.01
+
+
+def test_box_certificate_scaled_box_closed_form():
+    assert pytest.approx(1.625) == BOX_GAIN
+    ftol = 1e-8
+    for factor, want in ((1.01, True), (0.99, False)):
+        F = factor * BOX_GAIN / ftol
+        got = lm.box_certificate(BOX_G, BOX_H, F, ftol, BOX_THETA, BOX_LO, BOX_HI)
+        assert got is want, factor
+
+
+def test_box_certificate_bvls_failure_is_no_certificate(monkeypatch):
+    from types import SimpleNamespace
+
+    F = 1.01 * BOX_GAIN / 1e-8  # the true gain certifies; a failed solve must not
+    F_no = 0.5 * BOX_GAIN / 1e-8  # the true gain does not certify
+    args = (BOX_G, BOX_H)
+    box = (BOX_THETA, BOX_LO, BOX_HI)
+
+    def boom(*a, **k):
+        raise ValueError("bvls failed")
+
+    monkeypatch.setattr(lm, "lsq_linear", boom)
+    assert lm.box_certificate(*args, F, 1e-8, *box) is False
+    # max_iter reached: a feasible but suboptimal u (zero step, gain 0) would certify
+    monkeypatch.setattr(
+        lm, "lsq_linear", lambda *a, **k: SimpleNamespace(status=0, x=np.zeros(2))
+    )
+    assert lm.box_certificate(*args, F_no, 1e-8, *box) is False
+
+
+def test_stationary_box_certificate_when_at_bound_but_free():
+    """On a bound with an inward gradient (free): the box certificate must still run."""
+    H = np.array([[1.0, 0.999], [0.999, 1.0]])
+    g = np.array([1e-12, 1e-4])
+    theta, lo, hi = np.zeros(2), np.array([0.0, -np.inf]), np.full(2, np.inf)
+    free = lm.free_set(theta, g, lo, hi)
+    assert free.all()  # premise: var 0 sits on lb but g points inward
+    assert not lm.newton_certificate(
+        g, H, 1.0, 1e-8
+    )  # unconstrained step leaves the box
+    assert lm._stationary(1.0, g, H, free, theta, lo, hi, 1e-8, 1e-8) == "ftol"
