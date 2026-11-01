@@ -321,8 +321,10 @@ def check_model_contract(
     m = len(x_chunk)
     th = [float(t) for t in theta]
 
-    def f(xs: Any) -> np.ndarray:
-        return np.asarray(model(xs, *th), dtype=np.float64)
+    # compared on the model's own device: a host round trip of the 4M-point chunk and
+    # three np.allclose passes cost ~0.2 s per fit on GPU
+    def f(xs: Any) -> jax.Array:
+        return jnp.asarray(model(xs, *th), dtype=jnp.float64)
 
     full = f(x_chunk)
     bad = ValueError(
@@ -334,15 +336,19 @@ def check_model_contract(
         raise bad
     if m < 2:
         return
-    scale = float(np.max(np.abs(full[np.isfinite(full)]), initial=0.0))
+    scale = jnp.max(jnp.where(jnp.isfinite(full), jnp.abs(full), 0.0))
+    same = jnp.asarray(True)
     for got, want in (
         (f(x_chunk[: m // 2]), full[: m // 2]),
         (f(x_chunk[::-1]), full[::-1]),
     ):
-        if got.shape != want.shape or not np.allclose(
-            got, want, rtol=1e-12, atol=1e-12 * scale, equal_nan=True
-        ):
+        if got.shape != want.shape:
             raise bad
+        same = same & jnp.allclose(
+            got, want, rtol=1e-12, atol=1e-12 * scale, equal_nan=True
+        )
+    if not bool(same):
+        raise bad
 
 
 def _check_inputs(
