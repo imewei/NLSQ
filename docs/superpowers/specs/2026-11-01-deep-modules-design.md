@@ -1,6 +1,8 @@
 # Deepening four modules in NLSQ: design and plan
 
-Date: 2026-11-01. Status: draft for approval. No code has been changed.
+Date: 2026-11-01. Status: **approved 2026-11-01** by the owner, with all section 9
+proposed defaults accepted (phases/ routed through `NormalEquations`, nothing deleted; no
+`pinv` change; no hybrid sigma support; one PR per opportunity). No code has been changed.
 Source: four read-only design reviews (orchestration/preprocessing, protocol seams,
 streaming stack, streaming config) run 2026-11-01. Vocabulary: module, interface, depth,
 seam, adapter, leverage, locality (see the `codebase-design` skill).
