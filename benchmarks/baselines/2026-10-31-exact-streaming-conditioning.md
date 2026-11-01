@@ -50,8 +50,8 @@ was not made on the verdict, both are reported.
   missed by the rule; the script blocks a verdict only when the proxy is `≤ 1e4`.
 - Above the rule's range the expected `κ²`-scaling shows up in the normal-equation covariance:
   poly8 (`κ = 7e5`) covariance error about 5e-6 against 6e-12 for TSQR, same-theta; poly12
-  (`κ = 7.5e8`) about 5e-4 against 3e-5 to 5e-4 for TSQR. All remain under the 1e-3 threshold, and the
-  library already warns when `sqrt(cond(H)) > 1e4`. Parameter errors on poly12 for both candidates are
+  (`κ = 7.5e8`) 5e-4 against 6e-5 to 2.1e-3 for TSQR (TSQR is not uniformly better there: one seed
+  exceeds 1e-3). Normal equations stay under the 1e-3 threshold in every row, and the library already warns when `sqrt(cond(H)) > 1e4`. Parameter errors on poly12 for both candidates are
   dominated by the flat valley and the stopping rule (TSQR stops worse there: 1-4 relative error), not
   by accumulation.
 - Scale-set rows (n = 2e4) compare the candidates with SciPy only; on the degenerate two_exp problems
