@@ -1,6 +1,7 @@
 # Exact streaming solver, Stage 1 performance gate (2026-10-31)
 
-Commit `3780631` (module `nlsq/streaming/exact_lm.py`, unbounded and unweighted).
+Commits `3780631` (first gate pass) and `7455b86` (final series, default finite check, 1-D weights
+present in the module). Module `nlsq/streaming/exact_lm.py`.
 Gate: module warm median <= 1.10 x prototype warm median, 100M-point exp_decay on the GPU,
 matched resident-data preparation.
 
@@ -17,8 +18,10 @@ NLSQ_FORCE_CPU=1 JAX_PLATFORMS=cpu PYTHONPATH=. .venv/bin/python -m benchmarks.p
 
 - Both implementations receive the same device-resident float64 `x`, `y`, the same `p0`,
   `chunk_size = 1 << 22`, tolerances 1e-8, 3 warm repeats, and report the median.
-- The module runs with `check_finite=False` (the prototype has no finite-data pass), so these
-  numbers time the solver alone. The default library path adds one fused finite check on pass 1.
+- The module runs with its default `check_finite=True` (finite check fused into pass 1). The frozen
+  prototype also checks finiteness, fused into every pass. An earlier series (below) ran the
+  module with `check_finite=False` on the mistaken premise that the prototype has no such check;
+  an independent review caught this and the final series replaces it.
 - Prototype and module runs alternate within minutes of each other. This laptop's speed drifts
   by up to about 1.5x over an hour, so only same-session ratios are meaningful.
 
@@ -39,7 +42,18 @@ NLSQ_FORCE_CPU=1 JAX_PLATFORMS=cpu PYTHONPATH=. .venv/bin/python -m benchmarks.p
 | After, run 2 | 0.61 s | 0.57 s | 0.93 |
 
 The implementer's own three alternating pairs after the fix gave 0.90, 0.92 and 0.95.
-**Gate passed** (module <= 1.10 x prototype in every post-fix pair).
+
+Final series at `7455b86` (module default `check_finite=True`, includes the Task 8 weights code;
+unweighted path), three alternating pairs, identical cost and 5 passes:
+
+| Pair | Prototype warm | Module warm | Ratio |
+|---|---|---|---|
+| 1 | 0.57 s | 0.52 s | 0.91 |
+| 2 | 0.57 s | 0.54 s | 0.95 |
+| 3 | 0.58 s | 0.53 s | 0.91 |
+
+GPU SM clock 1935 MHz, 65 C, 40 GB RAM available. **Gate passed** (module <= 1.10 x prototype in
+every post-fix pair, with the default finite check).
 
 Cause of the first failure: `check_model_contract` (once per fit) evaluated the model three
 times on a 4M-point chunk, copied each result to the host and ran three `np.allclose` passes,
@@ -48,13 +62,18 @@ code (`jnp.where` masks, point count) was never the problem; per pass the module
 10 ms faster than the prototype (80-83 vs 91-92 ms). The module cold time rose from about 0.85 s
 to about 1.6 s on the GPU (op-by-op compile of the probe), which the gate does not cover.
 
-## CPU result, 100M points (warm median, identical passes and cost)
+## CPU result, 100M points (warm median, identical passes and cost; module default finite check)
+
+Measured at `7455b86` while two review agents were running on the same machine, so treat as
+indicative. The gate itself is the GPU measurement above.
 
 | Problem | Prototype | Module | Ratio | Passes |
 |---|---|---|---|---|
-| exp_decay | 10.37 s | 10.67 s | 1.03 | 5 |
-| gaussian | 30.03 s | 31.65 s | 1.05 | 15 |
-| two_exp | 38.37 s | 36.14 s | 0.94 | 19 |
+| exp_decay | 7.78 s | 8.67 s | 1.11 | 5 |
+| gaussian | 25.00 s | 26.88 s | 1.08 | 15 |
+| two_exp | 34.73 s | 34.79 s | 1.00 | 19 |
 
-Differences under about 1.5x on CPU are inside this machine's noise (see the 2026-10-31 library
-comparison caveats). Bounded problems arrive in Stage 2.
+An earlier CPU series with `check_finite=False` gave 1.03 / 1.05 / 0.94 (10.37 / 30.03 / 38.37 s
+prototype). The same-problem prototype time moved by up to 1.35x between the two series, which is
+this laptop's drift (see the 2026-10-31 library comparison caveats); differences under about 1.5x
+on CPU are inside that noise. Bounded problems arrive in Stage 2.
