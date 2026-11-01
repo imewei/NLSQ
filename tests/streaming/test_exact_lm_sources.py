@@ -5,7 +5,9 @@ from the source on every pass; nothing reads or places the whole source. The bas
 ndarray view test (``test_cpu_chunks_are_views``) lives in test_exact_lm.py.
 """
 
+import contextlib
 import tracemalloc
+import warnings
 
 import jax
 import jax.numpy as jnp
@@ -15,6 +17,7 @@ import pytest
 import nlsq.streaming.exact_lm as lm
 from benchmarks.compare.problems import PROBLEMS
 from nlsq import curve_fit_large
+from nlsq.result.optimize_warning import OptimizeWarning
 
 EXP = PROBLEMS["exp_decay"]
 N, CHUNK = 3000, 1024  # 3 chunks, padded tail
@@ -266,6 +269,7 @@ def test_jax_array_stays_resident(data):
     backend the guard does not fire (CPU arrays are host memory), so there only the
     ``jax.Array`` type checks are meaningful.
     """
+    # vacuous on CPU: the 100M GPU gate is the real guard for device residency
     x, y = (jnp.asarray(a) for a in data)
     s = jnp.full(N, 0.1)
     with jax.transfer_guard_device_to_host("disallow"):
@@ -776,3 +780,80 @@ def test_factory_single_row_blocks_match_array(monkeypatch):
     assert out["success"] and out["n_points"] == 40
     _assert_same(out, ref)
     assert calls == [8] * out["nfev"]  # still one factory call per pass
+
+
+# ---- final review: probe coverage, warning attribution, input checks -----------------
+
+
+def _min_anchored(x, a, b, c):  # not pointwise; first half and reversal keep min(x)
+    return a * jnp.exp(-b * (x - jnp.min(x))) + c
+
+
+def test_probe_catches_min_anchored_model():
+    x = np.linspace(1.0, 5.0, 4000)
+    y = 2.0 * np.exp(-0.7 * (x - 1.0)) + 0.3
+    p0 = [1.0, 1.0, 0.0]
+    with pytest.raises(ValueError, match=r"model is not pointwise"):
+        lm.exact_lm_fit(_min_anchored, x, y, p0, chunk_size=1000)
+    with pytest.raises(ValueError, match=r"model is not pointwise"):
+        lm.exact_lm_fit(_min_anchored, x[::-1], y[::-1], p0, chunk_size=1000)
+    with pytest.raises(ValueError, match=r"model is not pointwise"):
+        lm.exact_lm_fit(_min_anchored, make_factory(x, y), None, p0, chunk_size=1000)
+    with pytest.raises(ValueError, match=r"model is not pointwise"):
+        curve_fit_large(
+            _min_anchored, x, y, p0=p0, method="exact_streaming", chunk_size=1000
+        )
+
+
+def test_probe_with_chunk_size_one():
+    x, y = EXP.data(40)
+    with pytest.raises(ValueError, match=r"model is not pointwise"):
+        lm.exact_lm_fit(_centred, x, y, EXP.p0, chunk_size=1)
+
+
+def test_direct_fit_needs_two_points():
+    with pytest.raises(
+        ValueError, match=r"^Need at least 2 data points for fitting, got 1\.$"
+    ):
+        lm.exact_lm_fit(exp_model, np.ones(1), np.ones(1), EXP.p0)
+
+
+def test_callable_xdata_requires_exact_streaming(data):
+    with pytest.raises(ValueError, match=r"^a chunk factory .* requires method="):
+        curve_fit_large(exp_model, make_factory(*data), None, p0=EXP.p0)
+
+
+def _lin(x, a, b):
+    return a + b * x
+
+
+def _ill_fit(entry):
+    x = np.linspace(1000.0, 1001.0, 3000)
+    y = 1 + x + 1e-3 * np.sin(7 * x)
+    if entry == "direct":
+        lm.exact_lm_fit(_lin, x, y, [1.0, 1.0])
+    else:
+        # the warning is issued before the success check
+        with contextlib.suppress(lm.ExactSolverError):
+            curve_fit_large(_lin, x, y, p0=[1.0, 1.0], method="exact_streaming")
+
+
+def _no_cov_fit(entry):
+    x, y = np.array([0.0, 1.0]), np.array([1.0, 3.0])  # n == p: no covariance
+    if entry == "direct":
+        lm.exact_lm_fit(_lin, x, y, [0.0, 0.0])
+    else:
+        curve_fit_large(_lin, x, y, p0=[0.0, 0.0], method="exact_streaming")
+
+
+@pytest.mark.parametrize("entry", ["direct", "curve_fit_large"])
+@pytest.mark.parametrize(
+    ("fit", "category"), [(_ill_fit, UserWarning), (_no_cov_fit, OptimizeWarning)]
+)
+def test_covariance_warnings_point_at_caller(entry, fit, category):
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        fit(entry)
+    hits = [w for w in rec if issubclass(w.category, category)]
+    assert hits, [str(w.message) for w in rec]
+    assert all(w.filename == __file__ for w in hits), [w.filename for w in hits]

@@ -8,13 +8,15 @@ next iterate's, so no pass is spent re-evaluating an accepted point.
 Ported from ``benchmarks/prototypes/exact_accumulated_lm.py`` (Stage 0, kept frozen as the
 independent baseline). Stage 2a adds 1-D ``sigma`` (weights ``1/sigma`` on residuals and
 Jacobian rows); Stage 2b adds box ``bounds`` by an active set (not Coleman-Li TRF): the
-result is a KKT point of the box-constrained problem, reached by a different path than TRF.
+result is a KKT point of the box-constrained problem to within the stopping tolerances,
+reached by a different path than TRF.
 
 shortcut: normal equations square cond(J); the Stage 3 TSQR study decides whether to upgrade.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 from collections.abc import Callable, Iterator, Sequence
@@ -620,8 +622,10 @@ def check_model_contract(
 ) -> None:
     """Guard (not a proof) that ``model`` is pointwise: output ``i`` depends only on ``x[i]``.
 
-    Evaluates the model on ``x_chunk``, its first half and its reversed copy, and requires
-    ``f(x[:k]) == f(x)[:k]`` and ``f(x[::-1]) == f(x)[::-1]`` to relative 1e-12. Values
+    Evaluates the model on ``x_chunk``, its first half, its second half and its reversed
+    copy, and requires ``f(x[:k]) == f(x)[:k]``, ``f(x[k:]) == f(x)[k:]`` and
+    ``f(x[::-1]) == f(x)[::-1]`` to relative 1e-12 (the second half catches statistics
+    anchored at the batch min or max on sorted ``x``, which the first half keeps). Values
     within 1e-12 of the largest ``|f|`` also pass, so a zero crossing cannot trigger a
     false alarm. A model that behaves differently only on later chunks is not detected.
     """
@@ -649,6 +653,7 @@ def check_model_contract(
     same = jnp.asarray(True)
     for got, want in (
         (f(x_chunk[: m // 2]), full[: m // 2]),
+        (f(x_chunk[m // 2 :]), full[m // 2 :]),
         (f(x_chunk[::-1]), full[::-1]),
     ):
         if got.shape != want.shape:
@@ -708,8 +713,8 @@ def _check_inputs(
             )
         if sigma.shape[0] != n:
             raise ValueError(f"sigma has length {sigma.shape[0]}, expected {n}")
-    if n == 0:
-        raise ValueError("x and y must be non-empty")
+    if n < 2:
+        raise ValueError(f"Need at least 2 data points for fitting, got {n}.")
     if n_points is not None and n_points != n:
         raise ValueError(f"n_points={n_points} does not match len(x)={n}")
     lo, hi = check_bounds(bounds, p)
@@ -717,6 +722,8 @@ def _check_inputs(
 
 
 COND_WARN = 1e4  # warn when sqrt(cond(H)), the cond(J) estimate, exceeds this
+# warnings point at the user's call site, whether exact_lm_fit or curve_fit_large was called
+_NLSQ_DIR = (os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep,)
 
 
 def compute_covariance(
@@ -748,9 +755,10 @@ def compute_covariance(
             if ill:
                 warnings.warn(
                     f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
-                    f"{COND_WARN:.0e}); the covariance may be inaccurate",
+                    f"{COND_WARN:.0e}); the covariance may be inaccurate and the "
+                    "parameters may stop short of the optimum: check the result",
                     UserWarning,
-                    stacklevel=3,
+                    skip_file_prefixes=_NLSQ_DIR,
                 )
             Vk = V[:, keep]
             # overflow is caught below as all-inf + OptimizeWarning; silence numpy's own
@@ -766,7 +774,7 @@ def compute_covariance(
         warnings.warn(
             "Covariance of the parameters could not be estimated",
             OptimizeWarning,
-            stacklevel=3,
+            skip_file_prefixes=_NLSQ_DIR,
         )
     return pcov
 
@@ -911,7 +919,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         weighted = source.weighted
     else:
         source = _place(x, y, sigma, chunk * p * 8 * WORKSPACE_FACTOR, memory_limit_gb)
-        check_model_contract(model, theta, _block(x, 0, chunk))
+        # at least 2 points even for chunk_size=1: a 1-point probe proves nothing
+        check_model_contract(model, theta, _block(x, 0, min(n, max(chunk, 2))))
         weighted = sigma is not None
     stats = make_chunk_stats(model, weighted=weighted)
     st = evaluate(theta, 1, first=True)

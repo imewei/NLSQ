@@ -109,6 +109,7 @@ except ImportError:
     __version__ = "0.0.0+unknown"
 
 # Standard library imports needed at module level
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any, Literal
 
 from nlsq.callbacks import (
@@ -850,8 +851,8 @@ def _curve_fit_exact_streaming(
 # Convenience function for large dataset curve fitting
 def curve_fit_large(
     f: ModelFunction,
-    xdata: ArrayLike,
-    ydata: ArrayLike,
+    xdata: ArrayLike | Callable[[int], Iterator[tuple[Any, ...]]],
+    ydata: ArrayLike | None,
     p0: ArrayLike | None = None,
     sigma: ArrayLike | None = None,
     absolute_sigma: bool = False,
@@ -930,7 +931,8 @@ def curve_fit_large(
         count is checked on every pass. 1-D ``sigma``
         and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
         handled by an active set, not Coleman-Li TRF: the returned point is a
-        KKT point of the box-constrained problem, reached by a different path
+        KKT point of the box-constrained problem to within the stopping
+        tolerances, reached by a different path
         than ``method='trf'``. ``stability``, ``rescale_data``,
         ``max_jacobian_elements_for_svd``, ``auto_size_detection`` and
         ``size_threshold`` must stay at their defaults (``ValueError``
@@ -941,7 +943,9 @@ def curve_fit_large(
         as ``.result``. ``pcov`` is computed from the normal equations
         ``J^T J``, which squares ``cond(J)``: expect about ``1e-6`` relative
         agreement with ``curve_fit`` up to ``cond(J) ~ 1e4``, ``1e-3`` up to
-        ``1e6``, and a ``UserWarning`` beyond ``1e4``.
+        ``1e6`` for well-determined problems, and a ``UserWarning`` beyond
+        ``1e4``, where the fitted parameters can also stop short: check such
+        results.
     memory_limit_gb : float, optional
         Maximum memory usage in GB.
     auto_size_detection : bool, optional
@@ -1063,6 +1067,12 @@ def curve_fit_large(
                 "size_threshold": size_threshold,
             },
             solver_kwargs=kwargs,
+        )
+
+    if callable(xdata) or ydata is None:
+        raise ValueError(
+            "a chunk factory (callable xdata, ydata=None) requires "
+            "method='exact_streaming'; pass xdata and ydata arrays otherwise"
         )
 
     # Input validation

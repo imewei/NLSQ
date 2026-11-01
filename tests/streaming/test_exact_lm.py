@@ -726,7 +726,12 @@ def test_compute_covariance_cond_overflow_no_runtime_warning():
     # lam_max / lam_min = 1e320 overflows float64: still the documented cond UserWarning
     with warnings.catch_warnings():
         warnings.simplefilter("error", RuntimeWarning)
-        with pytest.warns(UserWarning, match=r"ill-conditioned \(sqrt\(cond\(H\)\)"):
+        with pytest.warns(
+            UserWarning,
+            match=r"^normal-equation Hessian is ill-conditioned \(sqrt\(cond\(H\)\) > "
+            r"1e\+04\); the covariance may be inaccurate and the parameters may stop "
+            r"short of the optimum: check the result$",
+        ):
             lm.compute_covariance(np.diag([1.0, 1e-320]), 0.4, 10, 2, False)
 
 
