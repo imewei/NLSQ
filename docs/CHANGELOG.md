@@ -6,6 +6,7 @@
   rejected arguments, 1-D `sigma` weights, box `bounds` by active set,
   `ExactSolverError`, covariance caveat, out-of-memory array-like sources such as
   memmap/HDF5/Zarr read chunk by chunk).
+  Added the 1B-point run result and the conditioning-study outcome to the covariance caveat.
 
 ## v0.7.6 (2026-09-04)
 - No documentation content changes; version-output examples bumped to match

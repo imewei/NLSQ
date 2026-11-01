@@ -64,6 +64,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     an `OptimizeWarning`.
   - `nlsq.fit(..., method="exact_streaming")` raises `ValueError` pointing to
     `curve_fit_large` at every dataset size.
+  - **Verified at scale:** a 1,000,000,000-point exp_decay fit read from HDF5 (16 GB of `x`/`y`)
+    on a 16 GB GPU recovers the generating parameters to 7e-16 (noiseless), lands within
+    1.3 sigma of the truth (noisy), counts all 1e9 points on every pass, matches an independent
+    streaming NumPy cost to 2e-16, shifts under a 1,000-point sentinel offset by the predicted amount,
+    and peaks at 1.8 GiB host RSS; a pass takes 4-10 s depending on the page cache
+    (`benchmarks/baselines/2026-10-31-exact-streaming-1b.md`).
+  - **Conditioning study (normal equations vs TSQR):** the pre-registered study kept normal equations;
+    the `cond(J) > 1e4` covariance warning stays. Only one of 40 accuracy rows fell in the rule's
+    range, so the evidence is thin and the covariance caveat above is the user-facing guidance
+    (`benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md`).
 - `benchmarks/compare/`: library comparison harness (NLSQ vs SciPy, lmfit, JAXopt,
   Optimistix) with shared tolerances, per-case fresh-process cold timing, an
   optimum-reached gate, and a Markdown report. CPU baselines committed under `benchmarks/baselines/`: the pre-optimisation run

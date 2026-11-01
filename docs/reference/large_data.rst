@@ -148,6 +148,14 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   ``cond(J)``. Expect about ``1e-6`` relative agreement with ``curve_fit`` for
   ``cond(J) <= 1e4`` and ``1e-3`` for ``cond(J) <= 1e6``; a ``UserWarning`` is
   issued beyond ``1e4``.
+  A conditioning study against a 50-digit reference kept the normal equations
+  (no QR/TSQR accumulation): at the same parameters the accumulated ``J^T J`` step
+  and covariance were accurate to 1e-12 and 1e-8 for ``cond(J) <= 1e4``, and the
+  covariance error grew as expected with ``cond(J)^2`` beyond that (about 5e-6 at
+  ``cond(J) = 7e5``). Only one problem fell inside the rule's ``cond(J) <= 1e4``
+  range, so treat the warning as the guidance for ill-conditioned fits.
+- **Scale:** the method has been run on one billion points (16 GB of ``x`` and
+  ``y`` in an HDF5 file) with 1.8 GiB peak host memory; each pass reads the file once.
 
 LargeDatasetFitter
 ------------------
