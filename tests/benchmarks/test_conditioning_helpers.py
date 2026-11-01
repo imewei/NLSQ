@@ -12,8 +12,10 @@ mpmath = pytest.importorskip("mpmath")
 from benchmarks.studies.conditioning_helpers import (
     eigh_rank,
     error_norms,
+    failed_row_eligible,
     mp_gn_step,
     mp_reference,
+    reference_conflict,
     svd_covariance,
     tsqr_solve,
     verdict,
@@ -205,3 +207,17 @@ def test_mp_gn_step_matches_float64_gauss_newton_step():
     expected = np.linalg.lstsq(J, r, rcond=None)[0]
     np.testing.assert_allclose(mp_gn_step(f, jac, x, y, theta), expected, rtol=1e-10)
     np.testing.assert_allclose(mp_gn_step(f, None, x, y, theta), expected, rtol=1e-10)
+
+
+def test_failed_row_eligible():
+    assert failed_row_eligible([1e16, 8.5e3, 2e5])  # one solver inside the range
+    assert failed_row_eligible([1e16, float("nan"), 2e5])  # unknown cannot exclude
+    assert not failed_row_eligible([1e16, 1.0001e4, 2e5])
+
+
+def test_reference_conflict():
+    t = np.array([1.0, 2.0])
+    assert not reference_conflict([(t, 1.0)])
+    assert not reference_conflict([(t, 1.0), (t * (1 + 1e-6), 1.0 + 1e-12)])
+    assert reference_conflict([(t, 1.0), (t, 1.0 + 1e-9)])  # cost
+    assert reference_conflict([(t, 1.0), (t * (1 + 1e-3), 1.0)])  # parameters

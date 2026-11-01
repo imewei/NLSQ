@@ -298,3 +298,34 @@ def verdict(
         if not ok:
             return "tsqr_default"
     return "normal_equations_stay"
+
+
+def failed_row_eligible(kappas: Sequence[float]) -> bool:
+    """Whether a row without a reference may lie inside the rule's range.
+
+    ``kappas`` are ``kappa(J)`` at each solver's own solution (normal equations, TSQR,
+    SciPy). The row can be excluded only if every one is above ``1e4``; a NaN (crashed
+    solver) cannot rule the row out.
+    """
+    return not all(k > KAPPA_MAX for k in kappas)
+
+
+def reference_conflict(
+    refs: Sequence[tuple[np.ndarray, float]],
+    cost_rtol: float = 1e-10,
+    param_rtol: float = 1e-4,
+) -> bool:
+    """True if two converged references ``(theta, cost)`` disagree.
+
+    Thetas must already be in canonical (term-sorted) order. A pair conflicts when the
+    costs differ by more than ``cost_rtol`` relative or any parameter by more than
+    ``param_rtol`` relative (``max(|b|, 1e-12)`` as the scale).
+    """
+    for i, (ta, ca) in enumerate(refs):
+        for tb, cb in refs[i + 1 :]:
+            if abs(ca - cb) > cost_rtol * max(abs(ca), abs(cb)):
+                return True
+            scale = np.maximum(np.abs(tb), 1e-12)
+            if np.max(np.abs(np.asarray(ta) - np.asarray(tb)) / scale) > param_rtol:
+                return True
+    return False

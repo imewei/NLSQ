@@ -47,8 +47,10 @@ from benchmarks.studies.conditioning_helpers import (
     PARAM_TOL,
     eigh_rank,
     error_norms,
+    failed_row_eligible,
     mp_gn_step,
     mp_reference,
+    reference_conflict,
     svd_covariance,
     tsqr_factor,
     tsqr_step,
@@ -324,6 +326,7 @@ def fit_tsqr(
                 lam, nu = lam * nu, nu * 2
                 continue
             new = theta + s
+            s = new - theta  # the representable displacement, as the module
             Rs = R @ s
             pred = s @ g - 0.5 * Rs @ Rs
             R_new, c_new, F_new = factor(new)
@@ -483,6 +486,45 @@ def mp_step_at(
     }
 
 
+def _kappa(prob: Problem, x: np.ndarray, fit: dict) -> float:
+    """``kappa(J)`` (SVD) at a solver's own solution; NaN if the solver crashed."""
+    if "error" in fit:
+        return float("nan")
+    return float(np.linalg.cond(jacobian(prob.model, x, fit["x"])))
+
+
+def multi_start_reference(
+    prob: Problem, x: np.ndarray, y: np.ndarray, fits: dict[str, dict]
+) -> tuple[dict[str, tuple[np.ndarray, float, np.ndarray, int]], dict[str, str]]:
+    """``mp_reference`` from each solver's solution (in ``fits`` order).
+
+    Crashed solvers and starts within ``1e-8`` relative of an earlier start are
+    skipped; a failed attempt moves on to the next start. Returns the converged results
+    by start name and a status string for every start.
+    """
+    converged: dict[str, tuple[np.ndarray, float, np.ndarray, int]] = {}
+    status: dict[str, str] = {}
+    tried: dict[str, np.ndarray] = {}
+    for name, fit in fits.items():
+        if "error" in fit:
+            status[name] = "skipped: solver crashed"
+            continue
+        start = np.asarray(fit["x"])
+        dup = next((k for k, t in tried.items() if _rel(start - t, t) <= 1e-8), None)
+        if dup is not None:
+            status[name] = f"skipped: duplicate of {dup}"
+            continue
+        tried[name] = start
+        try:
+            converged[name] = mp_reference(
+                prob.model_mp, x, y, start, jac_mp=prob.jac_mp
+            )
+            status[name] = "converged"
+        except Exception as exc:  # non-convergence or stall: try the next start
+            status[name] = f"failed: {exc!r}"
+    return converged, status
+
+
 def run_row(
     prob: Problem, seed: int, set_name: str, n: int, chunk: int, tol: float
 ) -> dict:
@@ -502,11 +544,7 @@ def run_row(
     sp = _guard(lambda: fit_scipy(prob, x, y, p0), p)
     ne = _guard(lambda: fit_normal_equations(prob, x, y, p0, chunk, tol), p)
     ts = _guard(lambda: fit_tsqr(prob, x, y, p0, chunk, tol), p)
-    row["kappa_scipy"] = (
-        float("nan")
-        if "error" in sp
-        else float(np.linalg.cond(jacobian(prob.model, x, sp["x"])))
-    )
+    row["kappa_scipy"] = _kappa(prob, x, sp)
     cands = {"normal_equations": ne, "tsqr": ts}
     if set_name == "scale":
         if "error" in sp:
@@ -516,24 +554,24 @@ def run_row(
         row["baseline_scipy"] = _info(sp)
     else:
         cands["scipy"] = sp
-        start, row["ref_start"] = (
-            (ne["x"], "normal_equations") if "error" not in ne else (sp["x"], "scipy")
-        )
         t = time.perf_counter()
-        try:
-            theta_r, cost_r, cov_r, rank_r = mp_reference(
-                prob.model_mp, x, y, start, jac_mp=prob.jac_mp
-            )
-        except Exception as exc:  # recorded per row; the summary prints every failure
+        converged, row["ref_attempts"] = multi_start_reference(prob, x, y, cands)
+        row["ref_time_s"] = time.perf_counter() - t
+        if not converged:  # every start failed: the summary prints the row loudly
             row.update(
                 status="reference_failed",
-                error=repr(exc),
-                ref_time_s=time.perf_counter() - t,
-                info={k: _info(v) for k, v in (*cands.items(), ("scipy", sp))},
+                error="; ".join(f"{k}: {v}" for k, v in row["ref_attempts"].items()),
+                kappa_candidates={k: _kappa(prob, x, v) for k, v in cands.items()},
+                info={k: _info(v) for k, v in cands.items()},
             )
             return row
+        row["ref_costs"] = {k: v[1] for k, v in converged.items()}
+        row["ref_start"] = min(converged, key=lambda k: converged[k][1])
+        row["reference_basin_conflict"] = reference_conflict(
+            [(v[0][prob.perm(v[0])], v[1]) for v in converged.values()]
+        )
+        theta_r, cost_r, cov_r, rank_r = converged[row["ref_start"]]
         ref = {"x": theta_r, "cost": cost_r, "cov": cov_r, "rank": rank_r}
-        row["ref_time_s"] = time.perf_counter() - t
         row["reference"] = _info(ref)
         row["kappa"] = float(np.linalg.cond(jacobian(prob.model, x, theta_r)))
         row.update(same_theta(prob, x, y, chunk, theta_r, cost_r, cov_r))
@@ -619,33 +657,56 @@ def _tables(rows: list[dict], acc: list[dict]) -> None:
             )
 
 
+def _failed_eligible(r: dict) -> bool:
+    """A failed row is eligible unless kappa at every solver's solution exceeds 1e4."""
+    kappas = list(r.get("kappa_candidates", {}).values()) or [float("nan")]
+    return failed_row_eligible(kappas)
+
+
+def _kappa_txt(r: dict) -> str:
+    kc = r.get("kappa_candidates", {})
+    return ", ".join(f"{k} {v:.3g}" for k, v in kc.items()) or "kappa unknown"
+
+
 def summarize(rows: list[dict], missing: list[str]) -> None:
     failed = [r for r in rows if r["status"] != "ok"]
     acc = [r for r in rows if r["set"] == "accuracy" and r["status"] == "ok"]
     for r in acc:  # recompute so rows stored by an older run use the same definition
         r["basin_ok"] = all(r[c]["basin_ok"] for c in JUDGED)
     basin_bad = [r for r in acc if not r["basin_ok"]]
+    conflict = [r for r in acc if r.get("reference_basin_conflict")]
     blocking = [
         *(f"missing {m}" for m in missing),
         *(
-            f"{r['problem']} seed {r['seed']} reference failed"
+            f"{r['problem']} seed {r['seed']} reference failed (eligible)"
             for r in failed
-            if _in_range(r["kappa_scipy"])
+            if _failed_eligible(r)
         ),
         *(
             f"{r['problem']} seed {r['seed']} basin mismatch"
             for r in basin_bad
             if _in_range(r["kappa"])
         ),
+        *(
+            f"{r['problem']} seed {r['seed']} reference basin conflict"
+            for r in conflict
+            if _in_range(r["kappa"])
+        ),
     ]
-    if missing or failed or any(_in_range(r["kappa"]) for r in basin_bad):
+    if missing or failed or conflict or any(_in_range(r["kappa"]) for r in basin_bad):
         print("\n" + "!" * 78)
         for m in missing:
             print(f"!! MISSING (crashed, not computed): {m}")
         for r in failed:
+            tag = (
+                "UNRESOLVED-ELIGIBLE (some kappa <= 1e4 or unknown)"
+                if _failed_eligible(r)
+                else "excluded (kappa > 1e4 at every solver's solution)"
+            )
             print(
-                f"!! {r['set']} {r['problem']} seed {r['seed']}: {r['status']}: "
-                f"{r.get('error', '')} (kappa at SciPy optimum {r['kappa_scipy']:.3g})"
+                f"!! {r['set']} {r['problem']} seed {r['seed']}: {r['status']} -- {tag}"
+                f"\n!!     kappa at solutions: {_kappa_txt(r)}"
+                f"\n!!     {r.get('error', '')}"
             )
         for r in basin_bad:
             if _in_range(r["kappa"]):
@@ -654,8 +715,14 @@ def summarize(rows: list[dict], missing: list[str]) -> None:
                     f"!! accuracy {r['problem']} seed {r['seed']}: BASIN MISMATCH "
                     f"({', '.join(off)}) at kappa {r['kappa']:.3g} <= 1e4"
                 )
+        for r in conflict:
+            print(
+                f"!! accuracy {r['problem']} seed {r['seed']}: REFERENCE BASIN "
+                f"CONFLICT at kappa {r['kappa']:.3g} (costs {r['ref_costs']}, "
+                f"kept {r['ref_start']})"
+            )
         print(
-            "!! rows above are EXCLUDED from the rule; in-range ones make it UNDECIDED"
+            "!! eligible failed rows and in-range mismatches make the verdict UNDECIDED"
         )
         print("!" * 78)
     out_basin = [r for r in basin_bad if not _in_range(r["kappa"])]
@@ -663,17 +730,21 @@ def summarize(rows: list[dict], missing: list[str]) -> None:
         print(f"\n{len(out_basin)} accuracy row(s) above kappa 1e4 with basin mismatch")
     _tables(rows, acc)
     covered = [r for r in acc if _in_range(r["kappa"])]
-    if covered:
-        ts_ok = sum(_passes(r["tsqr"]) for r in covered)
-        print(
-            f"\npremise: TSQR meets the same criteria on {ts_ok}/{len(covered)} rows "
-            "with kappa <= 1e4"
-        )
     try:
         v = verdict(acc) if acc else None
         reason = "" if acc else "no accuracy row with a valid reference"
     except ValueError as exc:
         v, reason = None, str(exc)
+    print(
+        "\nliteral verdict (pre-registered rule, unmodified): "
+        f"{v if v is not None else 'not computable (' + reason + ')'}"
+    )
+    if covered:
+        ts_ok = sum(_passes(r["tsqr"]) for r in covered)
+        print(
+            f"premise: TSQR meets the same criteria on {ts_ok}/{len(covered)} rows "
+            "with kappa <= 1e4"
+        )
     if blocking:
         reason = "; ".join(blocking)
         v = None
