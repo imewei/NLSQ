@@ -435,13 +435,25 @@ def test_hybrid_chunk_cost_convention():
 
 
 def test_hybrid_kernel_follows_reassigned_jacobian():
-    """Dropping _jacobian_fn_compiled rebuilds the kernel on the inline fallback."""
+    """The kernel is cached until normalized_model / _jacobian_fn_compiled change."""
     opt, _, p0_norm = _setup(_config())
     args = _chunk_inputs(opt, p0_norm)
-    ref = opt._accumulate_jtj_jtr(*args)
-    first = opt._get_normal_eq()
-    opt._jacobian_fn_compiled = None
-    assert opt._get_normal_eq() is not first
-    got = opt._accumulate_jtj_jtr(*args)
-    for g, r in zip(got, ref, strict=True):
-        np.testing.assert_allclose(g, r, rtol=RTOL, atol=ATOL)
+    jtj, jtr, cost = (np.asarray(a) for a in opt._accumulate_jtj_jtr(*args))
+
+    kernel = opt._get_normal_eq()
+    opt._accumulate_jtj_jtr(*args)
+    assert opt._get_normal_eq() is kernel  # cache hit when nothing was reassigned
+
+    original = opt._jacobian_fn_compiled
+    opt._jacobian_fn_compiled = lambda theta, x: 2.0 * original(theta, x)
+    assert opt._get_normal_eq() is not kernel
+    jtj2, jtr2, cost2 = (np.asarray(a) for a in opt._accumulate_jtj_jtr(*args))
+    _assert_close(jtj2, 4.0 * jtj)  # the new Jacobian is really used
+    _assert_close(jtr2, 2.0 * jtr)
+    _assert_close(cost2, cost)  # the cost does not depend on the Jacobian
+
+    opt._jacobian_fn_compiled = None  # inline vmap(jacrev) fallback
+    jtj3, jtr3, cost3 = (np.asarray(a) for a in opt._accumulate_jtj_jtr(*args))
+    _assert_close(jtj3, jtj)
+    _assert_close(jtr3, jtr)
+    _assert_close(cost3, cost)
