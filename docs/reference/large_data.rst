@@ -106,13 +106,13 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   ``ValueError``. Each block is validated as it arrives (1-D parts of equal,
   non-zero length, at most ``chunk_size`` points, finite on the first pass
   unless ``check_finite=False``, ``sigma`` finite and positive); the model
-  probe uses the first block. ``sigma`` must then come from the blocks
+  probe uses the leading blocks of the first pass, joined until they hold at
+  least 2 points. ``sigma`` must then come from the blocks
   (``sigma=`` raises ``ValueError``), and ``n_points`` with an array source
   raises ``ValueError``. Exceptions raised by the factory propagate unchanged.
   With neither ``n_points`` nor ``chunk_size``, every block is padded to the
   derived chunk (default 4,194,304 rows), so pass one of them for small
-  factories. The model-contract probe runs on the first block, so it should
-  hold at least 2 points; fewer than 2 points in total raises ``ValueError``.
+  factories. Fewer than 2 points in total raises ``ValueError``.
 - **Accepted arguments:** ``sigma`` (1-D only), ``bounds``, ``chunk_size``,
   ``check_finite``, ``show_progress``, ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
   ``xtol``, ``gtol``, ``max_nfev`` (full-data passes, default

@@ -220,8 +220,11 @@ class FactorySource:
     as a :func:`run_pass` source.
 
     The factory is called once per full data pass. Pass 1 is opened at construction and
-    its first block is validated and kept (``first_x`` for the model probe; whether the
-    blocks carry ``sigma`` fixes the kernel), so the probe costs no extra factory call.
+    its leading blocks are validated and kept until they hold at least 2 points (or the
+    stream ends): ``first_x``, their ``x`` joined and cut to ``chunk``, feeds the model
+    probe, which cannot detect a non-pointwise model from one point; the first block's
+    arity (``sigma`` or not) fixes the kernel. Pass 1 then replays those blocks in order
+    before reading on, so the probe costs no extra factory call.
     Each block is validated as it arrives: a tuple of 2 or 3 parts, the same number as
     the first block, every part 1-D with equal lengths, ``0 < len <= chunk``. Short blocks
     are padded to ``chunk`` and masked, so every block has the compiled shape. At the end
@@ -238,8 +241,20 @@ class FactorySource:
         if first is _END:
             raise ValueError("chunk factory yielded no blocks")
         self.weighted = isinstance(first, tuple) and len(first) == 3
-        self._first: tuple[Any, ...] | None = self._check(first)
-        self.first_x: Any = self._first[0]
+        self._head: list[tuple[Any, ...]] = [self._check(first)]
+        seen = self._head[0][0].shape[0]
+        while seen < 2:  # a 1-point probe cannot see a non-pointwise model
+            item = next(self._pending, _END)
+            if item is _END:  # < 2 points in all: the fit raises after pass 1
+                break
+            self._head.append(self._check(item))
+            seen += self._head[-1][0].shape[0]
+        xs = [b[0] for b in self._head]
+        self.first_x: Any = (
+            xs[0]
+            if len(xs) == 1
+            else jnp.concatenate([jnp.asarray(a) for a in xs])[:chunk]
+        )
 
     def _check(self, item: Any) -> tuple[Any, ...]:
         if not isinstance(item, tuple) or len(item) not in (2, 3):
@@ -273,16 +288,16 @@ class FactorySource:
         """One full pass: validated, padded ``(x, y, sigma, mask)`` blocks."""
         if self._pending is None:
             items: Iterator[Any] = iter(self.factory(self.chunk))
-            first = None
-        else:  # pass 1, opened at construction
-            items, first, self._pending = self._pending, self._first, None
-            self._first = self.first_x = None  # not retained for the whole fit
+            head: list[tuple[Any, ...]] = []
+        else:  # pass 1, opened at construction: replay the probed blocks first
+            items, head, self._pending = self._pending, self._head, None
+            self._head, self.first_x = [], None  # not retained for the whole fit
         self.passes += 1
         full = jnp.ones(self.chunk, dtype=bool)
         count = 0
         while True:
-            if first is not None:
-                parts, first = first, None
+            if head:
+                parts = head.pop(0)
             else:
                 item = next(items, _END)
                 if item is _END:
@@ -849,8 +864,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     naming both counts on a mismatch). With an array source ``n_points`` must match its
     length. Without ``n_points`` and ``chunk_size`` every block is padded to the derived
     chunk (default 4,194,304 rows), so pass one of them for small factories. The model
-    contract probe runs on the first block, which should hold at least 2 points; a factory
-    yielding fewer than 2 points in total raises ``ValueError``.
+    contract probe runs on the leading blocks of pass 1, joined until they hold at least 2
+    points; a factory yielding fewer than 2 points in total raises ``ValueError``.
 
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
     that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
@@ -891,7 +906,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
 
     theta = np.clip(np.asarray(p0, np.float64), lo, hi)
     if factory:
-        source = FactorySource(x, chunk, n)  # opens pass 1 and reads its first block
+        source = FactorySource(x, chunk, n)  # opens pass 1, reads its leading blocks
         check_model_contract(model, theta, source.first_x)
         weighted = source.weighted
     else:

@@ -732,4 +732,44 @@ def test_factory_first_block_released(data, monkeypatch):
 
     monkeypatch.setattr(lm, "FactorySource", Spy)
     lm.exact_lm_fit(exp_model, make_factory(*data), None, EXP.p0, chunk_size=CHUNK)
-    assert made[0]._first is None and made[0].first_x is None
+    assert made[0]._head == [] and made[0].first_x is None
+
+
+def _centred(x, a, b, c):  # not pointwise: depends on the batch mean
+    return a * (x - jnp.mean(x)) + b + c
+
+
+@pytest.mark.parametrize("sizes", [[1], [1, 5]])
+def test_factory_probe_spans_leading_blocks(sizes):
+    x, y = EXP.data(40)
+    with pytest.raises(ValueError, match=r"model is not pointwise"):
+        lm.exact_lm_fit(
+            _centred, make_factory(x, y, sizes=sizes), None, EXP.p0, chunk_size=8
+        )
+    with pytest.raises(ValueError, match=r"model is not pointwise"):
+        lm.exact_lm_fit(_centred, x, y, EXP.p0, chunk_size=8)  # array path agrees
+
+
+def test_factory_single_row_blocks_match_array(monkeypatch):
+    x, y = EXP.data(40)
+    probes = []
+    real = lm.check_model_contract
+
+    def spy(model, theta, x_chunk):
+        probes.append(np.asarray(x_chunk))
+        return real(model, theta, x_chunk)
+
+    monkeypatch.setattr(lm, "check_model_contract", spy)
+    calls = []
+    out = lm.exact_lm_fit(
+        exp_model,
+        make_factory(x, y, sizes=[1], calls=calls),
+        None,
+        EXP.p0,
+        chunk_size=8,
+    )
+    np.testing.assert_array_equal(probes[0], x[:2])  # two leading 1-row blocks
+    ref = lm.exact_lm_fit(exp_model, x, y, EXP.p0, chunk_size=8)
+    assert out["success"] and out["n_points"] == 40
+    _assert_same(out, ref)
+    assert calls == [8] * out["nfev"]  # still one factory call per pass
