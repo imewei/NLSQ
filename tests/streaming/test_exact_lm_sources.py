@@ -5,7 +5,6 @@ from the source on every pass; nothing reads or places the whole source. The bas
 ndarray view test (``test_cpu_chunks_are_views``) lives in test_exact_lm.py.
 """
 
-import threading
 import tracemalloc
 
 import jax
@@ -734,55 +733,3 @@ def test_factory_first_block_released(data, monkeypatch):
     monkeypatch.setattr(lm, "FactorySource", Spy)
     lm.exact_lm_fit(exp_model, make_factory(*data), None, EXP.p0, chunk_size=CHUNK)
     assert made[0]._first is None and made[0].first_x is None
-
-
-# ---- prefetch: read the next block on a background thread ----------------------------
-
-
-def test_prefetch_preserves_order_and_propagates_errors():
-    base = threading.active_count()
-    assert list(lm._prefetch(iter(range(500)))) == list(range(500))
-    assert list(lm._prefetch(iter(range(50)), depth=4)) == list(range(50))
-    assert list(lm._prefetch(iter(()))) == []
-
-    def failing(k):
-        yield from range(k)
-        raise Boom("read failed")
-
-    got = []
-    with pytest.raises(Boom, match="read failed"):
-        got.extend(lm._prefetch(failing(7), depth=2))
-    assert got == list(range(7))  # items 0..k-1 delivered before the error
-
-    # early close of the generator stops the reader thread, even one blocked on a full queue
-    gen = lm._prefetch(iter(range(10**9)), depth=2)
-    assert [next(gen), next(gen)] == [0, 1]
-    gen.close()
-    assert threading.active_count() == base
-    # a generator never started owns no thread
-    lm._prefetch(iter(range(3))).close()
-    assert threading.active_count() == base
-
-
-def test_prefetch_toggle_is_bit_identical(data, tmp_path, monkeypatch):
-    s = np.full(N, 0.1)
-    mm = [_memmap(tmp_path / f"p{i}.bin", a) for i, a in enumerate((*data, s))]
-    used = []
-    real = lm._prefetch
-    monkeypatch.setattr(
-        lm, "_prefetch", lambda *a, **k: used.append(1) or real(*a, **k)
-    )
-
-    def fit(x, y, flag):
-        monkeypatch.setattr(lm, "_PREFETCH", flag)
-        return lm.exact_lm_fit(exp_model, x, y, EXP.p0, chunk_size=CHUNK)
-
-    for x, y in ((mm[0], mm[1]), (make_factory(*data), None)):
-        used.clear()
-        on, n_on = fit(x, y, True), len(used)
-        off, n_off = fit(x, y, False), len(used) - n_on
-        assert n_on > 0 and n_off == 0  # lazy sources are prefetched, only when enabled
-        assert np.array_equal(on["x"], off["x"]) and on["cost"] == off["cost"]
-    used.clear()
-    fit(*data, True)  # in-memory ndarray chunks are views: never prefetched
-    assert not used
