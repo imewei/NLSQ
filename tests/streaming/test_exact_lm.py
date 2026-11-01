@@ -3,6 +3,9 @@
 The same Stage 0 cases against the frozen prototype live in test_exact_lm_prototype.py.
 """
 
+import warnings
+
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -10,6 +13,8 @@ from scipy.optimize import least_squares
 
 import nlsq.streaming.exact_lm as lm
 from benchmarks.compare.problems import PROBLEMS
+from nlsq import curve_fit
+from nlsq.result.optimize_warning import OptimizeWarning
 
 EXP = PROBLEMS["exp_decay"]
 N = 3000
@@ -154,6 +159,9 @@ def collinear_model(x, a1, a2, b):  # columns 1 and 2 of J identical, H has rank
     return (a1 + a2) * jnp.exp(-b * x)
 
 
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
 def test_zero_jacobian_column_converges(data):
     p0 = (*EXP.p0, 1.7)
     out = run(zero_col_model, *data, p0)
@@ -193,12 +201,18 @@ def test_failed_solves_count_as_attempts_without_data_passes(data, monkeypatch):
     assert len(calls) == 20  # one failed solve per attempt, then the cap
 
 
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
 def test_rank_two_h_for_p3_converges(data):
     x, y = data
     out = run(collinear_model, x, y - 0.5, (1.0, 0.5, 1.0))
     assert out["success"] is True
 
 
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
 def test_noisy_collinear_start_at_optimum_success_or_stall(data):
     x, y = data
     first = run(collinear_model, x, y - 0.5, (1.0, 0.5, 1.0))
@@ -420,6 +434,9 @@ def test_check_finite_flag(data):
         run(exp_model, x, y_bad, EXP.p0, check_finite=False)
 
 
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
 def test_infinite_x_caught_by_fused_data_check_not_by_p0_cost(data):
     x, y = data
     x_bad = x.copy()
@@ -501,6 +518,9 @@ def test_list_and_int_inputs():
 def test_cpu_fit_peak_memory():
     import tracemalloc
 
+    if jax.default_backend() != "cpu":
+        pytest.skip("tracemalloc cannot see device buffers")
+
     n, chunk = 20_000_000, 1_000_000
     x = np.linspace(0.0, 4.0, n)
     y = EXP.model(np, x, *EXP.p_true)
@@ -513,3 +533,124 @@ def test_cpu_fit_peak_memory():
         tracemalloc.stop()
     assert out["n_points"] == n
     assert peak < 8 * chunk * 8 + 64 * 2**20, peak  # a whole-array copy of x is 160 MB
+
+
+# ---- Task 5: unweighted covariance contract -------------------------------------------
+
+TIGHT = {"ftol": 1e-12, "xtol": 1e-12, "gtol": 1e-12}
+COV_WARN = "Covariance of the parameters could not be estimated"
+
+
+@pytest.mark.parametrize("absolute_sigma", [False, True])
+@pytest.mark.parametrize("name", ["exp_decay", "gaussian"])
+def test_pcov_matches_curve_fit(name, absolute_sigma):
+    prob = PROBLEMS[name]
+    x, y = prob.data(N)
+
+    def model(x, *p):
+        return prob.model(jnp, x, *p)
+
+    out = run(model, x, y, prob.p0, absolute_sigma=absolute_sigma, **TIGHT)
+    _, ref = curve_fit(
+        model,
+        x,
+        y,
+        p0=prob.p0,
+        absolute_sigma=absolute_sigma,
+        ftol=1e-12,
+        xtol=1e-12,
+        gtol=1e-12,
+    )
+    assert out["success"]
+    assert out["pcov"].dtype == np.float64 and out["pcov"].shape == ref.shape
+    # atol only absorbs ~1e-17-relative roundoff in structurally-zero off-diagonals
+    atol = 1e-12 * np.abs(ref).max()
+    np.testing.assert_allclose(out["pcov"], ref, rtol=1e-6, atol=atol)
+
+
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
+def test_rank_deficient_pcov_finite_and_zero_on_dropped(data):
+    p0 = (*EXP.p0, 1.7)
+    out = run(zero_col_model, *data, p0, absolute_sigma=True, **TIGHT)
+    pcov = out["pcov"]
+    assert np.all(np.isfinite(pcov))
+    assert np.all(pcov[3, :] == 0.0) and np.all(pcov[:, 3] == 0.0)
+    # the identified block equals the plain 3-parameter covariance
+    ref = run(exp_model, *data, EXP.p0, absolute_sigma=True, **TIGHT)
+    np.testing.assert_allclose(pcov[:3, :3], ref["pcov"], rtol=1e-6, atol=0.0)
+    assert np.all(np.linalg.eigvalsh(pcov) >= -1e-12 * np.abs(pcov).max())
+
+
+def poly7(x, *c):
+    return sum(ck * x**k for k, ck in enumerate(c))
+
+
+@pytest.mark.parametrize("absolute_sigma", [False, True])
+def test_pcov_parity_to_cond_1e6(absolute_sigma):
+    x = np.linspace(0.0, 1.0, N)
+    c_true = np.array([1.0, -2.0, 3.0, -1.0, 0.5, 2.0, -1.5, 0.7])
+    y = sum(ck * x**k for k, ck in enumerate(c_true))
+    y = y + 0.01 * np.random.default_rng(0).standard_normal(N)
+    J = np.vander(x, 8, increasing=True)
+    kappa = np.linalg.cond(J)
+    assert 1e4 <= kappa <= 1e6, kappa
+    p0 = np.zeros(8)
+    with pytest.warns(UserWarning, match="ill-conditioned"):
+        out = run(poly7, x, y, p0, absolute_sigma=absolute_sigma, **TIGHT)
+    _, ref = curve_fit(poly7, x, y, p0=p0, absolute_sigma=absolute_sigma)
+    np.testing.assert_allclose(out["pcov"], ref, rtol=1e-3, atol=0.0)
+
+
+def test_n_le_p_gives_inf_with_warning():
+    x = np.array([0.0, 1.0, 2.0])
+    y = EXP.model(np, x, *EXP.p_true)
+    with pytest.warns(Warning, match=COV_WARN) as rec:
+        out = run(exp_model, x, y, EXP.p0)
+    assert any(w.category is OptimizeWarning for w in rec)
+    assert out["pcov"].shape == (3, 3) and np.all(np.isposinf(out["pcov"]))
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=COV_WARN)
+        out = run(exp_model, x, y, EXP.p0, absolute_sigma=True)
+    assert np.all(np.isfinite(out["pcov"]))
+
+
+def test_ill_conditioned_warns():
+    prob = PROBLEMS["two_exp"]
+    p_true = (2.0, 1.0, 1.5, 1.0001)
+    x = np.linspace(0.0, 4.0, N)
+    y = prob.model(np, x, *p_true) + 0.01 * np.random.default_rng(0).standard_normal(N)
+
+    def model(x, a1, k1, a2, k2):
+        return prob.model(jnp, x, a1, k1, a2, k2)
+
+    with pytest.warns(UserWarning, match="ill-conditioned"):
+        run(model, x, y, (1.0, 1.0, 1.0, 1.0001))
+
+
+def test_compute_covariance_contract():
+    s2 = 2 * 0.4 / (10 - 2)
+    # a direction below p*eps*lambda_max is dropped: zero row and column
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        pc = lm.compute_covariance(np.diag([4.0, 1e-17]), 0.4, 10, 2, False)
+    np.testing.assert_array_equal(pc, np.diag([s2 / 4.0, 0.0]))
+    # just above the cutoff (4 * 2.2e-16 * 4 = 3.6e-15) it is kept
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        pc = lm.compute_covariance(np.diag([4.0, 1e-13]), 0.4, 10, 2, True)
+    np.testing.assert_allclose(pc, np.diag([0.25, 1e13]), rtol=1e-12)
+    assert pc.dtype == np.float64
+    # no surviving direction / non-finite H: all-inf with OptimizeWarning
+    overflow = np.diag([1e-310, 1e-310])  # finite H whose inverse overflows
+    for H in (np.zeros((2, 2)), np.array([[1.0, np.nan], [np.nan, 1.0]]), overflow):
+        with pytest.warns(OptimizeWarning, match=COV_WARN):
+            pc = lm.compute_covariance(H, 0.4, 10, 2, False)
+        assert np.all(np.isposinf(pc))
+    # conditioning warning threshold: sqrt(cond H) = 3162 quiet, 31623 warns
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        lm.compute_covariance(np.diag([1.0, 1e-7]), 0.4, 10, 2, False)
+    with pytest.warns(UserWarning, match="ill-conditioned"):
+        lm.compute_covariance(np.diag([1.0, 1e-9]), 0.4, 10, 2, False)

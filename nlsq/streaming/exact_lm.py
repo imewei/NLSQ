@@ -14,6 +14,7 @@ shortcut: normal equations square cond(J); the Stage 3 TSQR study decides whethe
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any, NamedTuple
 
@@ -23,6 +24,7 @@ import numpy as np
 
 from nlsq.config import JAXConfig
 from nlsq.result import OptimizeResult
+from nlsq.result.optimize_warning import OptimizeWarning
 from nlsq.utils.logging import get_logger
 
 _jax_config = JAXConfig()  # enables jax_enable_x64, as every nlsq module does
@@ -372,6 +374,50 @@ def _check_inputs(
     return n, p, lo, hi
 
 
+COND_WARN = 1e4  # warn when sqrt(cond(H)), the cond(J) estimate, exceeds this
+
+
+def compute_covariance(
+    H: np.ndarray, cost: float, n: int, p: int, absolute_sigma: bool
+) -> np.ndarray:
+    """Parameter covariance from ``H = J^T J`` with the ``nlsq.curve_fit`` contract.
+
+    Pseudo-inverse over the eigen-directions with ``lambda_i > p*eps*lambda_max`` (dropped
+    directions give zero rows and columns), scaled by ``2*cost/(n-p)`` unless
+    ``absolute_sigma``. All-``inf`` with an :class:`OptimizeWarning` if no direction
+    survives, any value is non-finite, or ``n <= p`` without ``absolute_sigma``.
+    """
+    H = np.asarray(H, dtype=np.float64)
+    pcov = np.full((p, p), np.inf)
+    if np.isfinite(H).all():
+        w, V = np.linalg.eigh((H + H.T) / 2)  # ascending
+        keep = w > p * np.finfo(np.float64).eps * w[-1]
+        if keep.any():
+            lam_min = w[0] if w[0] > 0 else 0.0
+            if lam_min == 0.0 or np.sqrt(w[-1] / lam_min) > COND_WARN:
+                warnings.warn(
+                    f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
+                    f"{COND_WARN:.0e}); the covariance may be inaccurate",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            Vk = V[:, keep]
+            cov = (Vk / w[keep]) @ Vk.T
+            if absolute_sigma:
+                pcov = cov
+            elif n > p:
+                pcov = cov * (2.0 * cost / (n - p))
+    if not np.isfinite(pcov).all():
+        pcov = np.full((p, p), np.inf)
+    if np.isinf(pcov).any():
+        warnings.warn(
+            "Covariance of the parameters could not be estimated",
+            OptimizeWarning,
+            stacklevel=3,
+        )
+    return pcov
+
+
 def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     model: Callable[..., Any],
     x: Any,
@@ -483,11 +529,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     message = _MESSAGES[termination]
     if termination == "stalled" and _scaled_eig(g, H)[3]:
         message += "; rank cannot be certified from normal equations"
-    s2 = 1.0 if absolute_sigma else 2.0 * cost / max(n - p, 1)
-    try:
-        pcov = s2 * np.linalg.inv(H)
-    except np.linalg.LinAlgError:
-        pcov = np.full((p, p), np.inf)
+    pcov = compute_covariance(H, cost, n, p, absolute_sigma)
     return OptimizeResult(
         x=theta,
         cost=cost,
