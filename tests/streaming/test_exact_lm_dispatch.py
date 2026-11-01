@@ -61,11 +61,34 @@ def test_honoured_arguments_are_forwarded(data, spy):
         absolute_sigma=True,
         memory_limit_gb=2.0,
         show_progress=True,
+        sigma=np.full(N, 0.05),
     )
     kw = spy[0][1]
+    np.testing.assert_array_equal(kw["sigma"], np.full(N, 0.05))
     assert kw["chunk_size"] == 1024 and kw["check_finite"] is False
     assert kw["absolute_sigma"] is True and kw["memory_limit_gb"] == 2.0
     assert kw["show_progress"] is True
+
+
+def test_weighted_dispatch_matches_module(data):
+    x, y = data
+    s = 0.02 + 0.1 * x
+    direct = lm.exact_lm_fit(exp_model, x, y, EXP.p0, sigma=s, chunk_size=1024)
+    assert direct["success"]
+    for a in (False, True):
+        popt, _ = curve_fit_large(
+            exp_model,
+            x,
+            y,
+            p0=EXP.p0,
+            sigma=s,
+            absolute_sigma=a,
+            method=M,
+            chunk_size=1024,
+        )
+        np.testing.assert_array_equal(popt, direct["x"])
+    unweighted = curve_fit_large(exp_model, x, y, p0=EXP.p0, method=M, chunk_size=1024)
+    assert not np.array_equal(unweighted[0], popt)
 
 
 def test_failure_raises_with_result(data):
@@ -136,7 +159,7 @@ def test_unsupported_arguments_valueerror(data, spy, name, value):
     [
         ({"multistart": True}, r"^multistart=True is not supported by "),
         ({"global_search": True}, r"^multistart=True is not supported by "),
-        ({"sigma": np.ones(N)}, r"^sigma is not supported by method='exact_streaming'"),
+        ({"sigma": Lazy1D((N, N))}, r"^sigma must be 1-D for method='exact_streaming'"),
         ({"bounds": (0.0, np.inf)}, r"^finite bounds are not supported by "),
         ({"bounds": ([-np.inf] * 3, [np.inf, 5.0, np.inf])}, r"^finite bounds are "),
     ],

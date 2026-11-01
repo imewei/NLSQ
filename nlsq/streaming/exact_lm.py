@@ -6,8 +6,8 @@ fit regardless of how the data is chunked. The accepted trial's statistics are r
 next iterate's, so no pass is spent re-evaluating an accepted point.
 
 Ported from ``benchmarks/prototypes/exact_accumulated_lm.py`` (Stage 0, kept frozen as the
-independent baseline). Stage 1 scope: unweighted and unbounded; ``sigma`` and finite
-``bounds`` raise ``ValueError`` until Stage 2.
+independent baseline). Stage 2a adds 1-D ``sigma`` (weights ``1/sigma`` on residuals and
+Jacobian rows); finite ``bounds`` raise ``ValueError`` until Stage 2b.
 
 shortcut: normal equations square cond(J); the Stage 3 TSQR study decides whether to upgrade.
 """
@@ -75,6 +75,10 @@ class PassStats(NamedTuple):
     H: np.ndarray  # J^T J
     n_seen: int  # real (unpadded) points that contributed
     data_finite: bool  # all x, y finite (True when the check is off)
+    sigma_finite: bool = True  # all sigma finite (True when unchecked or unweighted)
+    sigma_positive: bool = (
+        True  # all finite sigma > 0 (True when unchecked or unweighted)
+    )
 
 
 def derive_chunk_size(
@@ -106,13 +110,29 @@ def derive_chunk_size(
 
 
 def make_chunk_stats(
-    model: Callable[..., Any],
-) -> Callable[[Any, Any, Any, Any], tuple[jax.Array, jax.Array, jax.Array]]:
+    model: Callable[..., Any], weighted: bool = False
+) -> Callable[..., tuple[jax.Array, jax.Array, jax.Array]]:
     """Jitted ``(theta, x, y, mask) -> (F, g, H)`` for one chunk; ``r = y - model``.
 
-    Rows where ``mask`` is False (the padded tail) are removed with ``jnp.where``, never by
-    multiplication, so a non-finite model value on a padded row cannot leak in.
+    With ``weighted=True`` the signature is ``(theta, x, y, sigma, mask)`` and residuals
+    and Jacobian rows are divided by ``sigma``. Rows where ``mask`` is False (the padded
+    tail) are removed with ``jnp.where`` after weighting, never by multiplication, so a
+    non-finite model value or weight on a padded row cannot leak in.
     """
+    if weighted:
+        # separate kernel: the unweighted one below stays free of any per-row weight
+
+        def wstats(
+            theta: jax.Array, x: jax.Array, y: jax.Array, s: jax.Array, mask: jax.Array
+        ) -> tuple[jax.Array, jax.Array, jax.Array]:
+            def f(q: jax.Array) -> jax.Array:
+                return model(x, *q)
+
+            r = jnp.where(mask, (y - f(theta)) / s, 0.0)
+            J = jnp.where(mask[:, None], jax.jacfwd(f)(theta) / s[:, None], 0.0)
+            return 0.5 * jnp.sum(r * r), J.T @ r, J.T @ J
+
+        return jax.jit(wstats)
 
     def stats(
         theta: jax.Array, x: jax.Array, y: jax.Array, mask: jax.Array
@@ -140,23 +160,28 @@ def iter_blocks(
     """Yield equal-shape float64 ``(x, y, sigma, mask)`` chunks of ndarray or JAX inputs.
 
     Host float64 arrays are sliced as views and JAX arrays stay on their device. The tail
-    is edge-padded (a padded row has the finiteness of a real row) and masked out.
+    is edge-padded (a padded row has the finiteness of a real row) and masked out; a
+    ``sigma`` tail is padded with 1, which is valid, so the sigma checks need no mask.
+    ``sigma`` is ``None`` (unweighted) or a 1-D array of the same length.
     """
-    if source_sigma is not None:
-        raise ValueError(f"sigma {_STAGE2}")
     n = len(source_x)
     full = jnp.ones(chunk, dtype=bool)
     for s in range(0, n, chunk):
         xc, yc = _block(source_x, s, chunk), _block(source_y, s, chunk)
+        sc = None if source_sigma is None else _block(source_sigma, s, chunk)
         m = xc.shape[0]
         if m == chunk:
-            yield xc, yc, None, full
+            yield xc, yc, sc, full
             continue
         pad = (0, chunk - m)
         yield (
             (jnp if isinstance(xc, jax.Array) else np).pad(xc, pad, mode="edge"),
             (jnp if isinstance(yc, jax.Array) else np).pad(yc, pad, mode="edge"),
-            None,
+            None
+            if sc is None
+            else (jnp if isinstance(sc, jax.Array) else np).pad(
+                sc, pad, constant_values=1.0
+            ),
             jnp.arange(chunk) < m,
         )
 
@@ -166,6 +191,13 @@ def _block_finite(x: jax.Array, y: jax.Array) -> jax.Array:
     return jnp.all(jnp.isfinite(x) & jnp.isfinite(y))
 
 
+@jax.jit
+def _sigma_ok(s: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """``(all finite, all finite values > 0)``: NaN/inf is reported as non-finite only."""
+    fin = jnp.isfinite(s)
+    return jnp.all(fin), jnp.all(jnp.where(fin, s > 0, True))
+
+
 def run_pass(
     stats: Callable[..., tuple[jax.Array, jax.Array, jax.Array]],
     theta: Any,
@@ -173,28 +205,41 @@ def run_pass(
     chunk: int,
     *,
     check_finite: bool = False,
+    check_sigma: bool = False,
 ) -> PassStats:
     """One full pass over ``source = (x, y, sigma)``: summed statistics on the host.
 
-    The finite check and the point count are reduced on device alongside the statistics,
-    so the only host sync is the final ``device_get``.
+    ``stats`` must be the weighted kernel when ``sigma`` is not None. The finite and
+    sigma checks and the point count are reduced on device alongside the statistics, so
+    the only host sync is the final ``device_get``.
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
     acc: tuple[jax.Array, ...] | None = None
-    finite = jnp.asarray(True)
+    finite = s_fin = s_pos = jnp.asarray(True)
     count = jnp.asarray(0)
-    for xc, yc, _sc, mask in iter_blocks(*source, chunk):
-        out = stats(th, xc, yc, mask)
+    for xc, yc, sc, mask in iter_blocks(*source, chunk):
+        out = stats(th, xc, yc, mask) if sc is None else stats(th, xc, yc, sc, mask)
         acc = (
             out if acc is None else tuple(a + b for a, b in zip(acc, out, strict=True))
         )
         count = count + jnp.sum(mask)
         if check_finite:
             finite = finite & _block_finite(xc, yc)
+        if check_sigma and sc is not None:
+            f_ok, p_ok = _sigma_ok(sc)
+            s_fin, s_pos = s_fin & f_ok, s_pos & p_ok
     if acc is None:
         raise ValueError("x and y must be non-empty")
-    c, g, H, ok, n_seen = jax.device_get((*acc, finite, count))
-    return PassStats(float(c), np.asarray(g), np.asarray(H), int(n_seen), bool(ok))
+    c, g, H, ok, n_seen, sf, sp = jax.device_get((*acc, finite, count, s_fin, s_pos))
+    return PassStats(
+        float(c),
+        np.asarray(g),
+        np.asarray(H),
+        int(n_seen),
+        bool(ok),
+        bool(sf),
+        bool(sp),
+    )
 
 
 def step_termination(
@@ -286,26 +331,29 @@ def _solve(
     return d if np.isfinite(d).all() else None
 
 
-def _place(x: Any, y: Any) -> tuple[Any, Any]:
-    """Move x, y to the accelerator once if they fit in DEVICE_FRACTION of free memory.
+def _place(x: Any, y: Any, sigma: Any) -> tuple[Any, Any, Any]:
+    """Move x, y (and sigma) to the accelerator once if they fit in DEVICE_FRACTION of free
+    memory.
 
     On the CPU backend nothing is copied: chunks are host views (spec, Stage 1).
     """
     if jax.default_backend() == "cpu":
-        return x, y
+        return x, y, sigma
     try:
         mem = jax.devices()[0].memory_stats()
     except Exception as exc:  # backend without memory stats: stream chunks instead
         logger.debug(
             "exact_lm: no device memory stats; streaming chunks", error=str(exc)
         )
-        return x, y
+        return x, y, sigma
     if not mem:
-        return x, y
+        return x, y, sigma
     free = mem.get("bytes_limit", 0) - mem.get("bytes_in_use", 0)
-    if 16 * len(x) > DEVICE_FRACTION * free:  # x and y as float64
-        return x, y
-    return jnp.asarray(x, dtype=jnp.float64), jnp.asarray(y, dtype=jnp.float64)
+    arrays = (x, y) if sigma is None else (x, y, sigma)
+    if 8 * len(arrays) * len(x) > DEVICE_FRACTION * free:  # float64
+        return x, y, sigma
+    placed = [jnp.asarray(a, dtype=jnp.float64) for a in arrays]
+    return placed[0], placed[1], (None if sigma is None else placed[2])
 
 
 def check_model_contract(
@@ -359,14 +407,20 @@ def _check_inputs(
     bounds: tuple[Any, Any],
     n_points: int | None,
 ) -> tuple[int, int, np.ndarray, np.ndarray]:
-    """Validate shapes and Stage 1 scope; return ``(n, p, lo, hi)``."""
+    """Validate shapes (from ``shape`` only, no data read) and scope; return ``(n, p, lo, hi)``."""
     if not 0 < LAM0 <= LAMBDA_MAX:
         raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
-    if sigma is not None:
-        raise ValueError(f"sigma {_STAGE2}")
     if not hasattr(x, "shape") or x.ndim != 1 or y.shape != x.shape:
         raise ValueError("x and y must be 1-D arrays of equal length")
     n, p = len(x), len(p0)
+    if sigma is not None:
+        if sigma.ndim != 1:
+            raise ValueError(
+                f"sigma must be 1-D, got shape {sigma.shape} (correlated 2-D sigma is "
+                "not supported by exact_streaming)"
+            )
+        if sigma.shape[0] != n:
+            raise ValueError(f"sigma has length {sigma.shape[0]}, expected {n}")
     if n == 0:
         raise ValueError("x and y must be non-empty")
     if n_points is not None and n_points != n:
@@ -453,21 +507,38 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     "stalled"``; success only for the first three), ``n_points`` and
     ``equivalent_to_full_batch=True``. A failed fit is returned, not raised.
 
-    Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a non-finite
-    cost, gradient or Hessian at ``p0``, and for ``sigma`` or finite ``bounds`` (Stage 2).
+    ``sigma`` (optional, 1-D, length ``n``) gives per-point standard deviations: residuals
+    and Jacobian rows are divided by it, so ``cost = 0.5*sum(((y - f)/sigma)^2)`` and
+    ``pcov`` is scaled by ``2*cost/(n - p)`` unless ``absolute_sigma``, as in
+    ``nlsq.curve_fit``. Its length and dimension are checked from its shape; finiteness and
+    positivity are reduced on device during the first pass (always, regardless of
+    ``check_finite``, because a negative ``sigma`` would otherwise square away silently).
+
+    Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
+    that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
+    gradient or Hessian at ``p0``, and for finite ``bounds`` (Stage 2b).
     """
     # lists and tuples have no .shape; array-likes (ndarray, JAX, memmap, ...) are never copied
     x = x if hasattr(x, "shape") else np.asarray(x)
     y = y if hasattr(y, "shape") else np.asarray(y)
+    if sigma is not None and not hasattr(sigma, "shape"):
+        sigma = np.asarray(sigma)
     n, p, lo, hi = _check_inputs(x, y, p0, sigma, bounds, n_points)
     if max_nfev is None:
         max_nfev = 100 * p
     chunk = derive_chunk_size(n, p, memory_limit_gb, chunk_size)
-    source = (*_place(x, y), None)
-    stats = make_chunk_stats(model)
+    source = _place(x, y, sigma)
+    stats = make_chunk_stats(model, weighted=sigma is not None)
 
     def evaluate(theta: np.ndarray, nfev: int, first: bool = False) -> PassStats:
-        st = run_pass(stats, theta, source, chunk, check_finite=first and check_finite)
+        st = run_pass(
+            stats,
+            theta,
+            source,
+            chunk,
+            check_finite=first and check_finite,
+            check_sigma=first,
+        )
         if show_progress:
             logger.info("exact_lm pass", nfev=nfev, cost=st.cost)
         return st
@@ -477,6 +548,10 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     st = evaluate(theta, 1, first=True)
     if check_finite and not st.data_finite:
         raise ValueError("x and y must be finite (found NaN or inf)")
+    if not st.sigma_finite:
+        raise ValueError("sigma must be finite (found NaN or inf)")
+    if not st.sigma_positive:
+        raise ValueError("sigma must be positive (found a zero or negative value)")
     if st.n_seen != n:
         raise RuntimeError(f"pass saw {st.n_seen} of {n} points")
     if not _finite(st):

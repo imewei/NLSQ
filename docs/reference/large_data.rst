@@ -79,11 +79,15 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
 - **Model contract:** ``model(x, *params)`` must be written with
   ``jax.numpy`` and be pointwise and deterministic in ``x`` (row ``i`` of the
   output depends only on ``x[i]``); a probe on the first chunk checks this.
-- **Accepted arguments:** ``chunk_size``, ``check_finite``, ``show_progress``,
-  ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
+- **Accepted arguments:** ``sigma`` (1-D only), ``chunk_size``,
+  ``check_finite``, ``show_progress``, ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
   ``xtol``, ``gtol`` and ``max_nfev`` (full-data passes, default
   ``100 * len(p0)``). Any other keyword argument raises ``TypeError``.
-- **Not yet supported (``ValueError`` naming the argument):** ``sigma``, finite
+- **Weights:** a 1-D ``sigma`` divides residuals and Jacobian rows, as in
+  ``curve_fit``. A ``sigma`` that is 2-D (correlated errors), of the wrong
+  length, non-finite or non-positive raises ``ValueError``; finiteness and
+  positivity are checked during the first pass, whatever ``check_finite`` says.
+- **Not yet supported (``ValueError`` naming the argument):** finite
   ``bounds``, ``multistart=True`` / ``global_search=True``, 2-D ``xdata``, and
   non-default ``stability``, ``rescale_data``,
   ``max_jacobian_elements_for_svd``, ``auto_size_detection`` or

@@ -295,8 +295,6 @@ def test_derive_chunk_size_precedence():
 
 
 def test_stage2_inputs_rejected(data):
-    with pytest.raises(ValueError, match=r"sigma .*Stage 2"):
-        run(exp_model, *data, EXP.p0, sigma=np.ones(N))
     with pytest.raises(ValueError, match=r"finite bounds .*Stage 2"):
         run(exp_model, *data, EXP.p0, bounds=(0.0, np.inf))
     with pytest.raises(ValueError, match="n_points"):
@@ -656,3 +654,141 @@ def test_compute_covariance_contract():
         lm.compute_covariance(np.diag([1.0, 1e-7]), 0.4, 10, 2, False)
     with pytest.warns(UserWarning, match="ill-conditioned"):
         lm.compute_covariance(np.diag([1.0, 1e-9]), 0.4, 10, 2, False)
+
+
+# ---- Task 8: 1-D sigma (weights) and weighted covariance -------------------------------
+
+
+def sig_of(x):
+    """Heteroscedastic sigma = 0.02 + 0.1 * x (x shifted to start at 0)."""
+    return 0.02 + 0.1 * (x - x[0])
+
+
+def weighted_data(prob, n=N, seed=0):
+    x, _ = prob.data(n)
+    s = sig_of(x)
+    y = prob.model(np, x, *prob.p_true) + s * np.random.default_rng(
+        seed
+    ).standard_normal(n)
+    return x, y, s
+
+
+@pytest.mark.parametrize("name", ["exp_decay", "two_exp"])
+def test_weighted_matches_scipy(name):
+    prob = PROBLEMS[name]
+    x, y, s = weighted_data(prob)
+    ref = least_squares(lambda th: (y - prob.model(np, x, *th)) / s, prob.p0, **TIGHT)
+    out = run(model_of(prob), x, y, prob.p0, sigma=s, **TIGHT)
+    assert out["success"]
+    rtol = 1e-4 if name == "two_exp" else 1e-6
+    assert_close(by_rate(prob, out["x"]), by_rate(prob, ref.x), rtol, 1e-8)
+    assert_close(out["cost"], ref.cost, 1e-9)
+    # the weights matter: the unweighted optimum is far from the weighted one
+    plain = least_squares(lambda th: y - prob.model(np, x, *th), prob.p0, **TIGHT)
+    assert np.max(np.abs(plain.x - ref.x) / np.abs(ref.x)) > 1e-3
+
+
+def test_weighted_chunk_invariance():
+    x, y, s = weighted_data(EXP)
+    outs = [
+        run(exp_model, x, y, EXP.p0, sigma=s, chunk_size=c)
+        for c in (N, N // 2, 512, 513, 7)
+    ]
+    for o in outs[1:]:
+        assert_close(o["x"], outs[0]["x"], 1e-9)
+        assert_close(o["cost"], outs[0]["cost"], 1e-12)
+
+
+@pytest.mark.parametrize("absolute_sigma", [False, True])
+def test_weighted_pcov_matches_curve_fit(absolute_sigma):
+    x, y, s = weighted_data(EXP)
+    out = run(exp_model, x, y, EXP.p0, sigma=s, absolute_sigma=absolute_sigma, **TIGHT)
+    _, ref = curve_fit(
+        exp_model,
+        x,
+        y,
+        p0=EXP.p0,
+        sigma=s,
+        absolute_sigma=absolute_sigma,
+        ftol=1e-12,
+        xtol=1e-12,
+        gtol=1e-12,
+    )
+    assert out["success"]
+    atol = 1e-12 * np.abs(ref).max()
+    np.testing.assert_allclose(out["pcov"], ref, rtol=1e-6, atol=atol)
+    # and it differs from the unweighted covariance
+    plain = run(exp_model, x, y, EXP.p0, absolute_sigma=absolute_sigma, **TIGHT)
+    assert not np.allclose(plain["pcov"], ref, rtol=1e-2)
+
+
+def test_constant_sigma_scales_cost_and_absolute_pcov(data):
+    c = 0.05
+    plain = {
+        a: run(exp_model, *data, EXP.p0, absolute_sigma=a, **TIGHT) for a in (0, 1)
+    }
+    w = {
+        a: run(exp_model, *data, EXP.p0, sigma=np.full(N, c), absolute_sigma=a, **TIGHT)
+        for a in (0, 1)
+    }
+    for a in (0, 1):
+        assert_close(w[a]["x"], plain[a]["x"], 1e-6, 1e-8)
+        assert_close(w[a]["cost"], plain[a]["cost"] / c**2, 1e-9)
+    # relative sigma: pcov is invariant to a constant sigma; absolute: scales by c^2
+    np.testing.assert_allclose(w[0]["pcov"], plain[0]["pcov"], rtol=1e-6)
+    np.testing.assert_allclose(w[1]["pcov"], c**2 * plain[1]["pcov"], rtol=1e-6)
+
+
+@pytest.mark.parametrize("bad", [0.0, np.nan, np.inf, -1.0])
+def test_masked_rows_ignore_sigma(bad):
+    x, y, s = weighted_data(EXP, n=64)
+    mask = jnp.arange(64) < 40
+    stats = lm.make_chunk_stats(exp_model, weighted=True)
+    s_bad = s.copy()
+    s_bad[40:] = bad
+    got = stats(jnp.asarray(EXP.p0), x, y, s_bad, mask)
+    want = stats(jnp.asarray(EXP.p0), x[:40], y[:40], s[:40], jnp.ones(40, bool))
+    for a, b in zip(got, want, strict=True):
+        assert np.all(np.isfinite(a))
+        np.testing.assert_allclose(a, b, rtol=1e-12)
+    # and the weight is applied to both r and J: F = 0.5 sum((y - f)/s)^2, H = J_w^T J_w
+    f = EXP.model(np, x[:40], *EXP.p0)
+    assert_close(float(want[0]), 0.5 * np.sum(((y[:40] - f) / s[:40]) ** 2), 1e-12)
+
+
+def test_jax_and_list_sigma_equal_numpy_sigma():
+    x, y, s = weighted_data(EXP)
+    ref = run(exp_model, x, y, EXP.p0, sigma=s)
+    for sg in (jnp.asarray(s), s.tolist()):
+        out = run(exp_model, x, y, EXP.p0, sigma=sg)
+        assert_close(out["x"], ref["x"], 1e-12)
+        assert out["nfev"] == ref["nfev"]
+    out = run(exp_model, jnp.asarray(x), jnp.asarray(y), EXP.p0, sigma=jnp.asarray(s))
+    assert_close(out["x"], ref["x"], 1e-12)
+
+
+def test_cpu_sigma_chunks_are_views(data):
+    x, y = data
+    s = np.ones(N)
+    sc = next(lm.iter_blocks(x, y, s, 1000))[2]
+    assert np.shares_memory(sc, s)
+    *_, sc_tail, mask_tail = list(lm.iter_blocks(x, y, s, 1024))[-1]
+    assert sc_tail.shape == (1024,) and not bool(mask_tail.all())
+
+
+@pytest.mark.parametrize(
+    ("make", "pattern"),
+    [
+        (lambda s: s[:-1], r"^sigma has length 2999, expected 3000"),
+        (lambda s: np.where(np.arange(N) == 5, 0.0, s), r"^sigma must be positive"),
+        (lambda s: np.where(np.arange(N) == 2999, -s, s), r"^sigma must be positive"),
+        (lambda s: np.where(np.arange(N) == 7, np.nan, s), r"^sigma must be finite"),
+        (lambda s: np.where(np.arange(N) == 2999, np.inf, s), r"^sigma must be finite"),
+        (np.diag, r"^sigma must be 1-D"),
+    ],
+)
+@pytest.mark.parametrize("check_finite", [True, False])
+def test_bad_sigma_raises(data, make, pattern, check_finite):
+    s = make(np.full(N, 0.05))
+    with pytest.raises(ValueError, match=pattern):
+        run(exp_model, *data, EXP.p0, sigma=s, check_finite=check_finite)

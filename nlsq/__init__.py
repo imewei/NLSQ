@@ -772,11 +772,11 @@ def _curve_fit_exact_streaming(
             raise ValueError(f"{name}={value!r} {_NOT_EXACT}; leave it at its default")
     if multistart:
         raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
-    if sigma is not None:
-        raise ValueError(f"sigma {_NOT_EXACT} yet (added in Stage 2)")
 
     shapes = {}
-    for name, a in (("xdata", xdata), ("ydata", ydata)):
+    for name, a in (("xdata", xdata), ("ydata", ydata), ("sigma", sigma)):
+        if name == "sigma" and a is None:  # unweighted
+            continue
         shape = a.shape if hasattr(a, "shape") else np.shape(a)
         if len(shape) != 1:
             raise ValueError(
@@ -806,6 +806,7 @@ def _curve_fit_exact_streaming(
         p0_arr,
         chunk_size=chunk_size,
         check_finite=check_finite,
+        sigma=sigma,
         absolute_sigma=absolute_sigma,
         memory_limit_gb=memory_limit_gb,
         show_progress=show_progress,
