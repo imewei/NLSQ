@@ -756,7 +756,9 @@ def _curve_fit_exact_streaming(
 ) -> tuple[np.ndarray, np.ndarray]:
     """``curve_fit_large(method="exact_streaming")``: argument policy, then exact_lm_fit.
 
-    Validates from ``shape``/``len`` only, so array-like sources are never read whole here.
+    Validates from ``shape``/``len`` only, so array-like sources (``np.memmap``,
+    ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len`` and slicing) are
+    never read whole here; objects without ``shape`` (lists, tuples) are converted.
     """
     from nlsq.core.least_squares import prepare_bounds
     from nlsq.streaming import exact_lm
@@ -779,8 +781,13 @@ def _curve_fit_exact_streaming(
             continue
         shape = a.shape if hasattr(a, "shape") else np.shape(a)
         if len(shape) != 1:
+            why = (
+                "; multi-feature (2-D) xdata is not supported by exact_streaming"
+                if name == "xdata" and len(shape) > 1
+                else ""
+            )
             raise ValueError(
-                f"{name} must be 1-D for method='exact_streaming', got shape {shape}"
+                f"{name} must be 1-D for method='exact_streaming', got shape {shape}{why}"
             )
         shapes[name] = shape[0]
     n_x, n_y = shapes["xdata"], shapes["ydata"]
@@ -887,7 +894,12 @@ def curve_fit_large(
         full-data Levenberg-Marquardt fit whose result does not depend on
         chunking, for any dataset size (``size_threshold`` is not consulted).
         It requires a pointwise, deterministic model written with
-        ``jax.numpy``, 1-D ``xdata`` and ``multistart=False``. 1-D ``sigma``
+        ``jax.numpy``, 1-D ``xdata`` (multi-feature 2-D ``xdata`` raises
+        ``ValueError``) and ``multistart=False``. ``xdata``, ``ydata`` and
+        ``sigma`` may be out-of-memory array-likes (``np.memmap``,
+        ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len``
+        and slicing): they are read one chunk at a time on every pass and
+        never loaded whole. 1-D ``sigma``
         and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
         handled by an active set, not Coleman-Li TRF: the returned point is a
         KKT point of the box-constrained problem, reached by a different path

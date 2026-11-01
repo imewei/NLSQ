@@ -157,9 +157,11 @@ def _block(a: Any, s: int, chunk: int) -> Any:
 def iter_blocks(
     source_x: Any, source_y: Any, source_sigma: Any, chunk: int
 ) -> Iterator[tuple[Any, Any, Any, jax.Array]]:
-    """Yield equal-shape float64 ``(x, y, sigma, mask)`` chunks of ndarray or JAX inputs.
+    """Yield equal-shape float64 ``(x, y, sigma, mask)`` chunks of array-like inputs.
 
-    Host float64 arrays are sliced as views and JAX arrays stay on their device. The tail
+    Every source is read by slice ``a[s:s+chunk]``, in order, never whole and never
+    shuffled: host float64 arrays give views, lazy sources (memmap, HDF5, Zarr) read one
+    chunk, and JAX arrays stay on their device. The tail
     is edge-padded (a padded row has the finiteness of a real row) and masked out; a
     ``sigma`` tail is padded with 1, which is valid, so the sigma checks need no mask.
     ``sigma`` is ``None`` (unweighted) or a 1-D array of the same length.
@@ -398,26 +400,50 @@ def _solve(
     return d if np.isfinite(d).all() else None
 
 
-def _place(x: Any, y: Any, sigma: Any) -> tuple[Any, Any, Any]:
-    """Move x, y (and sigma) to the accelerator once if they fit in DEVICE_FRACTION of free
-    memory.
-
-    On the CPU backend nothing is copied: chunks are host views (spec, Stage 1).
-    """
+def _free_device_bytes() -> int | None:
+    """Free accelerator memory in bytes; None on the CPU backend or without memory stats."""
     if jax.default_backend() == "cpu":
-        return x, y, sigma
+        return None
     try:
         mem = jax.devices()[0].memory_stats()
     except Exception as exc:  # backend without memory stats: stream chunks instead
         logger.debug(
             "exact_lm: no device memory stats; streaming chunks", error=str(exc)
         )
-        return x, y, sigma
+        return None
     if not mem:
-        return x, y, sigma
-    free = mem.get("bytes_limit", 0) - mem.get("bytes_in_use", 0)
+        return None
+    return int(mem.get("bytes_limit", 0) - mem.get("bytes_in_use", 0))
+
+
+def _place(
+    x: Any,
+    y: Any,
+    sigma: Any,
+    workspace_bytes: int = 0,
+    memory_limit_gb: float | None = None,
+) -> tuple[Any, Any, Any]:
+    """Move in-memory x, y (and sigma) to the accelerator once if they fit.
+
+    They fit when the float64 data takes at most DEVICE_FRACTION of free device memory
+    and, with ``memory_limit_gb``, data plus ``workspace_bytes`` (the chunk workspace)
+    stays within that budget. Only a plain ``np.ndarray`` or a ``jax.Array`` is placed: a
+    lazy source (memmap, HDF5, Zarr, any other array-like) is always streamed chunk by
+    chunk from the source. On the CPU backend nothing is copied: chunks are host views.
+    """
     arrays = (x, y) if sigma is None else (x, y, sigma)
-    if 8 * len(arrays) * len(x) > DEVICE_FRACTION * free:  # float64
+    if not all(type(a) is np.ndarray or isinstance(a, jax.Array) for a in arrays):
+        return x, y, sigma
+    free = _free_device_bytes()
+    if free is None:
+        return x, y, sigma
+    need = 8 * len(arrays) * len(x)  # float64
+    if need > DEVICE_FRACTION * free:
+        return x, y, sigma
+    if (
+        memory_limit_gb is not None
+        and need + workspace_bytes > memory_limit_gb * 1024**3
+    ):
         return x, y, sigma
     placed = [jnp.asarray(a, dtype=jnp.float64) for a in arrays]
     return placed[0], placed[1], (None if sigma is None else placed[2])
@@ -464,7 +490,7 @@ def check_model_contract(
         same = same & jnp.allclose(
             got, want, rtol=1e-12, atol=1e-12 * scale, equal_nan=True
         )
-    if not bool(same):
+    if not bool(jax.device_get(same)):  # explicit: allowed by a device-to-host guard
         raise bad
 
 
@@ -500,11 +526,16 @@ def _check_inputs(
     """Validate shapes (from ``shape`` only, no data read) and scope; return ``(n, p, lo, hi)``."""
     if not 0 < LAM0 <= LAMBDA_MAX:
         raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
-    if not hasattr(x, "shape") or x.ndim != 1 or y.shape != x.shape:
+    if hasattr(x, "shape") and len(x.shape) > 1:
+        raise ValueError(
+            f"multi-feature (2-D) xdata is not supported by exact_streaming: x must be "
+            f"1-D, got shape {tuple(x.shape)}"
+        )
+    if not hasattr(x, "shape") or len(x.shape) != 1 or tuple(y.shape) != tuple(x.shape):
         raise ValueError("x and y must be 1-D arrays of equal length")
     n, p = len(x), len(p0)
     if sigma is not None:
-        if sigma.ndim != 1:
+        if len(sigma.shape) != 1:
             raise ValueError(
                 f"sigma must be 1-D, got shape {sigma.shape} (correlated 2-D sigma is "
                 "not supported by exact_streaming)"
@@ -617,6 +648,13 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     exact constrained model decrease) takes its place. ``pcov`` uses all ``p``
     parameters for the degrees of freedom, as the legacy path.
 
+    ``x``, ``y`` and ``sigma`` may be NumPy or JAX arrays or out-of-memory array-likes
+    (``np.memmap``, ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len``
+    and slicing). Array-likes are read by slice, one chunk at a time, in order: each pass
+    reads every point once; the first-chunk model probe reads one extra chunk of ``x``.
+    They are never converted or placed on a device whole; ``memory_limit_gb`` caps the
+    resident data plus chunk workspace when an in-memory array is placed on a device.
+
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
     that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
     gradient or Hessian at ``p0``, and for ``bounds`` of the wrong shape or with
@@ -631,7 +669,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     if max_nfev is None:
         max_nfev = 100 * p
     chunk = derive_chunk_size(n, p, memory_limit_gb, chunk_size)
-    source = _place(x, y, sigma)
+    source = _place(x, y, sigma, chunk * p * 8 * WORKSPACE_FACTOR, memory_limit_gb)
     stats = make_chunk_stats(model, weighted=sigma is not None)
 
     def evaluate(theta: np.ndarray, nfev: int, first: bool = False) -> PassStats:

@@ -79,6 +79,14 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
 - **Model contract:** ``model(x, *params)`` must be written with
   ``jax.numpy`` and be pointwise and deterministic in ``x`` (row ``i`` of the
   output depends only on ``x[i]``); a probe on the first chunk checks this.
+- **Out-of-memory sources:** ``xdata``, ``ydata`` and ``sigma`` may be
+  ``np.memmap``, ``h5py.Dataset``, ``zarr.Array`` or any array-like with
+  ``shape``, ``len`` and slicing. They are validated from ``shape`` and read by
+  slice, one chunk at a time and in order, on every pass: each pass reads the
+  data once (plus one chunk of ``xdata`` for the model probe), and nothing is
+  loaded or placed on a device whole. In-memory NumPy/JAX arrays are placed on
+  an accelerator once only if they fit 50% of free device memory and, with
+  ``memory_limit_gb``, the data plus chunk workspace fit that budget.
 - **Accepted arguments:** ``sigma`` (1-D only), ``bounds``, ``chunk_size``,
   ``check_finite``, ``show_progress``, ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
   ``xtol``, ``gtol`` and ``max_nfev`` (full-data passes, default

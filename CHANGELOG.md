@@ -15,7 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path's precision-weighted combination). It runs at any dataset size, regardless of
   `size_threshold`, and returns `(popt, pcov)`.
   - **Model contract:** `model(x, *params)` written with `jax.numpy`, pointwise and
-    deterministic in `x` (checked by a probe on the first chunk); 1-D `xdata` only.
+    deterministic in `x` (checked by a probe on the first chunk); 1-D `xdata` only
+    (multi-feature 2-D `xdata` raises `ValueError`).
+  - **Out-of-memory sources:** `xdata`, `ydata` and `sigma` may be `np.memmap`,
+    `h5py.Dataset`, `zarr.Array` or any array-like with `shape`, `len` and slicing.
+    They are validated from `shape`, read by slice one chunk at a time in order (no
+    whole-array copy, no shuffle, no device placement), so each pass reads the data
+    exactly once, plus one chunk of `xdata` for the model probe. Non-finite data in any
+    chunk is caught during the first pass. In-memory arrays are placed on an accelerator
+    only if they fit 50% of free device memory and, with `memory_limit_gb`, the data plus
+    chunk workspace fit that budget.
   - **Weights:** 1-D `sigma` (per-point standard deviations, residuals `(y - f)/sigma`
     as in `curve_fit`) is supported; `absolute_sigma` selects whether `pcov` is scaled
     by the weighted residual variance. A `sigma` that is not 1-D (correlated 2-D
