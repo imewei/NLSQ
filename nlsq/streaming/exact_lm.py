@@ -147,6 +147,11 @@ def make_chunk_stats(
     return jax.jit(stats)
 
 
+def _source_len(a: Any) -> int:
+    """Length of a 1-D source from ``shape`` (zarr v3 arrays have no ``__len__``)."""
+    return int(a.shape[0]) if hasattr(a, "shape") else len(a)
+
+
 def _block(a: Any, s: int, chunk: int) -> Any:
     """Float64 slice ``a[s:s+chunk]``: a host view if already float64, on device for JAX."""
     if isinstance(a, jax.Array):
@@ -166,7 +171,7 @@ def iter_blocks(
     ``sigma`` tail is padded with 1, which is valid, so the sigma checks need no mask.
     ``sigma`` is ``None`` (unweighted) or a 1-D array of the same length.
     """
-    n = len(source_x)
+    n = _source_len(source_x)
     full = jnp.ones(chunk, dtype=bool)
     for s in range(0, n, chunk):
         xc, yc = _block(source_x, s, chunk), _block(source_y, s, chunk)
@@ -437,7 +442,7 @@ def _place(
     free = _free_device_bytes()
     if free is None:
         return x, y, sigma
-    need = 8 * len(arrays) * len(x)  # float64
+    need = 8 * len(arrays) * _source_len(x)  # float64
     if need > DEVICE_FRACTION * free:
         return x, y, sigma
     if (
@@ -533,7 +538,7 @@ def _check_inputs(
         )
     if not hasattr(x, "shape") or len(x.shape) != 1 or tuple(y.shape) != tuple(x.shape):
         raise ValueError("x and y must be 1-D arrays of equal length")
-    n, p = len(x), len(p0)
+    n, p = _source_len(x), len(p0)
     if sigma is not None:
         if len(sigma.shape) != 1:
             raise ValueError(

@@ -181,6 +181,51 @@ def test_multi_feature_xdata_rejected():
         lm.exact_lm_fit(exp_model, np.ones((10, 2)), np.ones((10, 2)), EXP.p0)
 
 
+class ZarrLike:
+    """zarr v3 ``Array`` semantics: ``shape``/``dtype``/slicing, no ``__len__``, no
+    ``__array__``; slices clamp at the end and return a fresh ``np.ndarray``."""
+
+    def __init__(self, a, log):
+        self._a, self.shape, self.dtype, self.log = a, a.shape, a.dtype, log
+
+    def __getitem__(self, k):
+        assert isinstance(k, slice), f"non-slice read {k!r}"
+        start, stop, _ = k.indices(self.shape[0])
+        self.log.append((start, stop))
+        return np.array(self._a[k])
+
+
+def test_zarr_like_source_without_len(data):
+    x, y = data
+    s = 0.01 * (1.0 + np.arange(N) % 7)
+    logs = [], [], []
+    src = [ZarrLike(a, log) for a, log in zip((x, y, s), logs, strict=True)]
+    out = lm.exact_lm_fit(
+        exp_model, src[0], src[1], EXP.p0, sigma=src[2], chunk_size=CHUNK
+    )
+    ref = lm.exact_lm_fit(exp_model, x, y, EXP.p0, sigma=s, chunk_size=CHUNK)
+    np.testing.assert_array_equal(out["x"], ref["x"])
+    assert out["cost"] == ref["cost"] and out["n_points"] == N
+    for log in logs:
+        assert max(_sizes(log)) <= CHUNK
+    _check_reads(logs[1], N, out["nfev"], CHUNK, extra=0)
+    popt, _ = curve_fit_large(
+        exp_model,
+        ZarrLike(x, []),
+        ZarrLike(y, []),
+        p0=EXP.p0,
+        sigma=ZarrLike(s, []),
+        method="exact_streaming",
+        chunk_size=CHUNK,
+    )
+    np.testing.assert_array_equal(popt, ref["x"])
+
+
+def test_place_zarr_like_not_placed(gpu):
+    z = ZarrLike(np.ones(1000), [])
+    assert lm._place(z, z, None)[0] is z
+
+
 def test_memmap_chunks_are_views(data, tmp_path):
     """A float64 memmap chunk is a view of the mapping: no per-pass host copy."""
     s = np.full(N, 0.1)
