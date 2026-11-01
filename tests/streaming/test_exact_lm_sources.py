@@ -181,6 +181,15 @@ def test_multi_feature_xdata_rejected():
         lm.exact_lm_fit(exp_model, np.ones((10, 2)), np.ones((10, 2)), EXP.p0)
 
 
+def test_memmap_chunks_are_views(data, tmp_path):
+    """A float64 memmap chunk is a view of the mapping: no per-pass host copy."""
+    s = np.full(N, 0.1)
+    mm = [_memmap(tmp_path / f"{i}.bin", a) for i, a in enumerate((*data, s))]
+    xc, yc, sc, mask = next(lm.iter_blocks(*mm, CHUNK))
+    assert all(np.shares_memory(b, a) for b, a in zip((xc, yc, sc), mm, strict=True))
+    assert bool(mask.all())
+
+
 # ---- JAX arrays stay on device --------------------------------------------------------
 
 
