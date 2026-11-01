@@ -15,7 +15,7 @@ changed covariance fallback) is a separate, later step with its own changelog li
 | # | Module | Replaces | Why |
 |---|---|---|---|
 | 1 | `NormalEquations` | 3 copies of J^T J / J^T r accumulation | one deep kernel, two real adapters |
-| 2 | `choose_large_strategy` | 13 construction sites with their own kwargs translation | routing knowledge in one place |
+| 2 | `build_large_strategy` (builder, not router) | 13 construction sites with their own kwargs translation | routing knowledge in one place |
 | 3 | `prepare_problem` | `_prepare_curve_fit_inputs` plus a partial copy in the hybrid path | step-order rules live in comments only |
 | 4 | covariance module | 4 covariance implementations | one fallback and warning contract |
 
@@ -71,10 +71,14 @@ class NormalEquations:
    `res_sq`, `total_cost`, `chunk_cost` (adaptive_hybrid.py ~3041-3141, 3379-3446,
    3545-3689, 4439-4469; the covariance sigma^2 at ~3819-3983) is listed in the PR and
    checked. A missed factor of 2 silently shifts GN convergence and `pcov`.
-2. **Checkpoint state.** `phase2_JTJ_accumulator` is written per chunk and serialized by
-   `phases/checkpoint.py`. A per-pass `accumulate` removes mid-pass resume. **Decision
-   needed (section 9):** checkpoint at pass boundaries only (keep the field populated from
-   the pass result), or version the checkpoint format. Default proposed: pass boundaries.
+2. **Checkpoint state.** `phase2_JTJ_accumulator` / `phase2_JTr_accumulator` are written per
+   chunk and saved/restored by `phases/checkpoint.py` and `_load_checkpoint` (~4129), but a
+   grep of `nlsq/` and `tests/` finds **no production reader**: after restore the next
+   accumulation overwrites them, and hybrid checkpoints only at Phase 1/2 iteration
+   boundaries (~2314, ~3509). Mid-pass resume therefore does not exist today. Resolved
+   (my call): keep the field populated from the pass result at pass boundaries and leave
+   the checkpoint format and field names unchanged, so old `.h5` files still load and no
+   versioning is needed. A test saves, loads and resumes a checkpoint.
 3. **Characterization first.** Before touching anything, add tests that pin the current
    behavior: H, g, cost, and final theta of hybrid Phase 2 on fixed seeds, with
    tolerances (not bitwise; `jacrev` vs `jacfwd` and per-chunk host sums vs device sums
@@ -83,9 +87,11 @@ class NormalEquations:
    (fallback path in `_compute_jacobian_chunk`). Verify it accepts batched `x`, or use the
    `jacobian=callable` adapter hook, before routing hybrid through the shared kernel.
 5. **Performance gate.** The `lax.scan` path may beat a Python block loop on GPU for
-   in-memory data. Acceptance: `bench` before/after on the hybrid path plus the existing
-   100M and 1B exact-streaming gates. If scan wins, keep it as an internal strategy of
-   `NormalEquations`, not as a second public method.
+   in-memory data. Acceptance (my call on the number): `bench` before/after on the hybrid
+   path must stay within 5% wall time on CPU and on GPU at the sizes the hybrid bench
+   already uses, plus the existing 100M and 1B exact-streaming gates unchanged. If the
+   block loop is slower than that, keep scan as an internal strategy of `NormalEquations`,
+   not as a second public method; otherwise delete it.
 
 ### Steps (each independently green)
 
@@ -121,8 +127,16 @@ everywhere (the value is not consumed twice); confirm with a test before changin
 
 ## 5. Opportunity 2: `choose_large_strategy`
 
-`choose_large_strategy(n, p, sigma, bounds, source, exact) -> Strategy`, with
-`Strategy.fit(f, x, y, p0, **common) -> OptimizeResult`. Replaces the 7
+**Scope (my call, from the builder check):** this is a *builder*, not a router. The 13
+sites sit inside entry points that already know their path (`_fit_with_preset`,
+`_fit_with_auto_global`, `_fit_global_multistart`, `_curve_fit_hybrid_streaming`,
+`_curve_fit_auto_memory`, plus `__init__.py` and `large_dataset.py`), so routing must not
+change. Name it `build_large_strategy(kind, config, **common) -> Strategy` where `kind`
+is the path the caller already chose (`"hybrid"` or `"chunked"`), and `Strategy.fit(f, x, y,
+p0, **common) -> OptimizeResult` hides the kwargs translation. Out of scope: global
+optimization callers (multistart, CMA-ES, HPC) and `_curve_fit_exact_streaming`, which is
+not among the 13 sites. Each site's current return type (tuple, `OptimizeResult` or dict)
+is recorded in the routing-table test and adapted inside the `Strategy`. Replaces the 7
 `AdaptiveHybridStreamingOptimizer(...)` sites (`__init__.py` 651, 1146; `large_dataset.py`
 1900; `minpack.py` 782, 1091, 1829, 4446) and 6 `LargeDatasetFitter(...)` sites
 (`__init__.py` 1253; `large_dataset.py` 3053; `minpack.py` 812, 1030, 1764, 4658). Each
@@ -167,12 +181,20 @@ is stale (gitignored, fix separately).
 
 ## 9. Decisions needed from the owner
 
-1. Hybrid `pinv` -> inf + `OptimizeWarning`: accept as a later behavior change?
-2. Should hybrid Phase 2 gain sigma support (later PR)?
-3. `phases/`: make it the real seam, route it through `NormalEquations`, or delete it?
+1. **`phases/` (most important; sets the scope of PR 1 step 4).** `GaussNewtonPhase` and
+   the orchestrator are used only by `tests/streaming/test_phases*.py` (72 tests), not by
+   production code. Delete them (with a stated reason), route them through
+   `NormalEquations` as a third adapter, or make them the real seam that hybrid calls?
+   Proposed default: route through `NormalEquations`, delete nothing yet.
+2. Hybrid `pinv` -> inf + `OptimizeWarning`: accept as a later behavior change?
+   Proposed default: not in this work; keep current finite `pcov`.
+3. Should hybrid Phase 2 gain sigma support (later PR)? Proposed default: not in this work.
 4. One PR per opportunity (proposed) or a single branch?
-5. Can mid-pass checkpoint resume be dropped in favor of pass-boundary checkpoints?
-   (Proposed: yes.)
+
+Resolved by the builder check and the code (my calls, please skim): mid-pass checkpoint
+resume does not exist, so checkpoint format is unchanged (section 3, trap 2); the
+`choose_large_strategy` scope and name (section 5); the 5% hybrid benchmark threshold
+(section 3, trap 5).
 
 ## 10. Left to the builder
 
