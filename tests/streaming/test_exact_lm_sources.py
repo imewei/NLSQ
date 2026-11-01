@@ -706,6 +706,9 @@ def test_factory_argument_errors(data, kw, pattern):
         lm.exact_lm_fit(exp_model, make_factory(*data), y, EXP.p0, **kw)
 
 
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
 @pytest.mark.parametrize("n", [1, 2])
 def test_factory_needs_two_points(n):
     x = np.linspace(0.0, 1.0, n)

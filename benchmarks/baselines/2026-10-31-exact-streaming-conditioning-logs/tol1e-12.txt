@@ -1,55 +1,155 @@
-
-GPU AVAILABLE BUT NOT USED
-===========================
-  GPU: NVIDIA GeForce RTX 4090 Laptop GPU (SM 8.9)
-  System CUDA: 13.4
-  JAX backend: CPU-only
-
-Enable 20-100x speedup:
-  make install-jax-gpu
-
-Or manually:
-  pip uninstall -y jax jaxlib jax-cuda13-plugin jax-cuda13-pjrt jax-cuda12-plugin jax-cuda12-pjrt
-  pip install "jax[cuda13-local]"
-
-Note: GPU acceleration is supported on Linux only.
-See README.md for details.
-
+accuracy two_exp_1e-1 seed 0: ok kappa=5.06e+04 (19.1 s)
+accuracy two_exp_1e-1 seed 1: ok kappa=8.54e+03 (5.8 s)
+accuracy two_exp_1e-1 seed 2: ok kappa=2.67e+04 (12.2 s)
+accuracy two_exp_1e-1 seed 3: ok kappa=2.17e+04 (21.8 s)
+accuracy two_exp_1e-1 seed 4: ok kappa=2.1e+04 (10.2 s)
+accuracy two_exp_1e-2 seed 0: reference_failed kappa=nan (109.5 s)
+accuracy two_exp_1e-2 seed 1: reference_failed kappa=nan (123.2 s)
+accuracy two_exp_1e-2 seed 2: reference_failed kappa=nan (4.6 s)
+accuracy two_exp_1e-2 seed 3: reference_failed kappa=nan (4.6 s)
+accuracy two_exp_1e-2 seed 4: reference_failed kappa=nan (8.7 s)
+accuracy two_exp_1e-3 seed 0: reference_failed kappa=nan (156.9 s)
+accuracy two_exp_1e-3 seed 1: reference_failed kappa=nan (281.7 s)
+accuracy two_exp_1e-3 seed 2: reference_failed kappa=nan (4.5 s)
+accuracy two_exp_1e-3 seed 3: reference_failed kappa=nan (138.5 s)
+accuracy two_exp_1e-3 seed 4: reference_failed kappa=nan (188.7 s)
+accuracy two_exp_1e-4 seed 0: ok kappa=6.44e+04 (33.4 s)
+accuracy two_exp_1e-4 seed 1: reference_failed kappa=nan (9.3 s)
+accuracy two_exp_1e-4 seed 2: ok kappa=8.8e+04 (155.7 s)
+accuracy two_exp_1e-4 seed 3: reference_failed kappa=nan (176.0 s)
+accuracy two_exp_1e-4 seed 4: reference_failed kappa=nan (167.3 s)
+accuracy two_exp_1e-5 seed 0: reference_failed kappa=nan (47.7 s)
+accuracy two_exp_1e-5 seed 1: reference_failed kappa=nan (90.9 s)
+accuracy two_exp_1e-5 seed 2: reference_failed kappa=nan (41.8 s)
+accuracy two_exp_1e-5 seed 3: reference_failed kappa=nan (4.5 s)
+accuracy two_exp_1e-5 seed 4: reference_failed kappa=nan (84.2 s)
+accuracy poly8 seed 0: ok kappa=7e+05 (6.4 s)
+accuracy poly8 seed 1: ok kappa=7e+05 (3.9 s)
+accuracy poly8 seed 2: ok kappa=7e+05 (4.0 s)
+accuracy poly8 seed 3: ok kappa=7e+05 (5.3 s)
+accuracy poly8 seed 4: ok kappa=7e+05 (4.0 s)
+accuracy poly12 seed 0: ok kappa=7.46e+08 (11.3 s)
+accuracy poly12 seed 1: ok kappa=7.46e+08 (9.8 s)
+accuracy poly12 seed 2: ok kappa=7.46e+08 (9.8 s)
+accuracy poly12 seed 3: ok kappa=7.46e+08 (10.0 s)
+accuracy poly12 seed 4: ok kappa=7.46e+08 (10.5 s)
+accuracy gauss3 seed 0: ok kappa=2.99e+04 (20.3 s)
+accuracy gauss3 seed 1: ok kappa=2.68e+04 (24.0 s)
+accuracy gauss3 seed 2: ok kappa=2.31e+04 (186.8 s)
+accuracy gauss3 seed 3: reference_failed kappa=nan (279.5 s)
+accuracy gauss3 seed 4: ok kappa=3.7e+04 (21.3 s)
+scale two_exp_1e-1 seed 0: ok kappa=4.58e+04 (4.5 s)
+scale two_exp_1e-1 seed 1: ok kappa=4.95e+04 (1.9 s)
+scale two_exp_1e-1 seed 2: ok kappa=2.46e+04 (7.3 s)
+scale two_exp_1e-1 seed 3: ok kappa=2.5e+04 (6.7 s)
+scale two_exp_1e-1 seed 4: ok kappa=4.51e+04 (3.4 s)
+scale two_exp_1e-2 seed 0: ok kappa=7.81e+15 (1.4 s)
+scale two_exp_1e-2 seed 1: ok kappa=5.84e+15 (27.5 s)
+scale two_exp_1e-2 seed 2: ok kappa=3.39e+08 (4.7 s)
+scale two_exp_1e-2 seed 3: ok kappa=2.81e+06 (2.9 s)
+scale two_exp_1e-2 seed 4: ok kappa=1.04e+16 (25.5 s)
+scale two_exp_1e-3 seed 0: ok kappa=5.64e+15 (1.9 s)
+scale two_exp_1e-3 seed 1: ok kappa=7.06e+05 (2.7 s)
+scale two_exp_1e-3 seed 2: ok kappa=6.56e+15 (24.6 s)
+scale two_exp_1e-3 seed 3: ok kappa=2.24e+15 (1.9 s)
+scale two_exp_1e-3 seed 4: ok kappa=3.33e+10 (4.6 s)
+scale two_exp_1e-4 seed 0: ok kappa=2.21e+16 (1.6 s)
+scale two_exp_1e-4 seed 1: ok kappa=7.39e+07 (27.1 s)
+scale two_exp_1e-4 seed 2: ok kappa=1.45e+16 (1.8 s)
+scale two_exp_1e-4 seed 3: ok kappa=6.13e+15 (26.8 s)
+scale two_exp_1e-4 seed 4: ok kappa=1.22e+16 (1.8 s)
+scale two_exp_1e-5 seed 0: ok kappa=3.13e+15 (22.3 s)
+scale two_exp_1e-5 seed 1: ok kappa=2.74e+15 (1.9 s)
+scale two_exp_1e-5 seed 2: ok kappa=1.16e+07 (29.0 s)
+scale two_exp_1e-5 seed 3: ok kappa=2.44e+15 (1.7 s)
+scale two_exp_1e-5 seed 4: ok kappa=2.26e+16 (1.9 s)
+scale poly8 seed 0: ok kappa=7.02e+05 (4.5 s)
+scale poly8 seed 1: ok kappa=7.02e+05 (4.6 s)
+scale poly8 seed 2: ok kappa=7.02e+05 (4.4 s)
+scale poly8 seed 3: ok kappa=7.02e+05 (3.9 s)
+scale poly8 seed 4: ok kappa=7.02e+05 (4.0 s)
+scale poly12 seed 0: ok kappa=7.5e+08 (11.6 s)
+scale poly12 seed 1: ok kappa=7.5e+08 (10.8 s)
+scale poly12 seed 2: ok kappa=7.5e+08 (10.9 s)
+scale poly12 seed 3: ok kappa=7.5e+08 (9.6 s)
+scale poly12 seed 4: ok kappa=7.5e+08 (11.4 s)
+scale gauss3 seed 0: ok kappa=2.78e+04 (5.4 s)
+scale gauss3 seed 1: ok kappa=3.23e+04 (14.7 s)
+scale gauss3 seed 2: ok kappa=2.93e+04 (8.3 s)
+scale gauss3 seed 3: ok kappa=2.64e+04 (6.2 s)
+scale gauss3 seed 4: ok kappa=5.89e+03 (11.3 s)
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!! accuracy two_exp_1e-2 seed 0: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 2.14e+16)
-!! accuracy two_exp_1e-2 seed 1: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 3.14e+04)
-!! accuracy two_exp_1e-2 seed 2: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.99e+16)
-!! accuracy two_exp_1e-2 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.6e+16)
-!! accuracy two_exp_1e-2 seed 4: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.02e+16)
-!! accuracy two_exp_1e-3 seed 0: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.94e+07)
-!! accuracy two_exp_1e-3 seed 1: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 6.95e+05)
-!! accuracy two_exp_1e-3 seed 2: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 2.09e+15)
-!! accuracy two_exp_1e-3 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 3.84e+06)
-!! accuracy two_exp_1e-3 seed 4: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 3.36e+08)
-!! accuracy two_exp_1e-4 seed 0: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 6.44e+04)
-!! accuracy two_exp_1e-4 seed 1: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 3.57e+15)
-!! accuracy two_exp_1e-4 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.82e+08)
-!! accuracy two_exp_1e-4 seed 4: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 2.29e+08)
-!! accuracy two_exp_1e-5 seed 0: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 1.14e+05)
-!! accuracy two_exp_1e-5 seed 1: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 8.8e+04)
-!! accuracy two_exp_1e-5 seed 2: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 9.44e+15)
-!! accuracy two_exp_1e-5 seed 3: reference_failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings') (kappa at SciPy optimum 8.9e+15)
-!! accuracy two_exp_1e-5 seed 4: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 1.12e+16)
-!! accuracy gauss3 seed 3: reference_failed: RuntimeError('mp_reference did not converge in 200 iterations') (kappa at SciPy optimum 1.98e+04)
-!! rows above are EXCLUDED from the rule; in-range ones make it UNDECIDED
+!! accuracy two_exp_1e-2 seed 0: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 1.65e+05, tsqr 1.65e+05, scipy 2.14e+16
+!!     normal_equations: failed: RuntimeError('mp_reference did not converge in 200 iterations'); tsqr: failed: RuntimeError('mp_reference did not converge in 200 iterations'); scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-2 seed 1: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 3.14e+04, tsqr 3.14e+04, scipy 3.14e+04
+!!     normal_equations: failed: RuntimeError('mp_reference did not converge in 200 iterations'); tsqr: failed: RuntimeError('mp_reference did not converge in 200 iterations'); scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-2 seed 2: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 1.39e+15, tsqr 4.85e+15, scipy 1.99e+16
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-2 seed 3: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 1.18e+16, tsqr 2.78e+15, scipy 1.6e+16
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-2 seed 4: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 2.43e+15, tsqr 2.54e+15, scipy 1.02e+16
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-3 seed 0: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 2.05e+16, tsqr 1.41e+16, scipy 1.94e+07
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-3 seed 1: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 1.58e+08, tsqr 1.58e+08, scipy 6.95e+05
+!!     normal_equations: failed: RuntimeError('mp_reference did not converge in 200 iterations'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-3 seed 2: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 3.43e+15, tsqr 8.76e+15, scipy 2.09e+15
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-3 seed 3: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 4.1e+15, tsqr 2.81e+15, scipy 3.84e+06
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-3 seed 4: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 2.21e+15, tsqr 6.15e+15, scipy 3.36e+08
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-4 seed 1: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 4.79e+15, tsqr 1.13e+16, scipy 3.57e+15
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-4 seed 3: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 1.03e+16, tsqr 3.14e+15, scipy 1.82e+08
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-4 seed 4: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 5.02e+15, tsqr 1.43e+15, scipy 2.29e+08
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-5 seed 0: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 4.05e+15, tsqr 5.24e+15, scipy 1.14e+05
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-5 seed 1: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 8.8e+04, tsqr 8.8e+04, scipy 8.8e+04
+!!     normal_equations: failed: RuntimeError('mp_reference did not converge in 200 iterations'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! accuracy two_exp_1e-5 seed 2: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 2.88e+05, tsqr 2.88e+05, scipy 9.44e+15
+!!     normal_equations: failed: RuntimeError('mp_reference did not converge in 200 iterations'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-5 seed 3: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 1.49e+15, tsqr 1.27e+16, scipy 8.9e+15
+!!     normal_equations: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy two_exp_1e-5 seed 4: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 4.56e+05, tsqr 4.56e+05, scipy 1.12e+16
+!!     normal_equations: failed: RuntimeError('mp_reference did not converge in 200 iterations'); tsqr: failed: RuntimeError('mp_reference did not converge in 200 iterations'); scipy: failed: RuntimeError('mp_reference stalled: no decrease after 60 halvings')
+!! accuracy gauss3 seed 3: reference_failed -- excluded (kappa > 1e4 at every solver's solution)
+!!     kappa at solutions: normal_equations 1.98e+04, tsqr 1.98e+04, scipy 1.98e+04
+!!     normal_equations: failed: RuntimeError('mp_reference did not converge in 200 iterations'); tsqr: skipped: duplicate of normal_equations; scipy: failed: RuntimeError('mp_reference did not converge in 200 iterations')
+!! eligible failed rows and in-range mismatches make the verdict UNDECIDED
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-6 accuracy row(s) above kappa 1e4 with basin mismatch
+7 accuracy row(s) above kappa 1e4 with basin mismatch
 
 == accuracy set: worst end-to-end errors versus mpmath reference ==
 problem        rows  kappa max  candidate         param_err    cov_err rank!= basin! terminations
 two_exp_1e-1      5   5.06e+04  normal_equations   9.88e-05   0.000247      0      0 ftol
 two_exp_1e-1      5   5.06e+04  tsqr               9.88e-05   0.000247      0      0 ftol
 two_exp_1e-1      5   5.06e+04  scipy                  12.8          1      1      1 2,3
-two_exp_1e-4      1    8.8e+04  normal_equations      0.123      0.325      0      1 max_nfev
-two_exp_1e-4      1    8.8e+04  tsqr                  0.123      0.325      0      1 max_nfev
-two_exp_1e-4      1    8.8e+04  scipy                 0.421       1.39      0      1 0
+two_exp_1e-4      2    8.8e+04  normal_equations   1.86e+04          1      1      2 ftol,max_nfev
+two_exp_1e-4      2    8.8e+04  tsqr               1.86e+04          1      1      2 ftol,max_nfev
+two_exp_1e-4      2    8.8e+04  scipy                 0.421       1.39      0      1 0,3
 poly8             5      7e+05  normal_equations   7.37e-05   4.96e-06      0      0 ftol,gtol
 poly8             5      7e+05  tsqr               7.37e-05   6.17e-12      0      0 ftol,gtol
 poly8             5      7e+05  scipy              1.55e-09   2.37e-12      0      0 3
@@ -86,6 +186,7 @@ two_exp_1e-1      1  8.54e+03 |  1.96e-06/ 4.73e-06 |  1.96e-06/ 4.74e-06 |  1.6
 two_exp_1e-1      2  2.67e+04 |  1.33e-05/ 3.10e-05 |  1.33e-05/ 3.10e-05 |  1.08e-11/ 3.21e-10 |  1.55e-11/ 5.59e-13 | 1.23e-11/2.51e-12
 two_exp_1e-1      3  2.17e+04 |  9.88e-05/ 2.47e-04 |  9.88e-05/ 2.47e-04 |  1.42e-11/ 6.44e-08 |  2.76e-13/ 1.53e-13 | 2.20e-11/1.99e-12
 two_exp_1e-1      4   2.1e+04 |  7.35e-06/ 1.80e-05 |  7.35e-06/ 1.79e-05 |  8.24e-13/ 4.65e-07 |  2.84e-12/ 2.83e-13 | 6.50e-12/4.09e-12
+two_exp_1e-4      0  6.44e+04 |  1.86e+04/ 1.00e+00 |  1.86e+04/ 1.00e+00 |  9.93e-13/ 1.25e-14 |  1.51e-12/ 1.59e-15 | 3.88e+19/3.88e+19
 two_exp_1e-4      2   8.8e+04 |  1.23e-01/ 3.25e-01 |  1.23e-01/ 3.25e-01 |  5.63e-10/ 4.11e-06 |  3.78e-11/ 4.74e-13 | 1.17e-07/2.98e-11
 poly8             0     7e+05 |  7.37e-05/ 4.96e-06 |  7.37e-05/ 5.80e-12 |  1.53e-10/ 4.96e-06 |  5.35e-11/ 6.15e-12 | 4.70e-10/5.36e-11
 poly8             1     7e+05 |  6.19e-06/ 4.96e-06 |  6.20e-06/ 6.16e-12 |  1.34e-10/ 4.96e-06 |  4.97e-11/ 6.15e-12 | 5.33e-10/5.33e-11
@@ -102,5 +203,6 @@ gauss3            1  2.68e+04 |  1.30e-06/ 8.37e-06 |  1.30e-06/ 8.38e-06 |  2.6
 gauss3            2  2.31e+04 |  2.36e-06/ 1.37e-05 |  2.36e-06/ 1.37e-05 |  5.52e-15/ 8.92e-09 |  1.42e-14/ 3.22e-13 | 1.24e-15/7.34e-15
 gauss3            4   3.7e+04 |  2.18e-06/ 1.65e-05 |  2.18e-06/ 1.66e-05 |  1.27e-13/ 1.30e-07 |  2.74e-14/ 6.36e-13 | 3.58e-14/1.45e-14
 
+literal verdict (pre-registered rule, unmodified): tsqr_default
 premise: TSQR meets the same criteria on 0/1 rows with kappa <= 1e4
 verdict = tsqr_default -- stopping-limited / undecided (TSQR fails the same rows: two_exp_1e-1 seed 1)
