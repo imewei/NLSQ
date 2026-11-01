@@ -221,6 +221,27 @@ def test_zarr_like_source_without_len(data):
     np.testing.assert_array_equal(popt, ref["x"])
 
 
+class Strict(Counting):
+    """Array-like that raises ``IndexError`` on a slice running past the end."""
+
+    def __getitem__(self, k):
+        if k.stop is not None and k.stop > self.shape[0]:
+            raise IndexError(f"slice stop {k.stop} > length {self.shape[0]}")
+        return super().__getitem__(k)
+
+
+def test_strict_array_like_last_block_clamped(data):
+    x, y = data
+    s = 0.01 * (1.0 + np.arange(N) % 7)
+    src = [Strict(a, []) for a in (x, y, s)]
+    out = lm.exact_lm_fit(
+        exp_model, src[0], src[1], EXP.p0, sigma=src[2], chunk_size=CHUNK
+    )
+    ref = lm.exact_lm_fit(exp_model, x, y, EXP.p0, sigma=s, chunk_size=CHUNK)
+    np.testing.assert_array_equal(out["x"], ref["x"])
+    assert out["cost"] == ref["cost"]
+
+
 def test_place_zarr_like_not_placed(gpu):
     z = ZarrLike(np.ones(1000), [])
     assert lm._place(z, z, None)[0] is z

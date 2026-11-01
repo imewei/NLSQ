@@ -89,7 +89,8 @@ def derive_chunk_size(
     An explicit positive ``chunk_size`` wins, clamped to ``n``. Otherwise ``1 << 22``,
     reduced so ``chunk * p * 8 B * 4`` fits ``memory_limit_gb`` (GiB) with a soft floor of
     1024 points (``n`` if ``n < 1024``). Raises ``ValueError`` if even the floor chunk does
-    not fit the budget.
+    not fit the budget. The budget goes to chunk workspace first; :func:`_place` puts
+    in-memory data on a device under a limit only if data plus workspace also fits.
     """
     if chunk_size is not None:
         if chunk_size <= 0:
@@ -152,11 +153,14 @@ def _source_len(a: Any) -> int:
     return int(a.shape[0]) if hasattr(a, "shape") else len(a)
 
 
-def _block(a: Any, s: int, chunk: int) -> Any:
-    """Float64 slice ``a[s:s+chunk]``: a host view if already float64, on device for JAX."""
+def _block(a: Any, s: int, e: int) -> Any:
+    """Float64 slice ``a[s:e]``: a host view if already float64, on device for JAX.
+
+    Callers keep ``e <= len(a)``: a strict array-like may raise on a slice past the end.
+    """
     if isinstance(a, jax.Array):
-        return jnp.asarray(a[s : s + chunk], dtype=jnp.float64)
-    return np.asarray(a[s : s + chunk], dtype=np.float64)
+        return jnp.asarray(a[s:e], dtype=jnp.float64)
+    return np.asarray(a[s:e], dtype=np.float64)
 
 
 def iter_blocks(
@@ -164,7 +168,7 @@ def iter_blocks(
 ) -> Iterator[tuple[Any, Any, Any, jax.Array]]:
     """Yield equal-shape float64 ``(x, y, sigma, mask)`` chunks of array-like inputs.
 
-    Every source is read by slice ``a[s:s+chunk]``, in order, never whole and never
+    Every source is read by slice ``a[s:min(s+chunk, n)]``, in order, never whole and never
     shuffled: host float64 arrays give views, lazy sources (memmap, HDF5, Zarr) read one
     chunk, and JAX arrays stay on their device. The tail
     is edge-padded (a padded row has the finiteness of a real row) and masked out; a
@@ -174,8 +178,9 @@ def iter_blocks(
     n = _source_len(source_x)
     full = jnp.ones(chunk, dtype=bool)
     for s in range(0, n, chunk):
-        xc, yc = _block(source_x, s, chunk), _block(source_y, s, chunk)
-        sc = None if source_sigma is None else _block(source_sigma, s, chunk)
+        e = min(s + chunk, n)
+        xc, yc = _block(source_x, s, e), _block(source_y, s, e)
+        sc = None if source_sigma is None else _block(source_sigma, s, e)
         m = xc.shape[0]
         if m == chunk:
             yield xc, yc, sc, full
@@ -683,6 +688,9 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     reads every point once; the first-chunk model probe reads one extra chunk of ``x``.
     They are never converted or placed on a device whole; ``memory_limit_gb`` caps the
     resident data plus chunk workspace when an in-memory array is placed on a device.
+    The chunk is sized from that budget first, so under a limit whole-array placement
+    happens only when data plus workspace fit (in practice, small inputs). A
+    ``jax.Array`` already on a device stays there regardless of the limit.
 
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
     that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,

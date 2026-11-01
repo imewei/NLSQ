@@ -21,10 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `h5py.Dataset`, `zarr.Array` or any array-like with `shape`, `len` and slicing.
     They are validated from `shape`, read by slice one chunk at a time in order (no
     whole-array copy, no shuffle, no device placement), so each pass reads the data
-    exactly once, plus one chunk of `xdata` for the model probe. Non-finite data in any
-    chunk is caught during the first pass. In-memory arrays are placed on an accelerator
-    only if they fit 50% of free device memory and, with `memory_limit_gb`, the data plus
-    chunk workspace fit that budget.
+    exactly once, plus one chunk of `xdata` for the model probe. With the default
+    `check_finite=True`, non-finite `xdata`/`ydata` in any chunk is caught during the
+    first pass. In-memory arrays are placed on an accelerator only if they fit 50% of
+    free device memory and, with `memory_limit_gb`, the data plus chunk workspace fit
+    that budget; the chunk is sized from the budget first, so under a limit placement
+    happens only for small inputs. A `jax.Array` already on a device stays there.
   - **Weights:** 1-D `sigma` (per-point standard deviations, residuals `(y - f)/sigma`
     as in `curve_fit`) is supported; `absolute_sigma` selects whether `pcov` is scaled
     by the weighted residual variance. A `sigma` that is not 1-D (correlated 2-D
