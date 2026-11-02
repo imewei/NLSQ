@@ -7,7 +7,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq.streaming.normal_equations import NormalEquations, make_chunk_stats, run_pass
+from nlsq.streaming.normal_equations import (
+    _SMALL_P,
+    NormalEquations,
+    _gradient_and_gauss_newton_hessian,
+    make_chunk_stats,
+    run_pass,
+)
 
 RTOL = 1e-8
 ATOL = 1e-10
@@ -123,3 +129,13 @@ def test_custom_jacobian_weighted_matches_default():
     np.testing.assert_allclose(hook.H, ref.H, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(hook.g, ref.g, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(hook.cost, ref.cost, rtol=RTOL, atol=ATOL)
+
+
+@pytest.mark.parametrize("p", [1, 2, 3, _SMALL_P - 1, _SMALL_P, 12])
+def test_gradient_and_hessian_match_dense_for_every_width(p):
+    """Both branches (fused sum for p < _SMALL_P, dot otherwise) give J^T r and J^T J."""
+    rng = np.random.default_rng(p)
+    J, r = rng.normal(size=(257, p)), rng.normal(size=257)
+    g, H = jax.jit(_gradient_and_gauss_newton_hessian)(jnp.asarray(J), jnp.asarray(r))
+    np.testing.assert_allclose(np.asarray(g), J.T @ r, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(np.asarray(H), J.T @ J, rtol=RTOL, atol=ATOL)

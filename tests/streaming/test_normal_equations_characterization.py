@@ -496,3 +496,12 @@ def test_accumulate_pass_on_chunk_called():
     _assert_close(JTJ, ref[0])
     _assert_close(JTr, ref[1])
     _assert_close(rss, ref[2])
+
+
+def test_normal_equations_kernel_is_reused_across_passes():
+    """A rebuilt kernel would retrace and recompile every chunk (CPU hot path)."""
+    opt, (x, y), p0_norm = _setup(_config("loop", chunk=6000))
+    opt._accumulate_pass(p0_norm, x, y)
+    ne = opt._get_normal_eq()
+    opt._accumulate_pass(p0_norm + 0.01, x, y)
+    assert opt._get_normal_eq() is ne

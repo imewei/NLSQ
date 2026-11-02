@@ -646,9 +646,10 @@ class AdaptiveHybridStreamingOptimizer:
             _logger.debug("Scan-based accumulation enabled for Phase 2")
 
     def _use_scan_for_accumulation(self) -> bool:
-        """Determine whether to use JAX scan or Python loops for chunk accumulation.
+        """Determine whether to use JAX scan or Python loops for the cost evaluation.
 
         Returns True if JAX lax.scan should be used, False for Python loops.
+        (J^T J accumulation does not consult this: it is always the chunk loop.)
 
         The decision is based on:
         - config.loop_strategy: 'auto', 'scan', or 'loop'

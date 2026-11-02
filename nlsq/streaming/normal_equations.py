@@ -34,6 +34,29 @@ class PassStats(NamedTuple):
     )
 
 
+_SMALL_P = 6  # below this, a fused product-sum beats the jitted dot (measured)
+
+
+def _gradient_and_gauss_newton_hessian(
+    J: jax.Array, r: jax.Array
+) -> tuple[jax.Array, jax.Array]:
+    """``(J^T r, J^T J)`` of a masked ``(n, p)`` Jacobian and its residual.
+
+    For ``p < _SMALL_P`` the two contractions are a fused multiply-and-sum over the
+    rows. Inside ``jit``, XLA folds the transpose into the dot and, for this skinny
+    ``(n, p)`` shape, emits a loop that is 2-4x slower than the same dot run eagerly
+    (CPU, p = 2-3, n = 1e5-1e6), and the fused reduction is 1.2-6x faster than either;
+    on GPU it is 2-6x faster at p <= 5 but 3x slower at p = 30. Wider Jacobians use
+    the dot, which XLA runs well there.
+    """
+    if J.shape[1] < _SMALL_P:
+        return (
+            jnp.sum(J * r[:, None], axis=0),
+            jnp.sum(J[:, :, None] * J[:, None, :], axis=0),
+        )
+    return J.T @ r, J.T @ J
+
+
 def make_chunk_stats(
     model: Callable[..., Any],
     weighted: bool = False,
@@ -66,7 +89,7 @@ def make_chunk_stats(
 
             r = jnp.where(mask, (y - f(theta)) / s, 0.0)
             J = jnp.where(mask[:, None], jac(f, theta, x) / s[:, None], 0.0)
-            return 0.5 * jnp.sum(r * r), J.T @ r, J.T @ J
+            return 0.5 * jnp.sum(r * r), *_gradient_and_gauss_newton_hessian(J, r)
 
         return jax.jit(wstats)
 
@@ -78,7 +101,7 @@ def make_chunk_stats(
 
         r = jnp.where(mask, y - f(theta), 0.0)
         J = jnp.where(mask[:, None], jac(f, theta, x), 0.0)
-        return 0.5 * jnp.sum(r * r), J.T @ r, J.T @ J
+        return 0.5 * jnp.sum(r * r), *_gradient_and_gauss_newton_hessian(J, r)
 
     return jax.jit(stats)
 
