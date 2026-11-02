@@ -2,8 +2,8 @@
 
 Pins, for each of the 13 places that construct ``AdaptiveHybridStreamingOptimizer``
 (the "hybrid" engine) or ``LargeDatasetFitter`` (the "chunked" engine), what a
-given (entry point, kwargs) builds: which class, the constructor arguments that
-matter (config values, forwarded or dropped tolerances), how the engine's fit
+given (entry point, kwargs) builds: which class, the whole constructor argument
+set, the config values (forwarded or dropped tolerances), how the engine's fit
 method is called, and what the entry point returns. It is the safety net for
 moving those construction sites behind ``build_large_strategy``: the rows must
 keep passing unchanged.
@@ -13,7 +13,16 @@ classes (not module attributes), so it sees construction wherever the classes
 are imported from. Arguments are normalised through the real signatures, so a
 positional-vs-keyword change at a call site does not matter, but an added,
 dropped or changed value does. Rows that would run a long fit stub the engine's
-fit with a recognisable sentinel; the ``*_real`` rows run the real fit.
+fit with sentinels whose fields all differ (``x`` vs ``popt``, hybrid vs chunked
+``pcov``), so a wrong extraction fails; ``*real*`` rows run the real fit.
+
+What a row catches in a refactor: a different class or a class built twice; a
+hardcoded or dropped forwarded kwarg (``absolute_sigma``, ``sigma``, ``callback``,
+bounds, tolerances, ``check_finite``, ``method``, extra solver kwargs); a config
+swapped for a copy (or the reverse) or mutated in place (configs are
+deep-copied when recorded and the caller's config is compared before/after);
+list/tuple/ndarray conversions (``same`` is strict about container types); and
+dropped result metadata or identity of results the production code returns as-is.
 
 Public vs direct: every ``WORKFLOW_PRESETS`` key is rejected before
 ``_fit_with_preset`` (see ``test_legacy_preset_keys_rejected_publicly``), so its
@@ -24,11 +33,13 @@ directly and ``test_fitter_fit_never_builds_hybrid`` pins that it stays unwired.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import inspect
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import jax.numpy as jnp
@@ -36,6 +47,7 @@ import numpy as np
 import pytest
 
 import nlsq
+from nlsq.config import get_memory_config
 from nlsq.core import minpack
 from nlsq.core.workflow import (
     MemoryBudgetSelector,
@@ -86,8 +98,29 @@ FAST_HYBRID = {
     "gauss_newton_max_iterations": 5,
 }
 
-SENT_X = np.array([7.0, 8.0])
-SENT_PCOV = 3.0 * np.eye(2)
+# Sentinels: every field of the two engines' stub results differs, so taking
+# x where popt is expected (or the reverse), or the wrong pcov, fails.
+HYB_X = np.array([7.0, 8.0])
+HYB_PCOV = np.array([[13.0, 1.0], [1.0, 17.0]])
+HYB_FUN = np.array([0.5, -0.25, 0.125])
+HYB_PERR = np.array([3.5, 4.5])
+HYB_META = {
+    "success": True,
+    "message": "hybrid-stub",
+    "fun": HYB_FUN,
+    "perr": HYB_PERR,
+    "streaming_diagnostics": {"marker": "hybrid-diag"},
+    "nfev": 42,
+}
+FIT_X = np.array([21.0, 22.0])
+FIT_POPT = np.array([23.0, 24.0])
+FIT_PCOV = np.array([[29.0, 2.0], [2.0, 31.0]])
+FIT_META = {
+    "success": True,
+    "message": "fitter-stub",
+    "marker": "fitter-meta",
+    "execution_time": 0.123,
+}
 
 
 def MODEL(x, a, b):
@@ -103,14 +136,17 @@ def MODEL(x, a, b):
 class Call:
     engine: str
     method: str
-    named: dict[str, Any]
+    named: dict[str, Any]  # live references, exactly as the call site passed them
     extra: dict[str, Any]  # the **kwargs the call site forwarded
+    configs: dict[str, Any]  # deep copies of dataclass args taken at call time
+    ambient: dict[str, Any]  # nlsq memory config in effect at call time
 
 
 @dataclass
 class Recorder:
     calls: list[Call] = field(default_factory=list)
     stubs: dict[str, Callable[[], Any]] = field(default_factory=dict)
+    last_result: Any = None  # what the stubbed engine fit last returned
 
     def ctors(self, engine: str | None = None) -> list[Call]:
         return [
@@ -140,9 +176,16 @@ def _wrap(rec: Recorder, engine: str, method: str, real: Callable) -> Callable:
                 extra.update(value)
             else:
                 named[name] = value
-        rec.calls.append(Call(engine, method, named, extra))
+        configs = {
+            k: copy.deepcopy(v)
+            for k, v in named.items()
+            if dataclasses.is_dataclass(v) and not isinstance(v, type)
+        }
+        ambient = dataclasses.asdict(get_memory_config())
+        rec.calls.append(Call(engine, method, named, extra, configs, ambient))
         if method != "__init__" and engine in rec.stubs:
-            return rec.stubs[engine]()
+            rec.last_result = rec.stubs[engine]()  # a stub may raise
+            return rec.last_result
         return real(self, *args, **kwargs)
 
     return wrapper
@@ -159,44 +202,62 @@ def rec(monkeypatch) -> Recorder:
 
 
 def hybrid_ok() -> dict[str, Any]:
-    return {"x": SENT_X.copy(), "success": True, "message": "stub", "pcov": SENT_PCOV}
+    return {
+        "x": HYB_X.copy(),
+        "pcov": HYB_PCOV.copy(),
+        **copy.deepcopy(HYB_META),
+    }
 
 
 def hybrid_no_pcov() -> dict[str, Any]:
-    return {"x": SENT_X.copy(), "success": True, "message": "stub"}
+    result = hybrid_ok()
+    del result["pcov"]
+    return result
+
+
+def hybrid_failed() -> dict[str, Any]:
+    return {**hybrid_ok(), "success": False}
 
 
 def fitter_ok() -> OptimizeResult:
     return OptimizeResult(
-        x=SENT_X.copy(),
-        popt=SENT_X.copy(),
-        pcov=SENT_PCOV,
-        success=True,
-        message="stub",
+        x=FIT_X.copy(), popt=FIT_POPT.copy(), pcov=FIT_PCOV.copy(), **FIT_META
     )
 
 
 def fitter_x_only() -> OptimizeResult:
-    return OptimizeResult(x=SENT_X.copy(), success=True, message="stub")
+    return OptimizeResult(x=FIT_X.copy(), success=True, message="fitter-stub")
+
+
+def fitter_curve_fit_result() -> CurveFitResult:
+    return CurveFitResult(fitter_ok())
 
 
 def fitter_failed() -> OptimizeResult:
-    return OptimizeResult(x=SENT_X.copy(), success=False, message="boom")
+    return OptimizeResult(x=FIT_X.copy(), success=False, message="boom")
 
 
 def same(a: Any, b: Any) -> bool:
-    """Equality that understands arrays, tuples and dicts (and identity of None)."""
+    """Strict equality: arrays by value, but list/tuple/ndarray and scalar types
+    must match, so a changed conversion shows up."""
     if a is None or b is None:
         return a is b
     if isinstance(a, dict) and isinstance(b, dict):
         return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
-    if isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
-        return len(a) == len(b) and all(same(i, j) for i, j in zip(a, b, strict=True))
-    if hasattr(a, "shape") or hasattr(b, "shape"):
-        return np.shape(a) == np.shape(b) and bool(
-            np.array_equal(np.asarray(a), np.asarray(b))
+    if isinstance(a, (tuple, list)) or isinstance(b, (tuple, list)):
+        return (
+            type(a) is type(b)
+            and len(a) == len(b)
+            and all(same(i, j) for i, j in zip(a, b, strict=True))
         )
-    return bool(a == b)
+    if hasattr(a, "shape") or hasattr(b, "shape"):
+        return (
+            hasattr(a, "shape")
+            and hasattr(b, "shape")
+            and np.shape(a) == np.shape(b)
+            and bool(np.array_equal(np.asarray(a), np.asarray(b)))
+        )
+    return type(a) is type(b) and bool(a == b)
 
 
 def _short(value: Any) -> str:
@@ -204,7 +265,7 @@ def _short(value: Any) -> str:
         return "{" + ", ".join(f"{k!r}: {_short(v)}" for k, v in value.items()) + "}"
     if hasattr(value, "shape") and np.size(value) > 6:
         return f"<array shape={np.shape(value)} first={np.ravel(value)[:3]}>"
-    return repr(value)
+    return f"{value!r}:{type(value).__name__}"
 
 
 def expect(actual: Any, expected: Any, what: str) -> None:
@@ -219,17 +280,72 @@ def expect_config(actual: Any, expected: Any, what: str) -> None:
     expect(dataclasses.asdict(actual), dataclasses.asdict(expected), what)
 
 
+def snap(config: Any) -> dict[str, Any]:
+    return copy.deepcopy(dataclasses.asdict(config))
+
+
+def expect_unchanged(config: Any, snapshot: dict[str, Any], what: str) -> None:
+    expect(dataclasses.asdict(config), snapshot, f"{what} (caller's config mutated)")
+
+
+def expect_hybrid_ctor(rec: Recorder, expected_config: Any, what: str) -> Call:
+    (ctor,) = rec.ctors(HYBRID)
+    assert set(ctor.named) == {"config"}
+    expect_config(ctor.configs["config"], expected_config, what)
+    return ctor
+
+
+_FITTER_CTOR_DEFAULTS = {
+    "curve_fit_class": None,
+    "logger": None,
+    "multistart": False,
+    "n_starts": 10,
+    "sampler": "lhs",
+}
+
+
+def expect_fitter_ctor(
+    rec: Recorder, *, memory_limit_gb: Any, config: Any, **overrides: Any
+) -> Call:
+    """The whole recorded constructor argument set (config compared by value)."""
+    (ctor,) = rec.ctors(FITTER)
+    named = dict(ctor.named)
+    named.pop("config")
+    expected = {
+        "memory_limit_gb": memory_limit_gb,
+        **_FITTER_CTOR_DEFAULTS,
+        **overrides,
+    }
+    expect(named, expected, "LargeDatasetFitter ctor args")
+    if config is None:
+        assert ctor.named["config"] is None
+    else:
+        expect_config(ctor.configs["config"], config, "LargeDatasetFitter config")
+    return ctor
+
+
 def expect_hybrid_fit(
     call: Call,
     *,
     p0: Any,
     bounds: Any,
     sigma: Any,
+    sigma_is: bool = False,
     absolute_sigma: bool = False,
     callback: Any = None,
     verbose: int = 1,
 ) -> None:
     n = call.named
+    assert set(n) == {
+        "data_source",
+        "func",
+        "p0",
+        "bounds",
+        "sigma",
+        "absolute_sigma",
+        "callback",
+        "verbose",
+    }
     assert isinstance(n["data_source"], tuple) and len(n["data_source"]) == 2
     expect(n["data_source"][0], X, "hybrid data_source x")
     expect(n["data_source"][1], Y, "hybrid data_source y")
@@ -237,20 +353,59 @@ def expect_hybrid_fit(
     expect(n["p0"], p0, "hybrid p0")
     expect(n["bounds"], bounds, "hybrid bounds")
     expect(n["sigma"], sigma, "hybrid sigma")
+    if sigma_is:
+        assert n["sigma"] is sigma
     assert n["absolute_sigma"] is absolute_sigma
     assert n["callback"] is callback
     assert n["verbose"] == verbose
-    assert call.extra == {}
+    assert call.extra == {}  # nothing else (no ftol/xtol/gtol) reaches the engine
 
 
-def expect_curve_fit_result(result: Any, *, pcov: Any) -> None:
-    """The hand-off shape of the _fit_with_* helpers: result + model/xdata/ydata."""
+def expect_fitter_fit(
+    call: Call,
+    *,
+    p0: Any,
+    bounds: Any,
+    method: str,
+    extra: dict[str, Any],
+    p0_is: bool = False,
+    bounds_is: bool = False,
+    solver: str = "auto",
+) -> None:
+    n = call.named
+    assert set(n) == {"f", "xdata", "ydata", "p0", "bounds", "method", "solver"}
+    assert n["f"] is MODEL
+    expect(n["xdata"], X, "fitter xdata")
+    expect(n["ydata"], Y, "fitter ydata")
+    expect(n["p0"], p0, "fitter p0")
+    expect(n["bounds"], bounds, "fitter bounds")
+    if p0_is:
+        assert n["p0"] is p0
+    if bounds_is:
+        assert n["bounds"] is bounds
+    assert n["method"] == method
+    assert n["solver"] == solver
+    expect(call.extra, extra, "forwarded fit kwargs")
+    for key in ("sigma", "gtol"):  # identity of array/py objects passed through
+        if key in extra and isinstance(extra[key], np.ndarray):
+            assert call.extra[key] is extra[key]
+
+
+def expect_curve_fit_result(
+    result: Any, *, x: Any, pcov: Any, meta: dict[str, Any], model: bool = True
+) -> None:
+    """Hand-off of the _fit_with_* helpers: engine result + model/xdata/ydata."""
     assert isinstance(result, CurveFitResult)
-    assert result["model"] is MODEL
-    expect(result["xdata"], X, "result xdata")
-    expect(result["ydata"], Y, "result ydata")
-    expect(result["x"], SENT_X, "result x")
+    if model:
+        assert result["model"] is MODEL
+        expect(result["xdata"], X, "result xdata")
+        expect(result["ydata"], Y, "result ydata")
+    else:
+        assert "model" not in result
+    expect(result["x"], x, "result x")
     expect(result["pcov"], pcov, "result pcov")
+    for key, value in meta.items():  # engine metadata survives the hand-off
+        expect(result[key], value, f"result[{key!r}]")
 
 
 def close_to_truth(popt: Any) -> None:
@@ -265,13 +420,19 @@ def close_to_truth(popt: Any) -> None:
 @dataclass(frozen=True)
 class Row:
     id: str
-    site: str  # construction site this row exercises (function; see report)
+    site: str  # construction site (enclosing function) this row exercises
     engine: str | None  # class that must be built exactly once; None = neither
-    drive: Callable[[], Any]
-    check: Callable[[Recorder, Any], None]
+    drive: Callable[[SimpleNamespace], Any]
+    check: Callable[[Recorder, Any, SimpleNamespace], None]
     stubs: dict[str, Callable[[], Any]] = field(default_factory=dict)
     # Constructions the drive function itself performs before the routed one.
     prebuilt: tuple[str, ...] = ()
+    marks: tuple[Any, ...] = ()
+
+
+SLOW = (pytest.mark.slow,)
+# Enters nlsq.config.memory_context/large_dataset_context (process-global state).
+SERIAL = (pytest.mark.serial,)
 
 
 def _call_preset(key: str, *, n_points: int = N, **overrides: Any) -> Any:
@@ -293,29 +454,53 @@ def _call_preset(key: str, *, n_points: int = N, **overrides: Any) -> Any:
     return minpack._fit_with_preset(**args)
 
 
-# ---- nlsq/__init__.py::fit (preset="streaming") --------------------------
+# ---- nlsq.fit (preset="streaming") ----------------------------------------
 
 
-def _drive_fit_preset_streaming(**kw: Any) -> Any:
+def _drive_fit_preset_streaming(ctx: SimpleNamespace, **kw: Any) -> Any:
     with pytest.warns(FutureWarning, match="preset"):
         return nlsq.fit(MODEL, X, Y, p0=P0, preset="streaming", **kw)
 
 
-def _check_fit_preset_streaming(rec: Recorder, result: Any) -> None:
-    # gtol/ftol are dropped on this route (no config field is set from them);
-    # only the multistart settings reach the config.
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
+def _drive_fit_preset_streaming_full(ctx: SimpleNamespace) -> Any:
+    return _drive_fit_preset_streaming(
+        ctx,
+        sigma=SIG,
+        absolute_sigma=True,
+        bounds=FINITE_BOUNDS,
+        callback=_CALLBACK,
+        verbose=0,
+        multistart=True,
+        n_starts=4,
+        sampler="sobol",
+        gtol=1e-3,
+        ftol=1e-3,
+        xtol=1e-3,
+    )
+
+
+def _check_fit_preset_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
+    # gtol/ftol/xtol are dropped on this route; only multistart settings reach
+    # the config, and sigma/absolute_sigma/callback/verbose/bounds reach fit().
+    expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(
             enable_multistart=True, n_starts=4, multistart_sampler="sobol"
         ),
         "fit(preset=streaming) config",
     )
-    expect_hybrid_fit(rec.only_fit(HYBRID), p0=np.array(P0), bounds=None, sigma=SIG)
-    assert isinstance(result, CurveFitResult)
-    expect(result["x"], SENT_X, "x")
-    expect(result["pcov"], SENT_PCOV, "pcov")
-    assert "model" not in result  # this route does not attach model/xdata/ydata
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        sigma_is=True,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
+    )
+    # No model/xdata/ydata on this route; engine metadata is kept.
+    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META, model=False)
     expect(
         result["multistart_diagnostics"],
         {"n_starts_configured": 4, "bypassed": False, "preset": "streaming"},
@@ -323,12 +508,13 @@ def _check_fit_preset_streaming(rec: Recorder, result: Any) -> None:
     )
 
 
-def _check_fit_preset_streaming_off(rec: Recorder, result: Any) -> None:
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
+def _check_fit_preset_streaming_off(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(enable_multistart=False, n_starts=10),
         "multistart=False config",
     )
+    expect_hybrid_fit(rec.only_fit(HYBRID), p0=np.array(P0), bounds=None, sigma=None)
     expect(
         result["multistart_diagnostics"],
         {"n_starts_configured": 10, "bypassed": True, "preset": "streaming"},
@@ -336,23 +522,25 @@ def _check_fit_preset_streaming_off(rec: Recorder, result: Any) -> None:
     )
 
 
-# ---- nlsq/__init__.py::curve_fit_large ------------------------------------
+# ---- nlsq.curve_fit_large --------------------------------------------------
 
 
-def _drive_clf_hybrid(**kw: Any) -> Any:
+def _drive_clf_hybrid(ctx: SimpleNamespace, **kw: Any) -> Any:
     return nlsq.curve_fit_large(
         MODEL, X, Y, p0=P0, method="hybrid_streaming", verbose=0, **FAST_HYBRID, **kw
     )
 
 
-def _check_clf_hybrid_real(rec: Recorder, result: Any) -> None:
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
-        HybridStreamingConfig(**FAST_HYBRID),
-        "curve_fit_large(hybrid_streaming) config",
+def _check_clf_hybrid_real(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(
+        rec, HybridStreamingConfig(**FAST_HYBRID), "curve_fit_large hybrid config"
     )
     expect_hybrid_fit(
-        rec.only_fit(HYBRID), p0=np.array(P0), bounds=None, sigma=None, verbose=0
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=None,
+        sigma=None,
+        verbose=0,
     )
     # A (popt, pcov) tuple of arrays, not a result object.
     assert type(result) is tuple and len(result) == 2
@@ -360,39 +548,65 @@ def _check_clf_hybrid_real(rec: Recorder, result: Any) -> None:
     assert np.asarray(result[1]).shape == (2, 2) and np.all(np.isfinite(result[1]))
 
 
-def _check_clf_hybrid_stub(rec: Recorder, result: Any) -> None:
+def _drive_clf_hybrid_full(ctx: SimpleNamespace) -> Any:
+    return _drive_clf_hybrid(ctx, sigma=SIG, absolute_sigma=True, bounds=FINITE_BOUNDS)
+
+
+def _check_clf_hybrid_stub(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(
+        rec, HybridStreamingConfig(**FAST_HYBRID), "curve_fit_large hybrid config"
+    )
+    # callback is not accepted on this route, so the engine always gets None.
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        sigma_is=True,
+        absolute_sigma=True,
+        verbose=0,
+    )
     assert type(result) is tuple and len(result) == 2
-    expect(result[0], SENT_X, "popt")
-    expect(result[1], SENT_PCOV, "pcov")
+    assert result[0] is rec.last_result["x"]  # engine's arrays, unwrapped
+    assert result[1] is rec.last_result["pcov"]
 
 
-def _check_clf_hybrid_no_pcov(rec: Recorder, result: Any) -> None:
-    expect(result[0], SENT_X, "popt")
+def _check_clf_hybrid_no_pcov(rec: Recorder, result: Any, ctx: Any) -> None:
+    assert type(result) is tuple and len(result) == 2
+    assert result[0] is rec.last_result["x"]
     expect(result[1], np.full((2, 2), np.inf), "pcov fallback is all-inf")
 
 
-def _drive_clf_chunked(**kw: Any) -> Any:
+def _drive_clf_chunked(ctx: SimpleNamespace, **kw: Any) -> Any:
     return nlsq.curve_fit_large(MODEL, X, Y, p0=P0, size_threshold=100, **kw)
 
 
-def _check_clf_chunked_real(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
-    # The constructor gets the limit and a config only: multistart & co. go to fit().
-    assert ctor.named["memory_limit_gb"] == 2.0
-    expect_config(
-        ctor.named["config"],
-        LDMemoryConfig(memory_limit_gb=2.0, min_chunk_size=600, max_chunk_size=600),
-        "curve_fit_large chunked config",
+def _expect_clf_ambient(call: Call, *, size: int, progress: bool) -> None:
+    # The fitter is built and run inside memory_context(chunk bounds, progress).
+    assert call.ambient["min_chunk_size"] == size
+    assert call.ambient["max_chunk_size"] == size
+    assert call.ambient["progress_reporting"] is progress
+
+
+def _check_clf_chunked_real(rec: Recorder, result: Any, ctx: Any) -> None:
+    # Ctor gets the limit and a config only: multistart & co. go to fit().
+    ctor = expect_fitter_ctor(
+        rec,
+        memory_limit_gb=2.0,
+        config=LDMemoryConfig(
+            memory_limit_gb=2.0, min_chunk_size=600, max_chunk_size=600
+        ),
     )
-    assert ctor.named["multistart"] is False and ctor.named["n_starts"] == 10
-    assert ctor.named["logger"] is None
     call = rec.only_fit(FITTER)
-    expect(call.named["p0"], np.array(P0), "p0")
-    expect(call.named["bounds"], INF_BOUNDS, "bounds")
-    assert call.named["method"] == "trf"
-    expect(
-        call.extra,
-        {
+    _expect_clf_ambient(ctor, size=600, progress=False)
+    _expect_clf_ambient(call, size=600, progress=False)
+    expect_fitter_fit(
+        call,
+        p0=P0,
+        p0_is=True,
+        bounds=INF_BOUNDS,
+        method="trf",
+        extra={
             "absolute_sigma": False,
             "check_finite": True,
             "multistart": False,
@@ -401,97 +615,213 @@ def _check_clf_chunked_real(rec: Recorder, result: Any) -> None:
             "center_on_p0": True,
             "scale_factor": 1.0,
         },
-        "forwarded fit kwargs",
     )
     assert type(result) is tuple and len(result) == 2
     close_to_truth(result[0])
     assert np.asarray(result[1]).shape == (2, 2)
 
 
-def _check_clf_chunked_args(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
-    expect_config(
-        ctor.named["config"],
-        LDMemoryConfig(memory_limit_gb=3.0, min_chunk_size=300, max_chunk_size=300),
-        "chunk_size=300 config",
+def _drive_clf_chunked_args(ctx: SimpleNamespace) -> Any:
+    return _drive_clf_chunked(
+        ctx,
+        memory_limit_gb=3.0,
+        chunk_size=300,
+        method="lm",
+        sigma=SIG,
+        absolute_sigma=True,
+        check_finite=False,
+        bounds=FINITE_BOUNDS,
+        multistart=True,
+        n_starts=5,
+        sampler="sobol",
+        center_on_p0=False,
+        scale_factor=2.0,
+        gtol=1e-3,
+        max_nfev=7,
+    )
+
+
+def _check_clf_chunked_args(rec: Recorder, result: Any, ctx: Any) -> None:
+    ctor = expect_fitter_ctor(
+        rec,
+        memory_limit_gb=3.0,
+        config=LDMemoryConfig(
+            memory_limit_gb=3.0, min_chunk_size=300, max_chunk_size=300
+        ),
     )
     call = rec.only_fit(FITTER)
-    expect(call.named["p0"], np.array(P0), "p0")
-    expect(call.named["bounds"], FINITE_BOUNDS, "bounds")
-    assert call.named["method"] == "lm"
-    expect(call.extra["sigma"], SIG, "sigma forwarded")
-    assert call.extra["absolute_sigma"] is True
-    assert call.extra["multistart"] is True and call.extra["n_starts"] == 5
-    assert call.extra["sampler"] == "sobol"
-    assert call.extra["gtol"] == 1e-3  # solver kwargs pass through untouched
-    expect(result[0], SENT_X, "popt from result.popt")
-    expect(result[1], SENT_PCOV, "pcov from result.pcov")
+    _expect_clf_ambient(ctor, size=300, progress=False)
+    _expect_clf_ambient(call, size=300, progress=False)
+    expect_fitter_fit(
+        call,
+        p0=P0,
+        p0_is=True,
+        bounds=FINITE_BOUNDS,
+        bounds_is=True,
+        method="lm",
+        extra={
+            "sigma": SIG,
+            "absolute_sigma": True,
+            "check_finite": False,
+            "multistart": True,
+            "n_starts": 5,
+            "sampler": "sobol",
+            "center_on_p0": False,
+            "scale_factor": 2.0,
+            "gtol": 1e-3,
+            "max_nfev": 7,
+        },
+    )
+    assert call.extra["sigma"] is SIG
+    assert type(result) is tuple and len(result) == 2
+    assert result[0] is rec.last_result.popt  # popt, not x
+    assert result[1] is rec.last_result.pcov
 
 
-def _check_clf_chunked_x_only(rec: Recorder, result: Any) -> None:
-    expect(result[0], SENT_X, "popt from result.x")
+def _check_clf_chunked_x_only(rec: Recorder, result: Any, ctx: Any) -> None:
+    assert type(result) is tuple and len(result) == 2
+    assert result[0] is rec.last_result.x
     expect(result[1], np.eye(2), "identity pcov when the result has none")
 
 
-def _check_clf_chunked_progress(rec: Recorder, result: Any) -> None:
+def _drive_clf_chunked_progress(ctx: SimpleNamespace) -> Any:
+    return _drive_clf_chunked(
+        ctx, memory_limit_gb=2.0, show_progress=True, chunk_size=450
+    )
+
+
+def _check_clf_chunked_progress(rec: Recorder, result: Any, ctx: Any) -> None:
     assert rec.fits(FITTER, "fit") == []
+    ctor = expect_fitter_ctor(
+        rec,
+        memory_limit_gb=2.0,
+        config=LDMemoryConfig(
+            memory_limit_gb=2.0, min_chunk_size=450, max_chunk_size=450
+        ),
+    )
     call = rec.only_fit(FITTER, "fit_with_progress")
-    assert call.named["method"] == "trf"
-    expect(result[0], SENT_X, "popt")
+    _expect_clf_ambient(ctor, size=450, progress=True)
+    _expect_clf_ambient(call, size=450, progress=True)
+    expect_fitter_fit(
+        call,
+        p0=P0,
+        p0_is=True,
+        bounds=INF_BOUNDS,
+        method="trf",
+        extra={
+            "absolute_sigma": False,
+            "check_finite": True,
+            "multistart": False,
+            "n_starts": 10,
+            "sampler": "lhs",
+            "center_on_p0": True,
+            "scale_factor": 1.0,
+        },
+    )
+    assert result[0] is rec.last_result.popt
+    assert result[1] is rec.last_result.pcov
 
 
-def _check_clf_small(rec: Recorder, result: Any) -> None:
+def _check_clf_small(rec: Recorder, result: Any, ctx: Any) -> None:
     # Below size_threshold the engine is bypassed entirely.
     assert rec.calls == []
     assert isinstance(result, CurveFitResult)
     close_to_truth(result.x)
 
 
-# ---- nlsq/streaming/large_dataset.py --------------------------------------
+# ---- nlsq.streaming.large_dataset -----------------------------------------
 
 
-def _drive_fit_large_dataset(**kw: Any) -> Any:
+def _drive_fit_large_dataset(ctx: SimpleNamespace) -> Any:
     return large_dataset.fit_large_dataset(
-        MODEL, X, Y, p0=P0, memory_limit_gb=2.0, multistart=False, n_starts=3, **kw
+        MODEL, X, Y, p0=P0, memory_limit_gb=2.0, multistart=False, n_starts=3
     )
 
 
-def _check_fit_large_dataset_real(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
-    # Constructed from loose limits, no config object; multistart is a ctor arg here.
-    expect(
-        ctor.named,
-        {
-            "memory_limit_gb": 2.0,
-            "config": None,
-            "curve_fit_class": None,
-            "logger": None,
-            "multistart": False,
-            "n_starts": 3,
-            "sampler": "lhs",
-        },
-        "fit_large_dataset ctor args",
+def _check_fit_large_dataset_real(rec: Recorder, result: Any, ctx: Any) -> None:
+    # Loose limits, no config object; multistart is a ctor arg here.
+    expect_fitter_ctor(rec, memory_limit_gb=2.0, config=None, n_starts=3)
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=P0,
+        p0_is=True,
+        bounds=INF_BOUNDS,
+        method="trf",
+        extra={},
     )
-    call = rec.only_fit(FITTER)
-    expect(call.named["p0"], P0, "p0")
-    assert call.extra == {}
     assert isinstance(result, OptimizeResult) and result.success
     close_to_truth(result.x)
 
 
-def _check_fit_large_dataset_progress(rec: Recorder, result: Any) -> None:
+def _drive_fit_large_dataset_stub(ctx: SimpleNamespace) -> Any:
+    return large_dataset.fit_large_dataset(
+        MODEL,
+        X,
+        Y,
+        p0=P0,
+        memory_limit_gb=2.0,
+        logger=_LOGGER,
+        multistart=True,
+        n_starts=3,
+        sampler="halton",
+        method="lm",
+        bounds=FINITE_BOUNDS,
+        ftol=1e-4,
+    )
+
+
+def _check_fit_large_dataset_stub(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_fitter_ctor(
+        rec,
+        memory_limit_gb=2.0,
+        config=None,
+        logger=_LOGGER,
+        multistart=True,
+        n_starts=3,
+        sampler="halton",
+    )
     (ctor,) = rec.ctors(FITTER)
-    assert ctor.named["multistart"] is True and ctor.named["n_starts"] == 3
-    assert ctor.named["sampler"] == "halton"
     assert ctor.named["logger"] is _LOGGER
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=P0,
+        p0_is=True,
+        bounds=FINITE_BOUNDS,
+        bounds_is=True,
+        method="lm",
+        extra={"ftol": 1e-4},
+    )
+    assert result is rec.last_result  # the engine's result, returned as-is
+
+
+def _drive_fit_large_dataset_progress(ctx: SimpleNamespace) -> Any:
+    return large_dataset.fit_large_dataset(
+        MODEL,
+        X,
+        Y,
+        p0=P0,
+        memory_limit_gb=2.0,
+        show_progress=True,
+        bounds=FINITE_BOUNDS,
+    )
+
+
+def _check_fit_large_dataset_progress(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_fitter_ctor(rec, memory_limit_gb=2.0, config=None)
     assert rec.fits(FITTER, "fit") == []
-    call = rec.only_fit(FITTER, "fit_with_progress")
-    expect(call.named["bounds"], FINITE_BOUNDS, "bounds passthrough")
-    assert isinstance(result, OptimizeResult)
-    expect(result.x, SENT_X, "result is the engine's, unchanged")
+    expect_fitter_fit(
+        rec.only_fit(FITTER, "fit_with_progress"),
+        p0=P0,
+        p0_is=True,
+        bounds=FINITE_BOUNDS,
+        bounds_is=True,
+        method="trf",
+        extra={},
+    )
+    assert result is rec.last_result
 
 
-def _drive_fitter_streaming(**kw: Any) -> Any:
+def _drive_fitter_streaming(ctx: SimpleNamespace) -> Any:
     # Built by hand: LargeDatasetFitter.fit never reaches _fit_with_streaming.
     fitter = _REAL[FITTER](
         config=LDMemoryConfig(
@@ -502,34 +832,44 @@ def _drive_fitter_streaming(**kw: Any) -> Any:
         MODEL,
         X,
         Y,
-        kw.get("p0", [2.0, 1.0]),
-        kw.get("bounds", FINITE_BOUNDS),
+        [2.0, 1.0],
+        FINITE_BOUNDS,
         "trf",
         "auto",
-        kw.get("show_progress", False),
+        False,
         sigma=SIG,  # accepted via **kwargs and silently unused
+        absolute_sigma=True,
+        callback=_CALLBACK,
     )
 
 
-def _check_fitter_streaming(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(HYBRID)
-    expect_config(
-        ctor.named["config"],
+def _check_fitter_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(chunk_size=123, gauss_newton_max_iterations=7),
         "_fit_with_streaming config",
     )
-    # sigma is not forwarded; bounds are passed through unprepared; verbose is 1.
+    # sigma/absolute_sigma/callback are not forwarded; bounds are passed through
+    # unprepared; verbose is 1.
     expect_hybrid_fit(
-        rec.only_fit(HYBRID), p0=np.array(P0), bounds=FINITE_BOUNDS, sigma=None
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS,
+        sigma=None,
+        verbose=1,
     )
+    assert rec.only_fit(HYBRID).named["bounds"] is FINITE_BOUNDS
+    engine = rec.last_result
     assert isinstance(result, OptimizeResult)
-    expect(result.x, SENT_X, "x")
-    expect(result.popt, SENT_X, "popt")
-    expect(result.pcov, SENT_PCOV, "pcov")
+    assert result.x is engine["x"]
+    assert result.popt is engine["x"]
+    assert result.pcov is engine["pcov"]
+    assert result.fun is engine["fun"]
+    assert result.message == "hybrid-stub"
     assert result.success is True and result.nfev == N
 
 
-def _check_fitter_streaming_failure(rec: Recorder, result: Any) -> None:
+def _check_fitter_streaming_failure(rec: Recorder, result: Any, ctx: Any) -> None:
     assert isinstance(result, OptimizeResult) and result.success is False
     assert "Streaming fit failed: kaboom" in result.message
     expect(result.x, np.array(P0), "falls back to p0")
@@ -540,164 +880,307 @@ def _raise_kaboom() -> Any:
     raise RuntimeError("kaboom")
 
 
-# ---- nlsq/core/minpack.py::_fit_with_config -------------------------------
+# ---- nlsq.core.minpack._fit_with_config -----------------------------------
 
 
-def _drive_workflow_hybrid_config(**kw: Any) -> Any:
-    config = HybridStreamingConfig(**FAST_HYBRID)
-    return nlsq.fit(MODEL, X, Y, workflow=config, verbose=0, **kw)
+def _drive_workflow_hybrid_config(ctx: SimpleNamespace, **kw: Any) -> Any:
+    ctx.config = HybridStreamingConfig(**FAST_HYBRID)
+    ctx.before = snap(ctx.config)
+    return nlsq.fit(MODEL, X, Y, workflow=ctx.config, verbose=0, **kw)
 
 
-def _check_workflow_hybrid_config(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(HYBRID)
+def _drive_workflow_hybrid_full(ctx: SimpleNamespace) -> Any:
+    return _drive_workflow_hybrid_config(
+        ctx,
+        p0=P0,
+        gtol=1e-3,
+        ftol=1e-4,
+        xtol=1e-5,
+        sigma=SIG,
+        absolute_sigma=True,
+        bounds=FINITE_BOUNDS,
+        callback=_CALLBACK,
+    )
+
+
+def _check_workflow_hybrid_config(rec: Recorder, result: Any, ctx: Any) -> None:
     # gtol is mapped into gauss_newton_tol on a *copy*; ftol/xtol have no target.
-    expect_config(
-        ctor.named["config"],
+    ctor = expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(gauss_newton_tol=1e-3, **FAST_HYBRID),
         "workflow=HybridStreamingConfig config",
     )
-    call = rec.only_fit(HYBRID)
-    expect_hybrid_fit(call, p0=np.ones(2), bounds=None, sigma=None, verbose=0)
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    assert ctor.named["config"] is not ctx.config
+    expect_unchanged(ctx.config, ctx.before, "workflow=HybridStreamingConfig")
+    assert ctx.config.gauss_newton_tol == HybridStreamingConfig().gauss_newton_tol
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
+    )
+    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META)
 
 
-def _check_workflow_hybrid_goal(rec: Recorder, result: Any) -> None:
+def _check_workflow_hybrid_goal(rec: Recorder, result: Any, ctx: Any) -> None:
     gtol = calculate_adaptive_tolerances(N, OptimizationGoal.FAST)["gtol"]
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
+    ctor = expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(gauss_newton_tol=gtol, **FAST_HYBRID),
         "goal-derived gtol reaches gauss_newton_tol",
     )
-
-
-def _check_workflow_hybrid_no_gtol(rec: Recorder, result: Any) -> None:
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
-        HybridStreamingConfig(**FAST_HYBRID),
-        "no gtol -> config untouched",
+    assert ctor.named["config"] is not ctx.config
+    expect_unchanged(ctx.config, ctx.before, "goal route")
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID), p0=np.ones(2), bounds=None, sigma=None, verbose=0
     )
-    expect_curve_fit_result(result, pcov=np.full((2, 2), np.inf))
 
 
-LD_WORKFLOW_CONFIG = LDMemoryConfig(
-    memory_limit_gb=2.0, min_chunk_size=100, max_chunk_size=300
-)
+def _check_workflow_hybrid_no_gtol(rec: Recorder, result: Any, ctx: Any) -> None:
+    # Without gtol the caller's config object is used as-is (same object).
+    ctor = expect_hybrid_ctor(
+        rec, HybridStreamingConfig(**FAST_HYBRID), "no gtol -> config untouched"
+    )
+    assert ctor.named["config"] is ctx.config
+    expect_unchanged(ctx.config, ctx.before, "no-gtol route")
+    expect_curve_fit_result(
+        result,
+        x=HYB_X,
+        pcov=np.full((2, 2), np.inf),
+        meta=HYB_META,
+    )
 
 
-def _drive_workflow_ld_config(**kw: Any) -> Any:
-    return nlsq.fit(MODEL, X, Y, p0=P0, workflow=LD_WORKFLOW_CONFIG, **kw)
+def _check_workflow_hybrid_real(rec: Recorder, result: Any, ctx: Any) -> None:
+    ctor = expect_hybrid_ctor(
+        rec, HybridStreamingConfig(**FAST_HYBRID), "real hybrid config"
+    )
+    assert ctor.named["config"] is ctx.config
+    expect_unchanged(ctx.config, ctx.before, "real hybrid route")
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=None,
+        sigma=None,
+        absolute_sigma=True,
+        verbose=0,
+    )
+    assert isinstance(result, CurveFitResult)
+    close_to_truth(result["x"])
+    assert result["model"] is MODEL
+    for key in ("fun", "perr", "streaming_diagnostics", "success", "message"):
+        assert key in result  # the real engine's metadata survives
+    assert np.asarray(result["pcov"]).shape == (2, 2)
+    assert np.all(np.isfinite(result["pcov"]))
 
 
-def _check_workflow_ld_config(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
-    assert ctor.named["config"] is LD_WORKFLOW_CONFIG  # used as given, not copied
-    assert ctor.named["memory_limit_gb"] == 2.0
-    assert ctor.named["multistart"] is False and ctor.named["logger"] is None
-    call = rec.only_fit(FITTER)
-    expect(call.named["p0"], np.array(P0), "p0")
-    expect(call.named["bounds"], FINITE_BOUNDS, "bounds")
-    assert call.named["method"] == "trf"  # method or "trf"
-    # sigma/absolute_sigma/check_finite and all three tolerances are forwarded
-    # (unlike the hybrid route). n_starts=None / memory_limit_gb=None are
+LD_BOUNDS = FINITE_BOUNDS
+
+
+def _drive_workflow_ld_config(ctx: SimpleNamespace, **kw: Any) -> Any:
+    ctx.config = LDMemoryConfig(
+        memory_limit_gb=2.0, min_chunk_size=100, max_chunk_size=300
+    )
+    ctx.before = snap(ctx.config)
+    return nlsq.fit(MODEL, X, Y, p0=P0, workflow=ctx.config, **kw)
+
+
+def _drive_workflow_ld_full(ctx: SimpleNamespace) -> Any:
+    return _drive_workflow_ld_config(
+        ctx,
+        method="lm",
+        gtol=1e-3,
+        ftol=1e-4,
+        xtol=1e-5,
+        sigma=SIG,
+        absolute_sigma=True,
+        check_finite=False,
+        bounds=FINITE_BOUNDS,
+        max_nfev=7,
+    )
+
+
+def _check_workflow_ld_config(rec: Recorder, result: Any, ctx: Any) -> None:
+    ctor = expect_fitter_ctor(rec, memory_limit_gb=2.0, config=ctx.before_config())
+    assert ctor.named["config"] is ctx.config  # used as given, not copied
+    expect_unchanged(ctx.config, ctx.before, "workflow=LDMemoryConfig")
+    # sigma/absolute_sigma/check_finite/method and all three tolerances are
+    # forwarded (unlike the hybrid route). n_starts=None / memory_limit_gb=None are
     # nlsq.fit's own passthrough of its named parameters into minpack.fit's
     # **kwargs, which _fit_with_config then forwards to the engine as-is.
-    expect(
-        call.extra,
-        {
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS,
+        bounds_is=True,
+        method="lm",
+        extra={
             "sigma": SIG,
             "absolute_sigma": True,
-            "check_finite": True,
+            "check_finite": False,
             "n_starts": None,
             "memory_limit_gb": None,
             "gtol": 1e-3,
             "ftol": 1e-4,
             "xtol": 1e-5,
+            "max_nfev": 7,
         },
-        "forwarded fit kwargs",
     )
-    # Plain OptimizeResult is wrapped and gets model/xdata/ydata attached.
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    # Plain OptimizeResult is wrapped; metadata and model/xdata/ydata attached.
+    expect_curve_fit_result(result, x=FIT_X, pcov=FIT_PCOV, meta=FIT_META)
 
 
-def _check_workflow_ld_config_real(rec: Recorder, result: Any) -> None:
-    assert len(rec.ctors()) == 1 and len(rec.ctors(FITTER)) == 1
+def _check_workflow_ld_passthrough(rec: Recorder, result: Any, ctx: Any) -> None:
+    assert result is rec.last_result  # an engine CurveFitResult is returned as-is
+
+
+def _check_workflow_ld_config_real(rec: Recorder, result: Any, ctx: Any) -> None:
+    ctor = expect_fitter_ctor(rec, memory_limit_gb=2.0, config=ctx.before_config())
+    assert ctor.named["config"] is ctx.config
+    expect_unchanged(ctx.config, ctx.before, "real LD route")
+    assert len(rec.ctors()) == 1
     assert isinstance(result, CurveFitResult)
     close_to_truth(result["x"])
     assert result["model"] is MODEL
 
 
-def _check_auto_chunked(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
+def _check_auto_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
     _, expected = MemoryBudgetSelector().select(
         n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB
     )
     assert isinstance(expected, LDMemoryConfig)
-    expect_config(ctor.named["config"], expected, "selector's chunked config")
-    assert ctor.named["memory_limit_gb"] == expected.memory_limit_gb
-    call = rec.only_fit(FITTER)
-    assert call.named["method"] == "trf"
-    assert call.extra["gtol"] == 1e-3 and call.extra["n_starts"] is None
-    assert "memory_limit_gb" not in call.extra  # consumed by the selector
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    expect_fitter_ctor(rec, memory_limit_gb=expected.memory_limit_gb, config=expected)
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=np.array(P0),
+        bounds=INF_BOUNDS,
+        method="trf",
+        extra={  # memory_limit_gb is consumed by the selector
+            "sigma": None,
+            "absolute_sigma": False,
+            "check_finite": True,
+            "n_starts": None,
+            "gtol": 1e-3,
+        },
+    )
+    expect_curve_fit_result(result, x=FIT_X, pcov=FIT_PCOV, meta=FIT_META)
 
 
-def _check_auto_streaming(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(HYBRID)
+def _drive_auto_streaming(ctx: SimpleNamespace) -> Any:
+    return nlsq.fit(
+        MODEL,
+        X,
+        Y,
+        p0=P0,
+        workflow="auto",
+        memory_limit_gb=STREAMING_LIMIT_GB,
+        gtol=1e-3,
+        ftol=1e-4,
+        xtol=1e-5,
+        sigma=SIG,
+        absolute_sigma=True,
+        bounds=FINITE_BOUNDS,
+        callback=_CALLBACK,
+        verbose=0,
+    )
+
+
+def _check_auto_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
     _, expected = MemoryBudgetSelector().select(
         n_points=N, n_params=2, memory_limit_gb=STREAMING_LIMIT_GB
     )
     assert isinstance(expected, HybridStreamingConfig)
-    expect_config(
-        ctor.named["config"],
+    expect_hybrid_ctor(
+        rec,
         dataclasses.replace(expected, gauss_newton_tol=1e-3),
         "selector's streaming config + gtol",
     )
-    expect_hybrid_fit(rec.only_fit(HYBRID), p0=np.array(P0), bounds=None, sigma=None)
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
+    )
+    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META)
 
 
-def _check_auto_standard(rec: Recorder, result: Any) -> None:
+def _check_auto_standard(rec: Recorder, result: Any, ctx: Any) -> None:
     assert rec.calls == []  # data fits: neither engine is built
     assert isinstance(result, CurveFitResult)
     close_to_truth(result["popt"] if "popt" in result else result["x"])
 
 
-# ---- nlsq/core/minpack.py::_fit_with_preset (direct helper) ---------------
+# ---- nlsq.core.minpack._fit_with_preset (direct helper) --------------------
 
 
-def _check_preset_chunked(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
-    expect_config(
-        ctor.named["config"],
-        LDMemoryConfig(
+def _drive_preset_chunked(ctx: SimpleNamespace) -> Any:
+    return _call_preset(
+        "large_robust",
+        n_points=1_000_000,
+        method="lm",
+        sigma=SIG,
+        absolute_sigma=True,
+        check_finite=False,
+        max_nfev=7,
+    )
+
+
+def _check_preset_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_fitter_ctor(
+        rec,
+        memory_limit_gb=8.0,
+        config=LDMemoryConfig(
             memory_limit_gb=8.0, min_chunk_size=1000, max_chunk_size=100_000
         ),
-        "large_robust config at n_points=1M",
     )
-    assert ctor.named["memory_limit_gb"] == 8.0
-    call = rec.only_fit(FITTER)
-    expect(call.named["p0"], np.array(P0), "p0")
-    assert call.named["method"] == "trf"
-    # sigma, absolute_sigma and check_finite are dropped on this route; the preset's
-    # multistart settings and tolerances are forwarded.
-    expect(
-        call.extra,
-        {
+    # sigma, absolute_sigma and check_finite are dropped on this route; method,
+    # the preset's multistart settings and tolerances and extra kwargs are forwarded.
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=np.array(P0),
+        bounds=INF_BOUNDS,
+        bounds_is=True,
+        method="lm",
+        extra={
             "multistart": True,
             "n_starts": 10,
             "gtol": 1e-8,
             "ftol": 1e-8,
             "xtol": 1e-8,
+            "max_nfev": 7,
         },
-        "forwarded fit kwargs",
     )
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    expect_curve_fit_result(result, x=FIT_X, pcov=FIT_PCOV, meta=FIT_META)
 
 
-def _check_preset_streaming(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(HYBRID)
-    expect_config(
-        ctor.named["config"],
+def _drive_preset_chunked_passthrough(ctx: SimpleNamespace) -> Any:
+    return _call_preset("large_robust", n_points=1_000_000)
+
+
+def _drive_preset_streaming(ctx: SimpleNamespace) -> Any:
+    return _call_preset(
+        "streaming",
+        sigma=SIG,
+        absolute_sigma=True,
+        bounds=FINITE_BOUNDS,
+        callback=_CALLBACK,
+        verbose=0,
+        ftol=1e-4,
+        xtol=1e-5,
+    )
+
+
+def _check_preset_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
+    # gauss_newton_tol comes from the preset's gtol (1e-7); explicit ftol/xtol are
+    # dropped; sigma/absolute_sigma/callback/verbose/bounds reach the engine.
+    expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(
             normalize=True,
             warmup_iterations=200,
@@ -711,21 +1194,32 @@ def _check_preset_streaming(rec: Recorder, result: Any) -> None:
     expect_hybrid_fit(
         rec.only_fit(HYBRID),
         p0=np.array(P0),
-        bounds=None,
-        sigma=None,
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
         callback=_CALLBACK,
         verbose=0,
     )
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META)
 
 
-def _check_preset_hpc(rec: Recorder, result: Any) -> None:
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
+def _drive_preset_hpc(ctx: SimpleNamespace) -> Any:
+    return _call_preset(
+        "hpc_distributed",
+        sigma=SIG,
+        absolute_sigma=True,
+        bounds=FINITE_BOUNDS,
+        gtol=1e-5,
+    )
+
+
+def _check_preset_hpc(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(
             normalize=True,
             warmup_iterations=200,
-            gauss_newton_tol=1e-6,
+            gauss_newton_tol=1e-5,  # explicit gtol beats the preset's 1e-6
             enable_checkpoints=True,
             enable_multistart=True,
             n_starts=10,
@@ -733,17 +1227,32 @@ def _check_preset_hpc(rec: Recorder, result: Any) -> None:
         "hpc_distributed preset config",
     )
     expect_hybrid_fit(
-        rec.only_fit(HYBRID), p0=np.array(P0), bounds=FINITE_BOUNDS_ARR, sigma=SIG
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
     )
 
 
-def _check_preset_goal_tolerance(rec: Recorder, result: Any) -> None:
+def _check_preset_goal_tolerance(rec: Recorder, result: Any, ctx: Any) -> None:
     gtol = calculate_adaptive_tolerances(N, OptimizationGoal.QUALITY)["gtol"]
     assert gtol != 1e-7
-    assert rec.ctors(HYBRID)[0].named["config"].gauss_newton_tol == gtol
+    expect_hybrid_ctor(
+        rec,
+        HybridStreamingConfig(
+            normalize=True,
+            warmup_iterations=200,
+            gauss_newton_tol=gtol,
+            enable_checkpoints=False,
+            enable_multistart=False,
+            n_starts=0,
+        ),
+        "goal-derived gtol overrides the preset's",
+    )
 
 
-# ---- nlsq/core/minpack.py::_fit_global_multistart -------------------------
+# ---- nlsq.core.minpack._fit_global_multistart ------------------------------
 
 
 def _drive_auto_global(limit: float | None, **kw: Any) -> Any:
@@ -761,45 +1270,57 @@ def _drive_auto_global(limit: float | None, **kw: Any) -> Any:
     )
 
 
-def _check_global_chunked(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
+def _drive_global_chunked(ctx: SimpleNamespace) -> Any:
+    return _drive_auto_global(CHUNKED_LIMIT_GB, absolute_sigma=True, check_finite=False)
+
+
+def _check_global_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
     _, expected = MemoryBudgetSelector().select(
         n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB
     )
-    expect_config(ctor.named["config"], expected, "selector's config used as-is")
-    assert ctor.named["memory_limit_gb"] == expected.memory_limit_gb
-    call = rec.only_fit(FITTER)
-    expect(call.named["p0"], np.array(P0), "p0")
-    expect(call.named["bounds"], FINITE_BOUNDS_ARR, "bounds")
-    assert call.named["method"] == "trf"
     # multistart/n_starts go to fit(), not to the constructor.
-    assert ctor.named["multistart"] is False
-    expect(
-        call.extra,
-        {
+    expect_fitter_ctor(rec, memory_limit_gb=expected.memory_limit_gb, config=expected)
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        method="trf",
+        extra={
             "multistart": True,
             "n_starts": 6,
-            "check_finite": True,
-            "absolute_sigma": False,
+            "check_finite": False,
+            "absolute_sigma": True,
         },
-        "forwarded fit kwargs",
     )
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    expect_curve_fit_result(result, x=FIT_X, pcov=FIT_PCOV, meta=FIT_META)
 
 
-def _check_global_streaming(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(HYBRID)
+def _drive_global_streaming(ctx: SimpleNamespace) -> Any:
+    return _drive_auto_global(
+        STREAMING_LIMIT_GB,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
+        gtol=1e-4,
+        ftol=1e-5,
+        xtol=1e-6,
+    )
+
+
+def _check_global_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
     _, base = MemoryBudgetSelector().select(
         n_points=N, n_params=2, memory_limit_gb=STREAMING_LIMIT_GB
     )
     assert isinstance(base, HybridStreamingConfig)
-    expect_config(
-        ctor.named["config"],
+    # Only gtol is used (ftol/xtol dropped); the selector's chunk_size is kept.
+    expect_hybrid_ctor(
+        rec,
         dataclasses.replace(
             base,
             normalize=True,
             warmup_iterations=200,
-            gauss_newton_tol=1e-8,
+            gauss_newton_tol=1e-4,
             enable_multistart=True,
             n_starts=6,
         ),
@@ -807,9 +1328,15 @@ def _check_global_streaming(rec: Recorder, result: Any) -> None:
     )
     # Unlike the other hybrid sites, bounds are passed on unconditionally.
     expect_hybrid_fit(
-        rec.only_fit(HYBRID), p0=np.array(P0), bounds=FINITE_BOUNDS_ARR, sigma=None
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
     )
-    expect_curve_fit_result(result, pcov=SENT_PCOV)
+    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META)
 
 
 def _call_multistart(strategy: str, **overrides: Any) -> Any:
@@ -829,21 +1356,66 @@ def _call_multistart(strategy: str, **overrides: Any) -> Any:
     return minpack._fit_global_multistart(**args)
 
 
-def _check_multistart_default_chunked(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
-    expect_config(
-        ctor.named["config"],
-        LDMemoryConfig(
+def _drive_multistart_default_chunked(ctx: SimpleNamespace) -> Any:
+    return _call_multistart("chunked", memory_config=None, absolute_sigma=True)
+
+
+def _check_multistart_default_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_fitter_ctor(
+        rec,
+        memory_limit_gb=8.0,
+        config=LDMemoryConfig(
             memory_limit_gb=8.0, min_chunk_size=1000, max_chunk_size=1_000_000
         ),
-        "fallback chunked config without memory_config",
     )
-    assert ctor.named["memory_limit_gb"] == 8.0
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        bounds_is=True,
+        method="trf",
+        extra={
+            "multistart": True,
+            "n_starts": 3,
+            "check_finite": True,
+            "absolute_sigma": True,
+        },
+    )
 
 
-def _check_multistart_default_streaming(rec: Recorder, result: Any) -> None:
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
+def _drive_multistart_given_chunked(ctx: SimpleNamespace) -> Any:
+    ctx.config = LDMemoryConfig(
+        memory_limit_gb=0.75,
+        min_chunk_size=111,
+        max_chunk_size=222,
+        safety_factor=0.5,
+        use_streaming=False,
+    )
+    ctx.before = snap(ctx.config)
+    return _call_multistart("chunked", memory_config=ctx.config)
+
+
+def _check_multistart_given_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
+    ctor = expect_fitter_ctor(rec, memory_limit_gb=0.75, config=ctx.before_config())
+    assert ctor.named["config"] is ctx.config  # reused as-is, not copied
+    expect_unchanged(ctx.config, ctx.before, "multistart chunked memory_config")
+
+
+def _drive_multistart_default_streaming(ctx: SimpleNamespace) -> Any:
+    return _call_multistart(
+        "streaming",
+        memory_config=None,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
+        ftol=1e-5,
+    )
+
+
+def _check_multistart_default_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(
             normalize=True,
             warmup_iterations=200,
@@ -853,20 +1425,70 @@ def _check_multistart_default_streaming(rec: Recorder, result: Any) -> None:
         ),
         "fallback streaming config without memory_config",
     )
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
+    )
 
 
-# ---- nlsq/core/minpack.py::CurveFit ---------------------------------------
+def _drive_multistart_given_streaming(ctx: SimpleNamespace) -> Any:
+    ctx.config = HybridStreamingConfig(
+        chunk_size=17,
+        normalize=False,
+        warmup_iterations=11,
+        gauss_newton_tol=0.5,
+        enable_multistart=False,
+        n_starts=2,
+    )
+    ctx.before = snap(ctx.config)
+    return _call_multistart("streaming", memory_config=ctx.config)
 
 
-def _drive_cf_hybrid(**kw: Any) -> Any:
+def _check_multistart_given_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
+    ctor = expect_hybrid_ctor(
+        rec,
+        dataclasses.replace(
+            ctx.config,
+            normalize=True,
+            warmup_iterations=200,
+            gauss_newton_tol=1e-8,
+            enable_multistart=True,
+            n_starts=3,
+        ),
+        "memory_config copy with multistart overrides",
+    )
+    assert ctor.named["config"] is not ctx.config  # a modified copy
+    assert ctor.configs["config"].chunk_size == 17  # the budget's chunk size kept
+    expect_unchanged(ctx.config, ctx.before, "multistart streaming memory_config")
+
+
+# ---- nlsq.core.minpack.CurveFit --------------------------------------------
+
+
+def _drive_cf_hybrid(ctx: SimpleNamespace, **kw: Any) -> Any:
     return nlsq.curve_fit(
         MODEL, X, Y, p0=P0, method="hybrid_streaming", verbose=0, **FAST_HYBRID, **kw
     )
 
 
-def _check_cf_hybrid_real(rec: Recorder, result: Any) -> None:
-    expect_config(
-        rec.ctors(HYBRID)[0].named["config"],
+def _drive_cf_hybrid_full(ctx: SimpleNamespace) -> Any:
+    return _drive_cf_hybrid(
+        ctx,
+        sigma=SIG,
+        absolute_sigma=True,
+        bounds=FINITE_BOUNDS,
+        callback=_CALLBACK,
+    )
+
+
+def _check_cf_hybrid_real(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(
+        rec,
         HybridStreamingConfig(**FAST_HYBRID),
         "curve_fit(hybrid_streaming) config from kwargs",
     )
@@ -878,120 +1500,209 @@ def _check_cf_hybrid_real(rec: Recorder, result: Any) -> None:
     assert result["model"] is MODEL and np.asarray(result["pcov"]).shape == (2, 2)
 
 
-def _check_cf_hybrid_eval(rec: Recorder, result: Any) -> None:
+def _check_cf_hybrid_full(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_hybrid_ctor(rec, HybridStreamingConfig(**FAST_HYBRID), "config from kwargs")
+    expect_hybrid_fit(
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
+    )
+    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META)
+
+
+def _drive_cf_hybrid_config_object(ctx: SimpleNamespace) -> Any:
+    ctx.config = HybridStreamingConfig(**FAST_HYBRID)
+    ctx.before = snap(ctx.config)
+    return nlsq.curve_fit(
+        MODEL, X, Y, p0=P0, method="hybrid_streaming", config=ctx.config, verbose=0
+    )
+
+
+def _check_cf_hybrid_config_object(rec: Recorder, result: Any, ctx: Any) -> None:
+    ctor = expect_hybrid_ctor(
+        rec, HybridStreamingConfig(**FAST_HYBRID), "config= object"
+    )
+    assert ctor.named["config"] is ctx.config  # used as given
+    expect_unchanged(ctx.config, ctx.before, "curve_fit(config=)")
+
+
+def _check_cf_hybrid_eval(rec: Recorder, result: Any, ctx: Any) -> None:
     assert type(result) is tuple and len(result) == 3
-    expect(result[0], SENT_X, "popt")
-    expect(result[1], SENT_PCOV, "pcov")
-    expect(result[2], np.asarray(MODEL(X, *SENT_X)), "f(xdata, *popt)")
+    expect(result[0], HYB_X, "popt")
+    expect(result[1], HYB_PCOV, "pcov")
+    expect(result[2], np.asarray(MODEL(X, *HYB_X)), "f(xdata, *popt)")
 
 
-def _check_cf_hybrid_full_output(rec: Recorder, result: Any) -> None:
+def _check_cf_hybrid_full_output(rec: Recorder, result: Any, ctx: Any) -> None:
     assert type(result) is tuple and len(result) == 5
-    expect(result[0], SENT_X, "popt")
-    expect(result[1], SENT_PCOV, "pcov")
+    expect(result[0], HYB_X, "popt")
+    expect(result[1], HYB_PCOV, "pcov")
+    expect(result[2], {"nfev": 42, "fvec": HYB_FUN}, "infodict from nfev and fun")
+    assert result[3] == "hybrid-stub"
     assert result[4] == 1  # success -> ier 1
 
 
-def _check_cf_auto_streaming(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(HYBRID)
+def _check_cf_hybrid_full_output_failed(rec: Recorder, result: Any, ctx: Any) -> None:
+    assert type(result) is tuple and len(result) == 5
+    assert result[4] == 5  # failure -> ier 5
+
+
+def _drive_cf_auto_streaming(ctx: SimpleNamespace) -> Any:
+    return nlsq.curve_fit(
+        MODEL,
+        X,
+        Y,
+        p0=P0,
+        method="auto",
+        memory_limit_gb=STREAMING_LIMIT_GB,
+        sigma=SIG,
+        absolute_sigma=True,
+        bounds=FINITE_BOUNDS,
+        callback=_CALLBACK,
+        verbose=0,
+    )
+
+
+def _check_cf_auto_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
     _, expected = MemoryBudgetSelector().select(
         n_points=N, n_params=2, memory_limit_gb=STREAMING_LIMIT_GB
     )
     # The selector's config is handed through (not a fresh default).
-    expect_config(ctor.named["config"], expected, "method=auto streaming config")
+    expect_hybrid_ctor(rec, expected, "method=auto streaming config")
     assert expected.chunk_size != HybridStreamingConfig().chunk_size
     expect_hybrid_fit(
-        rec.only_fit(HYBRID), p0=np.array(P0), bounds=None, sigma=None, verbose=1
+        rec.only_fit(HYBRID),
+        p0=np.array(P0),
+        bounds=FINITE_BOUNDS_ARR,
+        sigma=SIG,
+        absolute_sigma=True,
+        callback=_CALLBACK,
+        verbose=0,
     )
-    assert isinstance(result, CurveFitResult)
-    expect(result["x"], SENT_X, "x")
+    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META)
 
 
-def _check_cf_auto_chunked(rec: Recorder, result: Any) -> None:
-    (ctor,) = rec.ctors(FITTER)
+def _drive_cf_auto_chunked(ctx: SimpleNamespace, **kw: Any) -> Any:
+    return nlsq.curve_fit(
+        MODEL,
+        X,
+        Y,
+        p0=P0,
+        method="auto",
+        memory_limit_gb=CHUNKED_LIMIT_GB,
+        **kw,
+    )
+
+
+def _drive_cf_auto_chunked_full(ctx: SimpleNamespace) -> Any:
+    return _drive_cf_auto_chunked(
+        ctx, absolute_sigma=True, check_finite=False, bounds=FINITE_BOUNDS
+    )
+
+
+def _check_cf_auto_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
     _, expected = MemoryBudgetSelector().select(
         n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB
     )
-    expect_config(ctor.named["config"], expected, "method=auto chunked config")
     # The raw memory_limit_gb kwarg (not the config's) is the constructor limit.
-    assert ctor.named["memory_limit_gb"] == CHUNKED_LIMIT_GB
-    call = rec.only_fit(FITTER)
-    assert call.named["f"] is MODEL
-    expect(call.named["xdata"], X, "xdata")
-    expect(call.named["ydata"], Y, "ydata")
-    expect(call.named["p0"], P0, "p0")
-    expect(call.named["bounds"], INF_BOUNDS, "bounds")
-    assert call.named["method"] == "trf"  # engine default, no method forwarded
-    expect(call.extra, {"check_finite": True, "absolute_sigma": False}, "fit kwargs")
+    assert expected.memory_limit_gb != CHUNKED_LIMIT_GB
+    expect_fitter_ctor(rec, memory_limit_gb=CHUNKED_LIMIT_GB, config=expected)
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=P0,
+        p0_is=True,
+        bounds=FINITE_BOUNDS,
+        bounds_is=True,
+        method="trf",  # engine default; no method is forwarded
+        extra={"check_finite": False, "absolute_sigma": True},
+    )
     assert isinstance(result, CurveFitResult)
-    expect(result["x"], SENT_X, "x")
-    expect(result["pcov"], SENT_PCOV, "pcov")
-    assert result["model"] is MODEL
-    expect(result["xdata"], X, "xdata")
+    expect_curve_fit_result(result, x=FIT_X, pcov=FIT_PCOV, meta=FIT_META)
+    assert result["xdata"] is X and result["ydata"] is Y
 
 
-def _check_cf_auto_chunked_eval(rec: Recorder, result: Any) -> None:
+def _check_cf_auto_chunked_defaults(rec: Recorder, result: Any, ctx: Any) -> None:
+    expect_fitter_ctor(
+        rec,
+        memory_limit_gb=CHUNKED_LIMIT_GB,
+        config=MemoryBudgetSelector().select(
+            n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB
+        )[1],
+    )
+    expect_fitter_fit(
+        rec.only_fit(FITTER),
+        p0=P0,
+        p0_is=True,
+        bounds=INF_BOUNDS,
+        method="trf",
+        extra={"check_finite": True, "absolute_sigma": False},
+    )
+
+
+def _check_cf_auto_chunked_eval(rec: Recorder, result: Any, ctx: Any) -> None:
     assert type(result) is tuple and len(result) == 3
-    expect(result[0], SENT_X, "popt")
-    expect(result[1], SENT_PCOV, "pcov")
+    assert result[0] is rec.last_result.x
+    assert result[1] is rec.last_result.pcov
+    expect(result[2], np.asarray(MODEL(X, *FIT_X)), "f(xdata, *popt)")
 
 
-def _check_cf_auto_chunked_timeit(rec: Recorder, result: Any) -> None:
+def _check_cf_auto_chunked_timeit(rec: Recorder, result: Any, ctx: Any) -> None:
     assert type(result) is tuple and len(result) == 5
-    expect(result[0], SENT_X, "popt")
-    assert isinstance(result[2], OptimizeResult)
+    assert result[0] is rec.last_result.x
+    assert result[1] is rec.last_result.pcov
+    assert result[2] is rec.last_result  # the engine's result object
     assert result[3] == 0
+    assert result[4] == 0.123  # engine's execution_time
 
 
-def _check_cf_auto_chunked_real(rec: Recorder, result: Any) -> None:
+def _check_cf_auto_chunked_real(rec: Recorder, result: Any, ctx: Any) -> None:
     assert len(rec.ctors()) == 1 and len(rec.ctors(FITTER)) == 1
     assert isinstance(result, CurveFitResult)
     close_to_truth(result.x)
 
 
 ROWS: list[Row] = [
-    # --- nlsq/__init__.py -------------------------------------------------
+    # --- nlsq.fit (preset=streaming) --------------------------------------
     Row(
         "init.fit[preset=streaming]",
-        "nlsq.fit :651",
+        "nlsq.fit",
         HYBRID,
-        lambda: _drive_fit_preset_streaming(
-            sigma=SIG,
-            multistart=True,
-            n_starts=4,
-            sampler="sobol",
-            gtol=1e-3,
-            ftol=1e-3,
-        ),
+        _drive_fit_preset_streaming_full,
         _check_fit_preset_streaming,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "init.fit[preset=streaming,multistart=False]",
-        "nlsq.fit :651",
+        "nlsq.fit",
         HYBRID,
-        lambda: _drive_fit_preset_streaming(multistart=False),
+        lambda ctx: _drive_fit_preset_streaming(ctx, multistart=False),
         _check_fit_preset_streaming_off,
         {HYBRID: hybrid_ok},
     ),
+    # --- nlsq.curve_fit_large ---------------------------------------------
     Row(
         "init.curve_fit_large[hybrid_streaming,real]",
-        "nlsq.curve_fit_large :1146",
+        "nlsq.curve_fit_large",
         HYBRID,
         _drive_clf_hybrid,
         _check_clf_hybrid_real,
+        marks=SLOW,
     ),
     Row(
         "init.curve_fit_large[hybrid_streaming,stub]",
-        "nlsq.curve_fit_large :1146",
+        "nlsq.curve_fit_large",
         HYBRID,
-        _drive_clf_hybrid,
+        _drive_clf_hybrid_full,
         _check_clf_hybrid_stub,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "init.curve_fit_large[hybrid_streaming,no-pcov]",
-        "nlsq.curve_fit_large :1146",
+        "nlsq.curve_fit_large",
         HYBRID,
         _drive_clf_hybrid,
         _check_clf_hybrid_no_pcov,
@@ -999,84 +1710,73 @@ ROWS: list[Row] = [
     ),
     Row(
         "init.curve_fit_large[chunked,real]",
-        "nlsq.curve_fit_large :1253",
+        "nlsq.curve_fit_large",
         FITTER,
-        lambda: _drive_clf_chunked(memory_limit_gb=2.0),
+        lambda ctx: _drive_clf_chunked(ctx, memory_limit_gb=2.0),
         _check_clf_chunked_real,
+        marks=SERIAL,
     ),
     Row(
         "init.curve_fit_large[chunked,args]",
-        "nlsq.curve_fit_large :1253",
+        "nlsq.curve_fit_large",
         FITTER,
-        lambda: _drive_clf_chunked(
-            memory_limit_gb=3.0,
-            chunk_size=300,
-            method="lm",
-            sigma=SIG,
-            absolute_sigma=True,
-            bounds=FINITE_BOUNDS,
-            multistart=True,
-            n_starts=5,
-            sampler="sobol",
-            gtol=1e-3,
-        ),
+        _drive_clf_chunked_args,
         _check_clf_chunked_args,
         {FITTER: fitter_ok},
+        marks=SERIAL,
     ),
     Row(
         "init.curve_fit_large[chunked,x-only-result]",
-        "nlsq.curve_fit_large :1253",
+        "nlsq.curve_fit_large",
         FITTER,
-        lambda: _drive_clf_chunked(memory_limit_gb=2.0),
+        lambda ctx: _drive_clf_chunked(ctx, memory_limit_gb=2.0),
         _check_clf_chunked_x_only,
         {FITTER: fitter_x_only},
+        marks=SERIAL,
     ),
     Row(
         "init.curve_fit_large[chunked,show_progress]",
-        "nlsq.curve_fit_large :1253",
+        "nlsq.curve_fit_large",
         FITTER,
-        lambda: _drive_clf_chunked(memory_limit_gb=2.0, show_progress=True),
+        _drive_clf_chunked_progress,
         _check_clf_chunked_progress,
         {FITTER: fitter_ok},
+        marks=SERIAL,
     ),
     Row(
         "init.curve_fit_large[small-data,no-engine]",
         "nlsq.curve_fit_large (bypass)",
         None,
-        lambda: nlsq.curve_fit_large(MODEL, X, Y, p0=P0),
+        lambda ctx: nlsq.curve_fit_large(MODEL, X, Y, p0=P0),
         _check_clf_small,
     ),
-    # --- nlsq/streaming/large_dataset.py ----------------------------------
+    # --- nlsq.streaming.large_dataset ---------------------------------------
     Row(
         "large_dataset.fit_large_dataset[real]",
-        "fit_large_dataset :3053",
+        "fit_large_dataset",
         FITTER,
         _drive_fit_large_dataset,
         _check_fit_large_dataset_real,
     ),
     Row(
-        "large_dataset.fit_large_dataset[progress,stub]",
-        "fit_large_dataset :3053",
+        "large_dataset.fit_large_dataset[args,stub]",
+        "fit_large_dataset",
         FITTER,
-        lambda: large_dataset.fit_large_dataset(
-            MODEL,
-            X,
-            Y,
-            p0=P0,
-            memory_limit_gb=2.0,
-            show_progress=True,
-            logger=_LOGGER,
-            multistart=True,
-            n_starts=3,
-            sampler="halton",
-            bounds=FINITE_BOUNDS,
-        ),
+        _drive_fit_large_dataset_stub,
+        _check_fit_large_dataset_stub,
+        {FITTER: fitter_ok},
+    ),
+    Row(
+        "large_dataset.fit_large_dataset[progress,stub]",
+        "fit_large_dataset",
+        FITTER,
+        _drive_fit_large_dataset_progress,
         _check_fit_large_dataset_progress,
         {FITTER: fitter_ok},
     ),
     Row(
         "large_dataset.LargeDatasetFitter._fit_with_streaming[unwired,direct]",
-        "LargeDatasetFitter._fit_with_streaming :1900",
+        "LargeDatasetFitter._fit_with_streaming",
         HYBRID,
         _drive_fitter_streaming,
         _check_fitter_streaming,
@@ -1085,65 +1785,74 @@ ROWS: list[Row] = [
     ),
     Row(
         "large_dataset.LargeDatasetFitter._fit_with_streaming[engine-raises]",
-        "LargeDatasetFitter._fit_with_streaming :1900",
+        "LargeDatasetFitter._fit_with_streaming",
         HYBRID,
         _drive_fitter_streaming,
         _check_fitter_streaming_failure,
         {HYBRID: _raise_kaboom},
         prebuilt=(FITTER,),
     ),
-    # --- nlsq/core/minpack.py::_fit_with_config (via nlsq.fit workflow=) ---
+    # --- minpack._fit_with_config (via nlsq.fit workflow=) ------------------
     Row(
         "minpack._fit_with_config[HybridStreamingConfig,gtol]",
-        "_fit_with_config :778",
+        "_fit_with_config",
         HYBRID,
-        lambda: _drive_workflow_hybrid_config(gtol=1e-3, ftol=1e-4, xtol=1e-5),
+        _drive_workflow_hybrid_full,
         _check_workflow_hybrid_config,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack._fit_with_config[HybridStreamingConfig,goal]",
-        "_fit_with_config :778",
+        "_fit_with_config",
         HYBRID,
-        lambda: _drive_workflow_hybrid_config(goal="fast"),
+        lambda ctx: _drive_workflow_hybrid_config(ctx, goal="fast"),
         _check_workflow_hybrid_goal,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack._fit_with_config[HybridStreamingConfig,no-gtol,no-pcov]",
-        "_fit_with_config :778",
+        "_fit_with_config",
         HYBRID,
         _drive_workflow_hybrid_config,
         _check_workflow_hybrid_no_gtol,
         {HYBRID: hybrid_no_pcov},
     ),
     Row(
+        "minpack._fit_with_config[HybridStreamingConfig,real]",
+        "_fit_with_config",
+        HYBRID,
+        lambda ctx: _drive_workflow_hybrid_config(ctx, p0=P0, absolute_sigma=True),
+        _check_workflow_hybrid_real,
+        marks=SLOW,
+    ),
+    Row(
         "minpack._fit_with_config[LDMemoryConfig,args]",
-        "_fit_with_config :808",
+        "_fit_with_config",
         FITTER,
-        lambda: _drive_workflow_ld_config(
-            gtol=1e-3,
-            ftol=1e-4,
-            xtol=1e-5,
-            sigma=SIG,
-            absolute_sigma=True,
-            bounds=FINITE_BOUNDS,
-        ),
+        _drive_workflow_ld_full,
         _check_workflow_ld_config,
         {FITTER: fitter_ok},
     ),
     Row(
+        "minpack._fit_with_config[LDMemoryConfig,curvefitresult-passthrough]",
+        "_fit_with_config",
+        FITTER,
+        _drive_workflow_ld_config,
+        _check_workflow_ld_passthrough,
+        {FITTER: fitter_curve_fit_result},
+    ),
+    Row(
         "minpack._fit_with_config[LDMemoryConfig,real]",
-        "_fit_with_config :808",
+        "_fit_with_config",
         FITTER,
         _drive_workflow_ld_config,
         _check_workflow_ld_config_real,
     ),
     Row(
         "minpack._fit_with_config[workflow=auto->chunked]",
-        "_fit_with_config :808",
+        "_fit_with_config",
         FITTER,
-        lambda: nlsq.fit(
+        lambda ctx: nlsq.fit(
             MODEL,
             X,
             Y,
@@ -1157,18 +1866,9 @@ ROWS: list[Row] = [
     ),
     Row(
         "minpack._fit_with_config[workflow=auto->streaming]",
-        "_fit_with_config :778",
+        "_fit_with_config",
         HYBRID,
-        lambda: nlsq.fit(
-            MODEL,
-            X,
-            Y,
-            p0=P0,
-            workflow="auto",
-            memory_limit_gb=STREAMING_LIMIT_GB,
-            gtol=1e-3,
-            verbose=1,
-        ),
+        _drive_auto_streaming,
         _check_auto_streaming,
         {HYBRID: hybrid_ok},
     ),
@@ -1176,190 +1876,224 @@ ROWS: list[Row] = [
         "minpack._fit_with_config[workflow=auto->standard,no-engine]",
         "_fit_with_config (fallthrough)",
         None,
-        lambda: nlsq.fit(MODEL, X, Y, p0=P0, workflow="auto"),
+        lambda ctx: nlsq.fit(MODEL, X, Y, p0=P0, workflow="auto"),
         _check_auto_standard,
     ),
-    # --- nlsq/core/minpack.py::_fit_with_preset (direct helper only) -------
+    # --- minpack._fit_with_preset (direct helper only) ----------------------
     Row(
         "minpack._fit_with_preset[large_robust,n_points=1M,direct]",
-        "_fit_with_preset :1026",
+        "_fit_with_preset (chunked tier)",
         FITTER,
-        lambda: _call_preset(
-            "large_robust",
-            n_points=1_000_000,
-            sigma=SIG,
-            absolute_sigma=True,
-            check_finite=False,
-        ),
+        _drive_preset_chunked,
         _check_preset_chunked,
         {FITTER: fitter_ok},
     ),
     Row(
+        "minpack._fit_with_preset[large_robust,curvefitresult-passthrough]",
+        "_fit_with_preset (chunked tier)",
+        FITTER,
+        _drive_preset_chunked_passthrough,
+        _check_workflow_ld_passthrough,
+        {FITTER: fitter_curve_fit_result},
+    ),
+    Row(
         "minpack._fit_with_preset[streaming,direct]",
-        "_fit_with_preset :1087",
+        "_fit_with_preset (streaming tier)",
         HYBRID,
-        lambda: _call_preset("streaming", callback=_CALLBACK, verbose=0),
+        _drive_preset_streaming,
         _check_preset_streaming,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack._fit_with_preset[hpc_distributed,direct]",
-        "_fit_with_preset :1087",
+        "_fit_with_preset (streaming tier)",
         HYBRID,
-        lambda: _call_preset("hpc_distributed", sigma=SIG, bounds=FINITE_BOUNDS),
+        _drive_preset_hpc,
         _check_preset_hpc,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack._fit_with_preset[streaming,goal-overrides-preset-gtol]",
-        "_fit_with_preset :1087",
+        "_fit_with_preset (streaming tier)",
         HYBRID,
-        lambda: _call_preset("streaming", goal=OptimizationGoal.QUALITY),
+        lambda ctx: _call_preset("streaming", goal=OptimizationGoal.QUALITY),
         _check_preset_goal_tolerance,
         {HYBRID: hybrid_ok},
     ),
-    # --- nlsq/core/minpack.py::_fit_global_multistart ---------------------
+    # --- minpack._fit_global_multistart -------------------------------------
     Row(
         "minpack._fit_global_multistart[auto_global->chunked]",
-        "_fit_global_multistart :1760",
+        "_fit_global_multistart (chunked)",
         FITTER,
-        lambda: _drive_auto_global(CHUNKED_LIMIT_GB),
+        _drive_global_chunked,
         _check_global_chunked,
         {FITTER: fitter_ok},
     ),
     Row(
         "minpack._fit_global_multistart[auto_global->streaming]",
-        "_fit_global_multistart :1825",
+        "_fit_global_multistart (streaming)",
         HYBRID,
-        lambda: _drive_auto_global(STREAMING_LIMIT_GB),
+        _drive_global_streaming,
         _check_global_streaming,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack._fit_global_multistart[chunked,no-memory_config,direct]",
-        "_fit_global_multistart :1760",
+        "_fit_global_multistart (chunked)",
         FITTER,
-        lambda: _call_multistart("chunked", memory_config=None),
+        _drive_multistart_default_chunked,
         _check_multistart_default_chunked,
         {FITTER: fitter_ok},
     ),
     Row(
+        "minpack._fit_global_multistart[chunked,given-memory_config,direct]",
+        "_fit_global_multistart (chunked)",
+        FITTER,
+        _drive_multistart_given_chunked,
+        _check_multistart_given_chunked,
+        {FITTER: fitter_ok},
+    ),
+    Row(
         "minpack._fit_global_multistart[streaming,no-memory_config,direct]",
-        "_fit_global_multistart :1825",
+        "_fit_global_multistart (streaming)",
         HYBRID,
-        lambda: _call_multistart("streaming", memory_config=None),
+        _drive_multistart_default_streaming,
         _check_multistart_default_streaming,
         {HYBRID: hybrid_ok},
     ),
-    # --- nlsq/core/minpack.py::CurveFit -----------------------------------
+    Row(
+        "minpack._fit_global_multistart[streaming,given-memory_config,direct]",
+        "_fit_global_multistart (streaming)",
+        HYBRID,
+        _drive_multistart_given_streaming,
+        _check_multistart_given_streaming,
+        {HYBRID: hybrid_ok},
+    ),
+    # --- minpack.CurveFit ----------------------------------------------------
     Row(
         "minpack.CurveFit._curve_fit_hybrid_streaming[real]",
-        "_curve_fit_hybrid_streaming :3564",
+        "_curve_fit_hybrid_streaming",
         HYBRID,
         _drive_cf_hybrid,
         _check_cf_hybrid_real,
+        marks=SLOW,
+    ),
+    Row(
+        "minpack.CurveFit._curve_fit_hybrid_streaming[args]",
+        "_curve_fit_hybrid_streaming",
+        HYBRID,
+        _drive_cf_hybrid_full,
+        _check_cf_hybrid_full,
+        {HYBRID: hybrid_ok},
+    ),
+    Row(
+        "minpack.CurveFit._curve_fit_hybrid_streaming[config-object]",
+        "_curve_fit_hybrid_streaming",
+        HYBRID,
+        _drive_cf_hybrid_config_object,
+        _check_cf_hybrid_config_object,
+        {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack.CurveFit._curve_fit_hybrid_streaming[return_eval]",
-        "_curve_fit_hybrid_streaming :3564",
+        "_curve_fit_hybrid_streaming",
         HYBRID,
-        lambda: _drive_cf_hybrid(return_eval=True),
+        lambda ctx: _drive_cf_hybrid(ctx, return_eval=True),
         _check_cf_hybrid_eval,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack.CurveFit._curve_fit_hybrid_streaming[full_output]",
-        "_curve_fit_hybrid_streaming :3564",
+        "_curve_fit_hybrid_streaming",
         HYBRID,
-        lambda: _drive_cf_hybrid(full_output=True),
+        lambda ctx: _drive_cf_hybrid(ctx, full_output=True),
         _check_cf_hybrid_full_output,
         {HYBRID: hybrid_ok},
     ),
     Row(
-        "minpack.CurveFit._curve_fit_auto_memory[streaming]",
-        "_curve_fit_hybrid_streaming :3564 via _curve_fit_auto_memory",
+        "minpack.CurveFit._curve_fit_hybrid_streaming[full_output,failed]",
+        "_curve_fit_hybrid_streaming",
         HYBRID,
-        lambda: nlsq.curve_fit(
-            MODEL,
-            X,
-            Y,
-            p0=P0,
-            method="auto",
-            memory_limit_gb=STREAMING_LIMIT_GB,
-        ),
+        lambda ctx: _drive_cf_hybrid(ctx, full_output=True),
+        _check_cf_hybrid_full_output_failed,
+        {HYBRID: hybrid_failed},
+    ),
+    Row(
+        "minpack.CurveFit._curve_fit_auto_memory[streaming]",
+        "_curve_fit_hybrid_streaming via _curve_fit_auto_memory",
+        HYBRID,
+        _drive_cf_auto_streaming,
         _check_cf_auto_streaming,
         {HYBRID: hybrid_ok},
     ),
     Row(
         "minpack.CurveFit._curve_fit_auto_memory[chunked]",
-        "_curve_fit_auto_memory :3776",
+        "_curve_fit_auto_memory (chunked)",
         FITTER,
-        lambda: nlsq.curve_fit(
-            MODEL,
-            X,
-            Y,
-            p0=P0,
-            method="auto",
-            memory_limit_gb=CHUNKED_LIMIT_GB,
-        ),
+        _drive_cf_auto_chunked_full,
         _check_cf_auto_chunked,
         {FITTER: fitter_ok},
     ),
     Row(
-        "minpack.CurveFit._curve_fit_auto_memory[chunked,return_eval]",
-        "_curve_fit_auto_memory :3776",
+        "minpack.CurveFit._curve_fit_auto_memory[chunked,defaults]",
+        "_curve_fit_auto_memory (chunked)",
         FITTER,
-        lambda: nlsq.curve_fit(
-            MODEL,
-            X,
-            Y,
-            p0=P0,
-            method="auto",
-            memory_limit_gb=CHUNKED_LIMIT_GB,
-            return_eval=True,
-        ),
+        _drive_cf_auto_chunked,
+        _check_cf_auto_chunked_defaults,
+        {FITTER: fitter_ok},
+    ),
+    Row(
+        "minpack.CurveFit._curve_fit_auto_memory[chunked,return_eval]",
+        "_curve_fit_auto_memory (chunked)",
+        FITTER,
+        lambda ctx: _drive_cf_auto_chunked(ctx, return_eval=True),
         _check_cf_auto_chunked_eval,
         {FITTER: fitter_ok},
     ),
     Row(
         "minpack.CurveFit._curve_fit_auto_memory[chunked,timeit]",
-        "_curve_fit_auto_memory :3776",
+        "_curve_fit_auto_memory (chunked)",
         FITTER,
-        lambda: nlsq.curve_fit(
-            MODEL,
-            X,
-            Y,
-            p0=P0,
-            method="auto",
-            memory_limit_gb=CHUNKED_LIMIT_GB,
-            timeit=True,
-        ),
+        lambda ctx: _drive_cf_auto_chunked(ctx, timeit=True),
         _check_cf_auto_chunked_timeit,
         {FITTER: fitter_ok},
     ),
     Row(
         "minpack.CurveFit._curve_fit_auto_memory[chunked,real]",
-        "_curve_fit_auto_memory :3776",
+        "_curve_fit_auto_memory (chunked)",
         FITTER,
-        lambda: nlsq.curve_fit(
-            MODEL, X, Y, p0=P0, method="auto", memory_limit_gb=CHUNKED_LIMIT_GB
-        ),
+        _drive_cf_auto_chunked,
         _check_cf_auto_chunked_real,
     ),
 ]
 
 
-@pytest.mark.parametrize("row", ROWS, ids=[r.id for r in ROWS])
+class _Ctx(SimpleNamespace):
+    """Per-row scratch: configs the caller builds, plus their pre-call snapshot."""
+
+    def before_config(self) -> Any:
+        """A fresh config equal to the caller's config as it was before the call."""
+        return type(self.config)(**self.before)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [pytest.param(r, id=r.id, marks=r.marks) for r in ROWS],
+)
 def test_routing_table(row: Row, rec: Recorder) -> None:
     rec.stubs.update(row.stubs)
+    ambient_before = dataclasses.asdict(get_memory_config())
+    ctx = _Ctx()
     with np.errstate(all="ignore"):
-        result = row.drive()
+        result = row.drive(ctx)
     # Exactly one construction, of exactly the expected class (none for bypass rows);
     # this is what catches a class swap or a class built twice.
     built = [c.engine for c in rec.ctors()]
     expected = [*row.prebuilt, *([row.engine] if row.engine else [])]
     assert built == expected, f"constructed {built}, expected {expected}"
-    row.check(rec, result)
+    row.check(rec, result, ctx)
+    # No global memory config leaked out of the entry point.
+    expect(dataclasses.asdict(get_memory_config()), ambient_before, "ambient config")
 
 
 # --------------------------------------------------------------------------
@@ -1371,7 +2105,8 @@ def test_legacy_preset_keys_rejected_publicly(rec: Recorder) -> None:
     """Every WORKFLOW_PRESETS key is rejected before _fit_with_preset can run.
 
     So the two constructors inside _fit_with_preset have no public path; the
-    rows above drive them through the helper directly.
+    rows above drive them through the helper directly. (If D2 restructures
+    _fit_with_preset, this behavioural gate is what must keep holding.)
     """
     assert set(minpack.WORKFLOW_PRESETS) == set(minpack.REMOVED_PRESETS)
     for key in minpack.WORKFLOW_PRESETS:
@@ -1381,15 +2116,6 @@ def test_legacy_preset_keys_rejected_publicly(rec: Recorder) -> None:
             with pytest.raises(ValueError, match=r"removed in v0\.6\.3"):
                 minpack.fit(MODEL, X, Y, p0=P0, workflow=spelling)
     assert rec.calls == []
-
-
-def test_fit_preset_helper_has_a_single_gated_caller() -> None:
-    """_fit_with_preset is only called from fit(), after the REMOVED_PRESETS gate."""
-    source = inspect.getsource(minpack)
-    assert source.count("_fit_with_preset(") == 2  # the def + the one call
-    fit_source = inspect.getsource(minpack.fit)
-    gate = fit_source.index("REMOVED_PRESETS")
-    assert gate < fit_source.index("_fit_with_preset(")
 
 
 def test_fitter_fit_never_builds_hybrid(rec: Recorder) -> None:
@@ -1403,10 +2129,15 @@ def test_fitter_fit_never_builds_hybrid(rec: Recorder) -> None:
     close_to_truth(result.x)
 
 
-def test_hybrid_workflow_routes_reject_tolerance_kwargs(rec: Recorder) -> None:
-    """curve_fit_large / curve_fit hybrid routes accept only config fields."""
+def test_hybrid_routes_reject_unsupported_kwargs(rec: Recorder) -> None:
+    """curve_fit_large / curve_fit hybrid routes accept only config fields:
+    tolerances and callback (on curve_fit_large) are rejected, never forwarded."""
     with pytest.raises(TypeError, match="Unrecognized keyword"):
         nlsq.curve_fit_large(MODEL, X, Y, p0=P0, method="hybrid_streaming", gtol=1e-3)
+    with pytest.raises(TypeError, match="Unrecognized keyword"):
+        nlsq.curve_fit_large(
+            MODEL, X, Y, p0=P0, method="hybrid_streaming", callback=_CALLBACK
+        )
     with pytest.raises(TypeError, match="Unrecognized keyword"):
         nlsq.curve_fit(MODEL, X, Y, p0=P0, method="hybrid_streaming", gtol=1e-3)
     assert rec.ctors() == []
@@ -1511,18 +2242,25 @@ def test_multistart_standard_strategy_uses_curve_fit(
 
 
 def test_multistart_wrong_typed_memory_config_is_replaced(rec: Recorder) -> None:
-    """A memory_config of the other engine's type is ignored, not reused."""
+    """A memory_config of the other engine's type is ignored, not reused or mutated."""
     rec.stubs[FITTER] = fitter_ok
     rec.stubs[HYBRID] = hybrid_ok
-    _call_multistart("chunked", memory_config=HybridStreamingConfig(chunk_size=17))
-    expect_config(
-        rec.ctors(FITTER)[0].named["config"],
-        LDMemoryConfig(
+    wrong_for_chunked = HybridStreamingConfig(chunk_size=17)
+    wrong_for_streaming = LDMemoryConfig(memory_limit_gb=1.0, min_chunk_size=5)
+    before = (snap(wrong_for_chunked), snap(wrong_for_streaming))
+    _call_multistart("chunked", memory_config=wrong_for_chunked)
+    expect_fitter_ctor(
+        rec,
+        memory_limit_gb=8.0,
+        config=LDMemoryConfig(
             memory_limit_gb=8.0, min_chunk_size=1000, max_chunk_size=1_000_000
         ),
-        "chunked fallback config",
     )
-    _call_multistart("streaming", memory_config=LDMemoryConfig(memory_limit_gb=1.0))
-    assert rec.ctors(HYBRID)[0].named["config"].chunk_size == (
+    _call_multistart("streaming", memory_config=wrong_for_streaming)
+    assert rec.ctors(HYBRID)[0].configs["config"].chunk_size == (
         HybridStreamingConfig().chunk_size
+    )
+    expect_unchanged(wrong_for_chunked, before[0], "wrong-typed chunked memory_config")
+    expect_unchanged(
+        wrong_for_streaming, before[1], "wrong-typed streaming memory_config"
     )
