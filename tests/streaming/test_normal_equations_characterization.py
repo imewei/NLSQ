@@ -457,3 +457,40 @@ def test_hybrid_kernel_follows_reassigned_jacobian():
     _assert_close(jtj3, jtj)
     _assert_close(jtr3, jtr)
     _assert_close(cost3, cost)
+
+
+@pytest.mark.parametrize("strategy", ["loop", "scan"])
+def test_accumulate_pass_matches_manual_loop(strategy):
+    """_accumulate_pass == hand-rolled chunk loop / scan, ragged final chunk."""
+    opt, (x, y), p0_norm = _setup(_config(strategy, chunk=6000))  # 6000*3 + 2000
+    JTJ, JTr, rss = opt._accumulate_pass(p0_norm, x, y)
+
+    if strategy == "scan":
+        ref_JTJ, ref_JTr, ref_rss = opt._accumulate_jtj_jtr_scan(x, y, p0_norm)
+    else:
+        ref_JTJ, ref_JTr, ref_rss = jnp.zeros((2, 2)), jnp.zeros(2), 0.0
+        for i in range(0, N_POINTS, 6000):
+            ref_JTJ, ref_JTr, c = opt._accumulate_jtj_jtr(
+                x[i : i + 6000], y[i : i + 6000], p0_norm, ref_JTJ, ref_JTr
+            )
+            ref_rss += c
+
+    _assert_close(JTJ, ref_JTJ)
+    _assert_close(JTr, ref_JTr)
+    _assert_close(rss, ref_rss)
+    _assert_close(opt.phase2_JTJ_accumulator, JTJ)
+    _assert_close(opt.phase2_JTr_accumulator, JTr)
+
+
+def test_accumulate_pass_on_chunk_called():
+    """on_chunk fires once per chunk with (0-based idx, n_chunks), even under scan."""
+    opt, (x, y), p0_norm = _setup(_config("scan", chunk=6000))
+    calls = []
+    JTJ, JTr, rss = opt._accumulate_pass(
+        p0_norm, x, y, on_chunk=lambda i, n: calls.append((i, n))
+    )
+    assert calls == [(0, 4), (1, 4), (2, 4), (3, 4)]
+    ref = opt._accumulate_jtj_jtr_scan(x, y, p0_norm)  # same maths either path
+    _assert_close(JTJ, ref[0])
+    _assert_close(JTr, ref[1])
+    _assert_close(rss, ref[2])

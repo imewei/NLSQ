@@ -2518,6 +2518,69 @@ class AdaptiveHybridStreamingOptimizer:
 
         return JTJ_new, JTr_new, residual_sum_sq
 
+    def _accumulate_pass(
+        self,
+        params: jnp.ndarray,
+        x_data: Any,
+        y_data: Any,
+        *,
+        on_chunk: Callable[[int, int], None] | None = None,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
+        """Accumulate J^T J, J^T r and sum(r^2) over the full dataset.
+
+        Walks ``x_data``/``y_data`` in plain ``config.chunk_size`` slices (no
+        bucket padding; the last slice may be shorter), using the JAX scan
+        when ``_use_scan_for_accumulation()`` says so and the Python chunk loop
+        otherwise.
+
+        Parameters
+        ----------
+        params : array_like
+            Parameters in normalized space, shape (n_params,).
+        x_data, y_data : array_like
+            Full dataset.
+        on_chunk : callable, optional
+            Called as ``on_chunk(chunk_idx, n_chunks)`` (0-based ``chunk_idx``)
+            after each chunk is accumulated, for progress reporting. A scan has
+            no per-chunk host hook, so passing ``on_chunk`` forces the Python
+            loop regardless of ``loop_strategy``.
+
+        Returns
+        -------
+        JTJ, JTr : array_like
+            Accumulated normal-equation terms.
+        residual_sum_sq : float
+            ``sum(r^2)`` (not ``0.5 * sum(r^2)``).
+        """
+        if on_chunk is None and self._use_scan_for_accumulation():
+            JTJ, JTr, residual_sum_sq = self._accumulate_jtj_jtr_scan(
+                x_data, y_data, params
+            )
+        else:
+            n_params = len(params)
+            chunk_size = self.config.chunk_size
+            n_points = len(x_data)
+            n_chunks = (n_points + chunk_size - 1) // chunk_size
+            JTJ = jnp.zeros((n_params, n_params))
+            JTr = jnp.zeros(n_params)
+            residual_sum_sq = 0.0
+            for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
+                JTJ, JTr, chunk_ss = self._accumulate_jtj_jtr(
+                    x_data[i : i + chunk_size],
+                    y_data[i : i + chunk_size],
+                    params,
+                    JTJ,
+                    JTr,
+                )
+                residual_sum_sq += chunk_ss
+                if on_chunk is not None:
+                    on_chunk(chunk_idx, n_chunks)
+
+        # Checkpointing reads these; nothing reads them mid-pass.
+        self.phase2_JTJ_accumulator = JTJ
+        self.phase2_JTr_accumulator = JTr
+        return JTJ, JTr, residual_sum_sq
+
     def _solve_gauss_newton_step(
         self,
         JTJ: jnp.ndarray,
@@ -3054,35 +3117,10 @@ class AdaptiveHybridStreamingOptimizer:
         config.loop_strategy for optimal performance on each backend.
         """
         x_data, y_data = data_source
-        n_params = len(current_params)
         n_points = len(x_data)
-        chunk_size = self.config.chunk_size
 
-        # Dispatch based on backend: scan for GPU/TPU, loops for CPU
-        if self._use_scan_for_accumulation():
-            # Use JAX scan for GPU/TPU (better XLA fusion, reduced kernel launches)
-            JTJ, JTr, total_cost = self._accumulate_jtj_jtr_scan(
-                x_data,
-                y_data,
-                current_params,
-            )
-        else:
-            # Use Python loops for CPU (lower tracing overhead)
-            JTJ = jnp.zeros((n_params, n_params))
-            JTr = jnp.zeros(n_params)
-            total_cost = 0.0
-
-            for i in range(0, n_points, chunk_size):
-                x_chunk = x_data[i : i + chunk_size]
-                y_chunk = y_data[i : i + chunk_size]
-                JTJ, JTr, chunk_cost = self._accumulate_jtj_jtr(
-                    x_chunk,
-                    y_chunk,
-                    current_params,
-                    JTJ,
-                    JTr,
-                )
-                total_cost += chunk_cost
+        # Scan on GPU/TPU, Python loop on CPU (dispatch lives in _accumulate_pass)
+        JTJ, JTr, total_cost = self._accumulate_pass(current_params, x_data, y_data)
 
         # Add group variance regularization if enabled
         # This prevents per-angle parameters from absorbing angle-dependent signals
@@ -3397,10 +3435,6 @@ class AdaptiveHybridStreamingOptimizer:
         chunk_size = self.config.chunk_size
         n_points = len(x_data)
 
-        final_JTJ = jnp.zeros((n_params, n_params))
-        final_JTr = jnp.zeros(n_params)
-        final_residual_sum_sq = 0.0
-
         # Get verbosity from config or default to 1 for progress output
         verbose = getattr(self.config, "verbose", 1)
         log_frequency = getattr(
@@ -3417,20 +3451,8 @@ class AdaptiveHybridStreamingOptimizer:
                 f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)...",
             )
 
-        for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
-            x_chunk = x_data[i : i + chunk_size]
-            y_chunk = y_data[i : i + chunk_size]
-
-            final_JTJ, final_JTr, res_sq = self._accumulate_jtj_jtr(
-                x_chunk,
-                y_chunk,
-                current_params,
-                final_JTJ,
-                final_JTr,
-            )
-            final_residual_sum_sq += res_sq
-
-            # Progress for initial JTJ computation (every 10% or every 50 chunks)
+        def _report_init_progress(chunk_idx: int, n_chunks: int) -> None:
+            # Every 10% of chunks and on the last chunk
             if verbose >= 1 and (
                 (chunk_idx + 1) % max(1, n_chunks // 10) == 0
                 or (chunk_idx + 1) == n_chunks
@@ -3441,6 +3463,11 @@ class AdaptiveHybridStreamingOptimizer:
                     f"  Initial JTJ: {chunk_idx + 1}/{n_chunks} chunks "
                     f"({pct:.0f}%), elapsed={elapsed:.1f}s",
                 )
+
+        # on_chunk pins the Python loop (the initial pass never used the scan)
+        final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(
+            current_params, x_data, y_data, on_chunk=_report_init_progress
+        )
 
         if verbose >= 1:
             init_elapsed = time.time() - init_start_time
@@ -3562,35 +3589,10 @@ class AdaptiveHybridStreamingOptimizer:
                 # path here previously ran on every accepted GN iteration
                 # even on GPU/TPU, defeating the scan path's XLA fusion.
                 x_data, y_data = data_source
-                n_params = len(current_params)
 
-                if self._use_scan_for_accumulation():
-                    JTJ, JTr, residual_sum_sq = self._accumulate_jtj_jtr_scan(
-                        x_data,
-                        y_data,
-                        current_params,
-                    )
-                else:
-                    chunk_size = self.config.chunk_size
-                    n_points = len(x_data)
-                    JTJ = jnp.zeros((n_params, n_params))
-                    JTr = jnp.zeros(n_params)
-                    residual_sum_sq = 0.0
-                    for i in range(0, n_points, chunk_size):
-                        x_chunk = x_data[i : i + chunk_size]
-                        y_chunk = y_data[i : i + chunk_size]
-
-                        JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
-                            x_chunk,
-                            y_chunk,
-                            current_params,
-                            JTJ,
-                            JTr,
-                        )
-                        residual_sum_sq += res_sq
-
-                final_JTJ = JTJ
-                final_residual_sum_sq = residual_sum_sq
+                final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(
+                    current_params, x_data, y_data
+                )
             else:
                 # Step rejected - trust radius is already updated in
                 # _gauss_newton_iteration, no need to shrink again here.
@@ -4468,28 +4470,9 @@ class AdaptiveHybridStreamingOptimizer:
             # this fallback -- fit() would crash instead of degrading
             # gracefully to a success=False result.
             try:
-                if self._use_scan_for_accumulation():
-                    JTJ_fb, JTr_fb, residual_sum_sq_fb = self._accumulate_jtj_jtr_scan(
-                        x_data,
-                        y_data,
-                        fallback_params,
-                    )
-                else:
-                    chunk_size_fb = self.config.chunk_size
-                    JTJ_fb = jnp.zeros((n_params_fb, n_params_fb))
-                    JTr_fb = jnp.zeros(n_params_fb)
-                    residual_sum_sq_fb = 0.0
-                    for i in range(0, n_points, chunk_size_fb):
-                        x_chunk = x_data[i : i + chunk_size_fb]
-                        y_chunk = y_data[i : i + chunk_size_fb]
-                        JTJ_fb, JTr_fb, res_sq = self._accumulate_jtj_jtr(
-                            x_chunk,
-                            y_chunk,
-                            fallback_params,
-                            JTJ_fb,
-                            JTr_fb,
-                        )
-                        residual_sum_sq_fb += res_sq
+                JTJ_fb, _JTr_fb, residual_sum_sq_fb = self._accumulate_pass(
+                    fallback_params, x_data, y_data
+                )
                 residual_sum_sq_fb = float(residual_sum_sq_fb)
             except Exception as recompute_exc:
                 _logger.warning(
