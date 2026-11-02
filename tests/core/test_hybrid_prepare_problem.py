@@ -1,9 +1,9 @@
-"""Hybrid streaming input preparation goes through ``prepare_problem`` (Part B, B3).
+"""Hybrid streaming input preparation goes through ``prepare_problem``.
 
 Pins what ``_curve_fit_hybrid_streaming`` does with ``nan_policy``,
 ``check_finite``, ``p0`` and ``bounds`` after it delegates to
 ``nlsq.core.problem.prepare_problem``, including the five deliberate behavior
-differences (each was a crash or a silently wrong result before B3).
+differences (each was a crash or a silently wrong result before hybrid shared preparation).
 """
 
 import jax.numpy as jnp
@@ -61,7 +61,8 @@ def test_hybrid_kwargs_not_mutated_by_preparation(monkeypatch, reached):
 
     With ``enable_stability=True`` and ``method=None`` the standard path would add
     ftol/xtol/gtol/max_nfev/x_scale; those would fail the hybrid's leftover-keyword
-    TypeError check. Hybrid passes no kwargs/method to ``prepare_problem``.
+    TypeError check. Hybrid passes an explicit method and no kwargs to
+    ``prepare_problem``, so auto-selection cannot add them.
     """
     x, y = _data()
     calls = []
@@ -82,7 +83,7 @@ def test_hybrid_kwargs_not_mutated_by_preparation(monkeypatch, reached):
     assert calls[0].get("kwargs") is None
     assert calls[0].get("method") == "hybrid_streaming"
     assert calls[0]["ctx"].flength is None
-    # Config overrides still reach the optimizer config, nothing extra is added.
+    # The prepared p0/bounds/sigma reach the optimizer call.
     assert set(reached["kwargs"]) >= {"p0", "bounds", "sigma"}
 
 

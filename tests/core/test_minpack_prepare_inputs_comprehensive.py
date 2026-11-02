@@ -1,8 +1,8 @@
 """
 Comprehensive tests for input preparation (``nlsq.core.problem.prepare_problem``).
 
-These tests provide safety net for Sprint 2 refactoring.
-Goal: Cover all branches in this complex function (complexity 29).
+Covers the branches of the preparation pipeline (validation, bounds, p0, masks,
+padding, method selection).
 """
 
 import jax.numpy as jnp

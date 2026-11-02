@@ -19,9 +19,8 @@ transform.
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from inspect import signature
 from typing import Any
 
@@ -30,7 +29,7 @@ import numpy as np
 
 from nlsq.common_scipy import EPS
 from nlsq.core.least_squares import prepare_bounds
-from nlsq.utils.logging import get_logger
+from nlsq.utils.logging import NLSQLogger, get_logger
 from nlsq.utils.validators import InputValidator
 
 __all__ = ["PrepareContext", "PreparedProblem", "prepare_problem"]
@@ -45,7 +44,7 @@ class PrepareContext:
     fast-mode ``InputValidator``.
     """
 
-    flength: float | None = None
+    flength: float | None = None  # integral length; a float such as 1e6 is accepted
     use_dynamic_sizing: bool = False
     enable_stability: bool = False
     # Layout of multi-dimensional x for the x/y length check only: True is
@@ -54,9 +53,10 @@ class PrepareContext:
     # feature-major either way, so multi-dimensional hybrid x with
     # nan_policy="omit" is unsupported, exactly as before this field existed.
     x_points_axis_last: bool = True
-    # Typed Any (default None): prepare_problem resolves both before use.
-    validator: Any = None
-    logger: Any = None
+    validator: InputValidator = field(
+        default_factory=lambda: InputValidator(fast_mode=True)
+    )
+    logger: NLSQLogger = field(default_factory=lambda: get_logger("curve_fit"))
 
 
 @dataclass(frozen=True)
@@ -76,7 +76,7 @@ class PreparedProblem:
     x: Any
     y: Any
     sigma: Any | None
-    mask: np.ndarray | None
+    mask: np.ndarray
     method: str
     m_real: int
     n_effective: int
@@ -578,7 +578,7 @@ def _setup_data_mask_and_padding(
         raise ValueError("Data mask doesn't match data lengths.")
 
     if ctx.flength is not None:
-        len_diff = ctx.flength - m  # type: ignore[assignment]  # flength is a float annotation but an integral length in practice
+        len_diff = int(ctx.flength) - m
         if ctx.use_dynamic_sizing:
             should_pad = len_diff > 0
         else:
@@ -824,15 +824,6 @@ def prepare_problem(
     """
     if kwargs is None:
         kwargs = {}
-    ctx = dataclasses.replace(
-        ctx,
-        logger=ctx.logger if ctx.logger is not None else get_logger("curve_fit"),
-        validator=(
-            ctx.validator
-            if ctx.validator is not None
-            else InputValidator(fast_mode=True)
-        ),
-    )
     xdata, ydata = x, y
 
     # Step 1: Determine parameter count and auto-estimate p0 if needed

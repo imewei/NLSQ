@@ -44,7 +44,7 @@ from nlsq.precision.parameter_normalizer import (
 )
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
-from nlsq.streaming.normal_equations import NormalEquations
+from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
 from nlsq.streaming.telemetry import (
     DefenseLayerTelemetry,
     get_defense_telemetry,
@@ -231,7 +231,7 @@ class AdaptiveHybridStreamingOptimizer:
         self._jacobian_fn_compiled: Callable | None = None
 
         # (normalized_model, _jacobian_fn_compiled, NormalEquations) built by
-        # _get_normal_eq; rebuilt when either object is reassigned
+        # cached_kernel; rebuilt when either object is reassigned
         self._normal_eq: tuple[Any, Any, NormalEquations] | None = None
 
         # User progress callback set by fit(); invoked every
@@ -612,7 +612,7 @@ class AdaptiveHybridStreamingOptimizer:
         if self.config.verbose >= 2:
             _logger.debug("Pre-compiled cost function for Phase 2")
 
-        # Also set up scan functions for efficient loop-free accumulation
+        # Also set up scan functions for chunked cost evaluation
         self._setup_scan_functions()
 
     def _setup_scan_functions(self) -> None:
@@ -621,10 +621,9 @@ class AdaptiveHybridStreamingOptimizer:
         This method prepares the optimizer to use JAX lax.scan for chunk-based
         cost evaluation, eliminating Python loop overhead and enabling XLA fusion.
 
-        The scan approach provides 10-15% speedup by:
-        - Eliminating Python interpreter overhead in hot loops
-        - Enabling XLA to fuse operations across chunks
-        - Reducing memory allocation overhead
+        The scan removes the Python loop around per-chunk cost evaluation and lets
+        XLA fuse the chunks. J^T J / J^T r accumulation does not use it (it always
+        runs the chunk loop through the shared normal-equations kernel).
 
         Notes
         -----
@@ -2303,25 +2302,6 @@ class AdaptiveHybridStreamingOptimizer:
         jac_fn = jax.vmap(lambda x: jax.jacrev(model_at_x, argnums=0)(params, x))
         return jac_fn(x_chunk)
 
-    def _get_normal_eq(self) -> NormalEquations:
-        """Shared chunk kernel for ``normalized_model``, keeping the hybrid Jacobian.
-
-        Built lazily and rebuilt whenever ``normalized_model`` or
-        ``_jacobian_fn_compiled`` is a different object than at the last build.
-        """
-        model, jac = self.normalized_model, self._jacobian_fn_compiled
-        cached = self._normal_eq
-        if cached is not None and cached[0] is model and cached[1] is jac:
-            return cached[2]
-
-        ne = NormalEquations(
-            model,
-            chunk=self.config.chunk_size,  # only sizes run_pass; chunk_stats takes any length
-            jacobian=lambda theta, x: self._compute_jacobian_chunk(x, theta),
-        )
-        self._normal_eq = (model, jac, ne)
-        return ne
-
     def _accumulate_jtj_jtr(
         self,
         x_chunk: jnp.ndarray,
@@ -2368,14 +2348,10 @@ class AdaptiveHybridStreamingOptimizer:
         - J^T r_new = J^T r_prev + J_chunk^T @ r_chunk
         where r_chunk = y_chunk - f(x_chunk, params)
         """
-        mask = jnp.ones(len(x_chunk), dtype=bool)  # production chunks are unpadded
-        F, g, H = self._get_normal_eq().chunk_stats(params, x_chunk, y_chunk, mask)
-
-        JTJ_new = JTJ_prev + H
-        JTr_new = JTr_prev + g
-
-        # kernel cost is 0.5*sum r^2; this method returns sum r^2
-        residual_sum_sq = float(2.0 * F)
+        # production chunks are unpadded
+        JTJ_new, JTr_new, residual_sum_sq = cached_kernel(self).add_chunk(
+            params, x_chunk, y_chunk, JTJ_prev, JTr_prev
+        )
 
         # Store accumulators for checkpointing
         self.phase2_JTJ_accumulator = JTJ_new
@@ -3322,7 +3298,7 @@ class AdaptiveHybridStreamingOptimizer:
                     f"({pct:.0f}%), elapsed={elapsed:.1f}s",
                 )
 
-        # on_chunk pins the Python loop (the initial pass never used the scan)
+        # progress callback only; _accumulate_pass always uses the chunk loop
         final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(
             current_params, x_data, y_data, on_chunk=_report_init_progress
         )
