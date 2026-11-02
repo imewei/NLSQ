@@ -90,6 +90,16 @@ Large Dataset Tips
    popt, pcov = curve_fit_large(model, x, y, p0=p0)
    # Memory-efficient chunked processing
 
+The default path fits each chunk and combines the results; for a nonlinear model
+that is not the full-batch answer. Pass ``method="exact_streaming"`` for an exact
+full-data fit that accumulates ``J^T J`` and ``J^T r`` over chunks (any size,
+memmap/HDF5/Zarr sources, ``sigma``, ``bounds``). It was the fastest NLSQ path at
+100M points in the benchmarks below; see :ref:`exact-streaming`.
+
+.. code-block:: python
+
+   popt, pcov = curve_fit_large(model, x, y, p0=p0, method="exact_streaming")
+
 **2. Start with a subset:**
 
 .. code-block:: python
@@ -119,44 +129,40 @@ Large Dataset Tips
 Performance Benchmarks
 ----------------------
 
-Typical performance on modern hardware (8-core CPU, 32GB RAM):
+Measured on an i9-13900H (20 logical cores, 62 GB RAM) and an RTX 4090 Laptop GPU (16 GB),
+3-parameter ``exp_decay`` model, warm median (2026-11-01, JAX 0.12.0.1). Timings on a laptop
+vary by up to about 50% between sessions.
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 20 20 20 20
+   :widths: 16 28 28 28
 
    * - Points
-     - Strategy
-     - First Fit
-     - Subsequent
-     - Memory
-   * - 10K
-     - STANDARD
-     - ~1s
-     - ~0.1s
-     - ~100MB
-   * - 100K
-     - STANDARD
-     - ~2s
-     - ~0.3s
-     - ~1GB
+     - ``curve_fit_large`` default, CPU
+     - ``exact_streaming``, CPU
+     - ``exact_streaming``, GPU
+   * - 1K
+     - 3.8 ms
+     - 60 ms
+     - 92 ms
    * - 1M
-     - CHUNKED
-     - ~10s
-     - ~2s
-     - ~2GB
+     - 0.58 s
+     - 0.19 s
+     - 0.45 s
    * - 10M
-     - STREAMING
-     - ~60s
-     - ~20s
-     - ~4GB
+     - 3.1 s
+     - 1.3 s
+     - 0.26 s
    * - 100M
-     - STREAMING
-     - ~10min
-     - ~3min
-     - ~4GB
+     - 29 s
+     - 8.7 s
+     - 0.60 s
 
-First fit includes JIT compilation; subsequent fits are faster.
+Plain ``curve_fit`` runs out of memory on the 16 GB GPU at 100M points. On the GPU at 1M
+points and below, plain ``curve_fit`` is faster than ``exact_streaming`` (1M: 53 ms vs
+451 ms), and ``exact_streaming`` has a fixed cost of tens of milliseconds at 1K. The first
+fit also pays JIT compilation. The full comparison against SciPy, lmfit, JAXopt and Optimistix is in
+``benchmarks/baselines/2026-11-01-library-comparison-1k-1M-10M-100M.md``.
 
 GPU Acceleration
 ----------------

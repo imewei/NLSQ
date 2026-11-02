@@ -53,6 +53,8 @@ Automatically chunks data to fit within GPU memory.
        model, x, y, p0=[1.0, 0.1, 0.0], memory_limit_gb=8.0  # Limit to 8 GB
    )
 
+.. _exact-streaming:
+
 Exact streaming (``method="exact_streaming"``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
