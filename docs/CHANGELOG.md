@@ -1,6 +1,13 @@
 # Documentation Changelog
 
 ## Unreleased
+- `/dev-suite:docs update --full` pass for the exact streaming solver and the 2026-11-01
+  benchmark rerun: new `api/nlsq.streaming.exact_lm.rst` (`ExactSolverError`) linked from
+  `api/modules.rst`; `exact-streaming` label on the reference section; the large-dataset
+  tutorial gains an `exact_streaming` tip and its unmeasured "Typical performance" table
+  (e.g. 100M points in about 10 minutes) is replaced by measured 1K/1M/10M/100M timings;
+  `benchmarks/README.md` lists the `nlsq_large` and `nlsq_exact` adapters and the new
+  baselines; README feature table mentions the exact streaming fit.
 - `reference/large_data.rst`: new "Exact streaming" section for
   `curve_fit_large(method="exact_streaming")` (model contract, accepted and
   rejected arguments, 1-D `sigma` weights, box `bounds` by active set,
