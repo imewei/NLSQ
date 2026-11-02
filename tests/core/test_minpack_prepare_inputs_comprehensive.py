@@ -1,5 +1,5 @@
 """
-Comprehensive tests for CurveFit._prepare_curve_fit_inputs.
+Comprehensive tests for input preparation (``nlsq.core.problem.prepare_problem``).
 
 These tests provide safety net for Sprint 2 refactoring.
 Goal: Cover all branches in this complex function (complexity 29).

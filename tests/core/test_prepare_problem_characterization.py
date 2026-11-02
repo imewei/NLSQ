@@ -1,7 +1,7 @@
 """Characterization of ``curve_fit`` input preparation (Part B, Task B1).
 
 These tests pin the CURRENT observable behavior of input preparation
-(``CurveFit._prepare_curve_fit_inputs`` and its helpers, plus the duplicate
+(``nlsq.core.problem.prepare_problem`` and its helpers, plus the duplicate
 preparation inside ``_curve_fit_hybrid_streaming``) through the public entry
 points, so the extraction of ``prepare_problem`` into ``nlsq/core/problem.py``
 can be shown to be behavior-preserving.
@@ -13,7 +13,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from nlsq import CurveFit, curve_fit
+from nlsq import curve_fit
+from nlsq.core.problem import PrepareContext, prepare_problem
 from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 
 N = 60
@@ -140,20 +141,24 @@ class TestPreparationOrder:
         n_clean = int(keep.sum())
         assert n_clean == N - 2
 
-        out = CurveFit(enable_stability=True, flength=100)._prepare_curve_fit_inputs(
+        out = prepare_problem(
             _model,
             x,
             y_nan,
             np.array([1.0, 1.0]),
             (-np.inf, np.inf),
-            "auto",
-            None,
+            None,  # sigma
+            None,  # data_mask
+            True,  # check_finite
+            "omit",
             None,  # method=None -> auto-selection runs
-            True,
-            None,
+            "auto",
+            None,  # batch_size
             {"nan_policy": "omit"},
+            PrepareContext(enable_stability=True, flength=100),
         )
-        _, _, xdata, ydata, data_mask, _, _, _, m, len_diff, should_pad, _, _ = out
+        xdata, ydata, data_mask = out.x, out.y, out.mask
+        m, len_diff, should_pad = out.m_real, out.len_diff, out.should_pad
 
         # Selector ran once, on the cleaned and still-unpadded observations.
         assert len(seen) == 1
@@ -244,8 +249,7 @@ class TestKwargsLeftovers:
     def test_kwargs_leftovers_visible_to_caller(self):
         """Pin how preparation treats the caller's ``kwargs`` dict.
 
-        Isolated on purpose: it calls the private ``_prepare_curve_fit_inputs``
-        directly, so the extraction task (B2) repoints it to ``prepare_problem``.
+        Isolated on purpose: it calls ``prepare_problem`` directly.
 
         Current behavior (differs from the plan's wording): preparation CONSUMES
         nothing. ``nan_policy`` is read with ``kwargs.get`` and stays in the dict;
@@ -257,20 +261,26 @@ class TestKwargsLeftovers:
         args = (
             np.array([1.0, 1.0]),
             (-np.inf, np.inf),
-            "auto",
-            None,  # batch_size
-            None,  # method
-            True,  # check_finite
+            None,  # sigma
             None,  # data_mask
+            True,  # check_finite
         )
+        rest = (None, "auto", None)  # method, solver, batch_size
 
         kwargs = {"nan_policy": "omit", "unrelated": 1}
-        CurveFit()._prepare_curve_fit_inputs(_model, x, y, *args, kwargs)
+        prepare_problem(_model, x, y, *args, "omit", *rest, kwargs)
         assert kwargs == {"nan_policy": "omit", "unrelated": 1}
 
         kwargs = {"ftol": 1e-3}
-        CurveFit(enable_stability=True)._prepare_curve_fit_inputs(
-            _model, x, y, *args, kwargs
+        prepare_problem(
+            _model,
+            x,
+            y,
+            *args,
+            "raise",
+            *rest,
+            kwargs,
+            PrepareContext(enable_stability=True),
         )
         assert kwargs["ftol"] == 1e-3  # caller-supplied value is kept
         assert set(kwargs) == {"ftol", "xtol", "gtol", "max_nfev", "x_scale"}
