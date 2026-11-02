@@ -80,7 +80,7 @@ def test_hybrid_kwargs_not_mutated_by_preparation(monkeypatch, reached):
 
     assert len(calls) == 1
     assert calls[0].get("kwargs") is None
-    assert calls[0].get("method") is None
+    assert calls[0].get("method") == "hybrid_streaming"
     assert calls[0]["ctx"].flength is None
     # Config overrides still reach the optimizer config, nothing extra is added.
     assert set(reached["kwargs"]) >= {"p0", "bounds", "sigma"}
@@ -213,6 +213,7 @@ def _model_2d(x, a, b):
     return a * x[:, 0] + b * x[:, 1]
 
 
+@pytest.mark.slow
 def test_hybrid_accepts_points_first_2d_x():
     """Hybrid takes x as (n_points, n_features); the standard path is feature-major."""
     from nlsq import curve_fit

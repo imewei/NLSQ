@@ -3536,7 +3536,9 @@ class CurveFit:
 
         # nan_policy is popped here, before the leftover-keyword TypeError check
         # below. prepare_problem owns NaN handling, p0 and bounds; flength=None
-        # means no padding, and method/solver stay at their defaults.
+        # means no padding. An explicit method is returned unchanged by method
+        # selection (it only touches kwargs when method is None), and kwargs is
+        # not passed, so nothing is injected into the hybrid's kwargs.
         prepared = prepare_problem(
             f,
             xdata,
@@ -3546,6 +3548,7 @@ class CurveFit:
             sigma=sigma,
             check_finite=check_finite,
             nan_policy=kwargs.pop("nan_policy", "raise"),
+            method="hybrid_streaming",
             # Hybrid takes multi-dimensional x as (n_points, n_features).
             ctx=PrepareContext(
                 flength=None, use_dynamic_sizing=False, x_points_axis_last=False

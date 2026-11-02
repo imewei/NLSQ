@@ -101,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make dev` or `uv sync`.
 
 ### Changed (behavior)
-- `method="hybrid_streaming"` now prepares its inputs through the same
+- `curve_fit(..., method="hybrid_streaming")` now prepares its inputs through the same
   `prepare_problem` pipeline as the standard path. Cases that crashed or returned a
   silently wrong result now behave as follows:
   - `p0="auto"` estimates the initial parameters and fits (was a `UFuncTypeError`).
@@ -119,6 +119,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     first. `p0="auto"` with `nan_policy="omit"` estimates from the data before rows are
     omitted, as on the standard path.
   - Multi-dimensional `x` is still taken as `(n_points, n_features)` by this method.
+    `nan_policy="omit"` still treats multi-dimensional `x` as feature-major, so that
+    combination remains unsupported, as before.
+  - These changes apply to `curve_fit(..., method="hybrid_streaming")`;
+    `curve_fit_large(..., method="hybrid_streaming")` has its own branch and is
+    unaffected.
+  - `CurveFit.pad_fit_data` overrides in subclasses are no longer consulted by input
+    preparation (the module-level `pad_fit_data` is used).
 
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input

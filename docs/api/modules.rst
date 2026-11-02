@@ -16,6 +16,7 @@ Main interface for curve fitting:
    :maxdepth: 2
 
    nlsq.minpack
+   nlsq.core.problem
    nlsq.least_squares
 
 Pre-Built Functions

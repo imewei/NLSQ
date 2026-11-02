@@ -50,7 +50,9 @@ class PrepareContext:
     enable_stability: bool = False
     # Layout of multi-dimensional x for the x/y length check only: True is
     # (n_features, n_points) (standard path); hybrid streaming passes False for
-    # (n_points, n_features). NaN omission stays feature-major either way.
+    # (n_points, n_features). NaN omission (nan_policy="omit") stays
+    # feature-major either way, so multi-dimensional hybrid x with
+    # nan_policy="omit" is unsupported, exactly as before this field existed.
     x_points_axis_last: bool = True
     # Typed Any (default None): prepare_problem resolves both before use.
     validator: Any = None
@@ -932,7 +934,7 @@ def prepare_problem(
         mask=data_mask,
         method=method,
         m_real=m,
-        n_effective=int(np.sum(data_mask)) if data_mask is not None else m,
+        n_effective=int(np.sum(data_mask)),
         len_diff=len_diff,
         should_pad=should_pad,
         none_mask=none_mask,
