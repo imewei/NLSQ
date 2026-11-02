@@ -1,12 +1,12 @@
-"""Routing table for the two large-dataset engines (Part D, task D1).
+"""Routing table for the two large-dataset engines.
 
 Pins, for each of the 13 places that construct ``AdaptiveHybridStreamingOptimizer``
 (the "hybrid" engine) or ``LargeDatasetFitter`` (the "chunked" engine), what a
 given (entry point, kwargs) builds: which class, the whole constructor argument
 set, the config values (forwarded or dropped tolerances), how the engine's fit
-method is called, and what the entry point returns. It is the safety net for
-moving those construction sites behind ``build_large_strategy``: the rows must
-keep passing unchanged.
+method is called, and what the entry point returns. It guards the routing of those
+construction sites through ``build_large_strategy``: the rows were written against
+the pre-migration code and must keep passing unchanged.
 
 Recording patches ``__init__``/``fit``/``fit_with_progress`` on the two real
 classes (not module attributes), so it sees construction wherever the classes
@@ -2105,8 +2105,8 @@ def test_legacy_preset_keys_rejected_publicly(rec: Recorder) -> None:
     """Every WORKFLOW_PRESETS key is rejected before _fit_with_preset can run.
 
     So the two constructors inside _fit_with_preset have no public path; the
-    rows above drive them through the helper directly. (If D2 restructures
-    _fit_with_preset, this behavioural gate is what must keep holding.)
+    rows above drive them through the helper directly. (If
+    _fit_with_preset is restructured, this behavioural gate must keep holding.)
     """
     assert set(minpack.WORKFLOW_PRESETS) == set(minpack.REMOVED_PRESETS)
     for key in minpack.WORKFLOW_PRESETS:

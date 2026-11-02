@@ -75,7 +75,7 @@ def test_hybrid_without_gtol_keeps_config_identity():
     assert built.engine.config is cfg
 
 
-def test_hybrid_rejects_unknown_fit_kwarg(monkeypatch):
+def test_hybrid_rejects_unknown_fit_kwarg():
     # Only the tolerances are translated; anything else reaches the engine's
     # strict signature and fails loudly, as it does when called directly.
     cfg = HybridStreamingConfig()
