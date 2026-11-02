@@ -435,7 +435,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         Scope limitation: weighting is only applied in the L-BFGS warmup
         loss (``_create_warmup_loss_fn``). Phase 2 Gauss-Newton refinement
-        (``_accumulate_jtj_jtr`` / ``_accumulate_jtj_jtr_scan``) does not
+        (``_accumulate_jtj_jtr``) does not
         currently incorporate these weights, so the effective optimization
         objective is weighted during warmup and unweighted afterward.
         """
@@ -629,8 +629,8 @@ class AdaptiveHybridStreamingOptimizer:
 
         Notes
         -----
-        The actual scan body functions are created inline in _accumulate_jtj_jtr_scan
-        and _compute_cost_scan, as they need to capture the current params in a closure.
+        The actual scan body function is created inline in _compute_cost_scan,
+        as it needs to capture the current params in a closure.
         This setup method primarily validates that prerequisites are met.
         """
         if self.normalized_model is None:
@@ -857,132 +857,6 @@ class AdaptiveHybridStreamingOptimizer:
         data identity changes, but explicit clearing frees memory sooner.
         """
         self._padded_cache = None
-
-    def _accumulate_jtj_jtr_scan(
-        self,
-        x_data: jnp.ndarray,
-        y_data: jnp.ndarray,
-        params: jnp.ndarray,
-    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
-        """Accumulate J^T J and J^T r using JAX lax.scan for efficiency.
-
-        This is the scan-based version of the chunk accumulation loop,
-        providing 10-15% speedup by eliminating Python loop overhead.
-
-        Parameters
-        ----------
-        x_data : array_like
-            Full x data of shape (n_points,) or (n_points, n_features)
-        y_data : array_like
-            Full y data of shape (n_points,)
-        params : array_like
-            Current parameters in normalized space of shape (n_params,)
-
-        Returns
-        -------
-        JTJ : array_like
-            Accumulated J^T J of shape (n_params, n_params)
-        JTr : array_like
-            Accumulated J^T r of shape (n_params,)
-        total_cost : float
-            Total sum of squared residuals
-
-        Notes
-        -----
-        Uses jax.lax.scan instead of Python for loop, enabling XLA fusion
-        across chunks and eliminating interpreter overhead.
-        Uses masking to handle padding correctly for non-divisible data sizes.
-        """
-        chunk_size = self.config.chunk_size
-        n_params = len(params)
-
-        # B006: Use cached padded flat arrays + dynamic_slice instead of
-        # pre-stacking into (n_chunks, chunk_size, ...) arrays.
-        x_padded, y_padded, n_points, n_chunks = self._get_padded_data(
-            x_data,
-            y_data,
-            chunk_size,
-        )
-
-        # Capture functions and data for scan body closure
-        normalized_model = self.normalized_model
-        jacobian_fn = self._jacobian_fn_compiled
-        x_ndim = x_padded.ndim
-
-        chunk_indices = jnp.arange(n_chunks)
-
-        def scan_body(carry, chunk_idx):
-            """Scan body using dynamic_slice from flat padded arrays."""
-            JTJ, JTr, total_cost = carry
-            start = chunk_idx * chunk_size
-
-            # Dynamic slice from flat padded arrays (no pre-stacking needed)
-            if x_ndim == 1:
-                x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
-            else:
-                x_chunk = jax.lax.dynamic_slice(
-                    x_padded,
-                    (start, 0),
-                    (chunk_size, x_padded.shape[1]),
-                )
-            y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
-
-            # Compute mask on-the-fly (tiny chunk_size array, not full n_points)
-            mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
-
-            # See _fill_padded_rows: guards NaN/Inf from evaluating the model
-            # at padded rows before masking. The mask below still excludes
-            # padded rows from the accumulated sums either way.
-            safe_x_chunk = _fill_padded_rows(x_chunk, mask)
-
-            # Compute predictions and residuals
-            predictions = normalized_model(safe_x_chunk, *params)
-            residuals = y_chunk - predictions
-
-            # Apply mask to residuals (zero out padded points)
-            masked_residuals = residuals * mask
-
-            # Compute Jacobian
-            if jacobian_fn is not None:
-                J_chunk = jacobian_fn(params, safe_x_chunk)
-            else:
-
-                def model_at_x(p, x_single):
-                    return jnp.atleast_1d(normalized_model(x_single[None], *p))[0]
-
-                J_chunk = jax.vmap(
-                    lambda x: jax.jacrev(model_at_x, argnums=0)(params, x),
-                )(safe_x_chunk)
-
-            # Apply mask to Jacobian rows (zero out padded point gradients)
-            masked_J = J_chunk * mask[:, None]
-
-            # Accumulate with masked values
-            JTJ_new = JTJ + masked_J.T @ masked_J
-            JTr_new = JTr + masked_J.T @ masked_residuals
-            cost_new = total_cost + jnp.sum(masked_residuals**2)
-
-            return (JTJ_new, JTr_new, cost_new), None
-
-        # Initialize carry
-        init_carry = (
-            jnp.zeros((n_params, n_params)),
-            jnp.zeros(n_params),
-            jnp.array(0.0),
-        )
-
-        # Run scan over chunk indices (not pre-stacked data arrays)
-        (JTJ, JTr, total_cost), _ = jax.lax.scan(
-            scan_body,
-            init_carry,
-            chunk_indices,
-        )
-
-        # Store accumulators for checkpointing
-        self.phase2_JTJ_accumulator = JTJ
-        self.phase2_JTr_accumulator = JTr
-
-        return JTJ, JTr, float(total_cost)
 
     def _compute_cost_scan(
         self,
@@ -2529,9 +2403,9 @@ class AdaptiveHybridStreamingOptimizer:
         """Accumulate J^T J, J^T r and sum(r^2) over the full dataset.
 
         Walks ``x_data``/``y_data`` in plain ``config.chunk_size`` slices (no
-        bucket padding; the last slice may be shorter), using the JAX scan
-        when ``_use_scan_for_accumulation()`` says so and the Python chunk loop
-        otherwise.
+        bucket padding; the last slice may be shorter) with the Python chunk loop.
+        ``config.loop_strategy`` does not apply here (it still selects the
+        cost evaluation in ``_compute_cost``).
 
         Parameters
         ----------
@@ -2541,9 +2415,7 @@ class AdaptiveHybridStreamingOptimizer:
             Full dataset.
         on_chunk : callable, optional
             Called as ``on_chunk(chunk_idx, n_chunks)`` (0-based ``chunk_idx``)
-            after each chunk is accumulated, for progress reporting. A scan has
-            no per-chunk host hook, so passing ``on_chunk`` forces the Python
-            loop regardless of ``loop_strategy``.
+            after each chunk is accumulated, for progress reporting.
 
         Returns
         -------
@@ -2555,32 +2427,26 @@ class AdaptiveHybridStreamingOptimizer:
         Notes
         -----
         ``phase2_JTJ_accumulator`` / ``phase2_JTr_accumulator`` are maintained
-        by ``_accumulate_jtj_jtr`` (per chunk) and the scan (at its end), not
-        by this method.
+        by ``_accumulate_jtj_jtr`` (per chunk), not by this method.
         """
-        if on_chunk is None and self._use_scan_for_accumulation():
-            JTJ, JTr, residual_sum_sq = self._accumulate_jtj_jtr_scan(
-                x_data, y_data, params
+        n_params = len(params)
+        chunk_size = self.config.chunk_size
+        n_points = len(x_data)
+        n_chunks = (n_points + chunk_size - 1) // chunk_size
+        JTJ = jnp.zeros((n_params, n_params))
+        JTr = jnp.zeros(n_params)
+        residual_sum_sq = 0.0
+        for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
+            JTJ, JTr, chunk_ss = self._accumulate_jtj_jtr(
+                x_data[i : i + chunk_size],
+                y_data[i : i + chunk_size],
+                params,
+                JTJ,
+                JTr,
             )
-        else:
-            n_params = len(params)
-            chunk_size = self.config.chunk_size
-            n_points = len(x_data)
-            n_chunks = (n_points + chunk_size - 1) // chunk_size
-            JTJ = jnp.zeros((n_params, n_params))
-            JTr = jnp.zeros(n_params)
-            residual_sum_sq = 0.0
-            for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
-                JTJ, JTr, chunk_ss = self._accumulate_jtj_jtr(
-                    x_data[i : i + chunk_size],
-                    y_data[i : i + chunk_size],
-                    params,
-                    JTJ,
-                    JTr,
-                )
-                residual_sum_sq += chunk_ss
-                if on_chunk is not None:
-                    on_chunk(chunk_idx, n_chunks)
+            residual_sum_sq += chunk_ss
+            if on_chunk is not None:
+                on_chunk(chunk_idx, n_chunks)
 
         return JTJ, JTr, residual_sum_sq
 
@@ -3115,14 +2981,13 @@ class AdaptiveHybridStreamingOptimizer:
 
         Notes
         -----
-        Uses chunk-based accumulation for memory efficiency.
-        Dispatches between JAX scan (GPU/TPU) and Python loops (CPU) based on
-        config.loop_strategy for optimal performance on each backend.
+        Uses chunk-based accumulation (``_accumulate_pass``) for memory efficiency.
+        Cost evaluation of the trial step dispatches between JAX scan (GPU/TPU)
+        and Python loops (CPU) based on config.loop_strategy.
         """
         x_data, y_data = data_source
         n_points = len(x_data)
 
-        # Scan on GPU/TPU, Python loop on CPU (dispatch lives in _accumulate_pass)
         JTJ, JTr, total_cost = self._accumulate_pass(current_params, x_data, y_data)
 
         # Add group variance regularization if enabled
@@ -3585,11 +3450,6 @@ class AdaptiveHybridStreamingOptimizer:
 
                 # Recompute J^T J at new params for Phase 3
                 # This ensures we have J^T J at the final parameters.
-                # Dispatch between JAX scan (GPU/TPU) and Python loops (CPU),
-                # same as the initial accumulation above and the Phase 2
-                # failure fallback below -- the unconditional Python-loop
-                # path here previously ran on every accepted GN iteration
-                # even on GPU/TPU, defeating the scan path's XLA fusion.
                 x_data, y_data = data_source
 
                 final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(

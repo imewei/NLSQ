@@ -18,6 +18,7 @@ import jax
 import jax.numpy as jnp
 
 from nlsq.streaming.large_dataset import get_bucket_size
+from nlsq.streaming.normal_equations import NormalEquations
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -160,6 +161,9 @@ class GaussNewtonPhase:
 
         # Stall detection
         self._consecutive_rejections: int = 0
+
+        # (model, jacobian_fn, kernel) of the last _get_normal_eq build
+        self._normal_eq: tuple[Any, Any, NormalEquations] | None = None
 
     def set_jacobian_fn(self, fn: Callable | None) -> None:
         """Set pre-compiled Jacobian function."""
@@ -662,29 +666,41 @@ class GaussNewtonPhase:
         chunk_cost : float
             Sum of squared residuals for this chunk.
         """
-        # Compute predictions and residuals
-        predictions = self.normalized_model(x_chunk, *params)
-        residuals = y_chunk - predictions
-
-        # Compute Jacobian for this chunk
-        J_chunk = self._compute_jacobian_chunk(x_chunk, params)
-
-        # Mask out padded elements if chunk was padded to bucket size
-        if valid_size is not None and valid_size < len(x_chunk):
+        if valid_size is None:
+            mask = jnp.ones(len(x_chunk), dtype=bool)
+        else:
             mask = jnp.arange(len(x_chunk)) < valid_size
-            residuals = jnp.where(mask, residuals, 0.0)
-            J_chunk = jnp.where(mask[:, None], J_chunk, 0.0)
+        F, g, H = self._get_normal_eq().chunk_stats(params, x_chunk, y_chunk, mask)
 
-        # Accumulate
-        JTJ_new = JTJ_prev + J_chunk.T @ J_chunk
-        JTr_new = JTr_prev + J_chunk.T @ residuals
-        chunk_cost = float(jnp.sum(residuals**2))
+        JTJ_new = JTJ_prev + H
+        JTr_new = JTr_prev + g
+        # kernel cost is 0.5*sum r^2; this method returns sum r^2
+        chunk_cost = float(2.0 * F)
 
         # Store accumulators for checkpointing
         self.phase2_JTJ_accumulator = JTJ_new
         self.phase2_JTr_accumulator = JTr_new
 
         return JTJ_new, JTr_new, chunk_cost
+
+    def _get_normal_eq(self) -> NormalEquations:
+        """Shared chunk kernel for ``normalized_model`` with this phase's Jacobian.
+
+        Built lazily and rebuilt whenever ``normalized_model`` or
+        ``_jacobian_fn_compiled`` is a different object than at the last build
+        (the jitted kernel bakes both in).
+        """
+        model, jac = self.normalized_model, self._jacobian_fn_compiled
+        cached = self._normal_eq
+        if cached is not None and cached[0] is model and cached[1] is jac:
+            return cached[2]
+        ne = NormalEquations(
+            model,
+            chunk=self.config.chunk_size,  # only sizes run_pass; chunk_stats takes any length
+            jacobian=lambda theta, x: self._compute_jacobian_chunk(x, theta),
+        )
+        self._normal_eq = (model, jac, ne)
+        return ne
 
     def _compute_jacobian_chunk(
         self,

@@ -233,16 +233,17 @@ def test_exact_lm_golden():
 @pytest.mark.parametrize("penalty", [False, True], ids=["no_penalty", "penalty"])
 @pytest.mark.parametrize("strategy", ["scan", "loop"])
 def test_hybrid_phase2_golden(monkeypatch, penalty, strategy):
-    # Confirm the production switch (config.loop_strategy) really selects the path.
+    # J^T J accumulation always runs the chunk loop; config.loop_strategy still
+    # selects the cost-evaluation path, which is what the spy confirms.
     calls = {"scan": 0}
-    orig_scan = AdaptiveHybridStreamingOptimizer._accumulate_jtj_jtr_scan
+    orig_scan = AdaptiveHybridStreamingOptimizer._compute_cost_scan
 
     def spy_scan(self, *a, **k):
         calls["scan"] += 1
         return orig_scan(self, *a, **k)
 
     monkeypatch.setattr(
-        AdaptiveHybridStreamingOptimizer, "_accumulate_jtj_jtr_scan", spy_scan
+        AdaptiveHybridStreamingOptimizer, "_compute_cost_scan", spy_scan
     )
 
     x, rss, pcov = run_hybrid_phase2(penalty, strategy)
@@ -460,36 +461,22 @@ def test_hybrid_kernel_follows_reassigned_jacobian():
 
 
 @pytest.mark.parametrize("strategy", ["loop", "scan"])
-def test_accumulate_pass_matches_manual_loop(monkeypatch, strategy):
-    """_accumulate_pass == hand-rolled chunk loop / scan, ragged final chunk."""
-    calls = {"scan": 0}
-    orig_scan = AdaptiveHybridStreamingOptimizer._accumulate_jtj_jtr_scan
-
-    def spy_scan(self, *a, **k):
-        calls["scan"] += 1
-        return orig_scan(self, *a, **k)
-
-    monkeypatch.setattr(
-        AdaptiveHybridStreamingOptimizer, "_accumulate_jtj_jtr_scan", spy_scan
-    )
+def test_accumulate_pass_matches_manual_loop(strategy):
+    """_accumulate_pass == hand-rolled chunk loop, ragged final chunk, any strategy."""
     opt, (x, y), p0_norm = _setup(_config(strategy, chunk=6000))  # 6000*3 + 2000
     JTJ, JTr, rss = opt._accumulate_pass(p0_norm, x, y)
 
     # Checkpoint state straight after the pass, before any reference computation
-    # overwrites it, and the strategy really selected the scan or the loop.
-    assert calls["scan"] == (1 if strategy == "scan" else 0)
+    # overwrites it.
     _assert_close(opt.phase2_JTJ_accumulator, JTJ)
     _assert_close(opt.phase2_JTr_accumulator, JTr)
 
-    if strategy == "scan":
-        ref_JTJ, ref_JTr, ref_rss = orig_scan(opt, x, y, p0_norm)
-    else:
-        ref_JTJ, ref_JTr, ref_rss = jnp.zeros((2, 2)), jnp.zeros(2), 0.0
-        for i in range(0, N_POINTS, 6000):
-            ref_JTJ, ref_JTr, c = opt._accumulate_jtj_jtr(
-                x[i : i + 6000], y[i : i + 6000], p0_norm, ref_JTJ, ref_JTr
-            )
-            ref_rss += c
+    ref_JTJ, ref_JTr, ref_rss = jnp.zeros((2, 2)), jnp.zeros(2), 0.0
+    for i in range(0, N_POINTS, 6000):
+        ref_JTJ, ref_JTr, c = opt._accumulate_jtj_jtr(
+            x[i : i + 6000], y[i : i + 6000], p0_norm, ref_JTJ, ref_JTr
+        )
+        ref_rss += c
 
     _assert_close(JTJ, ref_JTJ)
     _assert_close(JTr, ref_JTr)
@@ -497,14 +484,15 @@ def test_accumulate_pass_matches_manual_loop(monkeypatch, strategy):
 
 
 def test_accumulate_pass_on_chunk_called():
-    """on_chunk fires once per chunk with (0-based idx, n_chunks), even under scan."""
-    opt, (x, y), p0_norm = _setup(_config("scan", chunk=6000))
+    """on_chunk fires once per chunk with (0-based idx, n_chunks)."""
+    opt, (x, y), p0_norm = _setup(_config("loop", chunk=6000))
     calls = []
     JTJ, JTr, rss = opt._accumulate_pass(
         p0_norm, x, y, on_chunk=lambda i, n: calls.append((i, n))
     )
     assert calls == [(0, 4), (1, 4), (2, 4), (3, 4)]
-    ref = opt._accumulate_jtj_jtr_scan(x, y, p0_norm)  # same maths either path
+    # whole data as one chunk: same maths
+    ref = opt._accumulate_jtj_jtr(x, y, p0_norm, jnp.zeros((2, 2)), jnp.zeros(2))
     _assert_close(JTJ, ref[0])
     _assert_close(JTr, ref[1])
     _assert_close(rss, ref[2])
