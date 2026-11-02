@@ -72,11 +72,11 @@ def _fill_padded_rows(x_chunk: jnp.ndarray, mask: jnp.ndarray) -> jnp.ndarray:
     """Replace padded rows (mask == 0) with x_chunk[0] before model evaluation.
 
     Padded rows are x=0 (jnp.pad's default) and only ever occur in the LAST
-    chunk of a lax.scan accumulation (pad_size < chunk_size by construction,
-    so index 0 is always real data). For models singular/undefined at 0
-    (e.g. a/x, log(x)), evaluating them there produces NaN/Inf, and
-    NaN * 0 == NaN, so masking the residual/Jacobian AFTER evaluation would
-    not zero it out and would poison the accumulated JTJ/JTr for the whole
+    chunk of the lax.scan cost evaluation (pad_size < chunk_size by
+    construction, so index 0 is always real data). For models
+    singular/undefined at 0 (e.g. a/x, log(x)), evaluating them there produces
+    NaN/Inf, and NaN * 0 == NaN, so masking the residual AFTER evaluation would
+    not zero it out and would poison the accumulated cost for the whole
     scan. x_chunk[0] is used rather than an arbitrary sentinel (e.g. 1.0)
     because it's guaranteed to be a value the model is actually defined at.
     """
@@ -243,8 +243,7 @@ class AdaptiveHybridStreamingOptimizer:
         self._cost_fn_compiled: Callable | None = None
 
         # Pre-compiled scan functions (set up in _setup_scan_functions)
-        # Used for efficient chunk-based accumulation with JAX lax.scan
-        self._jtj_scan_body_compiled: bool = False
+        # Used for efficient chunk-based cost evaluation with JAX lax.scan
         self._cost_scan_body_compiled: bool = False
 
     def _invoke_fit_callback(
@@ -617,10 +616,10 @@ class AdaptiveHybridStreamingOptimizer:
         self._setup_scan_functions()
 
     def _setup_scan_functions(self) -> None:
-        """Initialize scan function infrastructure for efficient chunk accumulation.
+        """Initialize scan function infrastructure for chunked cost evaluation.
 
         This method prepares the optimizer to use JAX lax.scan for chunk-based
-        operations, eliminating Python loop overhead and enabling XLA fusion.
+        cost evaluation, eliminating Python loop overhead and enabling XLA fusion.
 
         The scan approach provides 10-15% speedup by:
         - Eliminating Python interpreter overhead in hot loops
@@ -639,11 +638,10 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
         # Mark scan functions as available (bodies created inline in each method)
-        self._jtj_scan_body_compiled = True  # Flag indicating scan is available
         self._cost_scan_body_compiled = True
 
         if self.config.verbose >= 2:
-            _logger.debug("Scan-based accumulation enabled for Phase 2")
+            _logger.debug("Scan-based cost evaluation enabled for Phase 2")
 
     def _use_scan_for_accumulation(self) -> bool:
         """Determine whether to use JAX scan or Python loops for the cost evaluation.
@@ -2316,19 +2314,11 @@ class AdaptiveHybridStreamingOptimizer:
         if cached is not None and cached[0] is model and cached[1] is jac:
             return cached[2]
 
-        def jacobian(theta: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
-            if jac is not None:
-                return jac(theta, x)
-
-            # same inline fallback as _compute_jacobian_chunk
-            def model_at_x(p, x_single):
-                return jnp.atleast_1d(model(x_single[None], *p))[0]
-
-            return jax.vmap(lambda xi: jax.jacrev(model_at_x, argnums=0)(theta, xi))(x)
-
         ne = NormalEquations(
-            model, chunk=self.config.chunk_size, jacobian=jacobian
-        )  # chunk only sizes run_pass; chunk_stats takes any length
+            model,
+            chunk=self.config.chunk_size,  # only sizes run_pass; chunk_stats takes any length
+            jacobian=lambda theta, x: self._compute_jacobian_chunk(x, theta),
+        )
         self._normal_eq = (model, jac, ne)
         return ne
 
@@ -2406,7 +2396,7 @@ class AdaptiveHybridStreamingOptimizer:
         Walks ``x_data``/``y_data`` in plain ``config.chunk_size`` slices (no
         bucket padding; the last slice may be shorter) with the Python chunk loop.
         ``config.loop_strategy`` does not apply here (it still selects the
-        cost evaluation in ``_compute_cost``).
+        cost evaluation in ``_compute_cost_only``).
 
         Parameters
         ----------

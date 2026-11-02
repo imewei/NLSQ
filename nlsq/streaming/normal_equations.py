@@ -1,6 +1,9 @@
 """Chunked normal-equation accumulation: ``F = 0.5 sum r^2``, ``g = J^T r``, ``H = J^T J``.
 
-Shared by the exact streaming LM solver (:mod:`nlsq.streaming.exact_lm`). A data pass
+Shared by the exact streaming LM solver (:mod:`nlsq.streaming.exact_lm`), the hybrid
+optimizer (:mod:`nlsq.streaming.adaptive_hybrid`) and the Gauss-Newton phase
+(:mod:`nlsq.streaming.phases.gauss_newton`); ``exact_lm`` re-exports the moved helpers
+for import compatibility. A data pass
 sums the per-chunk statistics of a jitted kernel over equal-shape, masked chunks read
 from array-likes or a replayable chunk factory; :class:`NormalEquations` bundles the
 kernel and the pass.

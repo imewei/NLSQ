@@ -104,6 +104,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal: shared NormalEquations module for streaming solvers; no behavior change.
 - Hybrid streaming: Gauss-Newton `J^T J` accumulation always uses the chunk loop (the
   `lax.scan` accumulator was removed); `loop_strategy` now affects cost evaluation only.
+- Hybrid and phases Gauss-Newton chunks now run through the same jitted kernel as
+  `exact_lm` (fused multiply-and-sum contraction on CPU and for fewer than 5 parameters
+  on GPU); results agree to rounding (about 1e-16 relative), and `exact_lm` keeps
+  re-exporting the moved helpers.
 
 ### Fixed
 - `curve_fit_large(..., auto_size_detection=False)` no longer raises

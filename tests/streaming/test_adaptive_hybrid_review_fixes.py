@@ -94,7 +94,7 @@ class TestSigmaRejectedNotSilentlyIgnored:
         assert jnp.all(jnp.isfinite(result["x"]))
 
 
-class TestScanAccumulationMatchesLoopForSingularModel:
+class TestAccumulatePassMatchesSingleChunk:
     """G: padded x=0 rows evaluated before masking poisoned JTJ with NaN on the
     GPU/TPU scan accumulation path for models singular at x=0 (e.g. a/x),
     while the CPU Python-loop path never touched padded rows and was immune.
@@ -102,7 +102,7 @@ class TestScanAccumulationMatchesLoopForSingularModel:
     this pins that it stays finite for such a model.
     """
 
-    def test_no_nan_and_matches_loop_path_for_data_not_divisible_by_chunk_size(self):
+    def test_no_nan_and_matches_single_chunk_for_data_not_divisible_by_chunk_size(self):
         optimizer = AdaptiveHybridStreamingOptimizer(
             HybridStreamingConfig(chunk_size=8, normalize=False),
         )
@@ -119,29 +119,29 @@ class TestScanAccumulationMatchesLoopForSingularModel:
         optimizer._setup_normalization(model, jnp.array([1.0, 1.0]), None)
         params = optimizer.normalized_params
 
-        jtj_scan, jtr_scan, cost_scan = optimizer._accumulate_pass(params, x, y)
-        assert jnp.all(jnp.isfinite(jtj_scan)), jtj_scan
-        assert jnp.all(jnp.isfinite(jtr_scan)), jtr_scan
-        assert np.isfinite(cost_scan)
+        jtj_pass, jtr_pass, cost_pass = optimizer._accumulate_pass(params, x, y)
+        assert jnp.all(jnp.isfinite(jtj_pass)), jtj_pass
+        assert jnp.all(jnp.isfinite(jtr_pass)), jtr_pass
+        assert np.isfinite(cost_pass)
 
         # Reference: the whole data as one unpadded chunk (4 chunks + a ragged tail above)
-        jtj_loop, jtr_loop, cost_loop = optimizer._accumulate_jtj_jtr(
+        jtj_whole, jtr_whole, cost_whole = optimizer._accumulate_jtj_jtr(
             x, y, params, jnp.zeros((2, 2)), jnp.zeros(2)
         )
 
         np.testing.assert_allclose(
-            np.asarray(jtj_scan),
-            np.asarray(jtj_loop),
+            np.asarray(jtj_pass),
+            np.asarray(jtj_whole),
             rtol=1e-8,
             atol=1e-10,
         )
         np.testing.assert_allclose(
-            np.asarray(jtr_scan),
-            np.asarray(jtr_loop),
+            np.asarray(jtr_pass),
+            np.asarray(jtr_whole),
             rtol=1e-8,
             atol=1e-10,
         )
-        assert cost_scan == pytest.approx(cost_loop, rel=1e-8)
+        assert cost_pass == pytest.approx(cost_whole, rel=1e-8)
 
 
 class TestLbfgsBestParamsPairing:
