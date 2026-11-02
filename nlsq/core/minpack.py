@@ -77,6 +77,7 @@ from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.common_scipy import EPS
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
+from nlsq.core.covariance import pcov_from_jacobian
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
 from nlsq.core.problem import (
     PrepareContext,
@@ -3370,55 +3371,16 @@ class CurveFit:
         warn_cov : bool
             Whether to warn about covariance estimation
         """
-        cost = 2 * res.cost  # res.cost is half sum of squares!
-
-        # Do Moore-Penrose inverse discarding zero singular values
-        outputs = self.covariance_svd(res.jac)
-        # Convert JAX arrays to NumPy more efficiently using np.asarray
-        s, VT = (np.asarray(output) for output in outputs)
-
-        n_params = res.jac.shape[1]
-        # NaN/Inf in res.jac (e.g. a numerically unstable model at the solution)
-        # propagates into s via SVD; without this check, the threshold below is
-        # NaN and `s > threshold` is all-False, silently producing a deceptive
-        # all-ZERO pcov (reads as "perfectly determined") instead of the correct
-        # all-inf fallback.
-        singular = len(s) == 0 or not np.all(np.isfinite(s))
-        if not singular:
-            # Use ysize (true data count) not res.jac.shape[0] (may be padded) for
-            # the threshold, so padding doesn't cause over-aggressive SV truncation.
-            threshold = np.finfo(float).eps * max(ysize, res.jac.shape[1]) * s[0]
-            valid_mask = s > threshold
-            s = s[valid_mask]
-            VT = VT[valid_mask]
-            singular = len(s) == 0
-
-        warn_cov = False
-        if singular:
-            pcov = np.full((n_params, n_params), np.inf)
-            warn_cov = True
-            reason = "singular_jacobian"
-        else:
-            pcov = np.dot(VT.T / s**2, VT)
-            reason = None
-            if not absolute_sigma:
-                if ysize > p0.size:
-                    s_sq = cost / (ysize - p0.size)
-                    pcov = pcov * s_sq
-                else:
-                    pcov.fill(np.inf)
-                    warn_cov = True
-                    reason = "insufficient_data"
-
-        if warn_cov:
-            self.logger.warning("Covariance could not be estimated", reason=reason)
-            warnings.warn(
-                "Covariance of the parameters could not be estimated",
-                stacklevel=2,
-                category=OptimizeWarning,
-            )
-
-        return pcov, warn_cov
+        # Called directly from here: pcov_from_jacobian attributes its warning
+        # (stacklevel=3) to this method's caller.
+        return pcov_from_jacobian(
+            res.jac,
+            res.cost,  # half sum of squares; the helper applies the factor 2
+            ysize,
+            p0.size,
+            absolute_sigma,
+            self.covariance_svd,
+        )
 
     @staticmethod
     def _drop_unobserved_rows(res, xdata, ydata, data_mask):

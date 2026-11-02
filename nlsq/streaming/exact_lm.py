@@ -18,9 +18,7 @@ mitigation. Revisit with TSQR if accurate covariances at cond(J) > 1e5 are neede
 
 from __future__ import annotations
 
-import os
 import sys
-import warnings
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
@@ -30,8 +28,8 @@ import numpy as np
 from scipy.optimize import lsq_linear
 
 from nlsq.config import JAXConfig
+from nlsq.core.covariance import COND_WARN, pcov_from_normal
 from nlsq.result import OptimizeResult
-from nlsq.result.optimize_warning import OptimizeWarning
 
 # Moved to normal_equations; re-exported here (tests and benchmarks import and patch them).
 from nlsq.streaming.normal_equations import (
@@ -450,62 +448,15 @@ def _check_inputs(
     return n, p, lo, hi
 
 
-COND_WARN = 1e4  # warn when sqrt(cond(H)), the cond(J) estimate, exceeds this
-# warnings point at the user's call site, whether exact_lm_fit or curve_fit_large was called
-_NLSQ_DIR = (os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep,)
-
-
 def compute_covariance(
     H: np.ndarray, cost: float, n: int, p: int, absolute_sigma: bool
 ) -> np.ndarray:
     """Parameter covariance from ``H = J^T J`` with the ``nlsq.curve_fit`` contract.
 
-    Pseudo-inverse over the eigen-directions with ``lambda_i > p*eps*lambda_max`` (dropped
-    directions give zero rows and columns), scaled by ``2*cost/(n-p)`` unless
-    ``absolute_sigma``. All-``inf`` with an :class:`OptimizeWarning` if no direction
-    survives, any value is non-finite, or ``n <= p`` without ``absolute_sigma``.
+    Thin wrapper over :func:`nlsq.core.covariance.pcov_from_normal` returning only
+    ``pcov`` (``cost = 0.5*sum(r^2)``).
     """
-    H = np.asarray(H, dtype=np.float64)
-    pcov = np.full((p, p), np.inf)
-    if np.isfinite(H).all():
-        # eigh on H/s with s a power of two (scaling is exact, entries < 2): H + H.T would
-        # overflow for |H| > 1e308 / 2
-        top = np.max(np.abs(H))
-        s = np.ldexp(1.0, int(np.frexp(top)[1]) - 1) if top > 0 else 1.0
-        Hs = H / s
-        w, V = np.linalg.eigh((Hs + Hs.T) / 2)  # ascending
-        keep = w > p * np.finfo(np.float64).eps * w[-1]
-        if keep.any():
-            lam_min = w[0] if w[0] > 0 else 0.0
-            with np.errstate(
-                over="ignore", divide="ignore"
-            ):  # cond may overflow to inf
-                ill = lam_min == 0.0 or np.sqrt(w[-1] / lam_min) > COND_WARN
-            if ill:
-                warnings.warn(
-                    f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
-                    f"{COND_WARN:.0e}); the covariance may be inaccurate and the "
-                    "parameters may stop short of the optimum: check the result",
-                    UserWarning,
-                    skip_file_prefixes=_NLSQ_DIR,
-                )
-            Vk = V[:, keep]
-            # overflow is caught below as all-inf + OptimizeWarning; silence numpy's own
-            with np.errstate(over="ignore", invalid="ignore"):
-                cov = ((Vk / w[keep]) @ Vk.T) / s  # pinv(H) = pinv(H/s) / s
-                if absolute_sigma:
-                    pcov = cov
-                elif n > p:
-                    pcov = cov * (2.0 * cost / (n - p))
-    if not np.isfinite(pcov).all():
-        pcov = np.full((p, p), np.inf)
-    if np.isinf(pcov).any():
-        warnings.warn(
-            "Covariance of the parameters could not be estimated",
-            OptimizeWarning,
-            skip_file_prefixes=_NLSQ_DIR,
-        )
-    return pcov
+    return pcov_from_normal(H, cost, n, p, absolute_sigma)[0]
 
 
 def _check_factory_inputs(
