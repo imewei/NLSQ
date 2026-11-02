@@ -138,7 +138,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   finite `pcov` with the dropped direction zeroed, and well-conditioned fits give the
   same values to rounding. The rank cutoff is now `p*eps*lambda_max` of the normalized
   `J^T J` rather than `jnp.linalg.pinv`'s default `rcond`. The exact solver's
-  ill-conditioning `UserWarning` is not emitted for hybrid fits.
+  ill-conditioning `UserWarning` is not emitted for hybrid fits. A covariance that
+  overflows after the normalization scaling is now reported the same way (all-`inf`
+  plus the warning) instead of silently; entries below ~1e-308 after scaling still
+  underflow to zero, as before.
 
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input

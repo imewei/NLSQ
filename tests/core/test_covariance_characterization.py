@@ -585,10 +585,14 @@ def test_hybrid_fully_degenerate_contract(hybrid_wc, j_wc):
         (1.0, 1.0, 1.5e308, 3, 1.5e308),
     ],
 )
-def test_hybrid_extreme_scales_stay_finite(hybrid_wc, scale, h, rss, n, expected):
+def test_hybrid_extreme_scales_stay_finite(
+    hybrid_wc, monkeypatch, scale, h, rss, n, expected
+):
     """Numerical range: the order pinv -> D scaling -> variance must not over/underflow."""
     opt, p_norm = hybrid_wc
-    opt.normalization_jacobian = jnp.diag(jnp.array([scale, scale]))
+    monkeypatch.setattr(
+        opt, "normalization_jacobian", jnp.diag(jnp.array([scale, scale]))
+    )  # fixture is module-scoped: never assign directly
     r3, caught = _record(opt._run_phase3_finalize, p_norm, jnp.eye(2) * h, rss, n)
     _assert_no_warnings(caught)
     pcov = np.asarray(r3["pcov"])
