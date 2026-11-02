@@ -48,6 +48,11 @@ class _HybridStrategy:
         self.engine = AdaptiveHybridStreamingOptimizer(config=config)
 
     def fit(self, f: Any, x: Any, y: Any, p0: Any, /, **common: Any) -> Any:
+        """Call ``AdaptiveHybridStreamingOptimizer.fit``.
+
+        ``gtol`` is honoured only at build time; given here it is dropped (with
+        ``ftol``/``xtol``) and the config's ``gauss_newton_tol`` is used.
+        """
         for key in _HYBRID_DROPPED_TOLERANCES:
             common.pop(key, None)
         return self.engine.fit(data_source=(x, y), func=f, p0=p0, **common)
@@ -88,9 +93,12 @@ def build_large_strategy(
         ``show_progress`` to make ``fit`` call ``fit_with_progress``.
 
     ``Strategy.fit(f, x, y, p0, **common)`` forwards ``common`` to the engine's
-    fit. Hybrid drops ``gtol``/``ftol``/``xtol`` (no equivalent at fit time) and
-    passes everything else to ``AdaptiveHybridStreamingOptimizer.fit``; chunked
-    forwards everything, tolerances included.
+    fit. Hybrid honours ``gtol`` only at build time: passed to ``fit`` it is
+    dropped, as are ``ftol``/``xtol`` (no equivalent), and the config's
+    ``gauss_newton_tol`` is used; everything else goes to
+    ``AdaptiveHybridStreamingOptimizer.fit``. Building hybrid with ``ftol`` or
+    ``xtol`` raises ``TypeError``. Chunked forwards everything, tolerances
+    included.
     """
     if kind == "hybrid":
         return _HybridStrategy(config, **common)

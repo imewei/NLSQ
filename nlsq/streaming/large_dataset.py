@@ -1896,7 +1896,7 @@ class LargeDatasetFitter:
             gauss_newton_max_iterations=self.config.streaming_max_epochs,
         )
 
-        # Initialize adaptive hybrid streaming optimizer
+        # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
         strategy = build_large_strategy("hybrid", streaming_config)
 
         # Convert p0 to array if needed

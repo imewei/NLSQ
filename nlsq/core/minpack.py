@@ -3555,7 +3555,7 @@ class CurveFit:
                 "HybridStreamingConfig fields.",
             )
 
-        # Create optimizer
+        # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
         large_strategy = build_large_strategy("hybrid", config)
 
         # Run optimization
@@ -3768,8 +3768,8 @@ class CurveFit:
             # Delegate to LargeDatasetFitter
             from nlsq.streaming.strategy import build_large_strategy
 
-            # Create fitter with memory-aware configuration (the raw
-            # memory_limit_gb kwarg, not config.memory_limit_gb)
+            # Build the chunked engine with the raw memory_limit_gb kwarg,
+            # not config.memory_limit_gb
             large_strategy = build_large_strategy(
                 "chunked", config, memory_limit_gb=memory_limit_gb
             )

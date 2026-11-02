@@ -11,6 +11,5 @@ unchanged.
 
 .. automodule:: nlsq.streaming.strategy
    :members:
-   :noindex:
    :undoc-members:
    :show-inheritance:

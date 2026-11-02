@@ -1143,7 +1143,7 @@ def curve_fit_large(
             else None
         )
 
-        # Create optimizer
+        # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
         large_strategy = build_large_strategy("hybrid", config)
 
         # Run optimization
@@ -1252,7 +1252,7 @@ def curve_fit_large(
         max_chunk_size=memory_config.max_chunk_size,
     )
     with memory_context(context_config), large_dataset_context(large_dataset_config):
-        # Create fitter with current configuration
+        # Build the chunked engine (LargeDatasetFitter) inside the contexts
         large_strategy = build_large_strategy(
             "chunked",
             LDMemoryConfig(

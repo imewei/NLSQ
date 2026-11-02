@@ -121,6 +121,13 @@ def test_chunked_forwards_common_kwargs_and_does_not_mutate_config(monkeypatch):
     assert dataclasses.asdict(cfg) == before
 
 
+@pytest.mark.parametrize("tol", ["ftol", "xtol"])
+def test_hybrid_build_rejects_ftol_xtol(tol):
+    # Only gtol has a build-time mapping (gauss_newton_tol).
+    with pytest.raises(TypeError):
+        build_large_strategy("hybrid", HybridStreamingConfig(), **{tol: 1e-6})
+
+
 def test_unknown_kind_raises_value_error():
     with pytest.raises(ValueError, match="kind"):
         build_large_strategy("exact", None)  # type: ignore[arg-type]
