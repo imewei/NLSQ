@@ -1,12 +1,14 @@
 """Characterization tests for streaming normal-equation (J^T J / J^T r) accumulation.
 
-These pin the CURRENT behavior of the exact-LM solver and of the hybrid
-optimizer's two accumulation implementations so that a later refactor that moves
-the accumulation into a shared module can prove it is behavior-preserving.
+These pin the behavior of the exact-LM solver and of the hybrid optimizer's
+Phase 2 accumulation (always the chunk loop; the ``*_scan`` / ``*_loop`` keys differ
+only in which cost-evaluation path runs) across the move of the accumulation into
+``nlsq.streaming.normal_equations``.
 
-Golden constants were captured once by running the unmodified code on the fixed
-seed dataset below (``_dataset``) and pasting ``repr`` output here; see
-``GOLDEN``. Do not regenerate them to make a failing test pass: a mismatch means
+Golden constants were captured once by running the code before that move on the
+fixed seed dataset below (``_dataset``) and pasting ``repr`` output here; the shared
+kernel contracts in a different order, so results agree to ~1e-16 relative and the
+comparisons use a tolerance. See ``GOLDEN``. Do not regenerate them to make a failing test pass: a mismatch means
 behavior changed.
 """
 
@@ -21,6 +23,7 @@ import pytest
 from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 from nlsq.streaming.exact_lm import exact_lm_fit
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
+from nlsq.streaming.normal_equations import cached_kernel
 from nlsq.streaming.phases.checkpoint import CheckpointManager
 from nlsq.streaming.phases.gauss_newton import GaussNewtonPhase
 
@@ -441,13 +444,13 @@ def test_hybrid_kernel_follows_reassigned_jacobian():
     args = _chunk_inputs(opt, p0_norm)
     jtj, jtr, cost = (np.asarray(a) for a in opt._accumulate_jtj_jtr(*args))
 
-    kernel = opt._get_normal_eq()
+    kernel = cached_kernel(opt)
     opt._accumulate_jtj_jtr(*args)
-    assert opt._get_normal_eq() is kernel  # cache hit when nothing was reassigned
+    assert cached_kernel(opt) is kernel  # cache hit when nothing was reassigned
 
     original = opt._jacobian_fn_compiled
     opt._jacobian_fn_compiled = lambda theta, x: 2.0 * original(theta, x)
-    assert opt._get_normal_eq() is not kernel
+    assert cached_kernel(opt) is not kernel
     jtj2, jtr2, cost2 = (np.asarray(a) for a in opt._accumulate_jtj_jtr(*args))
     _assert_close(jtj2, 4.0 * jtj)  # the new Jacobian is really used
     _assert_close(jtr2, 2.0 * jtr)
@@ -501,6 +504,6 @@ def test_normal_equations_kernel_is_reused_across_passes():
     """A rebuilt kernel would retrace and recompile every chunk (CPU hot path)."""
     opt, (x, y), p0_norm = _setup(_config("loop", chunk=6000))
     opt._accumulate_pass(p0_norm, x, y)
-    ne = opt._get_normal_eq()
+    ne = cached_kernel(opt)
     opt._accumulate_pass(p0_norm + 0.01, x, y)
-    assert opt._get_normal_eq() is ne
+    assert cached_kernel(opt) is ne
