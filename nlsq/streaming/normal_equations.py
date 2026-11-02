@@ -34,7 +34,41 @@ class PassStats(NamedTuple):
     )
 
 
-_SMALL_P = 6  # below this, a fused product-sum beats the jitted dot (measured)
+# Contraction choice for J^T r and J^T J of a masked (n, p) Jacobian, by backend.
+# Inside jit, XLA folds the transpose into the dot; on CPU that is slow for skinny J.
+# Measured (min of 12 repeats, float64, n = 1e5 and 1e6, ms; one RTX 4090 Laptop GPU and
+# this CPU), fused multiply-and-sum vs the jitted dot vs the eager dot of the pre-jit code:
+#   CPU n=1e6: p=3 fused 2.6 / jit dot 13.6 / eager 5.5; p=8 3.9 / 19.2 / 24.5;
+#              p=30 33.9 / 70.8 / 126; p=50 95.8 / 120 / 247.
+#   CPU n=1e5: p=3 0.23 / 1.26 / 0.37; p=8 0.39 / 0.46 / 1.35; p=12 1.58 / 1.23 / 2.9;
+#              p=50 10.1 / 18.8 / 25.2.
+#   -> on CPU fused is faster than the eager dot at every p in 1..50 and than the jitted
+#      dot except at p=1 and p=12 (n=1e5, 1.3-1.9x of a <=1.6 ms term): always fused.
+#   GPU n=1e6: p=3 fused 0.19 / dot 0.48; p=5 0.69 / 0.63; p=12 4.0 / 2.8; p=30 21.6 / 5.8.
+#   GPU n=1e5: p=3 0.07 / 0.16; p=5 0.20 / 0.16; p=30 1.4 / 1.1; p=50 7.0 / 2.6.
+#   -> on GPU fused wins up to p=3-4 and loses from p=5: fused for p < 5.
+_GPU_FUSED_BELOW_P = 5
+
+
+def _fused_contractions(J: jax.Array, r: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """``(J^T r, J^T J)`` as multiply-and-sum over the rows (no ``(n, p, p)`` buffer)."""
+    return (
+        jnp.sum(J * r[:, None], axis=0),
+        jnp.sum(J[:, :, None] * J[:, None, :], axis=0),
+    )
+
+
+def _dot_contractions(J: jax.Array, r: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """``(J^T r, J^T J)`` as matrix products."""
+    return J.T @ r, J.T @ J
+
+
+def _use_fused(p: int) -> bool:
+    """Whether the fused form is used for ``p`` parameters on the current backend.
+
+    Decided at trace time (the kernel is traced for the default backend).
+    """
+    return jax.default_backend() == "cpu" or p < _GPU_FUSED_BELOW_P
 
 
 def _gradient_and_gauss_newton_hessian(
@@ -42,19 +76,11 @@ def _gradient_and_gauss_newton_hessian(
 ) -> tuple[jax.Array, jax.Array]:
     """``(J^T r, J^T J)`` of a masked ``(n, p)`` Jacobian and its residual.
 
-    For ``p < _SMALL_P`` the two contractions are a fused multiply-and-sum over the
-    rows. Inside ``jit``, XLA folds the transpose into the dot and, for this skinny
-    ``(n, p)`` shape, emits a loop that is 2-4x slower than the same dot run eagerly
-    (CPU, p = 2-3, n = 1e5-1e6), and the fused reduction is 1.2-6x faster than either;
-    on GPU it is 2-6x faster at p <= 5 but 3x slower at p = 30. Wider Jacobians use
-    the dot, which XLA runs well there.
+    Either form sums the same products; they differ only in summation order (the fused
+    one is the more accurate, about 1e-16 relative against 1e-14 for the dot at n=1e6).
     """
-    if J.shape[1] < _SMALL_P:
-        return (
-            jnp.sum(J * r[:, None], axis=0),
-            jnp.sum(J[:, :, None] * J[:, None, :], axis=0),
-        )
-    return J.T @ r, J.T @ J
+    contract = _fused_contractions if _use_fused(J.shape[1]) else _dot_contractions
+    return contract(J, r)
 
 
 def make_chunk_stats(

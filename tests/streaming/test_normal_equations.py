@@ -8,9 +8,12 @@ import numpy as np
 import pytest
 
 from nlsq.streaming.normal_equations import (
-    _SMALL_P,
+    _GPU_FUSED_BELOW_P,
     NormalEquations,
+    _dot_contractions,
+    _fused_contractions,
     _gradient_and_gauss_newton_hessian,
+    _use_fused,
     make_chunk_stats,
     run_pass,
 )
@@ -131,11 +134,31 @@ def test_custom_jacobian_weighted_matches_default():
     np.testing.assert_allclose(hook.cost, ref.cost, rtol=RTOL, atol=ATOL)
 
 
-@pytest.mark.parametrize("p", [1, 2, 3, _SMALL_P - 1, _SMALL_P, 12])
-def test_gradient_and_hessian_match_dense_for_every_width(p):
-    """Both branches (fused sum for p < _SMALL_P, dot otherwise) give J^T r and J^T J."""
+@pytest.mark.parametrize(
+    "p", [1, 2, 3, _GPU_FUSED_BELOW_P - 1, _GPU_FUSED_BELOW_P, 6, 8, 12, 30]
+)
+@pytest.mark.parametrize(
+    "contract",
+    [_fused_contractions, _dot_contractions, _gradient_and_gauss_newton_hessian],
+    ids=["fused", "dot", "dispatch"],
+)
+def test_contractions_match_dense_for_every_width(contract, p):
+    """Both forms (and the backend dispatch) give J^T r and J^T J, on any backend."""
     rng = np.random.default_rng(p)
     J, r = rng.normal(size=(257, p)), rng.normal(size=257)
-    g, H = jax.jit(_gradient_and_gauss_newton_hessian)(jnp.asarray(J), jnp.asarray(r))
+    g, H = jax.jit(contract)(jnp.asarray(J), jnp.asarray(r))
     np.testing.assert_allclose(np.asarray(g), J.T @ r, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(np.asarray(H), J.T @ J, rtol=RTOL, atol=ATOL)
+
+
+def test_contraction_choice_per_backend(monkeypatch):
+    monkeypatch.setattr(jax, "default_backend", lambda: "cpu")
+    assert all(_use_fused(p) for p in (1, 2, 3, 6, 12, 50))
+    monkeypatch.setattr(jax, "default_backend", lambda: "gpu")
+    assert [_use_fused(p) for p in (1, 4, 5, 6, 30)] == [
+        True,
+        True,
+        False,
+        False,
+        False,
+    ]

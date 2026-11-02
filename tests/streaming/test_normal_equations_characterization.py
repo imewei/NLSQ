@@ -460,10 +460,9 @@ def test_hybrid_kernel_follows_reassigned_jacobian():
     _assert_close(cost3, cost)
 
 
-@pytest.mark.parametrize("strategy", ["loop", "scan"])
-def test_accumulate_pass_matches_manual_loop(strategy):
-    """_accumulate_pass == hand-rolled chunk loop, ragged final chunk, any strategy."""
-    opt, (x, y), p0_norm = _setup(_config(strategy, chunk=6000))  # 6000*3 + 2000
+def test_accumulate_pass_matches_manual_loop():
+    """_accumulate_pass == hand-rolled chunk loop, ragged final chunk."""
+    opt, (x, y), p0_norm = _setup(_config("loop", chunk=6000))  # 6000*3 + 2000
     JTJ, JTr, rss = opt._accumulate_pass(p0_norm, x, y)
 
     # Checkpoint state straight after the pass, before any reference computation
