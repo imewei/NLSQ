@@ -2551,6 +2551,12 @@ class AdaptiveHybridStreamingOptimizer:
             Accumulated normal-equation terms.
         residual_sum_sq : float
             ``sum(r^2)`` (not ``0.5 * sum(r^2)``).
+
+        Notes
+        -----
+        ``phase2_JTJ_accumulator`` / ``phase2_JTr_accumulator`` are maintained
+        by ``_accumulate_jtj_jtr`` (per chunk) and the scan (at its end), not
+        by this method.
         """
         if on_chunk is None and self._use_scan_for_accumulation():
             JTJ, JTr, residual_sum_sq = self._accumulate_jtj_jtr_scan(
@@ -2576,9 +2582,6 @@ class AdaptiveHybridStreamingOptimizer:
                 if on_chunk is not None:
                     on_chunk(chunk_idx, n_chunks)
 
-        # Checkpointing reads these; nothing reads them mid-pass.
-        self.phase2_JTJ_accumulator = JTJ
-        self.phase2_JTr_accumulator = JTr
         return JTJ, JTr, residual_sum_sq
 
     def _solve_gauss_newton_step(
@@ -3431,7 +3434,6 @@ class AdaptiveHybridStreamingOptimizer:
         # Store final J^T J and residual sum for Phase 3
         # Initialize with JTJ at initial params (in case no steps accepted)
         x_data, y_data = data_source
-        n_params = len(current_params)
         chunk_size = self.config.chunk_size
         n_points = len(x_data)
 

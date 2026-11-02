@@ -460,13 +460,29 @@ def test_hybrid_kernel_follows_reassigned_jacobian():
 
 
 @pytest.mark.parametrize("strategy", ["loop", "scan"])
-def test_accumulate_pass_matches_manual_loop(strategy):
+def test_accumulate_pass_matches_manual_loop(monkeypatch, strategy):
     """_accumulate_pass == hand-rolled chunk loop / scan, ragged final chunk."""
+    calls = {"scan": 0}
+    orig_scan = AdaptiveHybridStreamingOptimizer._accumulate_jtj_jtr_scan
+
+    def spy_scan(self, *a, **k):
+        calls["scan"] += 1
+        return orig_scan(self, *a, **k)
+
+    monkeypatch.setattr(
+        AdaptiveHybridStreamingOptimizer, "_accumulate_jtj_jtr_scan", spy_scan
+    )
     opt, (x, y), p0_norm = _setup(_config(strategy, chunk=6000))  # 6000*3 + 2000
     JTJ, JTr, rss = opt._accumulate_pass(p0_norm, x, y)
 
+    # Checkpoint state straight after the pass, before any reference computation
+    # overwrites it, and the strategy really selected the scan or the loop.
+    assert calls["scan"] == (1 if strategy == "scan" else 0)
+    _assert_close(opt.phase2_JTJ_accumulator, JTJ)
+    _assert_close(opt.phase2_JTr_accumulator, JTr)
+
     if strategy == "scan":
-        ref_JTJ, ref_JTr, ref_rss = opt._accumulate_jtj_jtr_scan(x, y, p0_norm)
+        ref_JTJ, ref_JTr, ref_rss = orig_scan(opt, x, y, p0_norm)
     else:
         ref_JTJ, ref_JTr, ref_rss = jnp.zeros((2, 2)), jnp.zeros(2), 0.0
         for i in range(0, N_POINTS, 6000):
@@ -478,8 +494,6 @@ def test_accumulate_pass_matches_manual_loop(strategy):
     _assert_close(JTJ, ref_JTJ)
     _assert_close(JTr, ref_JTr)
     _assert_close(rss, ref_rss)
-    _assert_close(opt.phase2_JTJ_accumulator, JTJ)
-    _assert_close(opt.phase2_JTr_accumulator, JTr)
 
 
 def test_accumulate_pass_on_chunk_called():
