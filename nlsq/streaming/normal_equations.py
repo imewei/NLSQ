@@ -1,12 +1,14 @@
 """Chunked normal-equation accumulation: ``F = 0.5 sum r^2``, ``g = J^T r``, ``H = J^T J``.
 
-Shared by the exact streaming LM solver (:mod:`nlsq.streaming.exact_lm`), the hybrid
-optimizer (:mod:`nlsq.streaming.adaptive_hybrid`) and the Gauss-Newton phase
-(:mod:`nlsq.streaming.phases.gauss_newton`); ``exact_lm`` re-exports the moved helpers
-for import compatibility. A data pass
-sums the per-chunk statistics of a jitted kernel over equal-shape, masked chunks read
-from array-likes or a replayable chunk factory; :class:`NormalEquations` bundles the
-kernel and the pass.
+The jitted per-chunk kernel (:func:`make_chunk_stats`) and the data pass
+(:func:`run_pass`) are shared by the exact streaming LM solver
+(:mod:`nlsq.streaming.exact_lm`, which calls them directly and re-exports the moved
+helpers for import compatibility), the hybrid optimizer
+(:mod:`nlsq.streaming.adaptive_hybrid`) and the Gauss-Newton phase
+(:mod:`nlsq.streaming.phases.gauss_newton`); the latter two use :class:`NormalEquations`
+through :func:`cached_kernel` and :meth:`NormalEquations.add_chunk`. A data pass sums the
+per-chunk statistics over equal-shape, masked chunks read from array-likes or a
+replayable chunk factory; :class:`NormalEquations` bundles the kernel and the pass.
 """
 
 from __future__ import annotations
@@ -435,3 +437,47 @@ class NormalEquations:
             check_finite=check_finite,
             check_sigma=check_sigma,
         )
+
+    def add_chunk(
+        self,
+        theta: jax.Array,
+        x: jax.Array,
+        y: jax.Array,
+        H_prev: jax.Array,
+        g_prev: jax.Array,
+        valid_size: int | None = None,
+    ) -> tuple[jax.Array, jax.Array, float]:
+        """Fold one chunk into running ``(H, g)``; returns ``(H, g, sum r^2)``.
+
+        ``valid_size`` is the number of real leading points of a padded chunk
+        (``None``: all points are real).
+        """
+        n = len(x)
+        mask = (
+            jnp.ones(n, dtype=bool)
+            if valid_size is None
+            else jnp.arange(n) < valid_size
+        )
+        F, g, H = self.chunk_stats(theta, x, y, mask)
+        # kernel cost is 0.5*sum r^2; callers want sum r^2
+        return H_prev + H, g_prev + g, float(2.0 * F)
+
+
+def cached_kernel(owner: Any) -> NormalEquations:
+    """Chunk kernel for ``owner.normalized_model`` using ``owner._compute_jacobian_chunk``.
+
+    Cached on ``owner._normal_eq`` as ``(model, jacobian_fn, kernel)`` and rebuilt
+    whenever ``owner.normalized_model`` or ``owner._jacobian_fn_compiled`` is a
+    different object than at the last build (the jitted kernel bakes both in).
+    """
+    model, jac = owner.normalized_model, owner._jacobian_fn_compiled
+    cached = owner._normal_eq
+    if cached is not None and cached[0] is model and cached[1] is jac:
+        return cached[2]
+    ne = NormalEquations(
+        model,
+        chunk=owner.config.chunk_size,  # only sizes run_pass; chunk_stats takes any length
+        jacobian=lambda theta, x: owner._compute_jacobian_chunk(x, theta),
+    )
+    owner._normal_eq = (model, jac, ne)
+    return ne
