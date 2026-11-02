@@ -80,10 +80,7 @@ from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
 from nlsq.core.problem import (
     PrepareContext,
-    _determine_parameter_count,
     _is_auto_p0,
-    _omit_nonfinite_rows,
-    _prepare_bounds_and_initial_guess,
     prepare_problem,
 )
 from nlsq.core.problem import pad_fit_data as _pad_fit_data
@@ -3423,49 +3420,6 @@ class CurveFit:
 
         return pcov, warn_cov
 
-    def _determine_parameter_count(
-        self,
-        f: Callable,
-        p0: np.ndarray | str | None,
-        xdata: np.ndarray | None = None,
-        ydata: np.ndarray | None = None,
-    ) -> tuple[int, np.ndarray | None]:
-        """Delegate to :func:`nlsq.core.problem._determine_parameter_count`.
-
-        Kept for ``_curve_fit_hybrid_streaming`` until it calls
-        ``prepare_problem`` (Task B3).
-        """
-        return _determine_parameter_count(
-            f, p0, xdata, ydata, ctx=PrepareContext(logger=self.logger)
-        )
-
-    def _prepare_bounds_and_initial_guess(
-        self,
-        bounds: tuple,
-        n: int,
-        p0: np.ndarray | None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Delegate to :func:`nlsq.core.problem._prepare_bounds_and_initial_guess`.
-
-        Kept for ``_curve_fit_hybrid_streaming`` until it calls
-        ``prepare_problem`` (Task B3).
-        """
-        return _prepare_bounds_and_initial_guess(bounds, n, p0)
-
-    def _omit_nonfinite_rows(
-        self,
-        xdata: np.ndarray,
-        ydata: np.ndarray,
-        sigma: np.ndarray | None,
-        xdims: int,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
-        """Delegate to :func:`nlsq.core.problem._omit_nonfinite_rows`.
-
-        Kept for ``_curve_fit_hybrid_streaming`` until it calls
-        ``prepare_problem`` (Task B3).
-        """
-        return _omit_nonfinite_rows(xdata, ydata, sigma, xdims)
-
     @staticmethod
     def _drop_unobserved_rows(res, xdata, ydata, data_mask):
         """Drop padded (flength) and caller-masked rows from stored data/residuals.
@@ -3580,38 +3534,23 @@ class CurveFit:
                 "need to exclude specific data points, or omit data_mask.",
             )
 
-        nan_policy = kwargs.pop("nan_policy", "raise")
-        # Defer finiteness raising when 'omit' handles it instead.
-        effective_check_finite = check_finite and nan_policy not in (
-            "omit",
-            "propagate",
+        # nan_policy is popped here, before the leftover-keyword TypeError check
+        # below. prepare_problem owns NaN handling, p0 and bounds; flength=None
+        # means no padding, and method/solver stay at their defaults.
+        prepared = prepare_problem(
+            f,
+            xdata,
+            ydata,
+            p0=p0,
+            bounds=bounds,
+            sigma=sigma,
+            check_finite=check_finite,
+            nan_policy=kwargs.pop("nan_policy", "raise"),
+            ctx=PrepareContext(flength=None, use_dynamic_sizing=False),
         )
-
-        # Convert inputs to arrays
-        if effective_check_finite:
-            xdata = np.asarray_chkfinite(xdata, float)
-            ydata = np.asarray_chkfinite(ydata, float)
-        else:
-            xdata = np.asarray(xdata, float)
-            ydata = np.asarray(ydata, float)
-
-        if nan_policy == "omit":
-            xdata, ydata, sigma, _m, _omit_mask = self._omit_nonfinite_rows(
-                xdata,
-                ydata,
-                sigma,
-                xdata.ndim,
-            )
-
-        # Determine parameter count and prepare p0
-        if p0 is None:
-            n, p0 = self._determine_parameter_count(f, p0, xdata, ydata)
-        else:
-            p0 = np.atleast_1d(p0)
-            n = p0.size
-
-        # Prepare bounds
-        lb, ub, p0 = self._prepare_bounds_and_initial_guess(bounds, n, p0)
+        xdata, ydata, sigma = prepared.x, prepared.y, prepared.sigma
+        n, p0 = prepared.n, prepared.p0
+        lb, ub = prepared.lb, prepared.ub
         bounds_tuple = (
             (lb, ub)
             if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))

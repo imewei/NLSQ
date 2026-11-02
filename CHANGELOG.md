@@ -100,7 +100,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Migration:** GUI users run `pip install "nlsq[gui]"`; contributors use
   `make dev` or `uv sync`.
 
+### Changed (behavior)
+- `method="hybrid_streaming"` now prepares its inputs through the same
+  `prepare_problem` pipeline as the standard path. Cases that crashed or returned a
+  silently wrong result now behave as follows:
+  - `p0="auto"` estimates the initial parameters and fits (was a `UFuncTypeError`).
+  - x/y length mismatch raises `ValueError: X and Y data lengths dont match` (was a
+    `TypeError` deep in the fit).
+  - Empty data raises `ValueError` (was `success=True` returning `p0` unchanged).
+  - A NaN in the lower or upper bounds raises `ValueError` (was `success=True` with
+    `x=[nan, ...]`).
+  - Non-array `x` raises `ValueError: X needs arrays` (message change only).
+  - The security validator now runs on this path: more than 10 billion points, or
+    points x parameters above 100 billion, is rejected, and a Jacobian memory estimate
+    above 10 GB is logged as a warning.
+
 ### Changed (internal)
+- Internal: prepare_problem extracted from CurveFit; hybrid streaming no longer
+  consumes nan_policy twice.
 - Internal: shared NormalEquations module for streaming solvers; no behavior change.
 - Hybrid streaming: Gauss-Newton `J^T J` accumulation always uses the chunk loop (the
   `lax.scan` accumulator was removed); `loop_strategy` now affects cost evaluation only.
