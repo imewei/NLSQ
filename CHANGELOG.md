@@ -100,6 +100,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Migration:** GUI users run `pip install "nlsq[gui]"`; contributors use
   `make dev` or `uv sync`.
 
+### Changed (internal)
+- Internal: shared NormalEquations module for streaming solvers; no behavior change.
+- Hybrid streaming: Gauss-Newton `J^T J` accumulation always uses the chunk loop (the
+  `lax.scan` accumulator was removed); `loop_strategy` now affects cost evaluation only.
+
 ### Fixed
 - `curve_fit_large(..., auto_size_detection=False)` no longer raises
   `ValueError: min_chunk_size (1000) cannot be larger than max_chunk_size` for inputs under
