@@ -51,12 +51,12 @@ _HYBRID_FAST = {
 
 @pytest.fixture
 def hybrid_spy(monkeypatch):
-    """Record the (x, y) shapes the hybrid optimizer is actually handed."""
+    """Record the (x, y) arrays (copies) the hybrid optimizer is actually handed."""
     seen = []
     orig = AdaptiveHybridStreamingOptimizer.fit
 
     def spy(self, data_source, *args, **kwargs):
-        seen.append(tuple(np.asarray(d).shape for d in data_source))
+        seen.append(tuple(np.array(d) for d in data_source))
         return orig(self, data_source, *args, **kwargs)
 
     monkeypatch.setattr(AdaptiveHybridStreamingOptimizer, "fit", spy)
@@ -114,23 +114,87 @@ class TestOmitAndMask:
         )
 
 
-class TestHybridStreaming:
-    def test_hybrid_nan_policy_accepted_once(self, hybrid_spy):
-        x, y = _data(300)
-        y[[3, 10]] = np.nan
+class TestPreparationOrder:
+    def test_preparation_order_omit_then_select_then_pad(self, monkeypatch):
+        """Order is omit NaN rows -> auto-select method -> pad to flength.
 
-        res = curve_fit(
+        Seam: ``_select_optimization_method`` imports ``auto_select_algorithm``
+        lazily from ``nlsq.precision.algorithm_selector`` at call time, so a
+        spy there sees exactly the xdata/ydata the selector is given.
+        """
+        import nlsq.precision.algorithm_selector as selector
+
+        seen = []
+        orig = selector.auto_select_algorithm
+
+        def spy(f, xdata, ydata, p0, bounds, *args, **kwargs):
+            seen.append((np.array(xdata), np.array(ydata)))
+            return orig(f, xdata, ydata, p0, bounds, *args, **kwargs)
+
+        monkeypatch.setattr(selector, "auto_select_algorithm", spy)
+
+        x, y = _data()
+        y_nan = y.copy()
+        y_nan[[3, 10]] = np.nan
+        keep = np.isfinite(y_nan)
+        n_clean = int(keep.sum())
+        assert n_clean == N - 2
+
+        out = CurveFit(enable_stability=True, flength=100)._prepare_curve_fit_inputs(
             _model,
             x,
-            y,
-            p0=[1.9, 1.2],
-            method="hybrid_streaming",
-            nan_policy="omit",
-            **_HYBRID_FAST,
+            y_nan,
+            np.array([1.0, 1.0]),
+            (-np.inf, np.inf),
+            "auto",
+            None,
+            None,  # method=None -> auto-selection runs
+            True,
+            None,
+            {"nan_policy": "omit"},
         )
+        _, _, xdata, ydata, data_mask, _, _, _, m, len_diff, should_pad, _, _ = out
 
+        # Selector ran once, on the cleaned and still-unpadded observations.
+        assert len(seen) == 1
+        np.testing.assert_array_equal(seen[0][0], x[keep])
+        np.testing.assert_array_equal(seen[0][1], y_nan[keep])
+        # Padding came after: padded arrays, mask marks only the clean rows.
+        assert m == n_clean
+        assert should_pad
+        assert len_diff == 100 - n_clean
+        assert len(xdata) == len(ydata) == len(data_mask) == 100
+        assert int(np.sum(data_mask)) == n_clean
+        np.testing.assert_array_equal(np.asarray(xdata)[:n_clean], x[keep])
+        np.testing.assert_array_equal(np.asarray(ydata)[:n_clean], y_nan[keep])
+
+
+class TestHybridStreaming:
+    def test_hybrid_nan_policy_accepted_once(self, hybrid_spy):
+        """nan_policy is consumed exactly once on the hybrid path.
+
+        A second consumption would leave the later stage with the default
+        nan_policy='raise' and fail on the NaN rows (or an unconsumed key would
+        hit the unknown-keyword TypeError). The optimizer must receive exactly
+        the finite rows, and fit like a pre-filtered run.
+        """
+        x, y = _data(300)
+        y_nan = y.copy()
+        y_nan[[3, 10]] = np.nan
+        keep = np.isfinite(y_nan)
+        kw = {"p0": [1.9, 1.2], "method": "hybrid_streaming", **_HYBRID_FAST}
+
+        res = curve_fit(_model, x, y_nan, nan_policy="omit", **kw)
+        ref = curve_fit(_model, x[keep], y_nan[keep], **kw)
+
+        assert res.success
         assert np.all(np.isfinite(res.x))
-        assert hybrid_spy == [((298,), (298,))]  # rows omitted exactly once
+        assert len(hybrid_spy) == 2
+        assert hybrid_spy[0][0].shape == (298,)  # rows omitted exactly once
+        np.testing.assert_array_equal(hybrid_spy[0][0], x[keep])
+        np.testing.assert_array_equal(hybrid_spy[0][1], y_nan[keep])
+        # Same data, same deterministic CPU path -> same result.
+        np.testing.assert_allclose(res.x, ref.x, rtol=1e-8, atol=1e-10)
 
     def test_hybrid_unknown_kwarg_still_raises_typeerror(self):
         x, y = _data(300)
@@ -172,7 +236,7 @@ class TestHybridStreaming:
             **_HYBRID_FAST,
         )
 
-        assert hybrid_spy == [((300,), (300,))]
+        assert [tuple(a.shape for a in s) for s in hybrid_spy] == [((300,), (300,))]
         assert np.asarray(res["xdata"]).shape == (300,)
 
 
