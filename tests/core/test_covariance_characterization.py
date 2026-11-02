@@ -7,7 +7,8 @@ before the standard and exact sites were routed through ``nlsq.core.covariance``
   ``nlsq.core.covariance.pcov_from_jacobian``
 * exact:    ``exact_lm.compute_covariance`` (eigh of H = J^T J), a wrapper over
   ``nlsq.core.covariance.pcov_from_normal``
-* hybrid:   ``AdaptiveHybridStreamingOptimizer._run_phase3_finalize`` (bare ``pinv``)
+* hybrid:   ``AdaptiveHybridStreamingOptimizer._run_phase3_finalize`` (formerly a bare
+  ``pinv`` with no fallback; now ``pcov_from_normal`` in normalized space)
 * GLS:      ``LargeDatasetFitter._compute_covariance_from_history``
 
 Golden constants were captured once from the unmodified code (see the ``P_WC`` /
@@ -537,7 +538,8 @@ def test_hybrid_golden(hybrid_wc, j_wc):
 
 
 def test_hybrid_partial_rank_deficient_contract(hybrid_dup, j_dup):
-    """Bare pinv: finite, dropped direction zeroed, and (unlike exact) no warning."""
+    """Finite, dropped direction zeroed, no warning (the ill-conditioning UserWarning
+    of the exact site is not emitted for hybrid)."""
     opt, p_norm = hybrid_dup
     r3, caught = _record(
         opt._run_phase3_finalize,
@@ -553,30 +555,23 @@ def test_hybrid_partial_rank_deficient_contract(hybrid_dup, j_dup):
 
 
 def test_hybrid_fully_degenerate_contract(hybrid_wc, j_wc):
-    """Pinned deliberately (not endorsed): hybrid never returns all-inf for a bad JTJ.
+    """Hybrid now falls back like the exact site: all-inf plus one OptimizeWarning.
 
-    * all-zero J^T J -> finite all-ZERO pcov ("perfectly determined"), no warning
-    * non-finite J^T J -> all-NaN pcov, no warning
-    * n <= p -> all-inf pcov via the residual-variance step, no warning
+    Before the pcov_from_normal routing these were silent and misleading:
+    * all-zero J^T J -> finite all-ZERO pcov ("perfectly determined")
+    * non-finite J^T J -> all-NaN pcov
+    * n <= p -> all-inf pcov (no warning)
     """
     opt, p_norm = hybrid_wc
-    zero, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.zeros((2, 2)), 2 * COST_WC, N
-    )
-    _assert_no_warnings(caught)
-    np.testing.assert_array_equal(np.asarray(zero["pcov"]), np.zeros((2, 2)))
-
-    nan, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.full((2, 2), jnp.nan), 2 * COST_WC, N
-    )
-    _assert_no_warnings(caught)
-    assert np.isnan(np.asarray(nan["pcov"])).all()
-
-    few, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.asarray(j_wc.T @ j_wc), 2 * COST_WC, 2
-    )
-    _assert_no_warnings(caught)
-    _assert_all_inf(np.asarray(few["pcov"]), 2)
+    for bad_jtj, n in (
+        (jnp.zeros((2, 2)), N),
+        (jnp.full((2, 2), jnp.nan), N),
+        (jnp.asarray(j_wc.T @ j_wc), 2),
+    ):
+        r3, caught = _record(opt._run_phase3_finalize, p_norm, bad_jtj, 2 * COST_WC, n)
+        _assert_single(caught, OptimizeWarning)
+        _assert_all_inf(np.asarray(r3["pcov"]), 2)
+        assert np.isinf(np.asarray(r3["perr"])).all()
 
 
 # --- GLS site --------------------------------------------------------------------------

@@ -855,42 +855,12 @@ class TestPhase3DenormalizationCovariance:
         assert jnp.allclose(cov_orig[1, 1], expected_cov_11, rtol=1e-10)
         assert jnp.allclose(cov_orig[0, 1], expected_cov_01, rtol=1e-10)
 
-    def test_residual_variance_scaling(self):
-        """Test residual variance scaling of covariance matrix."""
-        config = HybridStreamingConfig()
-        optimizer = AdaptiveHybridStreamingOptimizer(config)
-
-        # Define model
-        def model(x, a, b):
-            return a * x + b
-
-        p0 = jnp.array([2.0, 1.0])
-        bounds = None
-        optimizer._setup_normalization(model, p0, bounds)
-
-        # Create mock covariance before scaling
-        cov_before = jnp.array([[1.0, 0.5], [0.5, 2.0]])
-
-        # Mock residual sum of squares
-        residual_sum_sq = 100.0
-        n_points = 100
-        n_params = 2
-
-        # Apply residual variance scaling
-        cov_final, sigma_sq = optimizer._apply_residual_variance(
-            cov_before, residual_sum_sq, n_points
-        )
-
-        # Compute expected sigma^2
-        expected_sigma_sq = residual_sum_sq / (n_points - n_params)
-        assert jnp.allclose(sigma_sq, expected_sigma_sq)
-
-        # Verify covariance scaling
-        expected_cov = sigma_sq * cov_before
-        assert jnp.allclose(cov_final, expected_cov)
-
-        # Verify symmetry preserved
-        assert jnp.allclose(cov_final, cov_final.T)
+    def test_residual_variance(self):
+        """sigma^2 = rss / (n - p); inf when n <= p."""
+        f = AdaptiveHybridStreamingOptimizer._residual_variance
+        assert f(100.0, 100, 2) == pytest.approx(100.0 / 98)
+        assert f(100.0, 2, 2) == float("inf")
+        assert f(100.0, 1, 2) == float("inf")
 
     def test_standard_error_computation(self):
         """Test standard error computation from covariance diagonal."""
@@ -929,8 +899,10 @@ class TestPhase3DenormalizationCovariance:
         # Create mock J^T J (should be symmetric)
         JTJ = jnp.array([[10.0, 2.0, 1.0], [2.0, 8.0, 3.0], [1.0, 3.0, 5.0]])
 
-        # Compute normalized covariance (pseudo-inverse)
-        cov_norm = optimizer._compute_normalized_covariance(JTJ)
+        # Compute normalized covariance (pseudo-inverse, residual-variance scaled)
+        cov_norm = optimizer._compute_normalized_covariance(JTJ, 10.0, 50)
+        sigma_sq = 10.0 / (50 - 3)
+        assert jnp.allclose(cov_norm, sigma_sq * jnp.linalg.inv(JTJ), rtol=1e-10)
 
         # Verify symmetry
         assert jnp.allclose(cov_norm, cov_norm.T, atol=1e-10)

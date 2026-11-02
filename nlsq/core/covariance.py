@@ -103,7 +103,12 @@ def pcov_from_jacobian(
 
 
 def pcov_from_normal(
-    H: np.ndarray, cost: float, n_eff: int, p: int, absolute_sigma: bool
+    H: np.ndarray,
+    cost: float,
+    n_eff: int,
+    p: int,
+    absolute_sigma: bool,
+    cond_warn: bool = True,
 ) -> tuple[np.ndarray, bool]:
     """Covariance from ``H = J^T J`` with the ``nlsq.curve_fit`` contract.
 
@@ -111,7 +116,8 @@ def pcov_from_normal(
     directions give zero rows and columns), scaled by ``2*cost/(n_eff-p)`` unless
     ``absolute_sigma``. All-``inf`` with an :class:`OptimizeWarning` if no direction
     survives, any value is non-finite, or ``n_eff <= p`` without ``absolute_sigma``.
-    A ``UserWarning`` is emitted when ``sqrt(cond(H)) > COND_WARN``.
+    A ``UserWarning`` is emitted when ``sqrt(cond(H)) > COND_WARN`` unless
+    ``cond_warn`` is False (the hybrid optimizer, whose callers never got that warning).
     """
     n = n_eff
     H = np.asarray(H, dtype=np.float64)
@@ -130,7 +136,7 @@ def pcov_from_normal(
                 over="ignore", divide="ignore"
             ):  # cond may overflow to inf
                 ill = lam_min == 0.0 or np.sqrt(w[-1] / lam_min) > COND_WARN
-            if ill:
+            if ill and cond_warn:
                 warnings.warn(
                     f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
                     f"{COND_WARN:.0e}); the covariance may be inaccurate and the "

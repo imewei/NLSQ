@@ -140,3 +140,19 @@ def test_compute_covariance_uses_instance_svd_hook():
     assert calls[0] is J
     assert not warn_cov
     np.testing.assert_allclose(pcov, _J_pcov(J, COST, N, 2, True)[0] / 4.0, rtol=1e-10)
+
+
+def test_pcov_from_normal_cond_warn_switch():
+    """sqrt(cond(H)) = 1e5 warns by default; cond_warn=False suppresses only that."""
+    H = np.diag([1.0, 1e-10])
+    with pytest.warns(UserWarning, match="ill-conditioned"):
+        loud, fired = pcov_from_normal(H, COST, N, 2, False)
+    assert not fired
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        quiet, fired_quiet = pcov_from_normal(H, COST, N, 2, False, cond_warn=False)
+    assert not fired_quiet
+    np.testing.assert_array_equal(loud, quiet)
+    # the fallback warning is not governed by the switch
+    with pytest.warns(OptimizeWarning):
+        pcov_from_normal(np.zeros((2, 2)), COST, N, 2, False, cond_warn=False)

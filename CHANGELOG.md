@@ -126,6 +126,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     unaffected.
 - `CurveFit.curve_fit`: subclass overrides of `CurveFit.pad_fit_data` are no longer
   consulted by input preparation (the module-level `pad_fit_data` is used).
+- Hybrid streaming covariance (`curve_fit(..., method="hybrid_streaming")` and
+  `AdaptiveHybridStreamingOptimizer`) now uses the same `pcov` contract as the exact
+  solver (`nlsq.core.covariance.pcov_from_normal`) instead of a bare pseudo-inverse.
+  Where the old code returned a misleading result silently, it now returns an all-`inf`
+  `pcov` (and `perr`) with one `OptimizeWarning`:
+  - an all-zero `J^T J` (was a finite all-zero `pcov`, "perfectly determined");
+  - a non-finite `J^T J` (was an all-NaN `pcov`);
+  - `n_points <= n_params` (was all-`inf` without a warning).
+  A partially rank-deficient `J^T J` (for example a duplicate parameter) still gives a
+  finite `pcov` with the dropped direction zeroed, and well-conditioned fits give the
+  same values to rounding. The rank cutoff is now `p*eps*lambda_max` of the normalized
+  `J^T J` rather than `jnp.linalg.pinv`'s default `rcond`. The exact solver's
+  ill-conditioning `UserWarning` is not emitted for hybrid fits.
 
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
