@@ -1,4 +1,4 @@
-"""Unit tests for ``nlsq.core.problem.prepare_problem`` (Part B, Task B2)."""
+"""Unit tests for ``nlsq.core.problem.prepare_problem``."""
 
 import dataclasses
 
@@ -8,6 +8,7 @@ import pytest
 
 from nlsq import CurveFit, curve_fit
 from nlsq.core.problem import PrepareContext, PreparedProblem, prepare_problem
+from nlsq.utils.validators import InputValidator
 
 N = 60
 P0 = np.array([1.0, 1.0])
@@ -190,7 +191,8 @@ class TestTypes:
         assert ctx.flength is None
         assert ctx.use_dynamic_sizing is False
         assert ctx.enable_stability is False
-        assert ctx.validator is None
-        assert ctx.logger is None
+        assert isinstance(ctx.validator, InputValidator)
+        assert ctx.validator.fast_mode is True
+        assert ctx.logger is not None  # the shared "curve_fit" logger
         with pytest.raises(dataclasses.FrozenInstanceError):
             ctx.flength = 3  # type: ignore[misc]

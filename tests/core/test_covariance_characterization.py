@@ -1,8 +1,7 @@
 """Characterization tests for the four covariance sites.
 
-These pin the CURRENT behavior of the four places that turn a fit into ``pcov`` so
-a later refactor that routes them through shared helpers can prove it preserved
-behavior:
+These pin the behavior of the four places that turn a fit into ``pcov``, captured
+before the standard and exact sites were routed through ``nlsq.core.covariance``:
 
 * standard: ``CurveFit._compute_covariance`` (SVD of J), a delegate to
   ``nlsq.core.covariance.pcov_from_jacobian``
@@ -11,8 +10,8 @@ behavior:
 * hybrid:   ``AdaptiveHybridStreamingOptimizer._run_phase3_finalize`` (bare ``pinv``)
 * GLS:      ``LargeDatasetFitter._compute_covariance_from_history``
 
-Golden constants were captured once from the unmodified code (see ``_problems``
-below for the exact inputs) and pasted as ``repr`` output. Do not regenerate them
+Golden constants were captured once from the unmodified code (see the ``P_WC`` /
+``P_DUP`` constants and the ``model`` / ``model_dup`` functions for the exact inputs) and pasted as ``repr`` output. Do not regenerate them
 to make a failing test pass: a mismatch means behavior changed. Goldens use
 ``rtol=1e-8, atol=0`` (stricter than rtol 1e-8 / atol 1e-10: every entry is
 ~1e-5..1, so an absolute floor of 1e-10 would hide real changes); the two
@@ -470,7 +469,9 @@ def test_exact_rank_cutoff_is_p_eps_lambda_max():
     """
     np.testing.assert_allclose(_exact_last_pcov(6e-16), 1 / 6e-16, rtol=RTOL)
     assert _exact_last_pcov(3e-16) == 0.0
-    np.testing.assert_allclose(_exact_last_pcov(1e-15), 1 / 1e-15, rtol=RTOL)  # n*eps?
+    np.testing.assert_allclose(
+        _exact_last_pcov(1e-15), 1 / 1e-15, rtol=RTOL
+    )  # kept: an n*eps cutoff would drop it
 
 
 def test_exact_rank_cutoff_scales_with_p():

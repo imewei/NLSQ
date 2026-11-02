@@ -1,12 +1,12 @@
-"""Characterization of ``curve_fit`` input preparation (Part B, Task B1).
+"""Characterization of ``curve_fit`` input preparation.
 
-These tests pin the CURRENT observable behavior of input preparation
-(``nlsq.core.problem.prepare_problem`` and its helpers, plus the duplicate
-preparation inside ``_curve_fit_hybrid_streaming``) through the public entry
-points, so the extraction of ``prepare_problem`` into ``nlsq/core/problem.py``
-can be shown to be behavior-preserving.
+These tests pin the observable behavior of input preparation
+(``nlsq.core.problem.prepare_problem`` and its helpers, which the standard
+``curve_fit`` path and ``_curve_fit_hybrid_streaming`` share) through the public
+entry points. They were written against the code before ``prepare_problem`` was
+extracted into ``nlsq/core/problem.py`` and unchanged by the extraction.
 
-They deliberately assert what the code does today, including quirks.
+They deliberately assert what the code does, including quirks.
 """
 
 import jax.numpy as jnp
@@ -251,9 +251,9 @@ class TestKwargsLeftovers:
 
         Isolated on purpose: it calls ``prepare_problem`` directly.
 
-        Current behavior (differs from the plan's wording): preparation CONSUMES
-        nothing. ``nan_policy`` is read with ``kwargs.get`` and stays in the dict;
-        unrelated keys stay; the only mutation is that auto-selection
+        Preparation CONSUMES nothing: ``nan_policy`` is an explicit argument (the
+        caller reads it from its own kwargs) and stays in the dict; unrelated keys
+        stay; the only mutation is that auto-selection
         (``enable_stability=True`` and ``method=None``) ADDS tolerance keys the
         caller did not set, never overwriting caller-supplied ones.
         """
