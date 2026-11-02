@@ -28,7 +28,7 @@ import numpy as np
 from scipy.optimize import lsq_linear
 
 from nlsq.config import JAXConfig
-from nlsq.core.covariance import COND_WARN, pcov_from_normal
+from nlsq.core.covariance import pcov_from_normal
 from nlsq.result import OptimizeResult
 
 # Moved to normal_equations; re-exported here (tests and benchmarks import and patch them).

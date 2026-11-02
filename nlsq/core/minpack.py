@@ -3380,6 +3380,7 @@ class CurveFit:
             p0.size,
             absolute_sigma,
             self.covariance_svd,
+            self.logger,
         )
 
     @staticmethod

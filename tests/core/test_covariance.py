@@ -12,7 +12,6 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import nlsq
 from nlsq.core.covariance import pcov_from_jacobian, pcov_from_normal
 from nlsq.core.minpack import CurveFit
 from nlsq.result import OptimizeWarning
@@ -95,6 +94,34 @@ def test_exact_compute_covariance_still_returns_ndarray():
     out = exact_lm.compute_covariance(H, COST, N, 2, False)
     assert isinstance(out, np.ndarray)
     np.testing.assert_array_equal(out, pcov_from_normal(H, COST, N, 2, False)[0])
+
+
+class _RecordingLogger:
+    def __init__(self):
+        self.calls = []
+
+    def warning(self, msg, **fields):
+        self.calls.append((msg, fields))
+
+
+@pytest.mark.parametrize(
+    ("J", "ysize", "reason"),
+    [
+        (np.zeros((N, 2)), N, "singular_jacobian"),
+        (_jac(), 2, "insufficient_data"),
+    ],
+)
+def test_fallback_logs_through_instance_logger(J, ysize, reason):
+    fit = CurveFit()
+    fit.logger = _RecordingLogger()
+    res = SimpleNamespace(jac=J, cost=COST)
+    with pytest.warns(OptimizeWarning):
+        pcov, warn_cov = fit._compute_covariance(res, ysize, np.zeros(2), False)
+    assert warn_cov
+    assert np.isinf(pcov).all()
+    assert fit.logger.calls == [
+        ("Covariance could not be estimated", {"reason": reason})
+    ]
 
 
 def test_compute_covariance_uses_instance_svd_hook():

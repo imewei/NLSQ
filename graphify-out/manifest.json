@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "nlsq/core/minpack.py": {
-    "mtime": 1793600983.0584598,
-    "seen": 1793601217.8700767,
-    "ast_hash": "01126fe8582dc151080204be01ded400",
+    "mtime": 1793636043.0492063,
+    "seen": 1793636134.4346464,
+    "ast_hash": "e6f166a288edd23c93f7b9cd32db1720",
     "semantic_hash": ""
   },
   "nlsq/core/workflow.py": {
@@ -3678,9 +3678,9 @@
     "semantic_hash": ""
   },
   "nlsq/streaming/exact_lm.py": {
-    "mtime": 1793600983.1434596,
-    "seen": 1793601217.8701577,
-    "ast_hash": "3a122deea92b34035256ea743807690f",
+    "mtime": 1793636025.2454033,
+    "seen": 1793636134.4348087,
+    "ast_hash": "9944b040522e167191a6e923cd67602e",
     "semantic_hash": ""
   },
   "nlsq/streaming/normal_equations.py": {
@@ -3864,15 +3864,15 @@
     "semantic_hash": ""
   },
   "nlsq/core/covariance.py": {
-    "mtime": 1793601058.8593984,
-    "seen": 1793601217.870071,
-    "ast_hash": "d1f70695a331e2a00533f9652792ad20",
+    "mtime": 1793636048.477147,
+    "seen": 1793636134.4346364,
+    "ast_hash": "bd8cb612cb3e045dc79ca0ea54821568",
     "semantic_hash": ""
   },
   "tests/core/test_covariance.py": {
-    "mtime": 1793600983.1334596,
-    "seen": 1793601217.8702765,
-    "ast_hash": "7e27f58f5614dc8e512538a36767185a",
+    "mtime": 1793636025.355402,
+    "seen": 1793636134.4350345,
+    "ast_hash": "23d08234a586b5d8973330cb67ea6bd9",
     "semantic_hash": ""
   },
   "tests/core/test_covariance_characterization.py": {

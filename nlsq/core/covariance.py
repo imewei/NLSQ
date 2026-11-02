@@ -37,13 +37,15 @@ def pcov_from_jacobian(
     p: int,
     absolute_sigma: bool,
     svd: Callable[[Any], tuple[Any, Any]],
+    logger: Any = None,
 ) -> tuple[np.ndarray, bool]:
     """Covariance from the SVD of ``J`` (Moore-Penrose, as ``scipy.optimize.curve_fit``).
 
     ``svd(J) -> (s, VT)`` is injected so ``CurveFit.covariance_svd`` stays the hook.
     ``n_eff`` is the true data count (``J`` may carry padded rows); it sets the
     singular-value cutoff ``eps * max(n_eff, J.shape[1]) * s[0]`` and the degrees of
-    freedom ``n_eff - p``. The warning is attributed to the caller of the method that
+    freedom ``n_eff - p``. Fallback messages go to ``logger`` (default: the
+    ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is attributed to the caller of the method that
     calls this function (``stacklevel=3``), so call it directly from that method.
     """
     cost = 2 * cost  # cost is half the sum of squares!
@@ -87,7 +89,9 @@ def pcov_from_jacobian(
                 reason = "insufficient_data"
 
     if warn_cov:
-        _logger.warning("Covariance could not be estimated", reason=reason)
+        (_logger if logger is None else logger).warning(
+            "Covariance could not be estimated", reason=reason
+        )
         warnings.warn(
             "Covariance of the parameters could not be estimated",
             stacklevel=3,
