@@ -159,9 +159,10 @@ vary by up to about 50% between sessions.
      - 0.60 s
 
 Plain ``curve_fit`` runs out of memory on the 16 GB GPU at 100M points. On the GPU at 1M
-points and below, plain ``curve_fit`` is faster than ``exact_streaming`` (1M: 53 ms vs
-451 ms), and ``exact_streaming`` has a fixed cost of tens of milliseconds at 1K. The first
-fit also pays JIT compilation. The full comparison against SciPy, lmfit, JAXopt and Optimistix is in
+points and below, plain ``curve_fit`` is faster than ``exact_streaming`` for the unbounded
+problems (``exp_decay`` at 1M: 53 ms vs 451 ms; not for ``bounded_exp``), and
+``exact_streaming`` has a fixed cost of about 60-140 ms at 1K. The first fit also pays JIT
+compilation. The full comparison against SciPy, lmfit, JAXopt and Optimistix is in
 ``benchmarks/baselines/2026-11-01-library-comparison-1k-1M-10M-100M.md``.
 
 GPU Acceleration

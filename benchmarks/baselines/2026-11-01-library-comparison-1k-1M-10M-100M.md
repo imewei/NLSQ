@@ -30,7 +30,7 @@ Repeats: 7 warm at 1k/1M, 3 at 10M, 100M: 1 (SciPy, lmfit), 2 (JAX-based, CPU), 
 ## Observations
 
 - GPU, `exact_streaming` is the fastest NLSQ path from 10M up. At 100M it takes 0.60 / 1.87 / 2.76 / 1.94 s (exp_decay / gaussian / two_exp / bounded_exp), 6-22x faster than the default `curve_fit_large` (13.3-23.4 s).
-- At 100M on GPU it also beats JAXopt on all three unbounded problems (0.60 vs 0.74, 1.87 vs 3.05, 2.76 vs 4.17 s). At 10M and below JAXopt is faster (10M exp_decay 83 vs 258 ms; 1M 11 vs 451 ms); plain `curve_fit` is faster than `exact_streaming` at 1M on GPU (53 vs 451 ms).
+- At 100M on GPU it also beats JAXopt on all three unbounded problems (0.60 vs 0.74, 1.87 vs 3.05, 2.76 vs 4.17 s). At 10M and below JAXopt is faster (10M exp_decay 83 vs 258 ms; 1M 11 vs 451 ms); on the unbounded problems plain `curve_fit` is faster than `exact_streaming` at 1M on GPU (exp_decay 53 vs 451 ms), but not on bounded_exp (661 vs 469 ms at 1M; 169 vs 112 ms at 1k).
 - `exact_streaming` has a high fixed cost at small n: 1k takes 60-119 ms on CPU and 92-143 ms on GPU (plain `curve_fit` CPU: 5-10 ms, bounded 53 ms).
 - Plain `curve_fit` runs out of GPU memory at 100M on all four problems (as on 2026-10-31). Optimistix OOMs or fails in cuSolver (`Dormqr`) at 100M.
 - Accuracy: `exact_streaming` final costs are 2.5e-9 to 6.9e-9 above the best (two_exp, bounded_exp); GLS `curve_fit_large` two_exp is 4e-7 (100M), 7e-7 (10M) and 7e-5 at 1M, which fails the 1e-6 gate.

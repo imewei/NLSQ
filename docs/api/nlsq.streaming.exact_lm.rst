@@ -6,7 +6,8 @@ nlsq.streaming.exact\_lm module
 Exact chunk-accumulated Levenberg-Marquardt behind
 ``curve_fit_large(method="exact_streaming")``. Each trial point costs one pass over the
 data that accumulates ``J^T J``, ``J^T r`` and the cost in float64, so solver state is
-O(p\ :sup:`2`) and the result equals a full-batch fit regardless of chunking.
+O(p\ :sup:`2`) and the result equals a full-batch fit, up to floating-point rounding and the
+stopping tolerances, regardless of chunking.
 
 Use it through :func:`nlsq.curve_fit_large`; the argument rules, model contract, ``sigma``
 and ``bounds`` handling, out-of-memory sources and covariance caveat are in

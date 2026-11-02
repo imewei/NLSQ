@@ -2,7 +2,7 @@
 
 One pass over the data per trial point accumulates ``F = 0.5*sum r^2``, ``g = J^T r`` and
 ``H = J^T J`` in float64, so the solver state is O(p^2) and the result equals a full-batch
-fit regardless of how the data is chunked. The accepted trial's statistics are reused as the
+fit (up to rounding and the stopping tolerances) regardless of how the data is chunked. The accepted trial's statistics are reused as the
 next iterate's, so no pass is spent re-evaluating an accepted point.
 
 Ported from ``benchmarks/prototypes/exact_accumulated_lm.py`` (Stage 0, kept frozen as the
