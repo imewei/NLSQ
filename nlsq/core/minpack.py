@@ -3546,11 +3546,15 @@ class CurveFit:
             sigma=sigma,
             check_finite=check_finite,
             nan_policy=kwargs.pop("nan_policy", "raise"),
-            ctx=PrepareContext(flength=None, use_dynamic_sizing=False),
+            # Hybrid takes multi-dimensional x as (n_points, n_features).
+            ctx=PrepareContext(
+                flength=None, use_dynamic_sizing=False, x_points_axis_last=False
+            ),
         )
         xdata, ydata, sigma = prepared.x, prepared.y, prepared.sigma
         n, p0 = prepared.n, prepared.p0
         lb, ub = prepared.lb, prepared.ub
+        del prepared  # frees the m-byte mask for the duration of the fit
         bounds_tuple = (
             (lb, ub)
             if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))

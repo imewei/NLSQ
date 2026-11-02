@@ -114,10 +114,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The security validator now runs on this path: more than 10 billion points, or
     points x parameters above 100 billion, is rejected, and a Jacobian memory estimate
     above 10 GB is logged as a warning.
+  - `p0` and bounds are now processed before the data conversion and finiteness checks,
+    so for an input that is invalid in several ways the `p0`/bounds error can come
+    first. `p0="auto"` with `nan_policy="omit"` estimates from the data before rows are
+    omitted, as on the standard path.
+  - Multi-dimensional `x` is still taken as `(n_points, n_features)` by this method.
 
 ### Changed (internal)
-- Internal: prepare_problem extracted from CurveFit; hybrid streaming no longer
-  consumes nan_policy twice.
+- Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
+  preparation with curve_fit, and nan_policy is read once in the shared step.
 - Internal: shared NormalEquations module for streaming solvers; no behavior change.
 - Hybrid streaming: Gauss-Newton `J^T J` accumulation always uses the chunk loop (the
   `lax.scan` accumulator was removed); `loop_strategy` now affects cost evaluation only.

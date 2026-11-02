@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "nlsq/core/minpack.py": {
-    "mtime": 1793594045.5682142,
-    "seen": 1793595824.9251356,
-    "ast_hash": "01b3c5b5bdb3776406a1e064170d7629",
+    "mtime": 1793596288.5845985,
+    "seen": 1793597189.358421,
+    "ast_hash": "440b3d79671062c257fc24aa0054b48e",
     "semantic_hash": ""
   },
   "nlsq/core/workflow.py": {
@@ -3834,15 +3834,15 @@
     "semantic_hash": ""
   },
   "nlsq/core/problem.py": {
-    "mtime": 1793593259.7692778,
-    "seen": 1793595824.9251397,
-    "ast_hash": "13b18e76c112b3603f878bd908830715",
+    "mtime": 1793596278.9266121,
+    "seen": 1793597189.3584259,
+    "ast_hash": "63299c2aaf37fc05d3ca9aba6ae4dbf3",
     "semantic_hash": ""
   },
   "tests/core/test_hybrid_prepare_problem.py": {
-    "mtime": 1793595799.3044562,
-    "seen": 1793595824.9255254,
-    "ast_hash": "a3ce47bf666e03cc9294e34163e34f9a",
+    "mtime": 1793596261.7546368,
+    "seen": 1793597189.3589082,
+    "ast_hash": "bc9a68901ecec93e9c07ad7523cf5e7c",
     "semantic_hash": ""
   },
   "tests/core/test_prepare_problem_characterization.py": {

@@ -141,17 +141,36 @@ def test_hybrid_sigma_passes_through_untouched(reached):
         _run(x, y, p0=P0, sigma=sigma)
     np.testing.assert_array_equal(reached["kwargs"]["sigma"], sigma)
 
+    # nan_policy="omit" drops the bad row from sigma as well as from x and y.
+    y_nan = y.copy()
+    y_nan[3] = np.nan
+    sigma = np.linspace(0.1, 0.2, 50)
+    with pytest.raises(_Reached):
+        _run(x, y_nan, p0=P0, sigma=sigma, nan_policy="omit")
+    np.testing.assert_array_equal(reached["kwargs"]["sigma"], np.delete(sigma, 3))
+    assert reached["xy"][0].shape == (49,)
+
 
 # --- The five accepted behavior differences ---------------------------------
 
 
-def test_hybrid_p0_auto_now_estimates(reached):
+def test_hybrid_p0_auto_now_estimates(reached, monkeypatch):
     """Was a UFuncTypeError (np.clip on the string 'auto')."""
+    import nlsq.precision.parameter_estimation as pe
+
+    calls = []
+    estimate = np.array([1.234, 0.567])
+
+    def fake_estimate(f, xdata, ydata, p0):
+        calls.append(p0)
+        return estimate
+
+    monkeypatch.setattr(pe, "estimate_initial_parameters", fake_estimate)
     x, y = _data()
     with pytest.raises(_Reached):
         _run(x, y, p0="auto")
-    p0 = np.asarray(reached["kwargs"]["p0"])
-    assert p0.shape == (2,) and np.all(np.isfinite(p0))
+    assert calls == ["auto"]
+    np.testing.assert_array_equal(reached["kwargs"]["p0"], estimate)
 
 
 def test_hybrid_length_mismatch_raises_valueerror():
@@ -174,8 +193,45 @@ def test_hybrid_nan_lower_bound_raises_valueerror():
         _run(x, y, p0=P0, bounds=([np.nan, 0], [5, 5]))
 
 
+def test_hybrid_nan_upper_bound_raises_valueerror():
+    x, y = _data()
+    with pytest.raises(ValueError, match="Upper bounds contain NaN"):
+        _run(x, y, p0=P0, bounds=([0, 0], [np.nan, 5]))
+
+
 def test_hybrid_non_array_x_raises_x_needs_arrays():
     """Was 'could not convert string to float'."""
     _, y = _data()
     with pytest.raises(ValueError, match="X needs arrays"):
         _run("abc", y, p0=P0)
+
+
+# --- (n_points, n_features) x layout ----------------------------------------
+
+
+def _model_2d(x, a, b):
+    return a * x[:, 0] + b * x[:, 1]
+
+
+def test_hybrid_accepts_points_first_2d_x():
+    """Hybrid takes x as (n_points, n_features); the standard path is feature-major."""
+    from nlsq import curve_fit
+
+    rng = np.random.default_rng(1)
+    x = rng.uniform(0.5, 2.0, size=(200, 2))
+    y = 1.5 * x[:, 0] + 0.7 * x[:, 1]
+    res = curve_fit(_model_2d, x, y, p0=[1.0, 1.0], **_FAST)
+    np.testing.assert_allclose(res.x, [1.5, 0.7], rtol=1e-3)
+
+
+def test_prepare_problem_x_points_axis_last_flag():
+    from nlsq.core.problem import PrepareContext, prepare_problem
+
+    x = np.ones((200, 2))
+    y = np.ones(200)
+    with pytest.raises(ValueError, match="X and Y data lengths dont match"):
+        prepare_problem(_model_2d, x, y, p0=[1.0, 1.0])
+    out = prepare_problem(
+        _model_2d, x, y, p0=[1.0, 1.0], ctx=PrepareContext(x_points_axis_last=False)
+    )
+    assert out.m_real == 200 and out.x.shape == (200, 2)

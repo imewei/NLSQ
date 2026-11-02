@@ -48,6 +48,10 @@ class PrepareContext:
     flength: float | None = None
     use_dynamic_sizing: bool = False
     enable_stability: bool = False
+    # Layout of multi-dimensional x for the x/y length check only: True is
+    # (n_features, n_points) (standard path); hybrid streaming passes False for
+    # (n_points, n_features). NaN omission stays feature-major either way.
+    x_points_axis_last: bool = True
     # Typed Any (default None): prepare_problem resolves both before use.
     validator: Any = None
     logger: Any = None
@@ -502,6 +506,7 @@ def _convert_and_validate_arrays(
 def _validate_data_lengths(
     xdata: np.ndarray,
     ydata: np.ndarray,
+    points_axis_last: bool = True,
 ) -> tuple[int, int]:
     """Validate that X and Y data lengths match.
 
@@ -511,6 +516,10 @@ def _validate_data_lengths(
         X data
     ydata : np.ndarray
         Y data
+    points_axis_last : bool, default True
+        For multi-dimensional ``xdata``: points on the last axis
+        ``(n_features, n_points)`` (standard path) or the first axis
+        ``(n_points, n_features)`` (hybrid streaming).
 
     Returns
     -------
@@ -526,7 +535,7 @@ def _validate_data_lengths(
     """
     m = len(ydata)
     xdims = xdata.ndim
-    xlen = len(xdata) if xdims == 1 else len(xdata[0])
+    xlen = len(xdata) if xdims == 1 or not points_axis_last else len(xdata[0])
     if xlen != m:
         raise ValueError("X and Y data lengths dont match")
 
@@ -661,7 +670,7 @@ def _preprocess_input_data(
     )
 
     # Step 8: Validate data lengths
-    m, xdims = _validate_data_lengths(xdata, ydata)
+    m, xdims = _validate_data_lengths(xdata, ydata, ctx.x_points_axis_last)
 
     omit_mask = None
     if nan_policy == "omit":
