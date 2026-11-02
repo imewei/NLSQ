@@ -4,8 +4,10 @@ These pin the CURRENT behavior of the four places that turn a fit into ``pcov`` 
 a later refactor that routes them through shared helpers can prove it preserved
 behavior:
 
-* standard: ``CurveFit._compute_covariance`` (SVD of J, ``nlsq/core/minpack.py``)
-* exact:    ``exact_lm.compute_covariance`` (eigh of H = J^T J)
+* standard: ``CurveFit._compute_covariance`` (SVD of J), a delegate to
+  ``nlsq.core.covariance.pcov_from_jacobian``
+* exact:    ``exact_lm.compute_covariance`` (eigh of H = J^T J), a wrapper over
+  ``nlsq.core.covariance.pcov_from_normal``
 * hybrid:   ``AdaptiveHybridStreamingOptimizer._run_phase3_finalize`` (bare ``pinv``)
 * GLS:      ``LargeDatasetFitter._compute_covariance_from_history``
 
@@ -191,7 +193,8 @@ def _assert_single(caught, category):
     """Exactly one warning, of exactly ``category`` (OptimizeWarning vs UserWarning).
 
     Also pins attribution: the helpers are called from this file, so the warning
-    must point here (standard: ``stacklevel=2``; exact: ``skip_file_prefixes``). A
+    must point here (standard: ``stacklevel=3`` inside the helper; exact:
+    ``skip_file_prefixes`` in the helper). A
     covariance helper that moves into another nlsq module must keep that.
     """
     assert [w.category for w in caught] == [category], [str(w.message) for w in caught]
@@ -339,7 +342,7 @@ def _std_last_pcov(sv, ysize, rows=N, p=2):
 
 
 def test_standard_rank_cutoff_is_eps_max_ysize_p_times_s0():
-    """Cutoff is eps*max(ysize, p)*s0 (minpack.py:3390); pin both sides of it.
+    """Cutoff is eps*max(ysize, p)*s0 (``pcov_from_jacobian``); pin both sides of it.
 
     eps*12 = 2.66e-15 here, so sv=3e-15 is kept (pcov = 1/sv^2) and 1e-15 dropped
     (pcov = 0). A p-only cutoff (eps*2 = 4.4e-16) would keep 1e-15.
@@ -459,7 +462,7 @@ def _exact_last_pcov(lam, p=2, n=N):
 
 
 def test_exact_rank_cutoff_is_p_eps_lambda_max():
-    """Keep eigen-directions with lambda > p*eps*lambda_max (exact_lm.py:477).
+    """Keep eigen-directions with lambda > p*eps*lambda_max (``pcov_from_normal``).
 
     p=2: p*eps = 4.44e-16. lambda=6e-16 is kept, 3e-16 dropped. A cutoff of eps alone
     (2.2e-16) would keep 3e-16; one of n*eps (n=12, 2.66e-15) would drop 1e-15, which

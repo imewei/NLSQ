@@ -12,8 +12,8 @@ result is a KKT point of the box-constrained problem to within the stopping tole
 reached by a different path than TRF.
 
 shortcut: normal equations square cond(J). The Stage 3 conditioning study kept them
-(benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md); COND_WARN is the
-mitigation. Revisit with TSQR if accurate covariances at cond(J) > 1e5 are needed.
+(benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md); the COND_WARN
+warning (in nlsq.core.covariance) is the mitigation. Revisit with TSQR if accurate covariances at cond(J) > 1e5 are needed.
 """
 
 from __future__ import annotations

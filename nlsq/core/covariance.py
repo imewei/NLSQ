@@ -45,8 +45,9 @@ def pcov_from_jacobian(
     ``n_eff`` is the true data count (``J`` may carry padded rows); it sets the
     singular-value cutoff ``eps * max(n_eff, J.shape[1]) * s[0]`` and the degrees of
     freedom ``n_eff - p``. Fallback messages go to ``logger`` (default: the
-    ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is attributed to the caller of the method that
-    calls this function (``stacklevel=3``), so call it directly from that method.
+    ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is
+    attributed to the caller of the method that calls this function
+    (``stacklevel=3``), so call it directly from that method.
     """
     cost = 2 * cost  # cost is half the sum of squares!
 

@@ -1,7 +1,7 @@
 # Graph Report - refactor-normal-equations  (2026-11-02)
 
 ## Corpus Check
-- 494 files · ~747,716 words
+- 494 files · ~747,781 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 77 file(s) not represented in the graph (top: .ipynb 54, .csv 11, .npz 3)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `68a6e1c6`
+- Built from commit: `7461cd61`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2396,7 +2396,7 @@ Cohesion: 0.50
 Nodes (4): model, function, path, type
 
 ## Knowledge Gaps
-- **113 isolated node(s):** `Technical Note: Removal of Randomized SVD (v0.3.5)`, `nlsq package`, `nlsq.result.OptimizeResult`, `airy_disk diffraction pattern`, `FRAP recovery model` (+108 more)
+- **113 isolated node(s):** `Technical Note: Removal of Randomized SVD (v0.3.5)`, `nlsq.adaptive_hybrid_streaming docs`, `nlsq package`, `nlsq.result.OptimizeResult`, `airy_disk diffraction pattern` (+108 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 9471 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **284 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2407,7 +2407,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.127) - this node is a cross-community bridge._
 - **Are the 8 inferred relationships involving `curve_fit()` (e.g. with `.curve_fit()` and `DiagnosticLevel`) actually correct?**
   _`curve_fit()` has 8 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Technical Note: Removal of Randomized SVD (v0.3.5)`, `nlsq package`, `nlsq.result.OptimizeResult` to the rest of the system?**
+- **What connects `Technical Note: Removal of Randomized SVD (v0.3.5)`, `nlsq.adaptive_hybrid_streaming docs`, `nlsq package` to the rest of the system?**
   _113 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `test_hybrid_config.py` be split into smaller, more focused modules?**
   _Cohesion score 0.017230115956230606 - nodes in this community are weakly interconnected._

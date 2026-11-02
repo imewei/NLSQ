@@ -17,6 +17,7 @@ Main interface for curve fitting:
 
    nlsq.minpack
    nlsq.core.problem
+   nlsq.core.covariance
    nlsq.least_squares
 
 Pre-Built Functions
