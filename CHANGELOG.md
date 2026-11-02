@@ -124,8 +124,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These changes apply to `curve_fit(..., method="hybrid_streaming")`;
     `curve_fit_large(..., method="hybrid_streaming")` has its own branch and is
     unaffected.
-  - `CurveFit.pad_fit_data` overrides in subclasses are no longer consulted by input
-    preparation (the module-level `pad_fit_data` is used).
+- `CurveFit.curve_fit`: subclass overrides of `CurveFit.pad_fit_data` are no longer
+  consulted by input preparation (the module-level `pad_fit_data` is used).
 
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input

@@ -75,7 +75,6 @@ from jax.scipy.linalg import svd as jax_svd
 
 from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
-from nlsq.common_scipy import EPS
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
 from nlsq.core.problem import (
@@ -454,7 +453,7 @@ def fit(  # noqa: C901
     if n_points == 0:
         raise ValueError("`ydata` must not be empty!")
 
-    # Determine number of parameters (see _determine_parameter_count/_is_auto_p0).
+    # Determine number of parameters (see nlsq.core.problem._determine_parameter_count/_is_auto_p0).
     if p0 is not None and not _is_auto_p0(p0):
         p0_arr = np.atleast_1d(p0)
         n_params = len(p0_arr)
@@ -4395,7 +4394,8 @@ class CurveFit:
                 flength=self.flength,
                 use_dynamic_sizing=self.use_dynamic_sizing,
                 enable_stability=self.enable_stability,
-                validator=getattr(self, "validator", None),
+                validator=getattr(self, "validator", None)
+                or InputValidator(fast_mode=True),
                 logger=self.logger,
             ),
         )
