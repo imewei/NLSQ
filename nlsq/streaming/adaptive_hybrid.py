@@ -33,7 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax  # type: ignore[import-not-found]
 
-from nlsq.core.covariance import pcov_from_normal
+from nlsq.core.covariance import pcov_from_normal, warn_not_estimated
 from nlsq.global_optimization.config import GlobalOptimizationConfig
 from nlsq.global_optimization.sampling import (
     get_sampler,
@@ -3579,40 +3579,33 @@ class AdaptiveHybridStreamingOptimizer:
 
         return self.normalizer.denormalize(normalized_params)
 
-    def _compute_normalized_covariance(
-        self, JTJ: jnp.ndarray, residual_sum_sq: float, n_points: int
-    ) -> jnp.ndarray:
-        """Residual-variance-scaled covariance in normalized space from J^T J.
+    def _compute_normalized_covariance(self, JTJ: jnp.ndarray) -> jnp.ndarray:
+        """Compute covariance matrix in normalized space from J^T J.
 
-        Delegates to :func:`nlsq.core.covariance.pcov_from_normal` (the
-        ``nlsq.curve_fit`` contract): a pseudo-inverse over the eigen-directions
-        above ``p*eps*lambda_max`` (dropped directions give zero rows and columns, so a
-        partially rank-deficient problem still returns a finite matrix), scaled by
-        ``sigma^2 = residual_sum_sq / (n_points - p)``.
+        The covariance is the (unit-variance) pseudo-inverse of the Hessian
+        approximation: Cov_norm = pinv(J^T J), via
+        :func:`nlsq.core.covariance.pcov_from_normal` (eigen-directions above
+        ``p*eps*lambda_max``; dropped directions give zero rows and columns, so a
+        partially rank-deficient J^T J still gives a finite matrix).
 
         Parameters
         ----------
         JTJ : array_like
             Accumulated J^T J matrix from Phase 2 of shape (n_params, n_params)
-        residual_sum_sq : float
-            Total sum of squared residuals from Phase 2
-        n_points : int
-            Total number of data points
 
         Returns
         -------
         cov_norm : array_like
             Covariance matrix in normalized space of shape (n_params, n_params).
-            All ``inf`` (with an ``OptimizeWarning``) when no direction survives the
-            cutoff, J^T J or the result is non-finite, or ``n_points <= n_params``.
+            All ``inf`` (after one ``OptimizeWarning``) when no direction survives the
+            cutoff or J^T J or the result is non-finite.
         """
-        n_params = JTJ.shape[0]
         cov_norm, _ = pcov_from_normal(
             np.asarray(JTJ),
-            0.5 * residual_sum_sq,  # pcov_from_normal takes cost = 0.5 * sum(r^2)
-            n_points,
-            n_params,
-            absolute_sigma=False,
+            0.0,  # unused: absolute_sigma=True leaves the variance to the caller
+            JTJ.shape[0] + 1,
+            JTJ.shape[0],
+            absolute_sigma=True,
             cond_warn=False,
         )
         return jnp.asarray(cov_norm)
@@ -3661,27 +3654,82 @@ class AdaptiveHybridStreamingOptimizer:
         # Get denormalization Jacobian (diagonal matrix with scales)
         D = self.normalization_jacobian
 
-        # Cov_orig = D @ Cov_norm @ D^T for diagonal D, elementwise so that the
-        # off-diagonal 0 * inf of an all-inf Cov_norm stays inf (not NaN)
+        # Cov_orig = D @ Cov_norm @ D^T for diagonal D, as two sequential row/column
+        # scalings (no D_i*D_j product, which can overflow, and no 0 * inf from a
+        # dense matmul when Cov_norm is the all-inf fallback)
         scales = jnp.diag(D)
-        cov_orig = cov_norm * jnp.outer(scales, scales)
+        cov_orig = (cov_norm * scales[:, None]) * scales[None, :]
 
-        # Ensure symmetry (should be preserved, but enforce for numerical stability)
-        cov_orig = 0.5 * (cov_orig + cov_orig.T)
+        # Ensure symmetry (should be preserved, but enforce for numerical stability);
+        # halve before adding so a large cov_orig cannot overflow
+        cov_orig = 0.5 * cov_orig + 0.5 * cov_orig.T
 
         return cov_orig
 
-    @staticmethod
-    def _residual_variance(
-        residual_sum_sq: float, n_points: int, n_params: int
-    ) -> float:
-        """Residual variance ``sigma^2 = residual_sum_sq / (n - p)``.
+    def _apply_residual_variance(
+        self,
+        cov_orig: jnp.ndarray,
+        residual_sum_sq: float,
+        n_points: int,
+    ) -> tuple[jnp.ndarray, float]:
+        """Apply residual variance scaling to covariance matrix.
 
-        ``inf`` when ``n <= p`` (variance undefined), matching
-        ``scipy.optimize.curve_fit`` with ``absolute_sigma=False``.
+        Scales the covariance by the residual variance estimate:
+        sigma^2 = residual_sum_sq / (n - p)
+        Cov_final = sigma^2 * Cov_orig
+
+        This provides the final covariance estimate accounting for the
+        goodness-of-fit of the model to the data.
+
+        Parameters
+        ----------
+        cov_orig : array_like
+            Covariance matrix in original space (before variance scaling)
+            of shape (n_params, n_params)
+        residual_sum_sq : float
+            Total sum of squared residuals from Phase 2
+        n_points : int
+            Total number of data points
+
+        Returns
+        -------
+        cov_final : array_like
+            Final scaled covariance matrix of shape (n_params, n_params)
+        sigma_sq : float
+            Residual variance estimate (sigma^2)
+
+        Notes
+        -----
+        The residual variance is computed as:
+        sigma^2 = sum(residuals^2) / (n - p)
+
+        where n is the number of data points and p is the number of parameters.
+        This is an unbiased estimator of the error variance.
+
+        Special cases:
+        - If n <= p: sigma^2 set to infinity (covariance undefined)
+        - If residual_sum_sq = 0: Perfect fit, sigma^2 = 0
+
+        This matches scipy.optimize.curve_fit behavior when absolute_sigma=False.
         """
+        n_params = cov_orig.shape[0]
+
+        # Compute degrees of freedom
         dof = n_points - n_params
-        return float(residual_sum_sq / dof) if dof > 0 else float("inf")
+
+        if dof <= 0:
+            # Not enough data points to estimate variance
+            # Set to infinity (covariance undefined)
+            sigma_sq = jnp.inf
+            cov_final = jnp.full_like(cov_orig, jnp.inf)
+        else:
+            # Compute residual variance
+            sigma_sq = residual_sum_sq / dof
+
+            # Scale covariance by residual variance
+            cov_final = sigma_sq * cov_orig
+
+        return cov_final, float(sigma_sq)
 
     def _compute_standard_errors(self, pcov: jnp.ndarray) -> jnp.ndarray:
         """Compute standard errors from covariance matrix diagonal.
@@ -3767,27 +3815,36 @@ class AdaptiveHybridStreamingOptimizer:
         - perr: Standard errors (not returned by scipy but useful)
 
         The covariance transformation follows:
-        1. Cov_norm = sigma^2 * pinv(J^T J)  [in normalized space, via
-           ``nlsq.core.covariance.pcov_from_normal``]
-        2. Cov_final = D @ Cov_norm @ D^T  [transform to original space]
+        1. Cov_norm = pinv(J^T J)  [in normalized space]
+        2. Cov_orig = D @ Cov_norm @ D^T  [transform to original space]
+        3. Cov_final = sigma^2 * Cov_orig  [scale by residual variance]
         """
         phase_start = time.time()
 
         # Step 1: Denormalize parameters to original space
         popt = self._denormalize_params(optimized_params_normalized)
 
-        # Step 2: Residual-variance-scaled covariance in normalized space
-        cov_norm = self._compute_normalized_covariance(
-            JTJ_final, residual_sum_sq, n_points
-        )
+        # Step 2: Compute covariance in normalized space (all-inf + one
+        # OptimizeWarning if J^T J is degenerate or non-finite)
+        cov_norm = self._compute_normalized_covariance(JTJ_final)
+        degenerate = bool(jnp.isinf(cov_norm).any())
 
         # Step 3: Transform covariance to original space
-        pcov = self._transform_covariance(cov_norm)
+        cov_orig = self._transform_covariance(cov_norm)
 
-        # Step 4: Residual variance estimate
-        sigma_sq = self._residual_variance(
-            residual_sum_sq, n_points, JTJ_final.shape[0]
+        # Step 4: Apply residual variance scaling
+        pcov, sigma_sq = self._apply_residual_variance(
+            cov_orig,
+            residual_sum_sq,
+            n_points,
         )
+        if degenerate:
+            # keep the all-inf fallback (inf * sigma^2 would be NaN for a perfect fit)
+            pcov = cov_orig
+        elif not bool(jnp.isfinite(pcov).all()):
+            # n_points <= n_params, or the scaled covariance overflowed
+            pcov = jnp.full_like(pcov, jnp.inf)
+            warn_not_estimated()
 
         # Step 5: Compute standard errors
         perr = self._compute_standard_errors(pcov)

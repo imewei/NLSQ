@@ -102,6 +102,15 @@ def pcov_from_jacobian(
     return pcov, warn_cov
 
 
+def warn_not_estimated() -> None:
+    """Emit the all-``inf`` fallback ``OptimizeWarning``, attributed to the user's call site."""
+    warnings.warn(
+        "Covariance of the parameters could not be estimated",
+        OptimizeWarning,
+        skip_file_prefixes=_NLSQ_DIR,
+    )
+
+
 def pcov_from_normal(
     H: np.ndarray,
     cost: float,
@@ -156,9 +165,5 @@ def pcov_from_normal(
         pcov = np.full((p, p), np.inf)
     fired = bool(np.isinf(pcov).any())
     if fired:
-        warnings.warn(
-            "Covariance of the parameters could not be estimated",
-            OptimizeWarning,
-            skip_file_prefixes=_NLSQ_DIR,
-        )
+        warn_not_estimated()
     return pcov, fired

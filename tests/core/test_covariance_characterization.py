@@ -574,6 +574,35 @@ def test_hybrid_fully_degenerate_contract(hybrid_wc, j_wc):
         assert np.isinf(np.asarray(r3["perr"])).all()
 
 
+@pytest.mark.parametrize(
+    ("scale", "h", "rss", "n", "expected"),
+    [
+        # variance applied after the transform: 1e-200 survives a 1e100 scale
+        (1e100, 1e200, 1e-200, N, 1e-200 / (N - 2)),
+        # D_i * D_j (1e320) would overflow; sequential scaling gives 1e-300 * 1e160 * 1e160
+        (1e160, 1e300, float(N - 2), N, 1.0e20),
+        # symmetrization halves before adding, so a ~1e308 entry stays finite
+        (1.0, 1.0, 1.5e308, 3, 1.5e308),
+    ],
+)
+def test_hybrid_extreme_scales_stay_finite(hybrid_wc, scale, h, rss, n, expected):
+    """Numerical range: the order pinv -> D scaling -> variance must not over/underflow."""
+    opt, p_norm = hybrid_wc
+    opt.normalization_jacobian = jnp.diag(jnp.array([scale, scale]))
+    r3, caught = _record(opt._run_phase3_finalize, p_norm, jnp.eye(2) * h, rss, n)
+    _assert_no_warnings(caught)
+    pcov = np.asarray(r3["pcov"])
+    np.testing.assert_allclose(pcov, expected * np.eye(2), rtol=1e-12, atol=0)
+
+
+def test_hybrid_perfect_fit_degenerate_stays_inf(hybrid_wc):
+    """rss = 0 with a degenerate J^T J: all-inf, not inf * 0 = NaN."""
+    opt, p_norm = hybrid_wc
+    r3, caught = _record(opt._run_phase3_finalize, p_norm, jnp.zeros((2, 2)), 0.0, N)
+    _assert_single(caught, OptimizeWarning)
+    _assert_all_inf(np.asarray(r3["pcov"]), 2)
+
+
 # --- GLS site --------------------------------------------------------------------------
 def test_gls_golden():
     fit = _gls_fitter(absolute_sigma=False)
