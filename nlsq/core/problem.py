@@ -923,7 +923,7 @@ def prepare_problem(
         mask=data_mask,
         method=method,
         m_real=m,
-        n_effective=int(data_mask.sum()) if data_mask is not None else m,
+        n_effective=int(np.sum(data_mask)) if data_mask is not None else m,
         len_diff=len_diff,
         should_pad=should_pad,
         none_mask=none_mask,
