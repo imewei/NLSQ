@@ -615,8 +615,8 @@ def fit(
     # Determine which backend to use
     if use_streaming or preset == "streaming":
         # Use AdaptiveHybridStreaming for streaming preset
-        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
+        from nlsq.streaming.strategy import build_large_strategy
 
         # Prepare p0
         if p0 is None:
@@ -648,14 +648,15 @@ def fit(
             multistart_sampler=sampler,
         )
 
-        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+        large_strategy = build_large_strategy("hybrid", config)
 
-        result_dict = optimizer.fit(
-            data_source=(xdata, ydata),
-            func=f,
-            p0=p0,  # type: ignore[arg-type]
-            bounds=bounds_tuple,  # type: ignore[arg-type]
-            sigma=sigma,  # type: ignore[arg-type]
+        result_dict = large_strategy.fit(
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds=bounds_tuple,
+            sigma=sigma,
             absolute_sigma=absolute_sigma,
             callback=kwargs.get("callback"),
             verbose=kwargs.get("verbose", 1),
@@ -1103,8 +1104,8 @@ def curve_fit_large(
 
     # Handle hybrid_streaming method specially
     if method == "hybrid_streaming":
-        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
+        from nlsq.streaming.strategy import build_large_strategy
 
         # Extract verbosity from kwargs
         verbose = kwargs.pop("verbose", 1)
@@ -1143,15 +1144,16 @@ def curve_fit_large(
         )
 
         # Create optimizer
-        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+        large_strategy = build_large_strategy("hybrid", config)
 
         # Run optimization
-        result_dict = optimizer.fit(
-            data_source=(xdata, ydata),
-            func=f,
-            p0=p0,  # type: ignore[arg-type]
-            bounds=bounds_tuple,  # type: ignore[arg-type]
-            sigma=sigma,  # type: ignore[arg-type]
+        result_dict = large_strategy.fit(
+            f,
+            xdata,
+            ydata,
+            p0,
+            bounds=bounds_tuple,
+            sigma=sigma,
             absolute_sigma=absolute_sigma,
             callback=kwargs.get("callback"),
             verbose=verbose,
@@ -1204,7 +1206,8 @@ def curve_fit_large(
         large_dataset_context,
         memory_context,
     )
-    from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
+    from nlsq.streaming.large_dataset import LDMemoryConfig
+    from nlsq.streaming.strategy import build_large_strategy
 
     # Configure memory settings if provided
     if memory_limit_gb is None:
@@ -1250,13 +1253,15 @@ def curve_fit_large(
     )
     with memory_context(context_config), large_dataset_context(large_dataset_config):
         # Create fitter with current configuration
-        fitter = LargeDatasetFitter(
-            memory_limit_gb=memory_limit_gb,
-            config=LDMemoryConfig(
+        large_strategy = build_large_strategy(
+            "chunked",
+            LDMemoryConfig(
                 memory_limit_gb=memory_limit_gb,
                 min_chunk_size=memory_config.min_chunk_size,
                 max_chunk_size=memory_config.max_chunk_size,
             ),
+            show_progress=show_progress,
+            memory_limit_gb=memory_limit_gb,
         )
 
         # Handle sigma parameter by including it in kwargs if provided
@@ -1286,27 +1291,16 @@ def curve_fit_large(
         # Provide default method if None
         final_method = method if method is not None else "trf"
 
-        # Perform the fit
-        if show_progress:
-            result = fitter.fit_with_progress(
-                f,
-                xdata,
-                ydata,
-                p0=converted_p0,
-                bounds=bounds,
-                method=final_method,
-                **kwargs,  # type: ignore
-            )
-        else:
-            result = fitter.fit(
-                f,
-                xdata,
-                ydata,
-                p0=converted_p0,
-                bounds=bounds,
-                method=final_method,
-                **kwargs,  # type: ignore
-            )
+        # Perform the fit (fit_with_progress when show_progress)
+        result = large_strategy.fit(
+            f,
+            xdata,
+            ydata,
+            converted_p0,
+            bounds=bounds,
+            method=final_method,
+            **kwargs,
+        )
 
         # Extract popt and pcov from result
         if hasattr(result, "popt") and hasattr(result, "pcov"):
