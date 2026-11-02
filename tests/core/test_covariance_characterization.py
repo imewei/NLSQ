@@ -23,6 +23,7 @@ preserved on purpose; the docstrings say so.
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from types import SimpleNamespace
 
 import jax
@@ -158,8 +159,14 @@ def _jac(m, p):
     return np.asarray(jax.jacfwd(lambda q: m(jnp.asarray(X), *q))(jnp.asarray(p)))
 
 
-J_WC = _jac(model, P_WC)
-J_DUP = _jac(model_dup, P_DUP)
+@pytest.fixture(scope="module")
+def j_wc():
+    return _jac(model, P_WC)
+
+
+@pytest.fixture(scope="module")
+def j_dup():
+    return _jac(model_dup, P_DUP)
 
 
 def _record(fn, *args, **kwargs):
@@ -181,8 +188,14 @@ def _assert_no_warnings(caught):
 
 
 def _assert_single(caught, category):
-    """Exactly one warning, of exactly ``category`` (OptimizeWarning vs UserWarning)."""
+    """Exactly one warning, of exactly ``category`` (OptimizeWarning vs UserWarning).
+
+    Also pins attribution: the helpers are called from this file, so the warning
+    must point here (standard: ``stacklevel=2``; exact: ``skip_file_prefixes``). A
+    covariance helper that moves into another nlsq module must keep that.
+    """
     assert [w.category for w in caught] == [category], [str(w.message) for w in caught]
+    assert Path(caught[0].filename).resolve() == Path(__file__).resolve()
 
 
 def _assert_all_inf(pcov, p):
@@ -236,10 +249,10 @@ def _gls_fitter(absolute_sigma):
 
 
 # --- standard site ---------------------------------------------------------------------
-def test_standard_golden():
+def test_standard_golden(j_wc):
     for absolute_sigma, golden in ((False, STD_WC), (True, STD_WC_ABS)):
         (pcov, warn_cov), caught = _record(
-            _std_cov, J_WC, COST_WC, N, P_WC, absolute_sigma
+            _std_cov, j_wc, COST_WC, N, P_WC, absolute_sigma
         )
         assert warn_cov is False
         _assert_no_warnings(caught)
@@ -255,11 +268,11 @@ def test_standard_golden():
         _assert_golden(pcov, golden, RTOL_E2E)
 
 
-def test_standard_partial_rank_deficient_contract():
+def test_standard_partial_rank_deficient_contract(j_dup):
     """Duplicate column: finite pseudo-inverse, dropped direction zeroed, no warning."""
     for absolute_sigma, golden in ((False, STD_DUP), (True, STD_DUP_ABS)):
         (pcov, warn_cov), caught = _record(
-            _std_cov, J_DUP, COST_DUP, N, P_DUP, absolute_sigma
+            _std_cov, j_dup, COST_DUP, N, P_DUP, absolute_sigma
         )
         assert warn_cov is False
         _assert_no_warnings(caught)
@@ -267,19 +280,19 @@ def test_standard_partial_rank_deficient_contract():
         _assert_golden(pcov, golden)
 
 
-def test_standard_fully_degenerate_contract():
+def test_standard_fully_degenerate_contract(j_wc):
     """All-zero J, non-finite J, or n <= p without absolute_sigma: all-inf + one warning."""
     cases = {
         "zero_jacobian": (np.zeros((N, 3)), COST_DUP, N, P_DUP, False),
         "zero_jacobian_absolute": (np.zeros((N, 3)), COST_DUP, N, P_DUP, True),
         "nan_jacobian": (
-            np.where(np.eye(N, 2) > 0, np.nan, J_WC),
+            np.where(np.eye(N, 2) > 0, np.nan, j_wc),
             COST_WC,
             N,
             P_WC,
             False,
         ),
-        "n_equals_p": (J_WC, COST_WC, 2, P_WC, False),
+        "n_equals_p": (j_wc, COST_WC, 2, P_WC, False),
     }
     for name, args in cases.items():
         (pcov, warn_cov), caught = _record(_std_cov, *args)
@@ -288,28 +301,81 @@ def test_standard_fully_degenerate_contract():
         _assert_all_inf(pcov, args[0].shape[1])
 
     # n <= p WITH absolute_sigma is a legitimate finite covariance and does not warn.
-    (pcov, warn_cov), caught = _record(_std_cov, J_WC, COST_WC, 2, P_WC, True)
+    (pcov, warn_cov), caught = _record(_std_cov, j_wc, COST_WC, 2, P_WC, True)
     assert warn_cov is False
     _assert_no_warnings(caught)
     _assert_golden(pcov, STD_WC_ABS)
 
 
-def test_standard_nonfinite_cost_gives_nan_no_warning():
+def test_standard_nonfinite_cost_gives_nan_no_warning(j_wc):
     """Differs from exact on purpose: finite J + NaN cost -> NaN pcov, NO warning."""
-    (pcov, warn_cov), caught = _record(_std_cov, J_WC, float("nan"), N, P_WC, False)
+    (pcov, warn_cov), caught = _record(_std_cov, j_wc, float("nan"), N, P_WC, False)
     assert warn_cov is False
     _assert_no_warnings(caught)
     assert pcov.shape == (2, 2)
     assert np.isnan(pcov).all()
     # absolute_sigma never reads the cost, so the same input is finite.
-    (pcov, _), caught = _record(_std_cov, J_WC, float("nan"), N, P_WC, True)
+    (pcov, _), caught = _record(_std_cov, j_wc, float("nan"), N, P_WC, True)
     _assert_no_warnings(caught)
     _assert_golden(pcov, STD_WC_ABS)
 
 
+def _diag_jac(sv, rows=N, p=2):
+    """(rows, p) Jacobian with singular values (1, ..., 1, sv): s[0] == 1 exactly."""
+    jac = np.zeros((rows, p))
+    for i in range(p - 1):
+        jac[i, i] = 1.0
+    jac[p - 1, p - 1] = sv
+    return jac
+
+
+def _std_last_pcov(sv, ysize, rows=N, p=2):
+    """pcov[p-1, p-1] (absolute_sigma): 1/sv**2 if kept, 0.0 if dropped."""
+    (pcov, _), caught = _record(
+        _std_cov, _diag_jac(sv, rows, p), 1.0, ysize, np.zeros(p), True
+    )
+    _assert_no_warnings(caught)  # a dropped direction alone is not "singular"
+    return pcov[p - 1, p - 1]
+
+
+def test_standard_rank_cutoff_is_eps_max_ysize_p_times_s0():
+    """Cutoff is eps*max(ysize, p)*s0 (minpack.py:3390); pin both sides of it.
+
+    eps*12 = 2.66e-15 here, so sv=3e-15 is kept (pcov = 1/sv^2) and 1e-15 dropped
+    (pcov = 0). A p-only cutoff (eps*2 = 4.4e-16) would keep 1e-15.
+    """
+    np.testing.assert_allclose(_std_last_pcov(3e-15, N), 1 / 3e-15**2, rtol=RTOL)
+    assert _std_last_pcov(1e-15, N) == 0.0
+
+
+def test_standard_rank_cutoff_uses_ysize_not_padded_row_count():
+    """A padded J (20 rows, ysize=12) must truncate with ysize, not jac.shape[0].
+
+    eps*12 = 2.66e-15 < sv=3.5e-15 < eps*20 = 4.44e-15: kept with ysize (production),
+    dropped if the padded row count were used.
+    """
+    assert _std_last_pcov(3.5e-15, 12, rows=20) == pytest.approx(1 / 3.5e-15**2)
+    assert _std_last_pcov(3.5e-15, 20, rows=20) == 0.0  # same J, true count 20
+
+
+def test_standard_rank_cutoff_uses_max_of_ysize_and_p():
+    """With ysize < p the cutoff is eps*p (not eps*ysize): p=3, ysize=2.
+
+    eps*2 = 4.44e-16 < sv=5.5e-16 < eps*3 = 6.66e-16 -> dropped (a ysize-only
+    cutoff would keep it); sv=8e-16 > eps*3 is kept.
+    """
+    assert _std_last_pcov(5.5e-16, 2, p=3) == 0.0
+    np.testing.assert_allclose(_std_last_pcov(8e-16, 2, p=3), 1 / 8e-16**2, rtol=RTOL)
+
+
+def test_standard_warning_is_attributed_to_the_caller():
+    (_, _), caught = _record(_std_cov, np.zeros((N, 2)), 1.0, N, np.zeros(2), False)
+    _assert_single(caught, OptimizeWarning)  # also pins filename == this file
+
+
 # --- exact site ------------------------------------------------------------------------
-def test_exact_golden():
-    H = J_WC.T @ J_WC
+def test_exact_golden(j_wc):
+    H = j_wc.T @ j_wc
     for absolute_sigma, golden in ((False, EX_WC), (True, EX_WC_ABS)):
         pcov, caught = _record(compute_covariance, H, COST_WC, N, 2, absolute_sigma)
         assert isinstance(pcov, np.ndarray)
@@ -332,22 +398,22 @@ def test_exact_golden():
         _assert_golden(res.pcov, golden, RTOL_E2E)
 
 
-def test_standard_and_exact_agree_when_well_conditioned():
+def test_standard_and_exact_agree_when_well_conditioned(j_wc):
     """The two sites are numerically the same estimator on a well-conditioned problem."""
-    H = J_WC.T @ J_WC
+    H = j_wc.T @ j_wc
     for absolute_sigma in (False, True):
-        std, _ = _std_cov(J_WC, COST_WC, N, P_WC, absolute_sigma)
+        std, _ = _std_cov(j_wc, COST_WC, N, P_WC, absolute_sigma)
         ex = compute_covariance(H, COST_WC, N, 2, absolute_sigma)
         np.testing.assert_allclose(std, ex, rtol=1e-9, atol=0)
 
 
-def test_exact_partial_rank_deficient_contract():
+def test_exact_partial_rank_deficient_contract(j_dup):
     """Duplicate column: finite pseudo-inverse, dropped direction zeroed.
 
     Unlike standard it also emits exactly one UserWarning (ill-conditioned H), and
     that warning is not an OptimizeWarning.
     """
-    H = J_DUP.T @ J_DUP
+    H = j_dup.T @ j_dup
     for absolute_sigma, golden in ((False, EX_DUP), (True, EX_DUP_ABS)):
         pcov, caught = _record(compute_covariance, H, COST_DUP, N, 3, absolute_sigma)
         _assert_single(caught, UserWarning)
@@ -366,10 +432,54 @@ def test_exact_ill_conditioned_warning_threshold():
     _assert_single(caught, UserWarning)  # sqrt(cond) = 1e5
     np.testing.assert_allclose(pcov, np.diag([1.0, 1e10]) * (2.0 / (N - 2)), rtol=RTOL)
 
+    # Tight bracket around COND_WARN = 1e4: lambda_min = 1/sqrt(cond)^2.
+    pcov, caught = _record(
+        compute_covariance, np.diag([1.0, 1 / 9e3**2]), 1.0, N, 2, True
+    )
+    _assert_no_warnings(caught)
+    np.testing.assert_allclose(pcov, np.diag([1.0, 9e3**2]), rtol=RTOL)
+    pcov, caught = _record(
+        compute_covariance, np.diag([1.0, 1 / 1.1e4**2]), 1.0, N, 2, True
+    )
+    _assert_single(caught, UserWarning)
+    assert "ill-conditioned" in str(caught[0].message)
+    np.testing.assert_allclose(pcov, np.diag([1.0, 1.1e4**2]), rtol=RTOL)
 
-def test_exact_fully_degenerate_contract():
+
+def _exact_last_pcov(lam, p=2, n=N):
+    """pcov[p-1, p-1] (absolute_sigma) of H = diag(1, ..., 1, lam): 1/lam if kept, else 0.
+
+    lam <= 1e-8 makes sqrt(cond) > 1e4, so exactly one UserWarning is expected
+    either way (kept or dropped); anything else is a behavior change.
+    """
+    H = np.diag([1.0] * (p - 1) + [lam])
+    pcov, caught = _record(compute_covariance, H, 1.0, n, p, True)
+    _assert_single(caught, UserWarning)
+    return pcov[p - 1, p - 1]
+
+
+def test_exact_rank_cutoff_is_p_eps_lambda_max():
+    """Keep eigen-directions with lambda > p*eps*lambda_max (exact_lm.py:477).
+
+    p=2: p*eps = 4.44e-16. lambda=6e-16 is kept, 3e-16 dropped. A cutoff of eps alone
+    (2.2e-16) would keep 3e-16; one of n*eps (n=12, 2.66e-15) would drop 1e-15, which
+    production keeps.
+    """
+    np.testing.assert_allclose(_exact_last_pcov(6e-16), 1 / 6e-16, rtol=RTOL)
+    assert _exact_last_pcov(3e-16) == 0.0
+    np.testing.assert_allclose(_exact_last_pcov(1e-15), 1 / 1e-15, rtol=RTOL)  # n*eps?
+
+
+def test_exact_rank_cutoff_scales_with_p():
+    """p=3 moves the cutoff to 6.66e-16: 5.5e-16 is dropped here but kept at p=2."""
+    assert _exact_last_pcov(5.5e-16, p=3) == 0.0
+    np.testing.assert_allclose(_exact_last_pcov(5.5e-16, p=2), 1 / 5.5e-16, rtol=RTOL)
+    np.testing.assert_allclose(_exact_last_pcov(7.5e-16, p=3), 1 / 7.5e-16, rtol=RTOL)
+
+
+def test_exact_fully_degenerate_contract(j_wc):
     """Zero H, or n <= p without absolute_sigma: all-inf + exactly one OptimizeWarning."""
-    H = J_WC.T @ J_WC
+    H = j_wc.T @ j_wc
     cases = {
         "zero_hessian": (np.zeros((3, 3)), 1.0, N, 3, False),
         "zero_hessian_absolute": (np.zeros((3, 3)), 1.0, N, 3, True),
@@ -386,9 +496,9 @@ def test_exact_fully_degenerate_contract():
     _assert_golden(pcov, EX_WC_ABS)
 
 
-def test_exact_nonfinite_input_gives_inf_and_warns():
+def test_exact_nonfinite_input_gives_inf_and_warns(j_wc):
     """Differs from standard on purpose: any non-finite H or final pcov -> all-inf + warn."""
-    H = J_WC.T @ J_WC
+    H = j_wc.T @ j_wc
     bad_h = {
         "nan_hessian": np.array([[np.nan, 0.0], [0.0, 1.0]]),
         "inf_hessian": np.array([[np.inf, 0.0], [0.0, 1.0]]),
@@ -409,10 +519,10 @@ def test_exact_nonfinite_input_gives_inf_and_warns():
 
 
 # --- hybrid site -----------------------------------------------------------------------
-def test_hybrid_golden(hybrid_wc):
+def test_hybrid_golden(hybrid_wc, j_wc):
     opt, p_norm = hybrid_wc
     r3, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.asarray(J_WC.T @ J_WC), 2 * COST_WC, N
+        opt._run_phase3_finalize, p_norm, jnp.asarray(j_wc.T @ j_wc), 2 * COST_WC, N
     )
     _assert_no_warnings(caught)
     _assert_golden(r3["pcov"], HYB_WC)
@@ -422,13 +532,13 @@ def test_hybrid_golden(hybrid_wc):
     assert np.asarray(r3["pcov"]).dtype == np.float64
 
 
-def test_hybrid_partial_rank_deficient_contract(hybrid_dup):
+def test_hybrid_partial_rank_deficient_contract(hybrid_dup, j_dup):
     """Bare pinv: finite, dropped direction zeroed, and (unlike exact) no warning."""
     opt, p_norm = hybrid_dup
     r3, caught = _record(
         opt._run_phase3_finalize,
         p_norm,
-        jnp.asarray(J_DUP.T @ J_DUP),
+        jnp.asarray(j_dup.T @ j_dup),
         2 * COST_DUP,
         N,
     )
@@ -438,7 +548,7 @@ def test_hybrid_partial_rank_deficient_contract(hybrid_dup):
     _assert_golden(pcov, HYB_DUP)
 
 
-def test_hybrid_fully_degenerate_contract(hybrid_wc):
+def test_hybrid_fully_degenerate_contract(hybrid_wc, j_wc):
     """Pinned deliberately (not endorsed): hybrid never returns all-inf for a bad JTJ.
 
     * all-zero J^T J -> finite all-ZERO pcov ("perfectly determined"), no warning
@@ -459,7 +569,7 @@ def test_hybrid_fully_degenerate_contract(hybrid_wc):
     assert np.isnan(np.asarray(nan["pcov"])).all()
 
     few, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.asarray(J_WC.T @ J_WC), 2 * COST_WC, 2
+        opt._run_phase3_finalize, p_norm, jnp.asarray(j_wc.T @ j_wc), 2 * COST_WC, 2
     )
     _assert_no_warnings(caught)
     _assert_all_inf(np.asarray(few["pcov"]), 2)
@@ -508,13 +618,72 @@ def test_gls_degenerate_contract():
     _assert_golden(pcov, np.cov(np.asarray(history).T))
     _assert_golden(pcov, [[0.01, 0.02], [0.02, 0.04]])
 
-    # No usable information and no history: diagonal 1% proxy.
+    # No usable information and history of length <= 1 (empty or one estimate): the
+    # diagonal proxy |theta|*0.01 + 0.001 of the current parameters.
     none = LargeDatasetFitter(memory_limit_gb=1.0)
-    pcov, caught = _record(
-        none._compute_covariance_from_history, [], np.array([2.0, 1.3])
-    )
+    for hist in ([], [np.array([9.0, 9.0])]):
+        pcov, caught = _record(
+            none._compute_covariance_from_history, hist, np.array([2.0, 1.3])
+        )
+        _assert_no_warnings(caught)
+        _assert_golden(pcov, [[0.021, 0.0], [0.0, 0.014]])
+
+
+class _RecordingLogger:
+    """Minimal logger: collects ``.warning`` messages, ignores everything else."""
+
+    def __init__(self):
+        self.warnings = []
+
+    def warning(self, msg, *args, **kwargs):
+        self.warnings.append(msg)
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: None
+
+
+_HISTORY = [np.array([1.0, 2.0]), np.array([1.1, 2.2]), np.array([0.9, 1.8])]
+_HISTORY_PROXY = [[0.01, 0.02], [0.02, 0.04]]  # np.cov of the last estimates
+
+
+def _gls_from_info(info):
+    """Run the GLS covariance on a hand-set information matrix (absolute_sigma)."""
+    logger = _RecordingLogger()
+    fit = LargeDatasetFitter(memory_limit_gb=1.0, logger=logger)
+    fit._accum_information = np.asarray(info)
+    fit._accum_info_vector = np.ones(len(info))
+    fit._accum_n = 10
+    fit._absolute_sigma = True
+    pcov, caught = _record(fit._compute_covariance_from_history, _HISTORY, _HISTORY[-1])
     _assert_no_warnings(caught)
-    _assert_golden(pcov, [[0.021, 0.0], [0.0, 0.014]])
+    return pcov, logger.warnings
+
+
+def test_gls_condition_number_gate_is_1e12_from_both_sides():
+    """cond <= 1e12 inverts the information matrix; above it falls back to history."""
+    for cond in (5e11, 1e12):  # 1e12 itself passes: the gate is `<=`
+        pcov, logged = _gls_from_info(np.diag([1.0, 1.0 / cond]))
+        np.testing.assert_allclose(pcov, np.diag([1.0, cond]), rtol=RTOL)
+        assert logged == []
+
+    pcov, logged = _gls_from_info(np.diag([1.0, 1.0 / 2e12]))
+    _assert_golden(pcov, _HISTORY_PROXY)
+    assert len(logged) == 1
+    assert "condition number: 2.00e+12" in logged[0]
+
+
+def test_gls_nonfinite_inverse_falls_back_to_history():
+    """cond = 1 passes the gate but inv() overflows to inf -> history proxy, not inf.
+
+    Denormal information (1e-320) inverts to 1e320 = inf; the finite check, not
+    the condition-number gate, is what rejects it. (The LinAlgError branch of
+    ``np.linalg.inv`` is unreachable without mocking: a singular matrix has
+    cond = inf and is rejected by the gate first.)
+    """
+    pcov, logged = _gls_from_info(np.diag([1e-320, 1e-320]))
+    _assert_golden(pcov, _HISTORY_PROXY)
+    assert len(logged) == 1
+    assert "condition number: 1.00e+00" in logged[0]
 
 
 def test_package_import_enables_float64():
