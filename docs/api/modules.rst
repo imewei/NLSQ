@@ -39,6 +39,7 @@ Tools for fitting very large datasets (10M+ points):
    :maxdepth: 2
 
    nlsq.large_dataset
+   nlsq.streaming.strategy
    nlsq.memory_manager
    large_datasets_api
 
