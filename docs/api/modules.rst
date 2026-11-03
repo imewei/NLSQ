@@ -56,6 +56,7 @@ streaming Gauss-Newton, and exact covariance computation:
    nlsq.streaming.telemetry
    nlsq.streaming.validators
    nlsq.streaming.phases
+   nlsq.streaming.exact_lm
 
 Global Optimization (v0.3.3+)
 -----------------------------
@@ -210,6 +211,7 @@ Complete Module Listing
 - :doc:`nlsq.streaming.telemetry` - Defense layer telemetry (NEW in v0.4.2)
 - :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v0.4.2)
 - :doc:`nlsq.streaming.phases` - Phase classes (WarmupPhase, GaussNewtonPhase, etc.) (NEW in v0.4.3)
+- :doc:`nlsq.streaming.exact_lm` - ``ExactSolverError`` for ``curve_fit_large(method="exact_streaming")``
 
 **Global Optimization Modules** (NEW in v0.3.3+):
 - :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers
