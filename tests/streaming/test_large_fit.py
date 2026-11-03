@@ -123,5 +123,46 @@ def test_in_memory_special_output_passes_through_unchanged():
     want = curve_fit(model, x, y, p0=p0, full_output=True)
     assert type(got) is tuple and len(got) == len(want)
     assert [type(g) for g in got] == [type(w) for w in want]
-    np.testing.assert_allclose(got[0], want[0])
-    np.testing.assert_allclose(got[1], want[1])
+    for g, w in zip(got, want, strict=True):
+        _assert_same(g, w)
+
+
+def _assert_same(got, want):
+    """Deep-compare arrays, dicts (infodict), strings and ints."""
+    if isinstance(want, dict):
+        assert isinstance(got, dict) and got.keys() == want.keys()
+        for key in want:
+            _assert_same(got[key], want[key])
+    elif isinstance(want, str | int | bool | type(None)):
+        assert got == want
+    else:
+        np.testing.assert_allclose(np.asarray(got), np.asarray(want))
+
+
+def test_hybrid_rejects_engine_kwargs():
+    x, y = _data()
+    with pytest.raises(TypeError, match="Unrecognized keyword argument"):
+        _call(Hybrid(), x, y, verbose=0)
+
+
+def test_exact_forwards_explicit_numpy_scalar_tolerance_verbatim(monkeypatch):
+    # np.float32(1e-8) == 1e-8 is True, so a value-only != default check drops it
+    from nlsq import curve_fit_large
+    from nlsq.streaming import exact_lm
+
+    seen = []
+    real = exact_lm.exact_lm_fit
+
+    def spy(f, x, y, p0, **kwargs):
+        seen.append(kwargs)
+        return real(f, x, y, p0, **kwargs)
+
+    monkeypatch.setattr("nlsq.streaming.exact_lm.exact_lm_fit", spy)
+    x, y = _data()
+    tol = np.float32(1e-8)
+    _call(Exact(gtol=tol), x, y)
+    curve_fit_large(model, x, y, p0=[1.5, 0.4], method="exact_streaming", gtol=tol)
+    assert len(seen) == 2
+    for kw in seen:
+        assert "gtol" in kw
+        assert type(kw["gtol"]) is np.float32

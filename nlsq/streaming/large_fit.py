@@ -161,11 +161,16 @@ def _fit_exact(
     lb, ub = exact_lm.check_bounds(exact_bounds, len(p0_arr))
     # Only settings that differ from the defaults (which equal exact_lm_fit's)
     # reach the engine, as with the legacy keywords; check_exact_sources
-    # guarantees n_points is None for a non-factory source.
+    # guarantees n_points is None for a non-factory source. A value of another
+    # type is forwarded verbatim: np.float32(1e-8) == 1e-8 although they differ.
     solver_kwargs = {
         fld.name: getattr(strategy, fld.name)
         for fld in dataclasses.fields(strategy)
-        if fld.name != "chunk_size" and getattr(strategy, fld.name) != fld.default
+        if fld.name != "chunk_size"
+        and (
+            getattr(strategy, fld.name) != fld.default
+            or type(getattr(strategy, fld.name)) is not type(fld.default)
+        )
     }
     solver_kwargs.update(kwargs)
     large_strategy = build_large_strategy("exact", None)
