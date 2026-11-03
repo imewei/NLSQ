@@ -446,11 +446,14 @@ class NormalEquations:
         H_prev: jax.Array,
         g_prev: jax.Array,
         valid_size: int | None = None,
+        sigma: jax.Array | None = None,
     ) -> tuple[jax.Array, jax.Array, float]:
         """Fold one chunk into running ``(H, g)``; returns ``(H, g, sum r^2)``.
 
         ``valid_size`` is the number of real leading points of a padded chunk
-        (``None``: all points are real).
+        (``None``: all points are real). ``sigma`` is required for, and only valid
+        with, a ``weighted=True`` instance (see :meth:`chunk_stats`); the returned
+        sum is then the weighted ``sum (r/sigma)^2``.
         """
         n = len(x)
         mask = (
@@ -458,7 +461,7 @@ class NormalEquations:
             if valid_size is None
             else jnp.arange(n) < valid_size
         )
-        F, g, H = self.chunk_stats(theta, x, y, mask)
+        F, g, H = self.chunk_stats(theta, x, y, mask, sigma)
         # kernel cost is 0.5*sum r^2; callers want sum r^2
         return H_prev + H, g_prev + g, float(2.0 * F)
 

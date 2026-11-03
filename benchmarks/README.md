@@ -131,15 +131,17 @@ Focused pytest-benchmark tests for specific operations:
 
 ## Library comparison
 
-Compares NLSQ against SciPy, lmfit, JAXopt and Optimistix (`benchmarks/compare/`).
+Compares NLSQ (`curve_fit`, `curve_fit_large` default path, and `curve_fit_large(method="exact_streaming")`)
+against SciPy, lmfit, JAXopt and Optimistix (`benchmarks/compare/`; adapters `nlsq`, `nlsq_large`, `nlsq_exact`).
 Install the comparison libraries with `uv sync --group bench`.
 
 ```bash
 uv run python -m benchmarks.compare.run_library_comparison \
     --sizes 1000 100000 1000000 --repeats 7 --out benchmarks/results
 uv run python -m benchmarks.compare.run_library_comparison --quick --no-batch   # smoke run
-# GPU (not measured in the committed baseline):
+# GPU (needs a CUDA jaxlib; run CPU and GPU sequentially, never at the same time):
 JAX_PLATFORMS=cuda uv run python -m benchmarks.compare.run_library_comparison --out benchmarks/results
+# 100M points: add --no-batch; SciPy and lmfit take minutes per fit, use --libraries/--repeats 1
 ```
 
 Fairness rules: every library gets the same tolerance (1e-8) for each stopping
@@ -151,7 +153,10 @@ if that cost matches the best in the case (a fast early stop is listed as
 `did_not_reach_optimum`, not ranked). The raw JSON lands in the git-ignored
 `benchmarks/results/`; the rendered report is committed under `baselines/`
 (`2026-10-30-library-comparison.md`; `…-before-overhead.md` is the run from before the
-small-fit overhead work, kept for the before/after comparison).
+small-fit overhead work, kept for the before/after comparison). The CPU and GPU runs
+from 1k to 100M points are `2026-10-31-library-comparison-cpu-gpu-100M.md` and, with
+`exact_streaming`, `2026-11-01-library-comparison-1k-1M-10M-100M.md`. Timings on the
+development laptop drift by up to about 50% between sessions.
 
 ## Baselines
 
