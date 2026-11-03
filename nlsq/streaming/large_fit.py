@@ -52,9 +52,9 @@ def fit_with_strategy(
         Used by the chunked and exact paths; ignored by the others.
     **kwargs
         Extra keyword arguments for the engine. In-memory and chunked: merged
-        over the strategy's ``options``. Hybrid: ``verbose`` and
-        ``HybridStreamingConfig`` field overrides (anything else raises
-        ``TypeError``). Exact: merged over the strategy's solver settings.
+        over the strategy's ``options``. Hybrid: none accepted (``TypeError``);
+        ``verbose`` and the config live on ``Hybrid``. Exact: merged over the
+        strategy's solver settings.
 
     Returns
     -------
@@ -202,33 +202,13 @@ def _fit_hybrid(
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
     from nlsq.streaming.strategy import build_large_strategy, normalize_p0_bounds
 
-    kwargs = dict(kwargs)
-    # Extract verbosity from kwargs
-    verbose = kwargs.pop("verbose", strategy.verbose)
-
-    # Create configuration (allow kwargs to override defaults)
-    config_overrides = {}
-    for key in list(kwargs.keys()):
-        if hasattr(HybridStreamingConfig, key):
-            config_overrides[key] = kwargs.pop(key)
-
     if kwargs:
+        # curve_fit_large's shim builds the config; Hybrid takes no engine kwargs
         raise TypeError(
-            "Unrecognized keyword argument(s) for method="
-            f"'hybrid_streaming': {sorted(kwargs)}. These are not "
-            "HybridStreamingConfig fields.",
+            f"Unrecognized keyword argument(s) for a Hybrid strategy: {sorted(kwargs)}. "
+            "Set verbose and HybridStreamingConfig fields on Hybrid(config, verbose).",
         )
-
-    if config_overrides:
-        config = (
-            HybridStreamingConfig(**config_overrides)
-            if strategy.config is None
-            else dataclasses.replace(strategy.config, **config_overrides)
-        )
-    else:
-        config = (
-            strategy.config if strategy.config is not None else HybridStreamingConfig()
-        )
+    config = strategy.config if strategy.config is not None else HybridStreamingConfig()
 
     # Prepare p0 and bounds
     p0, (lb, ub) = normalize_p0_bounds(f, p0, bounds)
@@ -249,7 +229,7 @@ def _fit_hybrid(
         sigma=sigma,
         absolute_sigma=absolute_sigma,
         callback=None,  # Hybrid has no callback; an unknown keyword raised above
-        verbose=verbose,
+        verbose=strategy.verbose,
     )
 
     return large_strategy.unpack(native)

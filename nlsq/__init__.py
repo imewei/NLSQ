@@ -26,6 +26,7 @@ Examples
 """
 
 import faulthandler
+import inspect
 import os
 import sys
 import threading
@@ -133,6 +134,10 @@ from nlsq.result import OptimizeResult, OptimizeWarning
 from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
 
 _dbg("types imported")
+
+if TYPE_CHECKING:
+    from nlsq.result import CurveFitResult
+    from nlsq.streaming.specs import LargeStrategy
 
 # =============================================================================
 # LAZY IMPORT SYSTEM
@@ -746,6 +751,113 @@ def _check_exact_legacy_options(
         raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
 
 
+# The legacy path options of curve_fit_large, in signature order; a strategy owns them
+_LEGACY_PATH_OPTIONS = (
+    "method",
+    "stability",
+    "rescale_data",
+    "max_jacobian_elements_for_svd",
+    "auto_size_detection",
+    "size_threshold",
+    "chunk_size",
+    "multistart",
+    "n_starts",
+    "global_search",
+    "sampler",
+    "center_on_p0",
+    "scale_factor",
+)
+
+
+def _same_value(value: Any, default: Any) -> bool:
+    """``value == default`` as a plain bool; array-like values never match."""
+    try:
+        return bool(value == default)
+    except (TypeError, ValueError):
+        return False
+
+
+def _legacy_to_strategy(**legacy: Any) -> "LargeStrategy":
+    """Translate curve_fit_large's legacy options (and extra kwargs) into a strategy.
+
+    Omitted legacy path options take their ``curve_fit_large`` defaults; any
+    other keyword is an engine option (``**kwargs`` of ``curve_fit_large``).
+    """
+    from nlsq.streaming.specs import (
+        Auto,
+        Chunked,
+        Exact,
+        FitMethod,
+        Hybrid,
+        InMemory,
+        Multistart,
+    )
+
+    kwargs = dict(legacy)
+    opts = {
+        name: kwargs.pop(name, _LEGACY_DEFAULTS[name]) for name in _LEGACY_PATH_OPTIONS
+    }
+    method = opts["method"]
+    multistart = opts["multistart"]
+    n_starts = opts["n_starts"]
+    if opts["global_search"]:
+        multistart = True
+        n_starts = 20
+
+    if method == "exact_streaming":
+        _check_exact_legacy_options(
+            {name: opts[name] for name in _EXACT_DEFAULTS}, multistart, kwargs
+        )
+        # kwargs now holds only Exact fields (ftol, xtol, gtol, max_nfev, n_points)
+        return Exact(chunk_size=opts["chunk_size"], **kwargs)
+
+    if method == "hybrid_streaming":
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        verbose = kwargs.pop("verbose", 1)
+        overrides = {
+            key: kwargs.pop(key)
+            for key in list(kwargs)
+            if hasattr(HybridStreamingConfig, key)
+        }
+        if kwargs:
+            raise TypeError(
+                "Unrecognized keyword argument(s) for method="
+                f"'hybrid_streaming': {sorted(kwargs)}. These are not "
+                "HybridStreamingConfig fields.",
+            )
+        return Hybrid(config=HybridStreamingConfig(**overrides), verbose=verbose)
+
+    # Always built, even when disabled: method="multi-start" uses the sampling values
+    ms = Multistart(
+        n_starts=n_starts,
+        sampler=opts["sampler"],
+        center_on_p0=opts["center_on_p0"],
+        scale_factor=opts["scale_factor"],
+        enabled=multistart,
+    )
+    fit_method = cast("FitMethod | None", method)
+    return Auto(
+        size_threshold=opts["size_threshold"],
+        auto_size_detection=opts["auto_size_detection"],
+        in_memory=InMemory(
+            method=fit_method,
+            stability=opts["stability"],
+            rescale_data=opts["rescale_data"],
+            max_jacobian_elements_for_svd=opts["max_jacobian_elements_for_svd"],
+            multistart=ms,
+            options=kwargs,
+        ),
+        # Chunked has no stability fields: the chunk fits ignore them (documented)
+        chunked=Chunked(
+            chunk_size=opts["chunk_size"],
+            method=fit_method,
+            multistart=ms,
+            options=kwargs,
+        ),
+    )
+
+
 # Convenience function for large dataset curve fitting
 def curve_fit_large(
     f: ModelFunction,
@@ -774,8 +886,9 @@ def curve_fit_large(
     sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
+    strategy: "LargeStrategy | None" = None,
     **kwargs: Any,
-) -> tuple[np.ndarray, np.ndarray] | OptimizeResult:
+) -> "CurveFitResult | tuple[Any, ...]":
     """Curve fitting with automatic memory management for large datasets.
 
     Automatically selects processing strategy based on dataset size:
@@ -870,6 +983,15 @@ def curve_fit_large(
         Center multi-start samples around p0. Default: True.
     scale_factor : float, optional
         Scale factor for exploration region. Default: 1.0.
+    strategy : Auto, InMemory, Chunked, Hybrid or Exact, optional
+        An explicit fitting strategy from ``nlsq.streaming``. Default ``None``
+        builds one from the options above, as before. When given, the
+        strategy owns every path option: ``method``, ``stability``,
+        ``rescale_data``, ``max_jacobian_elements_for_svd``,
+        ``auto_size_detection``, ``size_threshold``, ``chunk_size``,
+        ``multistart``, ``n_starts``, ``global_search``, ``sampler``,
+        ``center_on_p0`` and ``scale_factor`` must stay at their defaults and
+        no extra keyword arguments may be passed (``TypeError`` otherwise).
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss). With
         ``method="exact_streaming"`` only ftol, xtol, gtol, max_nfev and n_points are
@@ -895,6 +1017,15 @@ def curve_fit_large(
     ``sampler``, ``center_on_p0``, ``scale_factor``) have no effect on them. These
     options only take effect on the in-memory path (fewer than ``size_threshold``
     points).
+
+    **Explicit strategies**
+
+    Without ``strategy``, the options are translated into
+    ``Auto(size_threshold, auto_size_detection, in_memory=InMemory(...),
+    chunked=Chunked(...))``, ``Hybrid(config, verbose)`` for
+    ``method="hybrid_streaming"`` or ``Exact(...)`` for
+    ``method="exact_streaming"``. Passing the strategy directly gives the same
+    fit with the settings in one object.
 
     **Important: Model Function Requirements for Chunking**
 
@@ -936,6 +1067,12 @@ def curve_fit_large(
     ...                             p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]),
     ...                             multistart=True, n_starts=10)
 
+    With an explicit strategy (always chunked, 500 points per chunk):
+
+    >>> from nlsq.streaming import Chunked
+    >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata, p0=[1, 2, 3],
+    ...                             strategy=Chunked(chunk_size=500))
+
     Using external logger for diagnostics:
 
     >>> import logging
@@ -944,11 +1081,6 @@ def curve_fit_large(
     >>> result = fitter.fit(model_func, xdata, ydata, p0=[1, 2])
     >>> # Chunk failures now appear in myapp's logs
     """
-    # Handle global_search shorthand
-    if global_search:
-        multistart = True
-        n_starts = 20
-
     # Reject removed sampling parameters
     removed_params = {"enable_sampling", "sampling_threshold", "max_sampled_size"}
     for param in removed_params:
@@ -958,68 +1090,38 @@ def curve_fit_large(
                 "This parameter was removed in v0.2.0. Use streaming instead.",
             )
 
-    # Minimal translation of the legacy options into a strategy; the path
-    # bodies live in nlsq.streaming.large_fit.fit_with_strategy.
-    from nlsq.streaming.large_fit import fit_with_strategy
-    from nlsq.streaming.specs import (
-        Auto,
-        Chunked,
-        Exact,
-        FitMethod,
-        Hybrid,
-        InMemory,
-        LargeStrategy,
-        Multistart,
-    )
-
-    strategy: LargeStrategy
-    engine_kwargs: dict[str, Any] = {}
-    if method == "exact_streaming":
-        _check_exact_legacy_options(
-            {
-                "stability": stability,
-                "rescale_data": rescale_data,
-                "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
-                "auto_size_detection": auto_size_detection,
-                "size_threshold": size_threshold,
-            },
-            multistart,
-            kwargs,
-        )
-        # kwargs now holds only Exact fields (ftol, xtol, gtol, max_nfev, n_points)
-        strategy = Exact(chunk_size=chunk_size, **kwargs)
-    elif method == "hybrid_streaming":
-        # verbose/config overrides are split (and unknown keys rejected) after
-        # source validation, inside fit_with_strategy
-        strategy = Hybrid()
-        engine_kwargs = kwargs
+    legacy = {
+        "method": method,
+        "stability": stability,
+        "rescale_data": rescale_data,
+        "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
+        "auto_size_detection": auto_size_detection,
+        "size_threshold": size_threshold,
+        "chunk_size": chunk_size,
+        "multistart": multistart,
+        "n_starts": n_starts,
+        "global_search": global_search,
+        "sampler": sampler,
+        "center_on_p0": center_on_p0,
+        "scale_factor": scale_factor,
+    }
+    if strategy is None:
+        strategy = _legacy_to_strategy(**legacy, **kwargs)
     else:
-        ms = Multistart(
-            n_starts=n_starts,
-            sampler=sampler,
-            center_on_p0=center_on_p0,
-            scale_factor=scale_factor,
-            enabled=multistart,
-        )
-        fit_method = cast("FitMethod | None", method)
-        strategy = Auto(
-            size_threshold=size_threshold,
-            auto_size_detection=auto_size_detection,
-            in_memory=InMemory(
-                method=fit_method,
-                stability=stability,
-                rescale_data=rescale_data,
-                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
-                multistart=ms,
-                options=kwargs,
-            ),
-            chunked=Chunked(
-                chunk_size=chunk_size,
-                method=fit_method,
-                multistart=ms,
-                options=kwargs,
-            ),
-        )
+        # The strategy owns every path option; detection is by default value.
+        for name, value in legacy.items():
+            if not _same_value(value, _LEGACY_DEFAULTS[name]):
+                raise TypeError(
+                    f"curve_fit_large() got {name}={value!r} together with "
+                    "strategy=; set it on the strategy instead",
+                )
+        if kwargs:
+            raise TypeError(
+                f"curve_fit_large() got keyword argument(s) {sorted(kwargs)} "
+                "together with strategy=; set them on the strategy instead",
+            )
+
+    from nlsq.streaming.large_fit import fit_with_strategy
 
     return fit_with_strategy(
         strategy,
@@ -1033,8 +1135,15 @@ def curve_fit_large(
         check_finite=check_finite,
         memory_limit_gb=memory_limit_gb,
         show_progress=show_progress,
-        **engine_kwargs,
     )
+
+
+# Read from the signature so the defaults are written down once
+_LEGACY_DEFAULTS: dict[str, Any] = {
+    name: param.default
+    for name, param in inspect.signature(curve_fit_large).parameters.items()
+    if name in _LEGACY_PATH_OPTIONS
+}
 
 
 # Optional: Provide convenience access to submodules for advanced users
