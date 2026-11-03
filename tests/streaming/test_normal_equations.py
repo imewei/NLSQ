@@ -162,3 +162,30 @@ def test_contraction_choice_per_backend(monkeypatch):
         False,
         False,
     ]
+
+
+def test_add_chunk_weighted_matches_pass_and_unweighted_default():
+    """add_chunk forwards sigma to a weighted kernel and honours valid_size padding."""
+    x, y = _data(20)
+    s = np.linspace(0.5, 2.0, 20)
+    theta = np.array([1.5, 0.8])
+    ne = NormalEquations(exp_model, weighted=True, chunk=20)
+    full = ne.accumulate(theta, (x, y, s))
+
+    pad = 4  # padded rows must not contribute
+    xp = np.concatenate([x, np.full(pad, 9.0)])
+    yp = np.concatenate([y, np.full(pad, 9.0)])
+    sp = np.concatenate([s, np.full(pad, 9.0)])
+    p = len(theta)
+    H, g, sum_sq = ne.add_chunk(
+        theta, xp, yp, np.zeros((p, p)), np.zeros(p), valid_size=20, sigma=sp
+    )
+    np.testing.assert_allclose(H, full.H, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(g, full.g, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(sum_sq, 2 * full.cost, rtol=RTOL, atol=ATOL)
+
+    plain = NormalEquations(exp_model, chunk=20)
+    H0, _g0, ss0 = plain.add_chunk(theta, x, y, np.zeros((p, p)), np.zeros(p))
+    ref = plain.accumulate(theta, (x, y, None))
+    np.testing.assert_allclose(H0, ref.H, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(ss0, 2 * ref.cost, rtol=RTOL, atol=ATOL)
