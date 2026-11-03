@@ -886,6 +886,16 @@ def curve_fit_large(
     -----
     All large datasets use streaming optimization for 100% data utilization.
 
+    **Options ignored by chunked processing**
+
+    The chunked path (at or above ``size_threshold``, or whenever
+    ``auto_size_detection=False``) does not forward ``stability``,
+    ``rescale_data`` or ``max_jacobian_elements_for_svd`` to the per-chunk fits,
+    and the multi-start options (``multistart``, ``n_starts``, ``global_search``,
+    ``sampler``, ``center_on_p0``, ``scale_factor``) have no effect on them. These
+    options only take effect on the in-memory path (fewer than ``size_threshold``
+    points).
+
     **Important: Model Function Requirements for Chunking**
 
     When auto_size_detection triggers chunked processing (>1M points), your model
