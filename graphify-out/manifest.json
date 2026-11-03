@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "nlsq/core/minpack.py": {
-    "mtime": 1793599553.219906,
-    "seen": 1793599858.3882203,
-    "ast_hash": "76bc4868ea3a88fe69797e90b4ac73b9",
+    "mtime": 1793636043.0492063,
+    "seen": 1793636134.4346464,
+    "ast_hash": "e6f166a288edd23c93f7b9cd32db1720",
     "semantic_hash": ""
   },
   "nlsq/core/workflow.py": {
@@ -2832,9 +2832,9 @@
     "semantic_hash": "a2264bbbb921c00637735d32e109a562"
   },
   "docs/api/modules.rst": {
-    "mtime": 1793599540.543925,
-    "seen": 1793599858.3890388,
-    "ast_hash": "bbefd622a91a3736cb27e5ea072d0eef",
+    "mtime": 1793638848.2183683,
+    "seen": 1793638878.4447117,
+    "ast_hash": "16f4ee42a65f7d373e9708c28ee57a4d",
     "semantic_hash": ""
   },
   "docs/api/nlsq.result.rst": {
@@ -3678,9 +3678,9 @@
     "semantic_hash": ""
   },
   "nlsq/streaming/exact_lm.py": {
-    "mtime": 1793570776.8620896,
-    "seen": 1793588687.0526197,
-    "ast_hash": "b7ca42eaa3c24e42ba4c84f16d658096",
+    "mtime": 1793638848.415369,
+    "seen": 1793638878.4441664,
+    "ast_hash": "c516047067b19b6cd3ac2b01f30dd730",
     "semantic_hash": ""
   },
   "nlsq/streaming/normal_equations.py": {
@@ -3861,6 +3861,30 @@
     "mtime": 1793599540.4149253,
     "seen": 1793599858.3890657,
     "ast_hash": "76bb78c9ad697a568083b8d13615456e",
+    "semantic_hash": ""
+  },
+  "nlsq/core/covariance.py": {
+    "mtime": 1793638848.0873678,
+    "seen": 1793638878.444008,
+    "ast_hash": "ded83619ac26f4f9134a6a3e5cf2f1c0",
+    "semantic_hash": ""
+  },
+  "tests/core/test_covariance.py": {
+    "mtime": 1793636025.355402,
+    "seen": 1793636134.4350345,
+    "ast_hash": "23d08234a586b5d8973330cb67ea6bd9",
+    "semantic_hash": ""
+  },
+  "tests/core/test_covariance_characterization.py": {
+    "mtime": 1793638848.7993708,
+    "seen": 1793638878.4443667,
+    "ast_hash": "01cc2bd40250c51e797583cdd350593c",
+    "semantic_hash": ""
+  },
+  "docs/api/nlsq.core.covariance.rst": {
+    "mtime": 1793638848.3193686,
+    "seen": 1793638878.4447355,
+    "ast_hash": "f414fe092e14ac73df484cb57c0b8258",
     "semantic_hash": ""
   }
 }

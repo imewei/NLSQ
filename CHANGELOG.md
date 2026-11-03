@@ -131,6 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
   preparation with curve_fit, and nan_policy is read once in the shared step.
 - Internal: shared NormalEquations module for streaming solvers; no behavior change.
+- Internal: shared covariance helpers (`nlsq/core/covariance.py`) for the Jacobian-based
+  and normal-matrix-based sites; no change to cutoffs or warnings.
 - Hybrid streaming: Gauss-Newton `J^T J` accumulation always uses the chunk loop (the
   `lax.scan` accumulator was removed); `loop_strategy` now affects cost evaluation only.
 - Hybrid and phases Gauss-Newton chunks now run through the same jitted kernel as
