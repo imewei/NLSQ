@@ -18,6 +18,7 @@ from nlsq.core.minpack import (
     _fit_global_multistart,
     _is_auto_p0,
 )
+from nlsq.core.problem import PrepareContext, prepare_problem
 from nlsq.core.trf_jit import _seed_lm_alpha
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
@@ -130,19 +131,20 @@ class TestDataMaskPadding:
     padding was applied, only the auto-generated mask was."""
 
     def test_user_supplied_data_mask_gets_padded(self):
-        cf = CurveFit()
         m = 10
+        x = np.linspace(0.0, 1.0, m)
         # flength longer than the data forces should_pad=True with len_diff>0.
-        cf.flength = 15
-        cf.use_dynamic_sizing = True
-        data_mask = np.ones(m, dtype=bool)
-        result_mask, none_mask, _len_diff, should_pad = cf._setup_data_mask_and_padding(
-            data_mask=data_mask,
-            m=m,
+        prepared = prepare_problem(
+            lambda x, a, b: a * x + b,
+            x,
+            2.0 * x + 1.0,
+            np.array([1.0, 1.0]),
+            data_mask=np.ones(m, dtype=bool),
+            ctx=PrepareContext(flength=15, use_dynamic_sizing=True),
         )
-        assert should_pad
-        assert not none_mask
-        assert len(result_mask) == 15
+        assert prepared.should_pad
+        assert not prepared.none_mask
+        assert len(prepared.mask) == 15
 
 
 class TestTRFFractionalMaxNfev:

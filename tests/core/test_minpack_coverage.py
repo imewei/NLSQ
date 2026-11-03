@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq.core.minpack import CurveFit, curve_fit
+from nlsq.core.problem import PrepareContext, prepare_problem
 
 try:
     from nlsq import fit_large_dataset
@@ -1126,21 +1127,24 @@ class TestBugFixRegressions(unittest.TestCase):
         mock_compute.assert_called_once()
 
     def test_data_mask_respected_when_flength_is_none(self):
-        """_setup_data_mask_and_padding's flength-is-None branch used to
-        unconditionally overwrite a caller-supplied data_mask with an
+        """The mask construction in prepare_problem's flength-is-None branch
+        used to unconditionally overwrite a caller-supplied data_mask with an
         all-True mask, silently including points the caller asked to
-        exclude. With CurveFit(flength=None) (the default), a mask that
-        excludes the outlier point must still be honored."""
-        fitter = CurveFit(flength=None)
-        m = 3
+        exclude. With flength=None (the default), a mask that excludes the
+        outlier point must still be honored."""
         mask = np.array([True, True, False])
 
-        data_mask, none_mask, _len_diff, _should_pad = (
-            fitter._setup_data_mask_and_padding(mask, m)
+        prepared = prepare_problem(
+            lambda x, a, b: a * x + b,
+            np.array([1.0, 2.0, 3.0]),
+            np.array([2.0, 4.0, 6.0]),
+            np.array([1.0, 1.0]),
+            data_mask=mask,
+            ctx=PrepareContext(flength=None),
         )
 
-        np.testing.assert_array_equal(data_mask, mask)
-        self.assertFalse(none_mask)
+        np.testing.assert_array_equal(prepared.mask, mask)
+        self.assertFalse(prepared.none_mask)
 
     def test_data_mask_excludes_outlier_from_fit(self):
         """End-to-end: fitting a*x with a data_mask that excludes an

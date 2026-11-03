@@ -100,7 +100,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Migration:** GUI users run `pip install "nlsq[gui]"`; contributors use
   `make dev` or `uv sync`.
 
+### Changed (behavior)
+- `curve_fit(..., method="hybrid_streaming")` now prepares its inputs through the same
+  `prepare_problem` pipeline as the standard path. Cases that crashed or returned a
+  silently wrong result now behave as follows:
+  - `p0="auto"` estimates the initial parameters and fits (was a `UFuncTypeError`).
+  - x/y length mismatch raises `ValueError: X and Y data lengths dont match` (was a
+    `TypeError` deep in the fit).
+  - Empty data raises `ValueError` (was `success=True` returning `p0` unchanged).
+  - A NaN in the lower or upper bounds raises `ValueError` (was `success=True` with
+    `x=[nan, ...]`).
+  - Non-array `x` raises `ValueError: X needs arrays` (message change only).
+  - The security validator now runs on this path: more than 10 billion points, or
+    points x parameters above 100 billion, is rejected, and a Jacobian memory estimate
+    above 10 GB is logged as a warning.
+  - `p0` and bounds are now processed before the data conversion and finiteness checks,
+    so for an input that is invalid in several ways the `p0`/bounds error can come
+    first. `p0="auto"` with `nan_policy="omit"` estimates from the data before rows are
+    omitted, as on the standard path.
+  - Multi-dimensional `x` is still taken as `(n_points, n_features)` by this method.
+    `nan_policy="omit"` still treats multi-dimensional `x` as feature-major, so that
+    combination remains unsupported, as before.
+  - These changes apply to `curve_fit(..., method="hybrid_streaming")`;
+    `curve_fit_large(..., method="hybrid_streaming")` has its own branch and is
+    unaffected.
+- `CurveFit.curve_fit`: subclass overrides of `CurveFit.pad_fit_data` are no longer
+  consulted by input preparation (the module-level `pad_fit_data` is used).
+
 ### Changed (internal)
+- Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
+  preparation with curve_fit, and nan_policy is read once in the shared step.
 - Internal: shared NormalEquations module for streaming solvers; no behavior change.
 - Hybrid streaming: Gauss-Newton `J^T J` accumulation always uses the chunk loop (the
   `lax.scan` accumulator was removed); `loop_strategy` now affects cost evaluation only.

@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "nlsq/core/minpack.py": {
-    "mtime": 1793569799.7077503,
-    "seen": 1793588687.0523026,
-    "ast_hash": "4f921f6da14014a9f06f23e68780dd40",
+    "mtime": 1793599553.219906,
+    "seen": 1793599858.3882203,
+    "ast_hash": "76bc4868ea3a88fe69797e90b4ac73b9",
     "semantic_hash": ""
   },
   "nlsq/core/workflow.py": {
@@ -1554,9 +1554,9 @@
     "semantic_hash": "bf266d187c861e754ad098bbf98094d0"
   },
   "tests/core/test_minpack_coverage.py": {
-    "mtime": 1793569799.6587503,
-    "seen": 1793588687.0531197,
-    "ast_hash": "7e2f9f11ed0c0aedbe508e7508095430",
+    "mtime": 1793591263.5094094,
+    "seen": 1793595824.9255447,
+    "ast_hash": "123ede5b2c649a159adca687b86ec70f",
     "semantic_hash": ""
   },
   "tests/core/test_least_squares_comprehensive.py": {
@@ -1764,10 +1764,10 @@
     "semantic_hash": "0c860d676dc37d09442c711a0100c347"
   },
   "tests/core/test_minpack_prepare_inputs_comprehensive.py": {
-    "mtime": 1793569799.6587503,
-    "seen": 1793588687.0531232,
-    "ast_hash": "793cc638f20214dd830708feb1739cf5",
-    "semantic_hash": "793cc638f20214dd830708feb1739cf5"
+    "mtime": 1793591247.8014252,
+    "seen": 1793595824.9255471,
+    "ast_hash": "c3de22207734a4598cc97d83e288100f",
+    "semantic_hash": ""
   },
   "tests/core/test_trf_refactoring_validation.py": {
     "mtime": 1793569799.65175,
@@ -2832,9 +2832,9 @@
     "semantic_hash": "a2264bbbb921c00637735d32e109a562"
   },
   "docs/api/modules.rst": {
-    "mtime": 1793569799.6667502,
-    "seen": 1793588687.0537102,
-    "ast_hash": "994a5953e2d16c812ed177fdacb69865",
+    "mtime": 1793599540.543925,
+    "seen": 1793599858.3890388,
+    "ast_hash": "bbefd622a91a3736cb27e5ea072d0eef",
     "semantic_hash": ""
   },
   "docs/api/nlsq.result.rst": {
@@ -3546,9 +3546,9 @@
     "semantic_hash": ""
   },
   "tests/core/test_pr29_regressions.py": {
-    "mtime": 1793569799.6487503,
-    "seen": 1793588687.0531354,
-    "ast_hash": "87818f7639bb812b41d8ae1ff2747a4f",
+    "mtime": 1793591263.5184093,
+    "seen": 1793595824.9255533,
+    "ast_hash": "8dcf30b644149efa9480dd7e2f54483c",
     "semantic_hash": ""
   },
   "tests/global_optimization/test_checkpoint.py": {
@@ -3831,6 +3831,36 @@
     "mtime": 1793569799.6617503,
     "seen": 1793588687.0536675,
     "ast_hash": "b5221c25b6eb0972028b0c4c352bcc8b",
+    "semantic_hash": ""
+  },
+  "nlsq/core/problem.py": {
+    "mtime": 1793599540.7249248,
+    "seen": 1793599858.3882246,
+    "ast_hash": "8d4329c8eb9d55b8d85a725affe0da15",
+    "semantic_hash": ""
+  },
+  "tests/core/test_hybrid_prepare_problem.py": {
+    "mtime": 1793599553.4659057,
+    "seen": 1793599858.3886611,
+    "ast_hash": "3059c8eff27b4d8163875559416342b0",
+    "semantic_hash": ""
+  },
+  "tests/core/test_prepare_problem_characterization.py": {
+    "mtime": 1793591247.8014252,
+    "seen": 1793595824.9255552,
+    "ast_hash": "5082ecae72df443344be157804bd1918",
+    "semantic_hash": ""
+  },
+  "tests/core/test_problem.py": {
+    "mtime": 1793593240.6852293,
+    "seen": 1793595824.9255579,
+    "ast_hash": "f8b1edb71152cb789aaa0b42e95c429a",
+    "semantic_hash": ""
+  },
+  "docs/api/nlsq.core.problem.rst": {
+    "mtime": 1793599540.4149253,
+    "seen": 1793599858.3890657,
+    "ast_hash": "76bb78c9ad697a568083b8d13615456e",
     "semantic_hash": ""
   }
 }
