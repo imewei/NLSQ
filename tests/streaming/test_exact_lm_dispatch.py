@@ -267,6 +267,11 @@ def test_p0_none_infers_parameter_count(data, spy):
         curve_fit_large(lambda x: x, *data, method=M)
 
 
+def test_exact_complex_list_p0_raises_type_error(data):
+    with pytest.raises(TypeError):
+        curve_fit_large(exp_model, *data, p0=[1 + 1j, 1.0, 1.0], method=M)
+
+
 def test_hybrid_streaming_default_p0(data, monkeypatch):
     from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 

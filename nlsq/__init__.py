@@ -718,16 +718,6 @@ def fit(
     )
 
 
-def _default_p0(f: ModelFunction) -> np.ndarray:
-    """Ones for every parameter after ``x`` in ``f``'s signature (curve_fit's p0=None)."""
-    from inspect import signature
-
-    args = signature(f).parameters
-    if len(args) < 2:
-        raise ValueError("Unable to determine number of fit parameters.")
-    return np.ones(len(args) - 1)
-
-
 _EXACT_DEFAULTS: dict[str, Any] = {
     "stability": False,
     "rescale_data": True,
@@ -739,34 +729,10 @@ _EXACT_SOLVER_KWARGS = frozenset({"ftol", "xtol", "gtol", "max_nfev", "n_points"
 _NOT_EXACT = "is not supported by method='exact_streaming'"
 
 
-def _curve_fit_exact_streaming(
-    f: ModelFunction,
-    xdata: Any,
-    ydata: Any,
-    p0: ArrayLike | None,
-    *,
-    sigma: Any,
-    absolute_sigma: bool,
-    check_finite: bool,
-    bounds: Any,
-    memory_limit_gb: float | None,
-    show_progress: bool,
-    chunk_size: int | None,
-    multistart: bool,
-    unsupported: dict[str, Any],
-    solver_kwargs: dict[str, Any],
-) -> tuple[np.ndarray, np.ndarray]:
-    """``curve_fit_large(method="exact_streaming")``: argument policy, then exact_lm_fit.
-
-    Validates from ``shape``/``len`` only, so array-like sources (``np.memmap``,
-    ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len`` and slicing) are
-    never read whole here; objects without ``shape`` (lists, tuples) are converted.
-    A callable ``xdata`` is a chunk factory: ``ydata`` and ``sigma`` must be None and
-    ``n_points`` (accepted only then) is optional; blocks are validated as they arrive.
-    """
-    from nlsq.core.least_squares import prepare_bounds
-    from nlsq.streaming import exact_lm
-
+def _check_exact_legacy_options(
+    unsupported: dict[str, Any], multistart: bool, solver_kwargs: dict[str, Any]
+) -> None:
+    """Reject options ``method="exact_streaming"`` does not support (first failure wins)."""
     extra = sorted(set(solver_kwargs) - _EXACT_SOLVER_KWARGS)
     if extra:
         raise TypeError(
@@ -778,75 +744,6 @@ def _curve_fit_exact_streaming(
             raise ValueError(f"{name}={value!r} {_NOT_EXACT}; leave it at its default")
     if multistart:
         raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
-
-    factory = exact_lm.is_chunk_factory(xdata)
-    if factory:
-        if ydata is not None:
-            raise ValueError(
-                "ydata must be None when xdata is a chunk factory (callable): the "
-                "factory yields (x, y) or (x, y, sigma) blocks"
-            )
-        if sigma is not None:
-            raise ValueError(
-                "sigma must be None with a chunk factory: yield (x, y, sigma) blocks "
-                "instead"
-            )
-    elif solver_kwargs.get("n_points") is not None:
-        raise ValueError(
-            "n_points is accepted only with a chunk factory (callable xdata); array "
-            "sources take their length from their shape"
-        )
-    else:
-        solver_kwargs = {k: v for k, v in solver_kwargs.items() if k != "n_points"}
-
-    shapes = {}
-    for name, a in (("xdata", xdata), ("ydata", ydata), ("sigma", sigma)):
-        if factory or (name == "sigma" and a is None):  # factory: checked per block
-            continue
-        shape = a.shape if hasattr(a, "shape") else np.shape(a)
-        if len(shape) != 1:
-            why = (
-                "; multi-feature (2-D) xdata is not supported by exact_streaming"
-                if name == "xdata" and len(shape) > 1
-                else ""
-            )
-            raise ValueError(
-                f"{name} must be 1-D for method='exact_streaming', got shape {shape}{why}"
-            )
-        shapes[name] = shape[0]
-    if not factory:
-        n_x, n_y = shapes["xdata"], shapes["ydata"]
-        if n_x != n_y:
-            raise ValueError(
-                f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
-            )
-        if n_x < 2:
-            raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
-
-    p0_arr = _default_p0(f) if p0 is None else np.atleast_1d(np.asarray(p0, float))
-    # (p,) shapes and lb < ub elementwise; prepare_bounds only broadcasts scalars
-    lb, ub = exact_lm.check_bounds(prepare_bounds(bounds, len(p0_arr)), len(p0_arr))
-
-    res = exact_lm.exact_lm_fit(
-        f,
-        xdata,
-        ydata,
-        p0_arr,
-        bounds=(lb, ub),
-        chunk_size=chunk_size,
-        check_finite=check_finite,
-        sigma=sigma,
-        absolute_sigma=absolute_sigma,
-        memory_limit_gb=memory_limit_gb,
-        show_progress=show_progress,
-        **solver_kwargs,
-    )
-    if not res["success"]:
-        raise exact_lm.ExactSolverError(
-            f"exact_streaming fit failed ({res['termination']}): {res['message']}",
-            res,
-        )
-    return res["x"], res["pcov"]
 
 
 # Convenience function for large dataset curve fitting
@@ -1053,28 +950,56 @@ def curve_fit_large(
 
     # Hoisted above np.asarray: a lazy source must not be read whole
     if method == "exact_streaming":
-        return _curve_fit_exact_streaming(
-            f,
-            xdata,
-            ydata,
-            p0,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            check_finite=check_finite,
-            bounds=bounds,
-            memory_limit_gb=memory_limit_gb,
-            show_progress=show_progress,
-            chunk_size=chunk_size,
-            multistart=multistart,
-            unsupported={
+        from nlsq.streaming import exact_lm
+        from nlsq.streaming.strategy import (
+            build_large_strategy,
+            check_exact_sources,
+            normalize_p0_bounds,
+        )
+
+        _check_exact_legacy_options(
+            {
                 "stability": stability,
                 "rescale_data": rescale_data,
                 "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
                 "auto_size_detection": auto_size_detection,
                 "size_threshold": size_threshold,
             },
-            solver_kwargs=kwargs,
+            multistart,
+            kwargs,
         )
+        check_exact_sources(xdata, ydata, sigma, kwargs.get("n_points"))
+        if p0 is not None:
+            p0 = np.asarray(p0, dtype=float)  # a complex list p0 must raise TypeError
+        p0_arr, exact_bounds = normalize_p0_bounds(f, p0, bounds)
+        # (p,) shapes and lb < ub elementwise; prepare_bounds only broadcasts scalars
+        lb, ub = exact_lm.check_bounds(exact_bounds, len(p0_arr))
+        # check_exact_sources guarantees n_points is None for a non-factory source
+        solver_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k != "n_points" or exact_lm.is_chunk_factory(xdata)
+        }
+        res = build_large_strategy("exact", None).fit(
+            f,
+            xdata,
+            ydata,
+            p0_arr,
+            bounds=(lb, ub),
+            chunk_size=chunk_size,
+            check_finite=check_finite,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            memory_limit_gb=memory_limit_gb,
+            show_progress=show_progress,
+            **solver_kwargs,
+        )
+        if not res["success"]:
+            raise exact_lm.ExactSolverError(
+                f"exact_streaming fit failed ({res['termination']}): {res['message']}",
+                res,
+            )
+        return res["x"], res["pcov"]
 
     from nlsq.streaming.exact_lm import is_chunk_factory
 
@@ -1106,7 +1031,7 @@ def curve_fit_large(
     # Handle hybrid_streaming method specially
     if method == "hybrid_streaming":
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
-        from nlsq.streaming.strategy import build_large_strategy
+        from nlsq.streaming.strategy import build_large_strategy, normalize_p0_bounds
 
         # Extract verbosity from kwargs
         verbose = kwargs.pop("verbose", 1)
@@ -1131,13 +1056,7 @@ def curve_fit_large(
         )
 
         # Prepare p0 and bounds
-        if p0 is None:
-            p0 = _default_p0(f)
-
-        p0 = np.atleast_1d(p0)
-        from nlsq.core.least_squares import prepare_bounds
-
-        lb, ub = prepare_bounds(bounds, len(p0))
+        p0, (lb, ub) = normalize_p0_bounds(f, p0, bounds)
         bounds_tuple = (
             (lb, ub)
             if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))

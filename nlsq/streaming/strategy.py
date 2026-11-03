@@ -16,9 +16,19 @@ so ``mock.patch("nlsq.streaming.<module>.<Class>")`` still takes effect and
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
-__all__ = ["Strategy", "build_large_strategy"]
+import numpy as np
+from numpy.typing import ArrayLike
+
+__all__ = [
+    "Strategy",
+    "build_large_strategy",
+    "check_exact_sources",
+    "default_p0",
+    "normalize_p0_bounds",
+]
 
 # AdaptiveHybridStreamingOptimizer.fit has no gtol/ftol/xtol: its single
 # convergence knob is config.gauss_newton_tol, set at construction.
@@ -132,3 +142,79 @@ def build_large_strategy(
     raise ValueError(
         f"unknown large-strategy kind {kind!r}; expected 'hybrid', 'chunked' or 'exact'"
     )
+
+
+def default_p0(f: Callable[..., Any]) -> np.ndarray:
+    """Ones for every parameter after ``x`` in ``f``'s signature (curve_fit's p0=None)."""
+    from inspect import signature
+
+    args = signature(f).parameters
+    if len(args) < 2:
+        raise ValueError("Unable to determine number of fit parameters.")
+    return np.ones(len(args) - 1)
+
+
+def normalize_p0_bounds(
+    f: Callable[..., Any], p0: ArrayLike | None, bounds: Any
+) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
+    """Return ``(p0, (lb, ub))``: ``p0`` defaulted from ``f`` and 1-D, bounds broadcast."""
+    from nlsq.core.least_squares import prepare_bounds
+
+    p0_arr = default_p0(f) if p0 is None else np.atleast_1d(p0)
+    return p0_arr, prepare_bounds(bounds, len(p0_arr))
+
+
+def check_exact_sources(
+    xdata: Any, ydata: Any, sigma: Any, n_points: int | None
+) -> None:
+    """Validate ``method="exact_streaming"`` data sources from ``shape``/``len`` only.
+
+    Array-like sources (``np.memmap``, ``h5py.Dataset``, ``zarr.Array``, any object
+    with ``shape``, ``len`` and slicing) are never read whole here; objects without
+    ``shape`` (lists, tuples) are converted. A callable ``xdata`` is a chunk factory:
+    ``ydata`` and ``sigma`` must be None and ``n_points`` (accepted only then) is
+    optional; blocks are validated as they arrive.
+    """
+    from nlsq.streaming import exact_lm
+
+    factory = exact_lm.is_chunk_factory(xdata)
+    if factory:
+        if ydata is not None:
+            raise ValueError(
+                "ydata must be None when xdata is a chunk factory (callable): the "
+                "factory yields (x, y) or (x, y, sigma) blocks"
+            )
+        if sigma is not None:
+            raise ValueError(
+                "sigma must be None with a chunk factory: yield (x, y, sigma) blocks "
+                "instead"
+            )
+        return
+    if n_points is not None:
+        raise ValueError(
+            "n_points is accepted only with a chunk factory (callable xdata); array "
+            "sources take their length from their shape"
+        )
+
+    lengths = {}
+    for name, a in (("xdata", xdata), ("ydata", ydata), ("sigma", sigma)):
+        if name == "sigma" and a is None:
+            continue
+        shape = a.shape if hasattr(a, "shape") else np.shape(a)
+        if len(shape) != 1:
+            why = (
+                "; multi-feature (2-D) xdata is not supported by exact_streaming"
+                if name == "xdata" and len(shape) > 1
+                else ""
+            )
+            raise ValueError(
+                f"{name} must be 1-D for method='exact_streaming', got shape {shape}{why}"
+            )
+        lengths[name] = shape[0]
+    n_x, n_y = lengths["xdata"], lengths["ydata"]
+    if n_x != n_y:
+        raise ValueError(
+            f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
+        )
+    if n_x < 2:
+        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")

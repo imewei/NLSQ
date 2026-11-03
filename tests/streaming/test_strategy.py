@@ -155,3 +155,42 @@ def test_exact_build_rejects_config():
 def test_exact_build_rejects_common_kwargs():
     with pytest.raises(TypeError):
         build_large_strategy("exact", None, ftol=1e-3)
+
+
+class _LazySource:
+    """Array-like with shape/len/slicing whose conversion to ndarray is forbidden."""
+
+    shape = (10,)
+
+    def __len__(self):
+        return 10
+
+    def __getitem__(self, key):
+        raise AssertionError("check_exact_sources must not read the source")
+
+    def __array__(self, *args, **kwargs):
+        raise AssertionError("check_exact_sources must not convert the source")
+
+
+def test_check_exact_sources_rejects_2d_xdata():
+    from nlsq.streaming.strategy import check_exact_sources
+
+    with pytest.raises(ValueError, match="must be 1-D for method='exact_streaming'"):
+        check_exact_sources(np.zeros((4, 2)), np.zeros(4), None, None)
+
+
+def test_check_exact_sources_never_converts_lazy_source():
+    from nlsq.streaming.strategy import check_exact_sources
+
+    check_exact_sources(_LazySource(), _LazySource(), _LazySource(), None)
+
+
+def test_normalize_p0_bounds_defaults_p0_from_signature():
+    from nlsq.streaming.strategy import normalize_p0_bounds
+
+    def f(x, a, b):
+        return a * x + b
+
+    p0, (lb, ub) = normalize_p0_bounds(f, None, (-np.inf, np.inf))
+    np.testing.assert_array_equal(p0, np.ones(2))
+    assert lb.shape == ub.shape == (2,)
