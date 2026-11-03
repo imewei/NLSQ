@@ -159,6 +159,25 @@ def test_explicit_strategy_array_valued_legacy_option_is_type_error():
         )
 
 
+@pytest.mark.parametrize(
+    "value",
+    [np.array(1.0), np.array([1.0]), np.array([[1.0]])],
+    ids=["0d", "size1_1d", "size1_2d"],
+)
+def test_explicit_strategy_rejects_size_one_array_legacy_option(value):
+    x, y = _data()
+    with pytest.raises(TypeError, match="scale_factor"):
+        curve_fit_large(model, x, y, strategy=InMemory(), scale_factor=value)
+
+
+def test_explicit_strategy_accepts_numpy_scalar_equal_to_default():
+    x, y = _data()
+    popt, _ = curve_fit_large(
+        model, x, y, p0=[1.5, 0.4], strategy=InMemory(), scale_factor=np.float64(1.0)
+    )
+    np.testing.assert_allclose(popt, TRUE, rtol=1e-2)
+
+
 def test_method_multi_start_keeps_sampling_values_when_flag_false(monkeypatch):
     seen = {}
 

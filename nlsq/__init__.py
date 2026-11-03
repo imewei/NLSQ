@@ -770,7 +770,9 @@ _LEGACY_PATH_OPTIONS = (
 
 
 def _same_value(value: Any, default: Any) -> bool:
-    """``value == default`` as a plain bool; array-like values never match."""
+    """``value == default`` as a plain bool; ndarray values (any size) never match."""
+    if isinstance(value, np.ndarray):
+        return False
     try:
         return bool(value == default)
     except (TypeError, ValueError):
