@@ -1,6 +1,19 @@
 # Documentation Changelog
 
 ## Unreleased
+- Large-fit strategy: new `api/nlsq.streaming.large_fit.rst` documents the six strategy
+  types (`Auto`, `InMemory`, `Chunked`, `Hybrid`, `Exact`, `Multistart`) and
+  `fit_with_strategy`, linked from `api/modules.rst`. Code changes the page describes:
+  - `curve_fit_large(..., strategy=...)` keyword; legacy keywords build the same strategy.
+    An explicit strategy combined with a non-default legacy path option (including any
+    `np.ndarray` value) raises `TypeError`.
+  - A chunked fit that returns no `pcov` now raises `RuntimeError` instead of returning an
+    identity matrix.
+  - Error precedence for doubly-invalid hybrid input changed: the unrecognized-keyword
+    `TypeError` is now raised first, ahead of hybrid config-value errors.
+  - `curve_fit_large` return annotation corrected.
+  - Known limitation: the chunked path ignores `stability`, `rescale_data`,
+    `max_jacobian_elements_for_svd` and multistart.
 - `/dev-suite:docs update --full` pass for the exact streaming solver and the 2026-11-01
   benchmark rerun: new `api/nlsq.streaming.exact_lm.rst` (`ExactSolverError`) linked from
   `api/modules.rst`; `exact-streaming` label on the reference section; the large-dataset
