@@ -944,9 +944,10 @@ def curve_fit_large(
         default ``100 * len(p0)``) and ``n_points``. A failed fit (stalled or out of passes)
         raises :class:`nlsq.streaming.ExactSolverError` with the full result
         as ``.result``. ``pcov`` is computed from the normal equations
-        ``J^T J``, which squares ``cond(J)``: expect about ``1e-6`` relative
-        agreement with ``curve_fit`` up to ``cond(J) ~ 1e4``, ``1e-3`` up to
-        ``1e6`` for well-determined problems, and a ``UserWarning`` beyond
+        ``J^T J``, which squares ``cond(J)``: the conditioning study measured
+        covariance errors of 4.7e-6 (``tol=1e-12``) and 5.8e-8 (``1e-15``) at
+        ``cond(J) = 8.5e3`` and 5e-6 at ``7e5`` (one row each, so treat these as
+        indicative, not guaranteed), and a ``UserWarning`` is issued beyond
         ``1e4``, where the fitted parameters can also stop short: check such
         results.
     memory_limit_gb : float, optional

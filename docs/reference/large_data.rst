@@ -53,6 +53,8 @@ Automatically chunks data to fit within GPU memory.
        model, x, y, p0=[1.0, 0.1, 0.0], memory_limit_gb=8.0  # Limit to 8 GB
    )
 
+.. _exact-streaming:
+
 Exact streaming (``method="exact_streaming"``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -148,10 +150,13 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
 - **Covariance caveat:** ``pcov`` follows the ``curve_fit`` contract
   (pseudo-inverse, scaled by the residual variance unless ``absolute_sigma``)
   but is computed from the normal equations ``J^T J``, which squares
-  ``cond(J)``. Expect about ``1e-6`` relative agreement with ``curve_fit`` for
-  ``cond(J) <= 1e4`` and, for well-determined problems, ``1e-3`` for
-  ``cond(J) <= 1e6`` (degenerate two_exp rows with ``cond(J)`` 6e4-9e4 showed
-  covariance errors of 1.0 and 0.33). A ``UserWarning`` is issued beyond
+  ``cond(J)``. The study has one row with ``cond(J) <= 1e4``
+  (``cond(J) = 8.5e3``): covariance agreement with the reference of 4.7e-6 at
+  ``tol = 1e-12`` and 5.8e-8 at ``1e-15``. Above that, the one row near ``1e6``
+  (poly8, ``cond(J) = 7e5``) gave 5e-6, so ``1e-3`` is a loose bound for
+  well-determined problems and is not established beyond these rows
+  (degenerate two_exp rows with ``cond(J)`` 6e4-9e4 showed covariance errors
+  of 1.0 and 0.33). A ``UserWarning`` is issued beyond
   ``1e4``: there the fitted *parameters* can also stop short (poly12,
   ``cond(J) = 7.5e8``: parameter error O(1) with ``success=True`` for both
   candidates in the study), so check such results.
