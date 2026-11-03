@@ -196,3 +196,31 @@ class TestTypes:
         assert ctx.logger is not None  # the shared "curve_fit" logger
         with pytest.raises(dataclasses.FrozenInstanceError):
             ctx.flength = 3  # type: ignore[misc]
+
+
+class TestCurveFitValidatorWiring:
+    def test_falsy_custom_validator_is_used(self):
+        """An explicitly set validator must be used even if it is falsy."""
+        calls = []
+
+        class FalsyValidator(InputValidator):
+            def __bool__(self):
+                return False
+
+            def validate_security_constraints(self, *args, **kwargs):
+                calls.append(1)
+                return super().validate_security_constraints(*args, **kwargs)
+
+        x, y = _data()
+        cf = CurveFit()
+        cf.validator = FalsyValidator(fast_mode=True)
+        cf.curve_fit(_model, x, y, p0=P0)
+        assert calls, "CurveFit ignored its falsy custom validator"
+
+
+class TestMaskNormalization:
+    def test_list_mask_becomes_ndarray(self):
+        x, y = _data()
+        prep = _prepare(x, y, data_mask=[True] * (N - 1) + [False])
+        assert isinstance(prep.mask, np.ndarray)
+        assert prep.n_effective == N - 1
