@@ -194,3 +194,50 @@ def test_normalize_p0_bounds_defaults_p0_from_signature():
     p0, (lb, ub) = normalize_p0_bounds(f, None, (-np.inf, np.inf))
     np.testing.assert_array_equal(p0, np.ones(2))
     assert lb.shape == ub.shape == (2,)
+
+
+def test_chunked_unpack_without_pcov_raises_runtime_error():
+    class OnlyX:
+        x = np.ones(2)
+
+    strategy = build_large_strategy("chunked", LDMemoryConfig(memory_limit_gb=1.0))
+    with pytest.raises(RuntimeError, match="Unexpected result format"):
+        strategy.unpack(OnlyX())
+
+
+def test_chunked_unpack_returns_popt_and_pcov():
+    class Res:
+        popt = np.ones(2)
+        pcov = np.eye(2)
+
+    strategy = build_large_strategy("chunked", LDMemoryConfig(memory_limit_gb=1.0))
+    res = Res()
+    popt, pcov = strategy.unpack(res)
+    assert popt is res.popt
+    assert pcov is res.pcov
+
+
+def test_hybrid_unpack_without_pcov_returns_inf_matrix():
+    strategy = build_large_strategy("hybrid", HybridStreamingConfig())
+    x, pcov = strategy.unpack({"x": np.ones(2)})
+    assert pcov.shape == (2, 2)
+    assert np.isinf(pcov).all()
+    np.testing.assert_array_equal(x, np.ones(2))
+
+
+def test_exact_unpack_raises_exact_solver_error_with_result():
+    from nlsq.streaming.exact_lm import ExactSolverError
+
+    native = {"success": False, "termination": "stalled", "message": "no progress"}
+    with pytest.raises(
+        ExactSolverError, match=r"^exact_streaming fit failed \(stalled\)"
+    ) as excinfo:
+        build_large_strategy("exact", None).unpack(native)
+    assert excinfo.value.result is native
+
+
+def test_exact_unpack_returns_x_and_pcov_on_success():
+    native = {"success": True, "x": np.ones(2), "pcov": np.eye(2)}
+    x, pcov = build_large_strategy("exact", None).unpack(native)
+    assert x is native["x"]
+    assert pcov is native["pcov"]

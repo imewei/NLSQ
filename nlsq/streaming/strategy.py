@@ -44,6 +44,10 @@ class Strategy(Protocol):
         """Run the engine; return its native result unchanged."""
         ...
 
+    def unpack(self, native: Any, /) -> Any:
+        """Turn ``fit``'s native result into what ``curve_fit_large`` returns."""
+        ...
+
 
 class _HybridStrategy:
     def __init__(self, config: Any, **common: Any) -> None:
@@ -68,6 +72,10 @@ class _HybridStrategy:
             common.pop(key, None)
         return self.engine.fit(data_source=(x, y), func=f, p0=p0, **common)
 
+    def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
+        x = native["x"]
+        return x, native.get("pcov", np.full((len(x), len(x)), np.inf))
+
 
 class _ChunkedStrategy:
     def __init__(
@@ -84,6 +92,13 @@ class _ChunkedStrategy:
         run = self.engine.fit_with_progress if self._show_progress else self.engine.fit
         return run(f, x, y, p0=p0, **common)
 
+    def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
+        if hasattr(native, "popt") and hasattr(native, "pcov"):
+            return native.popt, native.pcov
+        raise RuntimeError(
+            f"Unexpected result format from large dataset fitter: {native}"
+        )
+
 
 class _ExactStrategy:
     def __init__(self, config: Any, **common: Any) -> None:
@@ -99,6 +114,17 @@ class _ExactStrategy:
     def fit(self, f: Any, x: Any, y: Any, p0: Any, /, **common: Any) -> Any:
         """Call ``exact_lm_fit(f, x, y, p0, **common)``."""
         return self.engine(f, x, y, p0, **common)
+
+    def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
+        if not native["success"]:
+            from nlsq.streaming.exact_lm import ExactSolverError
+
+            raise ExactSolverError(
+                f"exact_streaming fit failed ({native['termination']}): "
+                f"{native['message']}",
+                native,
+            )
+        return native["x"], native["pcov"]
 
 
 def build_large_strategy(

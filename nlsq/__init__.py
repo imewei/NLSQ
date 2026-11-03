@@ -980,7 +980,8 @@ def curve_fit_large(
             for k, v in kwargs.items()
             if k != "n_points" or exact_lm.is_chunk_factory(xdata)
         }
-        res = build_large_strategy("exact", None).fit(
+        large_strategy = build_large_strategy("exact", None)
+        native = large_strategy.fit(
             f,
             xdata,
             ydata,
@@ -994,12 +995,7 @@ def curve_fit_large(
             show_progress=show_progress,
             **solver_kwargs,
         )
-        if not res["success"]:
-            raise exact_lm.ExactSolverError(
-                f"exact_streaming fit failed ({res['termination']}): {res['message']}",
-                res,
-            )
-        return res["x"], res["pcov"]
+        return large_strategy.unpack(native)
 
     from nlsq.streaming.exact_lm import is_chunk_factory
 
@@ -1067,7 +1063,7 @@ def curve_fit_large(
         large_strategy = build_large_strategy("hybrid", config)
 
         # Run optimization
-        result_dict = large_strategy.fit(
+        native = large_strategy.fit(
             f,
             xdata,
             ydata,
@@ -1079,11 +1075,7 @@ def curve_fit_large(
             verbose=verbose,
         )
 
-        # Convert to tuple format for backward compatibility
-        popt = result_dict["x"]
-        pcov = result_dict.get("pcov", np.full((len(p0), len(p0)), np.inf))
-
-        return popt, pcov
+        return large_strategy.unpack(native)
 
     # Auto-detect if we should use large dataset processing
     if auto_size_detection and n_points < size_threshold:
@@ -1212,7 +1204,7 @@ def curve_fit_large(
         final_method = method if method is not None else "trf"
 
         # Perform the fit (fit_with_progress when show_progress)
-        result = large_strategy.fit(
+        native = large_strategy.fit(
             f,
             xdata,
             ydata,
@@ -1222,18 +1214,7 @@ def curve_fit_large(
             **kwargs,
         )
 
-        # Extract popt and pcov from result
-        if hasattr(result, "popt") and hasattr(result, "pcov"):
-            return result.popt, result.pcov
-        if hasattr(result, "x"):
-            # Fallback: construct basic covariance matrix
-            popt = result.x
-            # Create identity covariance matrix if not available
-            pcov = np.eye(len(popt))
-            return popt, pcov
-        raise RuntimeError(
-            f"Unexpected result format from large dataset fitter: {result}",
-        )
+        return large_strategy.unpack(native)
 
 
 # Optional: Provide convenience access to submodules for advanced users

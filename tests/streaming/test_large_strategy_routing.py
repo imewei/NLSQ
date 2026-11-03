@@ -678,10 +678,18 @@ def _check_clf_chunked_args(rec: Recorder, result: Any, ctx: Any) -> None:
     assert result[1] is rec.last_result.pcov
 
 
+def _drive_clf_chunked_x_only(ctx: SimpleNamespace) -> Any:
+    # The table loop runs drive() before check(): hand the error to the check.
+    try:
+        return _drive_clf_chunked(ctx, memory_limit_gb=2.0)
+    except RuntimeError as exc:
+        return exc
+
+
 def _check_clf_chunked_x_only(rec: Recorder, result: Any, ctx: Any) -> None:
-    assert type(result) is tuple and len(result) == 2
-    assert result[0] is rec.last_result.x
-    expect(result[1], np.eye(2), "identity pcov when the result has none")
+    assert isinstance(result, RuntimeError), (
+        "no fabricated pcov when the result has none"
+    )
 
 
 def _drive_clf_chunked_progress(ctx: SimpleNamespace) -> Any:
@@ -1729,7 +1737,7 @@ ROWS: list[Row] = [
         "init.curve_fit_large[chunked,x-only-result]",
         "nlsq.curve_fit_large",
         FITTER,
-        lambda ctx: _drive_clf_chunked(ctx, memory_limit_gb=2.0),
+        _drive_clf_chunked_x_only,
         _check_clf_chunked_x_only,
         {FITTER: fitter_x_only},
         marks=SERIAL,
