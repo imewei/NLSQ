@@ -2,11 +2,13 @@
 
 ``build_large_strategy(kind, config, **common)`` constructs the engine for a path
 the caller has already chosen (``"hybrid"``: ``AdaptiveHybridStreamingOptimizer``;
-``"chunked"``: ``LargeDatasetFitter``; ``"exact"``: ``exact_lm_fit``). It never
-decides routing. The returned ``Strategy`` owns the input kwargs translation for
-its engine and returns the engine's native result unchanged (a dict for hybrid,
-an ``OptimizeResult`` for chunked and exact); callers keep their own result
-unpacking.
+``"chunked"``: ``LargeDatasetFitter``; ``"exact"``: ``exact_lm_fit``;
+``"in_memory"``: ``nlsq.curve_fit``). It never decides routing. The returned
+``Strategy`` owns the input kwargs translation for its engine and its ``fit``
+returns the engine's native result unchanged (a dict for hybrid, an
+``OptimizeResult`` for chunked and exact, a ``CurveFitResult`` or special-output
+tuple for in-memory); ``unpack`` turns that into what ``curve_fit_large``
+returns (``(popt, pcov)``, or the in-memory result unchanged).
 
 The engines are looked up when a strategy is built, not at import time,
 so ``mock.patch("nlsq.streaming.<module>.<Class>")`` still takes effect and
@@ -127,25 +129,50 @@ class _ExactStrategy:
         return native["x"], native["pcov"]
 
 
+class _InMemoryStrategy:
+    def __init__(self, config: Any, **common: Any) -> None:
+        if config is not None or common:
+            raise TypeError(
+                "in_memory strategy takes no config and no build kwargs; "
+                "pass fit kwargs to Strategy.fit"
+            )
+        import nlsq
+
+        # Looked up on the package, as curve_fit_large always has, so a patch of
+        # nlsq.curve_fit takes effect (nlsq.core.minpack.curve_fit does not).
+        self.engine = nlsq.curve_fit
+
+    def fit(self, f: Any, x: Any, y: Any, p0: Any, /, **common: Any) -> Any:
+        """Call ``curve_fit(f, x, y, **common)``, with ``p0=`` only when given."""
+        if p0 is not None:
+            common["p0"] = p0
+        return self.engine(f, x, y, **common)
+
+    def unpack(self, native: Any, /) -> Any:
+        return native
+
+
 def build_large_strategy(
-    kind: Literal["hybrid", "chunked", "exact"], config: Any, **common: Any
+    kind: Literal["hybrid", "chunked", "exact", "in_memory"],
+    config: Any,
+    **common: Any,
 ) -> Strategy:
     """Construct the engine for ``kind`` now and return it as a ``Strategy``.
 
     Parameters
     ----------
-    kind : {"hybrid", "chunked", "exact"}
+    kind : {"hybrid", "chunked", "exact", "in_memory"}
         The path the caller already chose.
     config : HybridStreamingConfig or LDMemoryConfig or None
-        Must be ``None`` for ``"exact"``.
+        Must be ``None`` for ``"exact"`` and ``"in_memory"``.
         Engine config. Hybrid: used as is unless ``gtol`` is given, in which
         case a copy with ``gauss_newton_tol=gtol`` is used. Chunked: passed to
         ``LargeDatasetFitter(config=...)`` (``None`` lets the fitter build one).
     **common
         Hybrid: optional ``gtol``. Chunked: ``LargeDatasetFitter`` constructor
         kwargs (``memory_limit_gb``, ``logger``, ``multistart``, ...) plus
-        ``show_progress`` to make ``fit`` call ``fit_with_progress``. Exact:
-        none (build-time kwargs raise ``TypeError``).
+        ``show_progress`` to make ``fit`` call ``fit_with_progress``. Exact and
+        in-memory: none (build-time kwargs raise ``TypeError``).
 
     Notes
     -----
@@ -157,7 +184,8 @@ def build_large_strategy(
     ``xtol`` raises ``TypeError``. Chunked forwards everything, tolerances
     included. Exact forwards ``common`` to ``exact_lm_fit`` (``sigma``,
     ``bounds``, ``chunk_size``, tolerances, ...) and returns its
-    ``OptimizeResult``.
+    ``OptimizeResult``. In-memory forwards ``common`` to ``nlsq.curve_fit`` (``p0``
+    only when not ``None``) and its ``unpack`` returns the result unchanged.
     """
     if kind == "hybrid":
         return _HybridStrategy(config, **common)
@@ -165,8 +193,11 @@ def build_large_strategy(
         return _ChunkedStrategy(config, **common)
     if kind == "exact":
         return _ExactStrategy(config, **common)
+    if kind == "in_memory":
+        return _InMemoryStrategy(config, **common)
     raise ValueError(
-        f"unknown large-strategy kind {kind!r}; expected 'hybrid', 'chunked' or 'exact'"
+        f"unknown large-strategy kind {kind!r}; expected 'hybrid', 'chunked', "
+        "'exact' or 'in_memory'"
     )
 
 

@@ -110,7 +110,7 @@ except ImportError:
 
 # Standard library imports needed at module level
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from nlsq.callbacks import (
     CallbackBase,
@@ -958,15 +958,23 @@ def curve_fit_large(
                 "This parameter was removed in v0.2.0. Use streaming instead.",
             )
 
-    # Hoisted above np.asarray: a lazy source must not be read whole
-    if method == "exact_streaming":
-        from nlsq.streaming import exact_lm
-        from nlsq.streaming.strategy import (
-            build_large_strategy,
-            check_exact_sources,
-            normalize_p0_bounds,
-        )
+    # Minimal translation of the legacy options into a strategy; the path
+    # bodies live in nlsq.streaming.large_fit.fit_with_strategy.
+    from nlsq.streaming.large_fit import fit_with_strategy
+    from nlsq.streaming.specs import (
+        Auto,
+        Chunked,
+        Exact,
+        FitMethod,
+        Hybrid,
+        InMemory,
+        LargeStrategy,
+        Multistart,
+    )
 
+    strategy: LargeStrategy
+    engine_kwargs: dict[str, Any] = {}
+    if method == "exact_streaming":
         _check_exact_legacy_options(
             {
                 "stability": stability,
@@ -978,253 +986,55 @@ def curve_fit_large(
             multistart,
             kwargs,
         )
-        check_exact_sources(xdata, ydata, sigma, kwargs.get("n_points"))
-        if p0 is not None:
-            p0 = np.asarray(p0, dtype=float)  # a complex list p0 must raise TypeError
-        p0_arr, exact_bounds = normalize_p0_bounds(f, p0, bounds)
-        # (p,) shapes and lb < ub elementwise; prepare_bounds only broadcasts scalars
-        lb, ub = exact_lm.check_bounds(exact_bounds, len(p0_arr))
-        # check_exact_sources guarantees n_points is None for a non-factory source
-        solver_kwargs = {
-            k: v
-            for k, v in kwargs.items()
-            if k != "n_points" or exact_lm.is_chunk_factory(xdata)
-        }
-        large_strategy = build_large_strategy("exact", None)
-        native = large_strategy.fit(
-            f,
-            xdata,
-            ydata,
-            p0_arr,
-            bounds=(lb, ub),
-            chunk_size=chunk_size,
-            check_finite=check_finite,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            memory_limit_gb=memory_limit_gb,
-            show_progress=show_progress,
-            **solver_kwargs,
+        # kwargs now holds only Exact fields (ftol, xtol, gtol, max_nfev, n_points)
+        strategy = Exact(chunk_size=chunk_size, **kwargs)
+    elif method == "hybrid_streaming":
+        # verbose/config overrides are split (and unknown keys rejected) after
+        # source validation, inside fit_with_strategy
+        strategy = Hybrid()
+        engine_kwargs = kwargs
+    else:
+        ms = Multistart(
+            n_starts=n_starts,
+            sampler=sampler,
+            center_on_p0=center_on_p0,
+            scale_factor=scale_factor,
+            enabled=multistart,
         )
-        return large_strategy.unpack(native)
-
-    from nlsq.streaming.exact_lm import is_chunk_factory
-
-    if is_chunk_factory(xdata) or ydata is None:
-        raise ValueError(
-            "a chunk factory (callable xdata, ydata=None) requires "
-            "method='exact_streaming'; pass xdata and ydata arrays otherwise"
-        )
-
-    # Input validation
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
-
-    # Check for edge cases (scipy convention: 2-D xdata is (k, M), points on last axis)
-    n_x = xdata.shape[-1] if xdata.ndim > 1 else len(xdata)
-    if n_x == 0:
-        raise ValueError("`xdata` cannot be empty.")
-    if len(ydata) == 0:
-        raise ValueError("`ydata` cannot be empty.")
-    if n_x != len(ydata):
-        raise ValueError(
-            f"`xdata` and `ydata` must have the same length: {n_x} vs {len(ydata)}.",
-        )
-    if n_x < 2:
-        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
-
-    n_points = n_x
-
-    # Handle hybrid_streaming method specially
-    if method == "hybrid_streaming":
-        from nlsq.streaming.hybrid_config import HybridStreamingConfig
-        from nlsq.streaming.strategy import build_large_strategy, normalize_p0_bounds
-
-        # Extract verbosity from kwargs
-        verbose = kwargs.pop("verbose", 1)
-
-        # Create configuration (allow kwargs to override defaults)
-        config_overrides = {}
-        for key in list(kwargs.keys()):
-            if hasattr(HybridStreamingConfig, key):
-                config_overrides[key] = kwargs.pop(key)
-
-        if kwargs:
-            raise TypeError(
-                "Unrecognized keyword argument(s) for method="
-                f"'hybrid_streaming': {sorted(kwargs)}. These are not "
-                "HybridStreamingConfig fields.",
-            )
-
-        config = (
-            HybridStreamingConfig(**config_overrides)
-            if config_overrides
-            else HybridStreamingConfig()
-        )
-
-        # Prepare p0 and bounds
-        p0, (lb, ub) = normalize_p0_bounds(f, p0, bounds)
-        bounds_tuple = (
-            (lb, ub)
-            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
-            else None
-        )
-
-        # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
-        large_strategy = build_large_strategy("hybrid", config)
-
-        # Run optimization
-        native = large_strategy.fit(
-            f,
-            xdata,
-            ydata,
-            p0,
-            bounds=bounds_tuple,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            callback=kwargs.get("callback"),
-            verbose=verbose,
-        )
-
-        return large_strategy.unpack(native)
-
-    # Auto-detect if we should use large dataset processing
-    if auto_size_detection and n_points < size_threshold:
-        # Use regular curve_fit for small datasets
-        # Rebuild kwargs for curve_fit
-        fit_kwargs = kwargs.copy()
-        if p0 is not None:
-            fit_kwargs["p0"] = p0
-        if sigma is not None:
-            fit_kwargs["sigma"] = sigma
-        _lb, _ub = bounds
-        _lb = np.atleast_1d(np.asarray(_lb, dtype=float))
-        _ub = np.atleast_1d(np.asarray(_ub, dtype=float))
-        if not (np.all(np.isneginf(_lb)) and np.all(np.isposinf(_ub))):
-            fit_kwargs["bounds"] = bounds
-        if method is not None:
-            fit_kwargs["method"] = method
-        fit_kwargs["absolute_sigma"] = absolute_sigma
-        fit_kwargs["check_finite"] = check_finite
-        fit_kwargs["stability"] = stability
-        fit_kwargs["rescale_data"] = rescale_data
-        fit_kwargs["max_jacobian_elements_for_svd"] = max_jacobian_elements_for_svd
-        # Add multi-start parameters
-        fit_kwargs["multistart"] = multistart
-        fit_kwargs["n_starts"] = n_starts
-        fit_kwargs["sampler"] = sampler
-        fit_kwargs["center_on_p0"] = center_on_p0
-        fit_kwargs["scale_factor"] = scale_factor
-
-        return curve_fit(f, xdata, ydata, **fit_kwargs)
-
-    # Use large dataset processing
-    # Import lazy modules needed for large dataset processing
-    from dataclasses import replace
-
-    from nlsq.config import (
-        LargeDatasetConfig,
-        MemoryConfig,
-        get_memory_config,
-        large_dataset_context,
-        memory_context,
-    )
-    from nlsq.streaming.large_dataset import LDMemoryConfig
-    from nlsq.streaming.strategy import build_large_strategy
-
-    # Configure memory settings if provided
-    if memory_limit_gb is None:
-        # Auto-detect available memory
-        try:
-            import psutil
-
-            available_gb = psutil.virtual_memory().available / (1024**3)
-            memory_limit_gb = min(8.0, available_gb * 0.7)  # Use 70% of available
-        except ImportError:
-            memory_limit_gb = 8.0  # Conservative default
-
-    # Create memory configuration
-    if chunk_size is not None and chunk_size <= 0:
-        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
-    # Default ceiling: a tenth of the data, but never below the 1000-point floor
-    # (or the whole input if smaller), so tiny inputs fit as one chunk, not many.
-    max_chunk_size = (
-        min(1_000_000, max(n_points // 10, min(1000, n_points)))
-        if chunk_size is None
-        else chunk_size
-    )
-    memory_config = MemoryConfig(
-        progress_reporting=show_progress,
-        # The floor must not exceed the ceiling (small n_points or chunk_size)
-        min_chunk_size=min(max(1000, n_points // 10000), max_chunk_size),
-        max_chunk_size=max_chunk_size,
-    )
-
-    # Create large dataset configuration (v0.2.0: no more sampling params)
-    large_dataset_config = LargeDatasetConfig(
-        enable_automatic_solver_selection=True,
-    )
-
-    # Use context managers to temporarily set configuration
-    # Layer only the chunk bounds and progress flag over the user's global
-    # settings; the fitter below gets its limit explicitly.
-    context_config = replace(
-        get_memory_config(),
-        progress_reporting=memory_config.progress_reporting,
-        min_chunk_size=memory_config.min_chunk_size,
-        max_chunk_size=memory_config.max_chunk_size,
-    )
-    with memory_context(context_config), large_dataset_context(large_dataset_config):
-        # Build the chunked engine (LargeDatasetFitter) inside the contexts
-        large_strategy = build_large_strategy(
-            "chunked",
-            LDMemoryConfig(
-                memory_limit_gb=memory_limit_gb,
-                min_chunk_size=memory_config.min_chunk_size,
-                max_chunk_size=memory_config.max_chunk_size,
+        fit_method = cast("FitMethod | None", method)
+        strategy = Auto(
+            size_threshold=size_threshold,
+            auto_size_detection=auto_size_detection,
+            in_memory=InMemory(
+                method=fit_method,
+                stability=stability,
+                rescale_data=rescale_data,
+                max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
+                multistart=ms,
+                options=kwargs,
             ),
-            show_progress=show_progress,
-            memory_limit_gb=memory_limit_gb,
+            chunked=Chunked(
+                chunk_size=chunk_size,
+                method=fit_method,
+                multistart=ms,
+                options=kwargs,
+            ),
         )
 
-        # Handle sigma parameter by including it in kwargs if provided
-        if sigma is not None:
-            kwargs["sigma"] = sigma
-        kwargs["absolute_sigma"] = absolute_sigma
-        kwargs["check_finite"] = check_finite
-
-        # Add multi-start parameters to kwargs
-        kwargs["multistart"] = multistart
-        kwargs["n_starts"] = n_starts
-        kwargs["sampler"] = sampler
-        kwargs["center_on_p0"] = center_on_p0
-        kwargs["scale_factor"] = scale_factor
-
-        # Convert p0 to appropriate type for LargeDatasetFitter
-        # LargeDatasetFitter expects np.ndarray | list | None (no tuple or jnp.ndarray)
-        converted_p0: np.ndarray | list | None
-        if p0 is None:
-            converted_p0 = None
-        elif isinstance(p0, list):
-            converted_p0 = p0
-        else:
-            # Convert tuple, jnp.ndarray, or np.ndarray to np.ndarray
-            converted_p0 = np.asarray(p0)
-
-        # Provide default method if None
-        final_method = method if method is not None else "trf"
-
-        # Perform the fit (fit_with_progress when show_progress)
-        native = large_strategy.fit(
-            f,
-            xdata,
-            ydata,
-            converted_p0,
-            bounds=bounds,
-            method=final_method,
-            **kwargs,
-        )
-
-        return large_strategy.unpack(native)
+    return fit_with_strategy(
+        strategy,
+        f,
+        xdata,
+        ydata,
+        p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        bounds=bounds,
+        check_finite=check_finite,
+        memory_limit_gb=memory_limit_gb,
+        show_progress=show_progress,
+        **engine_kwargs,
+    )
 
 
 # Optional: Provide convenience access to submodules for advanced users
