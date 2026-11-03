@@ -18,6 +18,7 @@ import jax
 import jax.numpy as jnp
 
 from nlsq.streaming.large_dataset import get_bucket_size
+from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -160,6 +161,9 @@ class GaussNewtonPhase:
 
         # Stall detection
         self._consecutive_rejections: int = 0
+
+        # (model, jacobian_fn, kernel) of the last cached_kernel build
+        self._normal_eq: tuple[Any, Any, NormalEquations] | None = None
 
     def set_jacobian_fn(self, fn: Callable | None) -> None:
         """Set pre-compiled Jacobian function."""
@@ -662,23 +666,9 @@ class GaussNewtonPhase:
         chunk_cost : float
             Sum of squared residuals for this chunk.
         """
-        # Compute predictions and residuals
-        predictions = self.normalized_model(x_chunk, *params)
-        residuals = y_chunk - predictions
-
-        # Compute Jacobian for this chunk
-        J_chunk = self._compute_jacobian_chunk(x_chunk, params)
-
-        # Mask out padded elements if chunk was padded to bucket size
-        if valid_size is not None and valid_size < len(x_chunk):
-            mask = jnp.arange(len(x_chunk)) < valid_size
-            residuals = jnp.where(mask, residuals, 0.0)
-            J_chunk = jnp.where(mask[:, None], J_chunk, 0.0)
-
-        # Accumulate
-        JTJ_new = JTJ_prev + J_chunk.T @ J_chunk
-        JTr_new = JTr_prev + J_chunk.T @ residuals
-        chunk_cost = float(jnp.sum(residuals**2))
+        JTJ_new, JTr_new, chunk_cost = cached_kernel(self).add_chunk(
+            params, x_chunk, y_chunk, JTJ_prev, JTr_prev, valid_size
+        )
 
         # Store accumulators for checkpointing
         self.phase2_JTJ_accumulator = JTJ_new

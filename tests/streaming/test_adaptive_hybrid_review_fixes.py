@@ -94,13 +94,15 @@ class TestSigmaRejectedNotSilentlyIgnored:
         assert jnp.all(jnp.isfinite(result["x"]))
 
 
-class TestScanAccumulationMatchesLoopForSingularModel:
+class TestAccumulatePassMatchesSingleChunk:
     """G: padded x=0 rows evaluated before masking poisoned JTJ with NaN on the
     GPU/TPU scan accumulation path for models singular at x=0 (e.g. a/x),
     while the CPU Python-loop path never touched padded rows and was immune.
+    The scan accumulator was removed; the remaining chunk loop never pads, and
+    this pins that it stays finite for such a model.
     """
 
-    def test_no_nan_and_matches_loop_path_for_data_not_divisible_by_chunk_size(self):
+    def test_no_nan_and_matches_single_chunk_for_data_not_divisible_by_chunk_size(self):
         optimizer = AdaptiveHybridStreamingOptimizer(
             HybridStreamingConfig(chunk_size=8, normalize=False),
         )
@@ -109,7 +111,7 @@ class TestScanAccumulationMatchesLoopForSingularModel:
             # Singular at x=0 -- exercises the padded-row NaN bug directly.
             return a / x + b
 
-        # n_points not divisible by chunk_size=8 forces padding in the scan path.
+        # n_points not divisible by chunk_size=8 leaves a ragged final chunk.
         n_points = 37
         x = jnp.linspace(1.0, 5.0, n_points)  # strictly positive, no real zeros
         y = 2.0 / x + 1.0
@@ -117,44 +119,29 @@ class TestScanAccumulationMatchesLoopForSingularModel:
         optimizer._setup_normalization(model, jnp.array([1.0, 1.0]), None)
         params = optimizer.normalized_params
 
-        jtj_scan, jtr_scan, cost_scan = optimizer._accumulate_jtj_jtr_scan(
-            x,
-            y,
-            params,
-        )
-        assert jnp.all(jnp.isfinite(jtj_scan)), jtj_scan
-        assert jnp.all(jnp.isfinite(jtr_scan)), jtr_scan
-        assert np.isfinite(cost_scan)
+        jtj_pass, jtr_pass, cost_pass = optimizer._accumulate_pass(params, x, y)
+        assert jnp.all(jnp.isfinite(jtj_pass)), jtj_pass
+        assert jnp.all(jnp.isfinite(jtr_pass)), jtr_pass
+        assert np.isfinite(cost_pass)
 
-        jtj_loop = jnp.zeros((2, 2))
-        jtr_loop = jnp.zeros(2)
-        cost_loop = 0.0
-        chunk_size = optimizer.config.chunk_size
-        for i in range(0, n_points, chunk_size):
-            x_chunk = x[i : i + chunk_size]
-            y_chunk = y[i : i + chunk_size]
-            jtj_loop, jtr_loop, chunk_cost = optimizer._accumulate_jtj_jtr(
-                x_chunk,
-                y_chunk,
-                params,
-                jtj_loop,
-                jtr_loop,
-            )
-            cost_loop += chunk_cost
+        # Reference: the whole data as one unpadded chunk (4 chunks + a ragged tail above)
+        jtj_whole, jtr_whole, cost_whole = optimizer._accumulate_jtj_jtr(
+            x, y, params, jnp.zeros((2, 2)), jnp.zeros(2)
+        )
 
         np.testing.assert_allclose(
-            np.asarray(jtj_scan),
-            np.asarray(jtj_loop),
+            np.asarray(jtj_pass),
+            np.asarray(jtj_whole),
             rtol=1e-8,
             atol=1e-10,
         )
         np.testing.assert_allclose(
-            np.asarray(jtr_scan),
-            np.asarray(jtr_loop),
+            np.asarray(jtr_pass),
+            np.asarray(jtr_whole),
             rtol=1e-8,
             atol=1e-10,
         )
-        assert cost_scan == pytest.approx(cost_loop, rel=1e-8)
+        assert cost_pass == pytest.approx(cost_whole, rel=1e-8)
 
 
 class TestLbfgsBestParamsPairing:
@@ -514,7 +501,6 @@ class TestPhaseFailureFallbackJTJRecomputeGuarded:
 
         monkeypatch.setattr(optimizer, "_run_phase2_gauss_newton", broken_phase2)
         monkeypatch.setattr(optimizer, "_accumulate_jtj_jtr", broken_accumulate)
-        monkeypatch.setattr(optimizer, "_accumulate_jtj_jtr_scan", broken_accumulate)
         monkeypatch.setattr(optimizer, "_use_scan_for_accumulation", lambda: False)
 
         result = optimizer.fit(
@@ -731,13 +717,12 @@ class TestMultiFeatureXdataJacobian:
         np.testing.assert_allclose(np.asarray(compiled), expected, atol=1e-12)
         np.testing.assert_allclose(np.asarray(fallback), expected, atol=1e-12)
 
-    def test_scan_accumulator_without_compiled_jacobian(self):
+    def test_accumulator_without_compiled_jacobian(self):
         optimizer, X, y = self._optimizer(normalize=False)
         params = optimizer.normalized_params
-        args = (X, y, params)
-        jtj_c, jtr_c, _ = optimizer._accumulate_jtj_jtr_scan(*args)
+        jtj_c, jtr_c, _ = optimizer._accumulate_pass(params, X, y)
         optimizer._jacobian_fn_compiled = None
-        jtj_f, jtr_f, _ = optimizer._accumulate_jtj_jtr_scan(*args)
+        jtj_f, jtr_f, _ = optimizer._accumulate_pass(params, X, y)
         np.testing.assert_allclose(np.asarray(jtj_f), np.asarray(jtj_c), rtol=1e-10)
         np.testing.assert_allclose(np.asarray(jtr_f), np.asarray(jtr_c), rtol=1e-10)
         assert float(jtj_c[0, 0]) == pytest.approx(len(X))
@@ -782,12 +767,5 @@ class TestMultiFeatureModelJacobian:
         params = optimizer.normalized_params
         expected = np.asarray(x).T @ np.asarray(x)
 
-        jtj_scan, _, _ = optimizer._accumulate_jtj_jtr_scan(x, y, params)
-        np.testing.assert_allclose(np.asarray(jtj_scan), expected, rtol=1e-8)
-
-        jtj, jtr = jnp.zeros((2, 2)), jnp.zeros(2)
-        for i in range(0, 20, 8):
-            jtj, jtr, _ = optimizer._accumulate_jtj_jtr(
-                x[i : i + 8], y[i : i + 8], params, jtj, jtr
-            )
+        jtj, _, _ = optimizer._accumulate_pass(params, x, y)
         np.testing.assert_allclose(np.asarray(jtj), expected, rtol=1e-8)

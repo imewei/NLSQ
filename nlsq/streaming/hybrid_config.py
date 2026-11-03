@@ -379,10 +379,11 @@ class HybridStreamingConfig:
     # Garbage collection interval for chunked processing (FR-007)
     gc_chunk_interval: int = 10  # Chunks between gc.collect() calls
 
-    # Loop strategy for chunk accumulation
+    # Loop strategy for the Phase 2 cost evaluation only. J^T J / J^T r accumulation
+    # is always the Python chunk loop, whatever this is set to.
     # 'auto': Use scan on GPU/TPU (better fusion), Python loops on CPU (lower overhead)
-    # 'scan': Always use JAX lax.scan (best for GPU/TPU)
-    # 'loop': Always use Python loops (best for CPU)
+    # 'scan': Always use JAX lax.scan for the cost evaluation
+    # 'loop': Always use Python loops for the cost evaluation
     loop_strategy: Literal["auto", "scan", "loop"] = "auto"
 
     # Fault tolerance

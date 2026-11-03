@@ -44,6 +44,7 @@ from nlsq.precision.parameter_normalizer import (
 )
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
+from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
 from nlsq.streaming.telemetry import (
     DefenseLayerTelemetry,
     get_defense_telemetry,
@@ -71,11 +72,11 @@ def _fill_padded_rows(x_chunk: jnp.ndarray, mask: jnp.ndarray) -> jnp.ndarray:
     """Replace padded rows (mask == 0) with x_chunk[0] before model evaluation.
 
     Padded rows are x=0 (jnp.pad's default) and only ever occur in the LAST
-    chunk of a lax.scan accumulation (pad_size < chunk_size by construction,
-    so index 0 is always real data). For models singular/undefined at 0
-    (e.g. a/x, log(x)), evaluating them there produces NaN/Inf, and
-    NaN * 0 == NaN, so masking the residual/Jacobian AFTER evaluation would
-    not zero it out and would poison the accumulated JTJ/JTr for the whole
+    chunk of the lax.scan cost evaluation (pad_size < chunk_size by
+    construction, so index 0 is always real data). For models
+    singular/undefined at 0 (e.g. a/x, log(x)), evaluating them there produces
+    NaN/Inf, and NaN * 0 == NaN, so masking the residual AFTER evaluation would
+    not zero it out and would poison the accumulated cost for the whole
     scan. x_chunk[0] is used rather than an arbitrary sentinel (e.g. 1.0)
     because it's guaranteed to be a value the model is actually defined at.
     """
@@ -229,6 +230,10 @@ class AdaptiveHybridStreamingOptimizer:
         # This avoids recompilation overhead in _compute_jacobian_chunk
         self._jacobian_fn_compiled: Callable | None = None
 
+        # (normalized_model, _jacobian_fn_compiled, NormalEquations) built by
+        # cached_kernel; rebuilt when either object is reassigned
+        self._normal_eq: tuple[Any, Any, NormalEquations] | None = None
+
         # User progress callback set by fit(); invoked every
         # config.callback_frequency iterations in Phase 1 and Phase 2.
         self._fit_callback: Callable | None = None
@@ -238,8 +243,7 @@ class AdaptiveHybridStreamingOptimizer:
         self._cost_fn_compiled: Callable | None = None
 
         # Pre-compiled scan functions (set up in _setup_scan_functions)
-        # Used for efficient chunk-based accumulation with JAX lax.scan
-        self._jtj_scan_body_compiled: bool = False
+        # Used for efficient chunk-based cost evaluation with JAX lax.scan
         self._cost_scan_body_compiled: bool = False
 
     def _invoke_fit_callback(
@@ -430,7 +434,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         Scope limitation: weighting is only applied in the L-BFGS warmup
         loss (``_create_warmup_loss_fn``). Phase 2 Gauss-Newton refinement
-        (``_accumulate_jtj_jtr`` / ``_accumulate_jtj_jtr_scan``) does not
+        (``_accumulate_jtj_jtr``) does not
         currently incorporate these weights, so the effective optimization
         objective is weighted during warmup and unweighted afterward.
         """
@@ -608,24 +612,23 @@ class AdaptiveHybridStreamingOptimizer:
         if self.config.verbose >= 2:
             _logger.debug("Pre-compiled cost function for Phase 2")
 
-        # Also set up scan functions for efficient loop-free accumulation
+        # Also set up scan functions for chunked cost evaluation
         self._setup_scan_functions()
 
     def _setup_scan_functions(self) -> None:
-        """Initialize scan function infrastructure for efficient chunk accumulation.
+        """Initialize scan function infrastructure for chunked cost evaluation.
 
         This method prepares the optimizer to use JAX lax.scan for chunk-based
-        operations, eliminating Python loop overhead and enabling XLA fusion.
+        cost evaluation, eliminating Python loop overhead and enabling XLA fusion.
 
-        The scan approach provides 10-15% speedup by:
-        - Eliminating Python interpreter overhead in hot loops
-        - Enabling XLA to fuse operations across chunks
-        - Reducing memory allocation overhead
+        The scan removes the Python loop around per-chunk cost evaluation and lets
+        XLA fuse the chunks. J^T J / J^T r accumulation does not use it (it always
+        runs the chunk loop through the shared normal-equations kernel).
 
         Notes
         -----
-        The actual scan body functions are created inline in _accumulate_jtj_jtr_scan
-        and _compute_cost_scan, as they need to capture the current params in a closure.
+        The actual scan body function is created inline in _compute_cost_scan,
+        as it needs to capture the current params in a closure.
         This setup method primarily validates that prerequisites are met.
         """
         if self.normalized_model is None:
@@ -634,16 +637,16 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
         # Mark scan functions as available (bodies created inline in each method)
-        self._jtj_scan_body_compiled = True  # Flag indicating scan is available
         self._cost_scan_body_compiled = True
 
         if self.config.verbose >= 2:
-            _logger.debug("Scan-based accumulation enabled for Phase 2")
+            _logger.debug("Scan-based cost evaluation enabled for Phase 2")
 
     def _use_scan_for_accumulation(self) -> bool:
-        """Determine whether to use JAX scan or Python loops for chunk accumulation.
+        """Determine whether to use JAX scan or Python loops for the cost evaluation.
 
         Returns True if JAX lax.scan should be used, False for Python loops.
+        (J^T J accumulation does not consult this: it is always the chunk loop.)
 
         The decision is based on:
         - config.loop_strategy: 'auto', 'scan', or 'loop'
@@ -852,132 +855,6 @@ class AdaptiveHybridStreamingOptimizer:
         data identity changes, but explicit clearing frees memory sooner.
         """
         self._padded_cache = None
-
-    def _accumulate_jtj_jtr_scan(
-        self,
-        x_data: jnp.ndarray,
-        y_data: jnp.ndarray,
-        params: jnp.ndarray,
-    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
-        """Accumulate J^T J and J^T r using JAX lax.scan for efficiency.
-
-        This is the scan-based version of the chunk accumulation loop,
-        providing 10-15% speedup by eliminating Python loop overhead.
-
-        Parameters
-        ----------
-        x_data : array_like
-            Full x data of shape (n_points,) or (n_points, n_features)
-        y_data : array_like
-            Full y data of shape (n_points,)
-        params : array_like
-            Current parameters in normalized space of shape (n_params,)
-
-        Returns
-        -------
-        JTJ : array_like
-            Accumulated J^T J of shape (n_params, n_params)
-        JTr : array_like
-            Accumulated J^T r of shape (n_params,)
-        total_cost : float
-            Total sum of squared residuals
-
-        Notes
-        -----
-        Uses jax.lax.scan instead of Python for loop, enabling XLA fusion
-        across chunks and eliminating interpreter overhead.
-        Uses masking to handle padding correctly for non-divisible data sizes.
-        """
-        chunk_size = self.config.chunk_size
-        n_params = len(params)
-
-        # B006: Use cached padded flat arrays + dynamic_slice instead of
-        # pre-stacking into (n_chunks, chunk_size, ...) arrays.
-        x_padded, y_padded, n_points, n_chunks = self._get_padded_data(
-            x_data,
-            y_data,
-            chunk_size,
-        )
-
-        # Capture functions and data for scan body closure
-        normalized_model = self.normalized_model
-        jacobian_fn = self._jacobian_fn_compiled
-        x_ndim = x_padded.ndim
-
-        chunk_indices = jnp.arange(n_chunks)
-
-        def scan_body(carry, chunk_idx):
-            """Scan body using dynamic_slice from flat padded arrays."""
-            JTJ, JTr, total_cost = carry
-            start = chunk_idx * chunk_size
-
-            # Dynamic slice from flat padded arrays (no pre-stacking needed)
-            if x_ndim == 1:
-                x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
-            else:
-                x_chunk = jax.lax.dynamic_slice(
-                    x_padded,
-                    (start, 0),
-                    (chunk_size, x_padded.shape[1]),
-                )
-            y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
-
-            # Compute mask on-the-fly (tiny chunk_size array, not full n_points)
-            mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
-
-            # See _fill_padded_rows: guards NaN/Inf from evaluating the model
-            # at padded rows before masking. The mask below still excludes
-            # padded rows from the accumulated sums either way.
-            safe_x_chunk = _fill_padded_rows(x_chunk, mask)
-
-            # Compute predictions and residuals
-            predictions = normalized_model(safe_x_chunk, *params)
-            residuals = y_chunk - predictions
-
-            # Apply mask to residuals (zero out padded points)
-            masked_residuals = residuals * mask
-
-            # Compute Jacobian
-            if jacobian_fn is not None:
-                J_chunk = jacobian_fn(params, safe_x_chunk)
-            else:
-
-                def model_at_x(p, x_single):
-                    return jnp.atleast_1d(normalized_model(x_single[None], *p))[0]
-
-                J_chunk = jax.vmap(
-                    lambda x: jax.jacrev(model_at_x, argnums=0)(params, x),
-                )(safe_x_chunk)
-
-            # Apply mask to Jacobian rows (zero out padded point gradients)
-            masked_J = J_chunk * mask[:, None]
-
-            # Accumulate with masked values
-            JTJ_new = JTJ + masked_J.T @ masked_J
-            JTr_new = JTr + masked_J.T @ masked_residuals
-            cost_new = total_cost + jnp.sum(masked_residuals**2)
-
-            return (JTJ_new, JTr_new, cost_new), None
-
-        # Initialize carry
-        init_carry = (
-            jnp.zeros((n_params, n_params)),
-            jnp.zeros(n_params),
-            jnp.array(0.0),
-        )
-
-        # Run scan over chunk indices (not pre-stacked data arrays)
-        (JTJ, JTr, total_cost), _ = jax.lax.scan(
-            scan_body,
-            init_carry,
-            chunk_indices,
-        )
-
-        # Store accumulators for checkpointing
-        self.phase2_JTJ_accumulator = JTJ
-        self.phase2_JTr_accumulator = JTr
-
-        return JTJ, JTr, float(total_cost)
 
     def _compute_cost_scan(
         self,
@@ -2471,29 +2348,74 @@ class AdaptiveHybridStreamingOptimizer:
         - J^T r_new = J^T r_prev + J_chunk^T @ r_chunk
         where r_chunk = y_chunk - f(x_chunk, params)
         """
-        # Compute predictions for chunk
-        predictions = self.normalized_model(x_chunk, *params)
-
-        # Compute residuals
-        residuals = y_chunk - predictions
-
-        # Compute Jacobian for chunk
-        J_chunk = self._compute_jacobian_chunk(x_chunk, params)
-
-        # Accumulate J^T J: (n_params, n_params)
-        JTJ_new = JTJ_prev + J_chunk.T @ J_chunk
-
-        # Accumulate J^T r: (n_params,)
-        JTr_new = JTr_prev + J_chunk.T @ residuals
-
-        # Compute residual sum of squares for this chunk
-        residual_sum_sq = float(jnp.sum(residuals**2))
+        # production chunks are unpadded
+        JTJ_new, JTr_new, residual_sum_sq = cached_kernel(self).add_chunk(
+            params, x_chunk, y_chunk, JTJ_prev, JTr_prev
+        )
 
         # Store accumulators for checkpointing
         self.phase2_JTJ_accumulator = JTJ_new
         self.phase2_JTr_accumulator = JTr_new
 
         return JTJ_new, JTr_new, residual_sum_sq
+
+    def _accumulate_pass(
+        self,
+        params: jnp.ndarray,
+        x_data: Any,
+        y_data: Any,
+        *,
+        on_chunk: Callable[[int, int], None] | None = None,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
+        """Accumulate J^T J, J^T r and sum(r^2) over the full dataset.
+
+        Walks ``x_data``/``y_data`` in plain ``config.chunk_size`` slices (no
+        bucket padding; the last slice may be shorter) with the Python chunk loop.
+        ``config.loop_strategy`` does not apply here (it still selects the
+        cost evaluation in ``_compute_cost_only``).
+
+        Parameters
+        ----------
+        params : array_like
+            Parameters in normalized space, shape (n_params,).
+        x_data, y_data : array_like
+            Full dataset.
+        on_chunk : callable, optional
+            Called as ``on_chunk(chunk_idx, n_chunks)`` (0-based ``chunk_idx``)
+            after each chunk is accumulated, for progress reporting.
+
+        Returns
+        -------
+        JTJ, JTr : array_like
+            Accumulated normal-equation terms.
+        residual_sum_sq : float
+            ``sum(r^2)`` (not ``0.5 * sum(r^2)``).
+
+        Notes
+        -----
+        ``phase2_JTJ_accumulator`` / ``phase2_JTr_accumulator`` are maintained
+        by ``_accumulate_jtj_jtr`` (per chunk), not by this method.
+        """
+        n_params = len(params)
+        chunk_size = self.config.chunk_size
+        n_points = len(x_data)
+        n_chunks = (n_points + chunk_size - 1) // chunk_size
+        JTJ = jnp.zeros((n_params, n_params))
+        JTr = jnp.zeros(n_params)
+        residual_sum_sq = 0.0
+        for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
+            JTJ, JTr, chunk_ss = self._accumulate_jtj_jtr(
+                x_data[i : i + chunk_size],
+                y_data[i : i + chunk_size],
+                params,
+                JTJ,
+                JTr,
+            )
+            residual_sum_sq += chunk_ss
+            if on_chunk is not None:
+                on_chunk(chunk_idx, n_chunks)
+
+        return JTJ, JTr, residual_sum_sq
 
     def _solve_gauss_newton_step(
         self,
@@ -3026,40 +2948,14 @@ class AdaptiveHybridStreamingOptimizer:
 
         Notes
         -----
-        Uses chunk-based accumulation for memory efficiency.
-        Dispatches between JAX scan (GPU/TPU) and Python loops (CPU) based on
-        config.loop_strategy for optimal performance on each backend.
+        Uses chunk-based accumulation (``_accumulate_pass``) for memory efficiency.
+        Cost evaluation of the trial step dispatches between JAX scan (GPU/TPU)
+        and Python loops (CPU) based on config.loop_strategy.
         """
         x_data, y_data = data_source
-        n_params = len(current_params)
         n_points = len(x_data)
-        chunk_size = self.config.chunk_size
 
-        # Dispatch based on backend: scan for GPU/TPU, loops for CPU
-        if self._use_scan_for_accumulation():
-            # Use JAX scan for GPU/TPU (better XLA fusion, reduced kernel launches)
-            JTJ, JTr, total_cost = self._accumulate_jtj_jtr_scan(
-                x_data,
-                y_data,
-                current_params,
-            )
-        else:
-            # Use Python loops for CPU (lower tracing overhead)
-            JTJ = jnp.zeros((n_params, n_params))
-            JTr = jnp.zeros(n_params)
-            total_cost = 0.0
-
-            for i in range(0, n_points, chunk_size):
-                x_chunk = x_data[i : i + chunk_size]
-                y_chunk = y_data[i : i + chunk_size]
-                JTJ, JTr, chunk_cost = self._accumulate_jtj_jtr(
-                    x_chunk,
-                    y_chunk,
-                    current_params,
-                    JTJ,
-                    JTr,
-                )
-                total_cost += chunk_cost
+        JTJ, JTr, total_cost = self._accumulate_pass(current_params, x_data, y_data)
 
         # Add group variance regularization if enabled
         # This prevents per-angle parameters from absorbing angle-dependent signals
@@ -3370,13 +3266,8 @@ class AdaptiveHybridStreamingOptimizer:
         # Store final J^T J and residual sum for Phase 3
         # Initialize with JTJ at initial params (in case no steps accepted)
         x_data, y_data = data_source
-        n_params = len(current_params)
         chunk_size = self.config.chunk_size
         n_points = len(x_data)
-
-        final_JTJ = jnp.zeros((n_params, n_params))
-        final_JTr = jnp.zeros(n_params)
-        final_residual_sum_sq = 0.0
 
         # Get verbosity from config or default to 1 for progress output
         verbose = getattr(self.config, "verbose", 1)
@@ -3394,20 +3285,8 @@ class AdaptiveHybridStreamingOptimizer:
                 f"  Computing initial JTJ ({n_chunks} chunks, {n_points:,} points)...",
             )
 
-        for chunk_idx, i in enumerate(range(0, n_points, chunk_size)):
-            x_chunk = x_data[i : i + chunk_size]
-            y_chunk = y_data[i : i + chunk_size]
-
-            final_JTJ, final_JTr, res_sq = self._accumulate_jtj_jtr(
-                x_chunk,
-                y_chunk,
-                current_params,
-                final_JTJ,
-                final_JTr,
-            )
-            final_residual_sum_sq += res_sq
-
-            # Progress for initial JTJ computation (every 10% or every 50 chunks)
+        def _report_init_progress(chunk_idx: int, n_chunks: int) -> None:
+            # Every 10% of chunks and on the last chunk
             if verbose >= 1 and (
                 (chunk_idx + 1) % max(1, n_chunks // 10) == 0
                 or (chunk_idx + 1) == n_chunks
@@ -3418,6 +3297,11 @@ class AdaptiveHybridStreamingOptimizer:
                     f"  Initial JTJ: {chunk_idx + 1}/{n_chunks} chunks "
                     f"({pct:.0f}%), elapsed={elapsed:.1f}s",
                 )
+
+        # progress callback only; _accumulate_pass always uses the chunk loop
+        final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(
+            current_params, x_data, y_data, on_chunk=_report_init_progress
+        )
 
         if verbose >= 1:
             init_elapsed = time.time() - init_start_time
@@ -3533,41 +3417,11 @@ class AdaptiveHybridStreamingOptimizer:
 
                 # Recompute J^T J at new params for Phase 3
                 # This ensures we have J^T J at the final parameters.
-                # Dispatch between JAX scan (GPU/TPU) and Python loops (CPU),
-                # same as the initial accumulation above and the Phase 2
-                # failure fallback below -- the unconditional Python-loop
-                # path here previously ran on every accepted GN iteration
-                # even on GPU/TPU, defeating the scan path's XLA fusion.
                 x_data, y_data = data_source
-                n_params = len(current_params)
 
-                if self._use_scan_for_accumulation():
-                    JTJ, JTr, residual_sum_sq = self._accumulate_jtj_jtr_scan(
-                        x_data,
-                        y_data,
-                        current_params,
-                    )
-                else:
-                    chunk_size = self.config.chunk_size
-                    n_points = len(x_data)
-                    JTJ = jnp.zeros((n_params, n_params))
-                    JTr = jnp.zeros(n_params)
-                    residual_sum_sq = 0.0
-                    for i in range(0, n_points, chunk_size):
-                        x_chunk = x_data[i : i + chunk_size]
-                        y_chunk = y_data[i : i + chunk_size]
-
-                        JTJ, JTr, res_sq = self._accumulate_jtj_jtr(
-                            x_chunk,
-                            y_chunk,
-                            current_params,
-                            JTJ,
-                            JTr,
-                        )
-                        residual_sum_sq += res_sq
-
-                final_JTJ = JTJ
-                final_residual_sum_sq = residual_sum_sq
+                final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(
+                    current_params, x_data, y_data
+                )
             else:
                 # Step rejected - trust radius is already updated in
                 # _gauss_newton_iteration, no need to shrink again here.
@@ -4445,28 +4299,9 @@ class AdaptiveHybridStreamingOptimizer:
             # this fallback -- fit() would crash instead of degrading
             # gracefully to a success=False result.
             try:
-                if self._use_scan_for_accumulation():
-                    JTJ_fb, JTr_fb, residual_sum_sq_fb = self._accumulate_jtj_jtr_scan(
-                        x_data,
-                        y_data,
-                        fallback_params,
-                    )
-                else:
-                    chunk_size_fb = self.config.chunk_size
-                    JTJ_fb = jnp.zeros((n_params_fb, n_params_fb))
-                    JTr_fb = jnp.zeros(n_params_fb)
-                    residual_sum_sq_fb = 0.0
-                    for i in range(0, n_points, chunk_size_fb):
-                        x_chunk = x_data[i : i + chunk_size_fb]
-                        y_chunk = y_data[i : i + chunk_size_fb]
-                        JTJ_fb, JTr_fb, res_sq = self._accumulate_jtj_jtr(
-                            x_chunk,
-                            y_chunk,
-                            fallback_params,
-                            JTJ_fb,
-                            JTr_fb,
-                        )
-                        residual_sum_sq_fb += res_sq
+                JTJ_fb, _JTr_fb, residual_sum_sq_fb = self._accumulate_pass(
+                    fallback_params, x_data, y_data
+                )
                 residual_sum_sq_fb = float(residual_sum_sq_fb)
             except Exception as recompute_exc:
                 _logger.warning(
