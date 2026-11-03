@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "nlsq/__init__.py": {
-    "mtime": 1793569799.70075,
-    "seen": 1793588687.0521357,
-    "ast_hash": "51abdd263239b89bf31ff23b38c57ea1",
+    "mtime": 1793656795.1621118,
+    "seen": 1793656838.7024496,
+    "ast_hash": "0a5a33a319fcd2fa8bb61a81438de84c",
     "semantic_hash": ""
   },
   "nlsq/device.py": {
@@ -498,9 +498,9 @@
     "semantic_hash": ""
   },
   "nlsq/streaming/large_dataset.py": {
-    "mtime": 1793569799.6537502,
-    "seen": 1793588687.0526311,
-    "ast_hash": "1bd30e2ca38d4908c42e3b71480fd22b",
+    "mtime": 1793656795.2671094,
+    "seen": 1793656838.7027612,
+    "ast_hash": "7307b566d77b9eeee4d4e5bb1d38b145",
     "semantic_hash": ""
   },
   "nlsq/streaming/phases/orchestrator.py": {
@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "nlsq/core/minpack.py": {
-    "mtime": 1793636043.0492063,
-    "seen": 1793636134.4346464,
-    "ast_hash": "e6f166a288edd23c93f7b9cd32db1720",
+    "mtime": 1793656795.3641071,
+    "seen": 1793656838.70255,
+    "ast_hash": "62b9696e143d2f356751e59edd0641d8",
     "semantic_hash": ""
   },
   "nlsq/core/workflow.py": {
@@ -2832,9 +2832,9 @@
     "semantic_hash": "a2264bbbb921c00637735d32e109a562"
   },
   "docs/api/modules.rst": {
-    "mtime": 1793638848.2183683,
-    "seen": 1793638878.4447117,
-    "ast_hash": "16f4ee42a65f7d373e9708c28ee57a4d",
+    "mtime": 1793643730.3308947,
+    "seen": 1793643782.5920348,
+    "ast_hash": "85fbfaf0feca872dfa803f6b5086fbcf",
     "semantic_hash": ""
   },
   "docs/api/nlsq.result.rst": {
@@ -3885,6 +3885,30 @@
     "mtime": 1793638848.3193686,
     "seen": 1793638878.4447355,
     "ast_hash": "f414fe092e14ac73df484cb57c0b8258",
+    "semantic_hash": ""
+  },
+  "nlsq/streaming/strategy.py": {
+    "mtime": 1793656795.6681,
+    "seen": 1793656838.7027802,
+    "ast_hash": "d1508681ba7d8912658a4c75f5402ad0",
+    "semantic_hash": ""
+  },
+  "tests/streaming/test_large_strategy_routing.py": {
+    "mtime": 1793642379.600477,
+    "seen": 1793643782.5920033,
+    "ast_hash": "f057fc18d776b8da826aedd4d7c76fd9",
+    "semantic_hash": ""
+  },
+  "tests/streaming/test_strategy.py": {
+    "mtime": 1793656795.752098,
+    "seen": 1793656838.7035358,
+    "ast_hash": "81b3fb657ddf1ed8c86ef9a9234e1875",
+    "semantic_hash": ""
+  },
+  "docs/api/nlsq.streaming.strategy.rst": {
+    "mtime": 1793656795.4801044,
+    "seen": 1793656838.7037375,
+    "ast_hash": "52f9d6fd782e6aa51a4112d789aaa55d",
     "semantic_hash": ""
   }
 }

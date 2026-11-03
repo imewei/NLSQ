@@ -707,7 +707,8 @@ def _fit_with_config(
     from nlsq.core.workflow import calculate_adaptive_tolerances
     from nlsq.global_optimization import GlobalOptimizationConfig
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
-    from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
+    from nlsq.streaming.large_dataset import LDMemoryConfig
+    from nlsq.streaming.strategy import build_large_strategy
 
     n_points = len(ydata)
 
@@ -739,10 +740,6 @@ def _fit_with_config(
 
     if isinstance(config, HybridStreamingConfig):
         # Streaming optimization path
-        import dataclasses
-
-        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
-
         _check_finite_for_streaming(xdata, ydata, check_finite)
 
         # Prepare p0
@@ -763,22 +760,19 @@ def _fit_with_config(
             else None
         )
 
-        # AdaptiveHybridStreamingOptimizer.fit() has no gtol/ftol/xtol
-        # parameters -- its single convergence knob is
-        # config.gauss_newton_tol, set at construction time. Without this,
-        # the goal-derived (or user-supplied) gtol computed into kwargs
-        # above is silently dropped for this route -- matching the
-        # gauss_newton_tol=kwargs.get("gtol", ...) treatment
-        # _fit_global_multistart's streaming branch already applies.
-        # ftol/xtol have no streaming equivalent to map to.
-        if "gtol" in kwargs:
-            config = dataclasses.replace(config, gauss_newton_tol=kwargs["gtol"])
-
-        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
-        result_dict = optimizer.fit(
-            data_source=(xdata, ydata),
-            func=f,
-            p0=p0_arr,
+        # The goal-derived (or user-supplied) gtol computed into kwargs above
+        # maps onto config.gauss_newton_tol (on a copy) inside the hybrid
+        # strategy; ftol/xtol have no streaming equivalent to map to.
+        large_strategy = build_large_strategy(
+            "hybrid",
+            config,
+            **({"gtol": kwargs["gtol"]} if "gtol" in kwargs else {}),
+        )
+        result_dict = large_strategy.fit(
+            f,
+            xdata,
+            ydata,
+            p0_arr,
             bounds=bounds_tuple,
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
@@ -804,15 +798,14 @@ def _fit_with_config(
         # n_points when n_params is large, so don't second-guess it by
         # n_points alone here (that used to silently fall back to plain
         # curve_fit() and defeat the memory-based decision).
-        fitter = LargeDatasetFitter(
-            memory_limit_gb=config.memory_limit_gb,
-            config=config,
+        large_strategy = build_large_strategy(
+            "chunked", config, memory_limit_gb=config.memory_limit_gb
         )
-        result = fitter.fit(
+        result = large_strategy.fit(
             f,
             xdata,
             ydata,
-            p0=np.asarray(p0) if p0 is not None else None,
+            np.asarray(p0) if p0 is not None else None,
             bounds=bounds,
             method=method or "trf",
             sigma=sigma,
@@ -998,7 +991,8 @@ def _fit_with_preset(  # noqa: C901
 
     if strategy == "chunked":
         # Large dataset with chunking
-        from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
+        from nlsq.streaming.strategy import build_large_strategy
 
         config = LDMemoryConfig(
             memory_limit_gb=8.0,  # Default, can be overridden
@@ -1022,15 +1016,14 @@ def _fit_with_preset(  # noqa: C901
                 n_starts=n_starts if enable_multistart else 0,
                 **kwargs,
             )
-        fitter = LargeDatasetFitter(
-            memory_limit_gb=config.memory_limit_gb,
-            config=config,
+        large_strategy = build_large_strategy(
+            "chunked", config, memory_limit_gb=config.memory_limit_gb
         )
-        result = fitter.fit(
+        result = large_strategy.fit(
             f,
             xdata,
             ydata,
-            p0=np.asarray(p0) if p0 is not None else None,
+            np.asarray(p0) if p0 is not None else None,
             bounds=bounds,
             method=method or "trf",
             multistart=enable_multistart,
@@ -1048,8 +1041,8 @@ def _fit_with_preset(  # noqa: C901
 
     if strategy == "streaming":
         # Streaming optimization path
-        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
+        from nlsq.streaming.strategy import build_large_strategy
 
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
@@ -1083,11 +1076,12 @@ def _fit_with_preset(  # noqa: C901
             n_starts=n_starts if enable_multistart else 0,
         )
 
-        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
-        result_dict = optimizer.fit(
-            data_source=(xdata, ydata),
-            func=f,
-            p0=p0_arr,
+        large_strategy = build_large_strategy("hybrid", config)
+        result_dict = large_strategy.fit(
+            f,
+            xdata,
+            ydata,
+            p0_arr,
             bounds=bounds_tuple,
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
@@ -1742,7 +1736,8 @@ def _fit_global_multistart(
             )
 
         # Chunked processing with multi-start
-        from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
+        from nlsq.streaming.large_dataset import LDMemoryConfig
+        from nlsq.streaming.strategy import build_large_strategy
 
         # Use the selector's real budget-derived config when present;
         # only fall back to a default if this was reached without one
@@ -1756,15 +1751,14 @@ def _fit_global_multistart(
                 max_chunk_size=1_000_000,
             )
         )
-        fitter = LargeDatasetFitter(
-            memory_limit_gb=config.memory_limit_gb,
-            config=config,
+        large_strategy = build_large_strategy(
+            "chunked", config, memory_limit_gb=config.memory_limit_gb
         )
-        result = fitter.fit(
+        result = large_strategy.fit(
             f,
             xdata,
             ydata,
-            p0=np.asarray(p0) if p0 is not None else None,
+            np.asarray(p0) if p0 is not None else None,
             bounds=bounds,
             method="trf",
             multistart=True,
@@ -1789,8 +1783,8 @@ def _fit_global_multistart(
             result["ydata"] = ydata
         return result
     # Streaming with multi-start (FR-004)
-    from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
+    from nlsq.streaming.strategy import build_large_strategy
 
     _check_finite_for_streaming(xdata, ydata, check_finite)
 
@@ -1821,11 +1815,12 @@ def _fit_global_multistart(
         n_starts=n_starts,
     )
 
-    optimizer = AdaptiveHybridStreamingOptimizer(config=config)
-    result_dict = optimizer.fit(
-        data_source=(xdata, ydata),
-        func=f,
-        p0=p0_arr,
+    large_strategy = build_large_strategy("hybrid", config)
+    result_dict = large_strategy.fit(
+        f,
+        xdata,
+        ydata,
+        p0_arr,
         bounds=bounds,
         sigma=np.asarray(sigma) if sigma is not None else None,
         absolute_sigma=absolute_sigma,
@@ -3476,8 +3471,8 @@ class CurveFit:
         result : CurveFitResult
             Optimization result compatible with scipy.optimize.curve_fit
         """
-        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
+        from nlsq.streaming.strategy import build_large_strategy
 
         self._warn_unsupported_args(
             "method='hybrid_streaming'",
@@ -3559,14 +3554,15 @@ class CurveFit:
                 "HybridStreamingConfig fields.",
             )
 
-        # Create optimizer
-        optimizer = AdaptiveHybridStreamingOptimizer(config=config)
+        # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
+        large_strategy = build_large_strategy("hybrid", config)
 
         # Run optimization
-        result_dict = optimizer.fit(
-            data_source=(xdata, ydata),
-            func=f,
-            p0=p0,
+        result_dict = large_strategy.fit(
+            f,
+            xdata,
+            ydata,
+            p0,
             bounds=bounds_tuple,
             sigma=sigma,
             absolute_sigma=absolute_sigma,
@@ -3769,20 +3765,20 @@ class CurveFit:
             )
 
             # Delegate to LargeDatasetFitter
-            from nlsq.streaming.large_dataset import LargeDatasetFitter
+            from nlsq.streaming.strategy import build_large_strategy
 
-            # Create fitter with memory-aware configuration
-            fitter = LargeDatasetFitter(
-                memory_limit_gb=memory_limit_gb,
-                config=config,
+            # Build the chunked engine with the raw memory_limit_gb kwarg,
+            # not config.memory_limit_gb
+            large_strategy = build_large_strategy(
+                "chunked", config, memory_limit_gb=memory_limit_gb
             )
 
             # Run fit
-            result = fitter.fit(
-                f=f,
-                xdata=np.asarray(xdata, float),
-                ydata=ydata_arr,
-                p0=p0,
+            result = large_strategy.fit(
+                f,
+                np.asarray(xdata, float),
+                ydata_arr,
+                p0,
                 bounds=bounds,
                 check_finite=check_finite,
                 absolute_sigma=absolute_sigma,

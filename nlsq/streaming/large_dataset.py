@@ -33,8 +33,8 @@ _jax_config = JAXConfig()
 
 
 from nlsq.result import OptimizeResult
-from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
+from nlsq.streaming.strategy import build_large_strategy
 from nlsq.utils.logging import get_logger
 
 # Type-only imports to avoid circular dependencies
@@ -1896,8 +1896,8 @@ class LargeDatasetFitter:
             gauss_newton_max_iterations=self.config.streaming_max_epochs,
         )
 
-        # Initialize adaptive hybrid streaming optimizer
-        optimizer = AdaptiveHybridStreamingOptimizer(config=streaming_config)
+        # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
+        strategy = build_large_strategy("hybrid", streaming_config)
 
         # Convert p0 to array if needed
         if p0 is None:
@@ -1907,10 +1907,11 @@ class LargeDatasetFitter:
 
         # Fit using streaming optimization
         try:
-            result_dict = optimizer.fit(
-                data_source=(xdata, ydata),
-                func=f,
-                p0=p0,
+            result_dict = strategy.fit(
+                f,
+                xdata,
+                ydata,
+                p0,
                 bounds=bounds,
                 verbose=2 if show_progress else 1,
             )
@@ -3050,17 +3051,17 @@ def fit_large_dataset(
     ...     print(f"Failed chunks: {result.failure_summary['failed_chunk_indices']}")
     ...     print(f"Common errors: {result.failure_summary['common_errors']}")
     """
-    fitter = LargeDatasetFitter(
+    strategy = build_large_strategy(
+        "chunked",
+        None,
+        show_progress=show_progress,
         memory_limit_gb=memory_limit_gb,
         logger=logger,
         multistart=multistart,
         n_starts=n_starts,
         sampler=sampler,
     )
-
-    if show_progress:
-        return fitter.fit_with_progress(f, xdata, ydata, p0=p0, **kwargs)
-    return fitter.fit(f, xdata, ydata, p0=p0, **kwargs)
+    return strategy.fit(f, xdata, ydata, p0, **kwargs)
 
 
 def estimate_memory_requirements(n_points: int, n_params: int) -> DatasetStats:

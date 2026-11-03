@@ -133,6 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal: shared NormalEquations module for streaming solvers; no behavior change.
 - Internal: shared covariance helpers (`nlsq/core/covariance.py`) for the Jacobian-based
   and normal-matrix-based sites; no change to cutoffs or warnings.
+- Internal: build_large_strategy (`nlsq/streaming/strategy.py`) constructs the hybrid and
+  chunked large-dataset engines at all 13 former construction sites; routing unchanged.
 - Hybrid streaming: Gauss-Newton `J^T J` accumulation always uses the chunk loop (the
   `lax.scan` accumulator was removed); `loop_strategy` now affects cost evaluation only.
 - Hybrid and phases Gauss-Newton chunks now run through the same jitted kernel as
