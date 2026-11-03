@@ -4357,8 +4357,11 @@ class CurveFit:
                 flength=self.flength,
                 use_dynamic_sizing=self.use_dynamic_sizing,
                 enable_stability=self.enable_stability,
-                validator=getattr(self, "validator", None)
-                or InputValidator(fast_mode=True),
+                validator=(
+                    InputValidator(fast_mode=True)
+                    if getattr(self, "validator", None) is None
+                    else self.validator
+                ),
                 logger=self.logger,
             ),
         )
