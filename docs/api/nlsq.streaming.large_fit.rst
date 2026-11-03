@@ -9,9 +9,12 @@ dataclass that names one way to run a large fit; pass one to
 its legacy keywords (``method``, ``size_threshold``, ``chunk_size``, ``multistart`` and
 the rest) when ``strategy`` is omitted, so both spellings run the same code.
 
-When ``strategy`` is given, any legacy path option set to a non-default value raises
-``TypeError``; engine keywords (``ftol``, ``xtol``, ``gtol``, ``loss`` and similar) are
-still accepted and merged over the strategy's own options.
+When ``strategy`` is given, ``curve_fit_large`` raises ``TypeError`` for any legacy path
+option set to a non-default value and for any extra keyword (``ftol``, ``xtol``, ``gtol``,
+``loss`` and similar). Set engine options on the strategy instead (its ``options``).
+:func:`~nlsq.streaming.large_fit.fit_with_strategy`, called directly, does accept extra
+engine keywords: for ``InMemory`` and ``Chunked`` they are merged over the strategy's
+``options``, ``Exact`` merges them over its solver settings, and ``Hybrid`` accepts none.
 
 .. code-block:: python
 

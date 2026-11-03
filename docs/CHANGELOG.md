@@ -9,8 +9,9 @@
     `np.ndarray` value) raises `TypeError`.
   - A chunked fit that returns no `pcov` now raises `RuntimeError` instead of returning an
     identity matrix.
-  - Error precedence for doubly-invalid hybrid input changed: the unrecognized-keyword
-    `TypeError` is now raised first, ahead of hybrid config-value errors.
+  - Error precedence for `method="hybrid_streaming"` changed: the unrecognized-keyword
+    `TypeError` and hybrid config-value errors are now raised before data and source
+    validation (empty data, chunk factory), not after it.
   - `curve_fit_large` return annotation corrected.
   - Known limitation: the chunked path ignores `stability`, `rescale_data`,
     `max_jacobian_elements_for_svd` and multistart.

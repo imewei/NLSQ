@@ -159,6 +159,12 @@ def test_explicit_strategy_array_valued_legacy_option_is_type_error():
         )
 
 
+def test_explicit_strategy_rejects_engine_keyword():
+    x, y = _data()
+    with pytest.raises(TypeError, match="together with strategy="):
+        curve_fit_large(model, x, y, p0=[1.5, 0.4], strategy=InMemory(), ftol=1e-10)
+
+
 @pytest.mark.parametrize(
     "value",
     [np.array(1.0), np.array([1.0]), np.array([[1.0]])],
