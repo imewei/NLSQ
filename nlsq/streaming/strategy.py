@@ -92,6 +92,8 @@ def build_large_strategy(
         kwargs (``memory_limit_gb``, ``logger``, ``multistart``, ...) plus
         ``show_progress`` to make ``fit`` call ``fit_with_progress``.
 
+    Notes
+    -----
     ``Strategy.fit(f, x, y, p0, **common)`` forwards ``common`` to the engine's
     fit. Hybrid honours ``gtol`` only at build time: passed to ``fit`` it is
     dropped, as are ``ftol``/``xtol`` (no equivalent), and the config's
