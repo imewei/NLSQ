@@ -33,6 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax  # type: ignore[import-not-found]
 
+from nlsq.core.covariance import pcov_from_normal, warn_not_estimated
 from nlsq.global_optimization.config import GlobalOptimizationConfig
 from nlsq.global_optimization.sampling import (
     get_sampler,
@@ -3581,11 +3582,11 @@ class AdaptiveHybridStreamingOptimizer:
     def _compute_normalized_covariance(self, JTJ: jnp.ndarray) -> jnp.ndarray:
         """Compute covariance matrix in normalized space from J^T J.
 
-        The covariance is the inverse of the Hessian approximation:
-        Cov_norm = (J^T J)^(-1)
-
-        Uses pseudo-inverse for numerical stability and to handle rank-deficient
-        or ill-conditioned matrices gracefully.
+        The covariance is the (unit-variance) pseudo-inverse of the Hessian
+        approximation: Cov_norm = pinv(J^T J), via
+        :func:`nlsq.core.covariance.pcov_from_normal` (eigen-directions above
+        ``p*eps*lambda_max``; dropped directions give zero rows and columns, so a
+        partially rank-deficient J^T J still gives a finite matrix).
 
         Parameters
         ----------
@@ -3595,25 +3596,19 @@ class AdaptiveHybridStreamingOptimizer:
         Returns
         -------
         cov_norm : array_like
-            Covariance matrix in normalized space of shape (n_params, n_params)
-
-        Notes
-        -----
-        Uses jnp.linalg.pinv (pseudo-inverse) which is numerically stable and
-        handles singular matrices via SVD. The result is guaranteed to be
-        symmetric positive semi-definite.
-
-        The pseudo-inverse uses SVD: J^T J = U S V^T
-        Then: (J^T J)^(-1) = V S^(-1) U^T where small singular values are zeroed.
+            Covariance matrix in normalized space of shape (n_params, n_params).
+            All ``inf`` (after one ``OptimizeWarning``) when no direction survives the
+            cutoff or J^T J or the result is non-finite.
         """
-        # Compute pseudo-inverse for numerical stability
-        # This handles rank-deficient and ill-conditioned matrices
-        cov_norm = jnp.linalg.pinv(JTJ)
-
-        # Ensure symmetry (should already be symmetric, but enforce for numerical reasons)
-        cov_norm = 0.5 * (cov_norm + cov_norm.T)
-
-        return cov_norm
+        cov_norm, _ = pcov_from_normal(
+            np.asarray(JTJ),
+            0.0,  # unused: absolute_sigma=True leaves the variance to the caller
+            JTJ.shape[0] + 1,
+            JTJ.shape[0],
+            absolute_sigma=True,
+            cond_warn=False,
+        )
+        return jnp.asarray(cov_norm)
 
     def _transform_covariance(self, cov_norm: jnp.ndarray) -> jnp.ndarray:
         """Transform covariance from normalized to original parameter space.
@@ -3659,11 +3654,15 @@ class AdaptiveHybridStreamingOptimizer:
         # Get denormalization Jacobian (diagonal matrix with scales)
         D = self.normalization_jacobian
 
-        # Transform covariance: Cov_orig = D @ Cov_norm @ D^T
-        cov_orig = D @ cov_norm @ D.T
+        # Cov_orig = D @ Cov_norm @ D^T for diagonal D, as two sequential row/column
+        # scalings (no D_i*D_j product, which can overflow, and no 0 * inf from a
+        # dense matmul when Cov_norm is the all-inf fallback)
+        scales = jnp.diag(D)
+        cov_orig = (cov_norm * scales[:, None]) * scales[None, :]
 
-        # Ensure symmetry (should be preserved, but enforce for numerical stability)
-        cov_orig = 0.5 * (cov_orig + cov_orig.T)
+        # Ensure symmetry (should be preserved, but enforce for numerical stability);
+        # halve before adding so a large cov_orig cannot overflow
+        cov_orig = 0.5 * cov_orig + 0.5 * cov_orig.T
 
         return cov_orig
 
@@ -3816,7 +3815,7 @@ class AdaptiveHybridStreamingOptimizer:
         - perr: Standard errors (not returned by scipy but useful)
 
         The covariance transformation follows:
-        1. Cov_norm = (J^T J)^(-1)  [in normalized space]
+        1. Cov_norm = pinv(J^T J)  [in normalized space]
         2. Cov_orig = D @ Cov_norm @ D^T  [transform to original space]
         3. Cov_final = sigma^2 * Cov_orig  [scale by residual variance]
         """
@@ -3825,8 +3824,10 @@ class AdaptiveHybridStreamingOptimizer:
         # Step 1: Denormalize parameters to original space
         popt = self._denormalize_params(optimized_params_normalized)
 
-        # Step 2: Compute covariance in normalized space
+        # Step 2: Compute covariance in normalized space (all-inf + one
+        # OptimizeWarning if J^T J is degenerate or non-finite)
         cov_norm = self._compute_normalized_covariance(JTJ_final)
+        degenerate = bool(jnp.isinf(cov_norm).any())
 
         # Step 3: Transform covariance to original space
         cov_orig = self._transform_covariance(cov_norm)
@@ -3837,6 +3838,13 @@ class AdaptiveHybridStreamingOptimizer:
             residual_sum_sq,
             n_points,
         )
+        if degenerate:
+            # keep the all-inf fallback (inf * sigma^2 would be NaN for a perfect fit)
+            pcov = cov_orig
+        elif not bool(jnp.isfinite(pcov).all()):
+            # n_points <= n_params, or the scaled covariance overflowed
+            pcov = jnp.full_like(pcov, jnp.inf)
+            warn_not_estimated()
 
         # Step 5: Compute standard errors
         perr = self._compute_standard_errors(pcov)

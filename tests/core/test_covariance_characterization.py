@@ -7,7 +7,8 @@ before the standard and exact sites were routed through ``nlsq.core.covariance``
   ``nlsq.core.covariance.pcov_from_jacobian``
 * exact:    ``exact_lm.compute_covariance`` (eigh of H = J^T J), a wrapper over
   ``nlsq.core.covariance.pcov_from_normal``
-* hybrid:   ``AdaptiveHybridStreamingOptimizer._run_phase3_finalize`` (bare ``pinv``)
+* hybrid:   ``AdaptiveHybridStreamingOptimizer._run_phase3_finalize`` (formerly a bare
+  ``pinv`` with no fallback; now ``pcov_from_normal`` in normalized space)
 * GLS:      ``LargeDatasetFitter._compute_covariance_from_history``
 
 Golden constants were captured once from the unmodified code (see the ``P_WC`` /
@@ -537,7 +538,8 @@ def test_hybrid_golden(hybrid_wc, j_wc):
 
 
 def test_hybrid_partial_rank_deficient_contract(hybrid_dup, j_dup):
-    """Bare pinv: finite, dropped direction zeroed, and (unlike exact) no warning."""
+    """Finite, dropped direction zeroed, no warning (the ill-conditioning UserWarning
+    of the exact site is not emitted for hybrid)."""
     opt, p_norm = hybrid_dup
     r3, caught = _record(
         opt._run_phase3_finalize,
@@ -553,30 +555,56 @@ def test_hybrid_partial_rank_deficient_contract(hybrid_dup, j_dup):
 
 
 def test_hybrid_fully_degenerate_contract(hybrid_wc, j_wc):
-    """Pinned deliberately (not endorsed): hybrid never returns all-inf for a bad JTJ.
+    """Hybrid now falls back like the exact site: all-inf plus one OptimizeWarning.
 
-    * all-zero J^T J -> finite all-ZERO pcov ("perfectly determined"), no warning
-    * non-finite J^T J -> all-NaN pcov, no warning
-    * n <= p -> all-inf pcov via the residual-variance step, no warning
+    Before the pcov_from_normal routing these were silent and misleading:
+    * all-zero J^T J -> finite all-ZERO pcov ("perfectly determined")
+    * non-finite J^T J -> all-NaN pcov
+    * n <= p -> all-inf pcov (no warning)
     """
     opt, p_norm = hybrid_wc
-    zero, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.zeros((2, 2)), 2 * COST_WC, N
-    )
-    _assert_no_warnings(caught)
-    np.testing.assert_array_equal(np.asarray(zero["pcov"]), np.zeros((2, 2)))
+    for bad_jtj, n in (
+        (jnp.zeros((2, 2)), N),
+        (jnp.full((2, 2), jnp.nan), N),
+        (jnp.asarray(j_wc.T @ j_wc), 2),
+    ):
+        r3, caught = _record(opt._run_phase3_finalize, p_norm, bad_jtj, 2 * COST_WC, n)
+        _assert_single(caught, OptimizeWarning)
+        _assert_all_inf(np.asarray(r3["pcov"]), 2)
+        assert np.isinf(np.asarray(r3["perr"])).all()
 
-    nan, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.full((2, 2), jnp.nan), 2 * COST_WC, N
-    )
-    _assert_no_warnings(caught)
-    assert np.isnan(np.asarray(nan["pcov"])).all()
 
-    few, caught = _record(
-        opt._run_phase3_finalize, p_norm, jnp.asarray(j_wc.T @ j_wc), 2 * COST_WC, 2
-    )
+@pytest.mark.parametrize(
+    ("scale", "h", "rss", "n", "expected"),
+    [
+        # variance applied after the transform: 1e-200 survives a 1e100 scale
+        (1e100, 1e200, 1e-200, N, 1e-200 / (N - 2)),
+        # D_i * D_j (1e320) would overflow; sequential scaling gives 1e-300 * 1e160 * 1e160
+        (1e160, 1e300, float(N - 2), N, 1.0e20),
+        # symmetrization halves before adding, so a ~1e308 entry stays finite
+        (1.0, 1.0, 1.5e308, 3, 1.5e308),
+    ],
+)
+def test_hybrid_extreme_scales_stay_finite(
+    hybrid_wc, monkeypatch, scale, h, rss, n, expected
+):
+    """Numerical range: the order pinv -> D scaling -> variance must not over/underflow."""
+    opt, p_norm = hybrid_wc
+    monkeypatch.setattr(
+        opt, "normalization_jacobian", jnp.diag(jnp.array([scale, scale]))
+    )  # fixture is module-scoped: never assign directly
+    r3, caught = _record(opt._run_phase3_finalize, p_norm, jnp.eye(2) * h, rss, n)
     _assert_no_warnings(caught)
-    _assert_all_inf(np.asarray(few["pcov"]), 2)
+    pcov = np.asarray(r3["pcov"])
+    np.testing.assert_allclose(pcov, expected * np.eye(2), rtol=1e-12, atol=0)
+
+
+def test_hybrid_perfect_fit_degenerate_stays_inf(hybrid_wc):
+    """rss = 0 with a degenerate J^T J: all-inf, not inf * 0 = NaN."""
+    opt, p_norm = hybrid_wc
+    r3, caught = _record(opt._run_phase3_finalize, p_norm, jnp.zeros((2, 2)), 0.0, N)
+    _assert_single(caught, OptimizeWarning)
+    _assert_all_inf(np.asarray(r3["pcov"]), 2)
 
 
 # --- GLS site --------------------------------------------------------------------------
