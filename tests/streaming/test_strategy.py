@@ -130,4 +130,28 @@ def test_hybrid_build_rejects_ftol_xtol(tol):
 
 def test_unknown_kind_raises_value_error():
     with pytest.raises(ValueError, match="kind"):
-        build_large_strategy("exact", None)  # type: ignore[arg-type]
+        build_large_strategy("bogus", None)  # type: ignore[arg-type]
+
+
+def test_exact_build_looks_up_engine_at_build_time(monkeypatch):
+    seen: dict = {}
+    sentinel = object()
+
+    def fake(*args, **kwargs):
+        seen.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("nlsq.streaming.exact_lm.exact_lm_fit", fake)
+    strategy = build_large_strategy("exact", None)
+    assert strategy.fit(model, X, Y, P0, chunk_size=10) is sentinel
+    assert seen == {"chunk_size": 10}
+
+
+def test_exact_build_rejects_config():
+    with pytest.raises(TypeError):
+        build_large_strategy("exact", object())
+
+
+def test_exact_build_rejects_common_kwargs():
+    with pytest.raises(TypeError):
+        build_large_strategy("exact", None, ftol=1e-3)

@@ -1,13 +1,14 @@
-"""Builder for the two large-dataset engines.
+"""Builder for the large-dataset engines.
 
 ``build_large_strategy(kind, config, **common)`` constructs the engine for a path
 the caller has already chosen (``"hybrid"``: ``AdaptiveHybridStreamingOptimizer``;
-``"chunked"``: ``LargeDatasetFitter``). It never decides routing. The returned
-``Strategy`` owns the input kwargs translation for its engine and returns the
-engine's native result unchanged (a dict for hybrid, an ``OptimizeResult`` for
-chunked); callers keep their own result unpacking.
+``"chunked"``: ``LargeDatasetFitter``; ``"exact"``: ``exact_lm_fit``). It never
+decides routing. The returned ``Strategy`` owns the input kwargs translation for
+its engine and returns the engine's native result unchanged (a dict for hybrid,
+an ``OptimizeResult`` for chunked and exact); callers keep their own result
+unpacking.
 
-The engine classes are looked up when a strategy is built, not at import time,
+The engines are looked up when a strategy is built, not at import time,
 so ``mock.patch("nlsq.streaming.<module>.<Class>")`` still takes effect and
 ``large_dataset`` can import this module without a cycle.
 """
@@ -74,23 +75,41 @@ class _ChunkedStrategy:
         return run(f, x, y, p0=p0, **common)
 
 
+class _ExactStrategy:
+    def __init__(self, config: Any, **common: Any) -> None:
+        from nlsq.streaming import exact_lm
+
+        if config is not None or common:
+            raise TypeError(
+                "exact strategy takes no config and no build kwargs; "
+                "pass fit kwargs to Strategy.fit"
+            )
+        self.engine = exact_lm.exact_lm_fit
+
+    def fit(self, f: Any, x: Any, y: Any, p0: Any, /, **common: Any) -> Any:
+        """Call ``exact_lm_fit(f, x, y, p0, **common)``."""
+        return self.engine(f, x, y, p0, **common)
+
+
 def build_large_strategy(
-    kind: Literal["hybrid", "chunked"], config: Any, **common: Any
+    kind: Literal["hybrid", "chunked", "exact"], config: Any, **common: Any
 ) -> Strategy:
     """Construct the engine for ``kind`` now and return it as a ``Strategy``.
 
     Parameters
     ----------
-    kind : {"hybrid", "chunked"}
+    kind : {"hybrid", "chunked", "exact"}
         The path the caller already chose.
     config : HybridStreamingConfig or LDMemoryConfig or None
+        Must be ``None`` for ``"exact"``.
         Engine config. Hybrid: used as is unless ``gtol`` is given, in which
         case a copy with ``gauss_newton_tol=gtol`` is used. Chunked: passed to
         ``LargeDatasetFitter(config=...)`` (``None`` lets the fitter build one).
     **common
         Hybrid: optional ``gtol``. Chunked: ``LargeDatasetFitter`` constructor
         kwargs (``memory_limit_gb``, ``logger``, ``multistart``, ...) plus
-        ``show_progress`` to make ``fit`` call ``fit_with_progress``.
+        ``show_progress`` to make ``fit`` call ``fit_with_progress``. Exact:
+        none (build-time kwargs raise ``TypeError``).
 
     Notes
     -----
@@ -100,12 +119,16 @@ def build_large_strategy(
     ``gauss_newton_tol`` is used; everything else goes to
     ``AdaptiveHybridStreamingOptimizer.fit``. Building hybrid with ``ftol`` or
     ``xtol`` raises ``TypeError``. Chunked forwards everything, tolerances
-    included.
+    included. Exact forwards ``common`` to ``exact_lm_fit`` (``sigma``,
+    ``bounds``, ``chunk_size``, tolerances, ...) and returns its
+    ``OptimizeResult``.
     """
     if kind == "hybrid":
         return _HybridStrategy(config, **common)
     if kind == "chunked":
         return _ChunkedStrategy(config, **common)
+    if kind == "exact":
+        return _ExactStrategy(config, **common)
     raise ValueError(
-        f"unknown large-strategy kind {kind!r}; expected 'hybrid' or 'chunked'"
+        f"unknown large-strategy kind {kind!r}; expected 'hybrid', 'chunked' or 'exact'"
     )
