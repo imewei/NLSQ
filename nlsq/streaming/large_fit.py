@@ -20,9 +20,25 @@ from nlsq.streaming.specs import (
     Hybrid,
     InMemory,
     LargeStrategy,
+    Multistart,
 )
 
 __all__ = ["fit_with_strategy"]
+
+
+def _multistart_kwargs(ms: Multistart) -> dict[str, Any]:
+    """The five multi-start keywords every in-memory and chunked fit receives."""
+    return {
+        "multistart": ms.enabled,
+        "n_starts": ms.n_starts,
+        "sampler": ms.sampler,
+        "center_on_p0": ms.center_on_p0,
+        "scale_factor": ms.scale_factor,
+    }
+
+
+def _is_unbounded(lb: Any, ub: Any) -> bool:
+    return bool(np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
 
 
 def fit_with_strategy(
@@ -217,9 +233,7 @@ def _fit_hybrid(
 
     # Prepare p0 and bounds
     p0, (lb, ub) = normalize_p0_bounds(f, p0, bounds)
-    bounds_tuple = (
-        (lb, ub) if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub))) else None
-    )
+    bounds_tuple = None if _is_unbounded(lb, ub) else (lb, ub)
 
     # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
     large_strategy = build_large_strategy("hybrid", config)
@@ -261,7 +275,7 @@ def _fit_in_memory(
     _lb, _ub = bounds
     _lb = np.atleast_1d(np.asarray(_lb, dtype=float))
     _ub = np.atleast_1d(np.asarray(_ub, dtype=float))
-    if not (np.all(np.isneginf(_lb)) and np.all(np.isposinf(_ub))):
+    if not _is_unbounded(_lb, _ub):
         fit_kwargs["bounds"] = bounds
     if strategy.method is not None:
         fit_kwargs["method"] = strategy.method
@@ -271,12 +285,7 @@ def _fit_in_memory(
     fit_kwargs["rescale_data"] = strategy.rescale_data
     fit_kwargs["max_jacobian_elements_for_svd"] = strategy.max_jacobian_elements_for_svd
     # Always forwarded: method="multi-start" uses these even when enabled is False
-    ms = strategy.multistart
-    fit_kwargs["multistart"] = ms.enabled
-    fit_kwargs["n_starts"] = ms.n_starts
-    fit_kwargs["sampler"] = ms.sampler
-    fit_kwargs["center_on_p0"] = ms.center_on_p0
-    fit_kwargs["scale_factor"] = ms.scale_factor
+    fit_kwargs.update(_multistart_kwargs(strategy.multistart))
 
     large_strategy = build_large_strategy("in_memory", None)
     return large_strategy.unpack(large_strategy.fit(f, xdata, ydata, p0, **fit_kwargs))
@@ -298,8 +307,6 @@ def _fit_chunked(
     show_progress: bool,
     kwargs: dict[str, Any],
 ) -> Any:
-    from dataclasses import replace
-
     from nlsq.config import (
         LargeDatasetConfig,
         MemoryConfig,
@@ -349,7 +356,7 @@ def _fit_chunked(
     # Use context managers to temporarily set configuration
     # Layer only the chunk bounds and progress flag over the user's global
     # settings; the fitter below gets its limit explicitly.
-    context_config = replace(
+    context_config = dataclasses.replace(
         get_memory_config(),
         progress_reporting=memory_config.progress_reporting,
         min_chunk_size=memory_config.min_chunk_size,
@@ -375,12 +382,7 @@ def _fit_chunked(
         fit_kwargs["check_finite"] = check_finite
 
         # Add multi-start parameters to kwargs (inert in the chunk fits; pinned)
-        ms = strategy.multistart
-        fit_kwargs["multistart"] = ms.enabled
-        fit_kwargs["n_starts"] = ms.n_starts
-        fit_kwargs["sampler"] = ms.sampler
-        fit_kwargs["center_on_p0"] = ms.center_on_p0
-        fit_kwargs["scale_factor"] = ms.scale_factor
+        fit_kwargs.update(_multistart_kwargs(strategy.multistart))
 
         # Convert p0 to appropriate type for LargeDatasetFitter
         # LargeDatasetFitter expects np.ndarray | list | None (no tuple or jnp.ndarray)
