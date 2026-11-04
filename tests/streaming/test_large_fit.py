@@ -166,3 +166,122 @@ def test_exact_forwards_explicit_numpy_scalar_tolerance_verbatim(monkeypatch):
     for kw in seen:
         assert "gtol" in kw
         assert type(kw["gtol"]) is np.float32
+
+
+def _spy_exact(monkeypatch):
+    from nlsq.streaming import exact_lm
+
+    seen = []
+    real = exact_lm.exact_lm_fit
+
+    def spy(f, x, y, p0, **kwargs):
+        seen.append(kwargs)
+        return real(f, x, y, p0, **kwargs)
+
+    monkeypatch.setattr("nlsq.streaming.exact_lm.exact_lm_fit", spy)
+    return seen
+
+
+_SOLVER_KEYS = {"ftol", "xtol", "gtol", "max_nfev", "n_points"}
+
+
+def test_default_exact_forwards_no_solver_kwargs(monkeypatch):
+    seen = _spy_exact(monkeypatch)
+    x, y = _data()
+    _call(Exact(chunk_size=500), x, y)
+    (kw,) = seen
+    assert not _SOLVER_KEYS & set(kw)
+    assert (
+        kw["chunk_size"] == 500
+    )  # engine argument, passed once, not as a solver kwarg
+
+
+def test_exact_forwards_non_default_settings_and_kwargs_override(monkeypatch):
+    seen = _spy_exact(monkeypatch)
+    x, y = _data()
+    _call(Exact(ftol=1e-6, xtol=1e-7, max_nfev=50), x, y)
+    _call(Exact(ftol=1e-6), x, y, ftol=1e-9)
+    kw, kw_override = seen
+    assert (kw["ftol"], kw["xtol"], kw["max_nfev"]) == (1e-6, 1e-7, 50)
+    assert "gtol" not in kw
+    assert kw_override["ftol"] == 1e-9
+
+
+def test_in_memory_kwargs_override_options(monkeypatch):
+    import nlsq
+
+    seen = {}
+
+    def spy(f, x, y, **kwargs):
+        seen.update(kwargs)
+        return np.ones(2), np.eye(2)
+
+    monkeypatch.setattr(nlsq, "curve_fit", spy)
+    x, y = _data()
+    _call(InMemory(options={"ftol": 1e-6, "xtol": 1e-7}), x, y, ftol=1e-9)
+    assert seen["ftol"] == 1e-9
+    assert seen["xtol"] == 1e-7
+
+
+def test_legacy_tolerances_reach_curve_fit_in_memory(monkeypatch):
+    import nlsq
+
+    seen = {}
+
+    def spy(f, x, y, **kwargs):
+        seen.update(kwargs)
+        return np.ones(2), np.eye(2)
+
+    monkeypatch.setattr(nlsq, "curve_fit", spy)
+    x, y = _data()
+    nlsq.curve_fit_large(model, x, y, p0=[1.5, 0.4], ftol=1e-9, xtol=1e-8, gtol=1e-7)
+    assert (seen["ftol"], seen["xtol"], seen["gtol"]) == (1e-9, 1e-8, 1e-7)
+
+
+def test_chunked_kwargs_override_options(monkeypatch):
+    from types import SimpleNamespace
+
+    from nlsq.streaming.large_dataset import LargeDatasetFitter
+
+    seen = {}
+
+    def stub(self, f, x, y, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(popt=np.ones(2), pcov=np.eye(2))
+
+    monkeypatch.setattr(LargeDatasetFitter, "fit", stub)
+    x, y = _data()
+    _call(Chunked(options={"ftol": 1e-6, "xtol": 1e-7}), x, y, ftol=1e-9)
+    assert seen["ftol"] == 1e-9
+    assert seen["xtol"] == 1e-7
+
+
+@pytest.mark.parametrize(
+    ("xdata_shape", "n_points", "threshold", "expected"),
+    [
+        ((49,), 49, 50, "in_memory"),
+        ((50,), 50, 50, "chunked"),
+        # 2-D xdata is (k, M): the sample count is shape[-1], not shape[0]
+        ((2, 60), 60, 60, "chunked"),
+        ((2, 60), 60, 61, "in_memory"),
+    ],
+)
+def test_auto_dispatches_on_sample_count(
+    monkeypatch, xdata_shape, n_points, threshold, expected
+):
+    from nlsq.streaming import large_fit
+    from nlsq.streaming.specs import Auto
+
+    called = []
+    monkeypatch.setattr(
+        large_fit, "_fit_in_memory", lambda *a, **k: called.append("in_memory")
+    )
+    monkeypatch.setattr(
+        large_fit, "_fit_chunked", lambda *a, **k: called.append("chunked")
+    )
+    _call(
+        Auto(size_threshold=threshold),
+        np.zeros(xdata_shape),
+        np.zeros(n_points),
+    )
+    assert called == [expected]

@@ -245,3 +245,159 @@ def test_strategy_call_matches_legacy_call():
     )
     np.testing.assert_allclose(popt_s, popt_l, rtol=1e-12)
     np.testing.assert_allclose(pcov_s, pcov_l, rtol=1e-12)
+
+
+# One distinct non-default value per legacy path option
+_NON_DEFAULT_LEGACY = {
+    "method": "trf",
+    "stability": "check",
+    "rescale_data": False,
+    "max_jacobian_elements_for_svd": 5,
+    "auto_size_detection": False,
+    "size_threshold": 5,
+    "chunk_size": 100,
+    "multistart": True,
+    "n_starts": 3,
+    "global_search": True,
+    "sampler": "sobol",
+    "center_on_p0": False,
+    "scale_factor": 2.0,
+}
+
+
+def test_non_default_table_covers_every_legacy_option():
+    assert set(_NON_DEFAULT_LEGACY) == set(nlsq._LEGACY_PATH_OPTIONS)
+    for name, value in _NON_DEFAULT_LEGACY.items():
+        assert value != nlsq._LEGACY_DEFAULTS[name]
+
+
+@pytest.mark.parametrize("name", sorted(_NON_DEFAULT_LEGACY))
+def test_every_legacy_option_is_rejected_with_explicit_strategy(name):
+    x, y = _data()
+    with pytest.raises(TypeError, match="together with strategy="):
+        curve_fit_large(
+            model, x, y, strategy=Chunked(), **{name: _NON_DEFAULT_LEGACY[name]}
+        )
+
+
+def test_explicit_strategy_accepts_signature_default_chunk_size():
+    x, y = _data()
+    popt, _ = curve_fit_large(
+        model,
+        x,
+        y,
+        p0=[1.5, 0.4],
+        strategy=Chunked(chunk_size=200),
+        chunk_size=nlsq._LEGACY_DEFAULTS["chunk_size"],
+    )
+    np.testing.assert_allclose(popt, TRUE, rtol=1e-2)
+
+
+@pytest.mark.parametrize(
+    "strategy", [Hybrid(verbose=0), Exact()], ids=["hybrid", "exact"]
+)
+def test_hybrid_and_exact_strategies_accept_default_equal_legacy_options(strategy):
+    x, y = _data()
+    popt, _ = curve_fit_large(
+        model,
+        x,
+        y,
+        p0=[1.5, 0.4],
+        strategy=strategy,
+        method=None,
+        stability=False,
+        chunk_size=None,
+        n_starts=10,
+    )
+    np.testing.assert_allclose(popt, TRUE, rtol=1e-2)
+
+
+def test_legacy_mapping_places_every_option_in_its_spec_field():
+    ms = Multistart(n_starts=3, sampler="sobol", center_on_p0=False, scale_factor=2.0)
+    got = _legacy_to_strategy(
+        method="trf",
+        stability="check",
+        rescale_data=False,
+        max_jacobian_elements_for_svd=5,
+        auto_size_detection=False,
+        size_threshold=7,
+        chunk_size=100,
+        multistart=True,
+        n_starts=3,
+        sampler="sobol",
+        center_on_p0=False,
+        scale_factor=2.0,
+        ftol=1e-9,
+    )
+    assert got.size_threshold == 7
+    assert got.auto_size_detection is False
+    assert got.in_memory.multistart == ms
+    assert got.chunked.multistart == ms
+    assert got == Auto(
+        size_threshold=7,
+        auto_size_detection=False,
+        in_memory=InMemory(
+            method="trf",
+            stability="check",
+            rescale_data=False,
+            max_jacobian_elements_for_svd=5,
+            multistart=ms,
+            options={"ftol": 1e-9},
+        ),
+        chunked=Chunked(
+            chunk_size=100, method="trf", multistart=ms, options={"ftol": 1e-9}
+        ),
+    )
+
+
+def test_global_search_forces_twenty_starts_over_user_n_starts():
+    got = _legacy_to_strategy(global_search=True, n_starts=3)
+    for spec in (got.in_memory, got.chunked):
+        assert spec.multistart.enabled is True
+        assert spec.multistart.n_starts == 20
+
+
+def test_global_search_with_exact_streaming_is_rejected():
+    with pytest.raises(ValueError, match=r"multistart=True .*exact_streaming"):
+        _legacy_to_strategy(method="exact_streaming", global_search=True)
+
+
+def test_hybrid_mapping_carries_verbose():
+    got = _legacy_to_strategy(method="hybrid_streaming", verbose=0)
+    assert got == Hybrid(config=HybridStreamingConfig(), verbose=0)
+
+
+def test_exact_mapping_carries_chunk_size_and_solver_settings():
+    got = _legacy_to_strategy(
+        method="exact_streaming",
+        chunk_size=100,
+        ftol=1e-9,
+        xtol=1e-10,
+        gtol=1e-11,
+        max_nfev=5,
+        n_points=10,
+    )
+    assert got == Exact(
+        chunk_size=100, ftol=1e-9, xtol=1e-10, gtol=1e-11, max_nfev=5, n_points=10
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("stability", "auto"),
+        ("rescale_data", False),
+        ("max_jacobian_elements_for_svd", 5),
+        ("auto_size_detection", False),
+        ("size_threshold", 7),
+    ],
+)
+def test_exact_rejects_each_unsupported_option(name, value):
+    with pytest.raises(ValueError, match=rf"{name}={value!r} is not supported"):
+        _legacy_to_strategy(method="exact_streaming", **{name: value})
+
+
+def test_hybrid_rejects_gtol_as_on_main():
+    # d2de6bc8 raised the same TypeError: gtol is not a HybridStreamingConfig field
+    with pytest.raises(TypeError, match=r"'hybrid_streaming': \['gtol'\]"):
+        _legacy_to_strategy(method="hybrid_streaming", gtol=1e-6)

@@ -80,7 +80,7 @@ def test_hybrid_rejects_unknown_fit_kwarg():
     # strict signature and fails loudly, as it does when called directly.
     cfg = HybridStreamingConfig()
     built = build_large_strategy("hybrid", cfg)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="not_a_kwarg"):
         built.fit(model, X, Y, P0, not_a_kwarg=1)
 
 
@@ -124,7 +124,7 @@ def test_chunked_forwards_common_kwargs_and_does_not_mutate_config(monkeypatch):
 @pytest.mark.parametrize("tol", ["ftol", "xtol"])
 def test_hybrid_build_rejects_ftol_xtol(tol):
     # Only gtol has a build-time mapping (gauss_newton_tol).
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match=rf"hybrid strategy got unexpected \['{tol}'\]"):
         build_large_strategy("hybrid", HybridStreamingConfig(), **{tol: 1e-6})
 
 
@@ -148,12 +148,12 @@ def test_exact_build_looks_up_engine_at_build_time(monkeypatch):
 
 
 def test_exact_build_rejects_config():
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="exact strategy takes no config"):
         build_large_strategy("exact", object())
 
 
 def test_exact_build_rejects_common_kwargs():
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="exact strategy takes no config"):
         build_large_strategy("exact", None, ftol=1e-3)
 
 
