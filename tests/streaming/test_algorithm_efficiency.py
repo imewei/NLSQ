@@ -361,16 +361,22 @@ class TestMemoryCeiling:
 
     @pytest.mark.slow
     @pytest.mark.serial  # Memory-intensive: runs without parallelism to prevent OOM
-    @pytest.mark.timeout(600)  # XLA compile time grows ~p^2: ~190s at p=2000
+    @pytest.mark.timeout(600)  # cold XLA compile ~p^2; see docstring
     def test_2000_param_problem_under_500mb(self):
-        """Test 2000-parameter problem stays < 500MB peak traced memory.
+        """Smoke test: the CG implicit matvec runs at p=2000 within 500MB.
 
-        For p=2000, O(p^2) would be ~32MB just for J^T J in float64.
-        With CG implicit matvec, we avoid this O(p^2) storage entirely.
+        Checks that ``_implicit_jtj_matvec`` returns a finite vector of shape
+        (p,) and that the Python-heap peak (``tracemalloc``) stays < 500MB.
+        This is a coarse bound, not an O(p^2) detector: a dense J^T J is only
+        ~32MB at p=2000, ``tracemalloc`` does not see XLA buffers, and JAX
+        tracing overhead alone is ~140MB at p=2000 (30MB at p=500, 61MB at
+        p=1000). The model also uses only its first 50 parameters, so the
+        remaining Jacobian columns are zero.
 
-        p=2000 rather than 5000: compiling the Jacobian of a model that takes
-        p positional scalars scales ~p^2 (13s at p=500, 45s at p=1000, 189s at
-        p=2000, ~1450s at p=5000 on CPU), so p=5000 cannot fit the timeout.
+        p=2000 rather than 5000: cold XLA compilation of the Jacobian of a
+        model taking p positional scalars scales ~p^2 (13s at p=500, 45s at
+        p=1000, 189s at p=2000, ~1450s at p=5000 on CPU), so p=5000 cannot fit
+        the timeout.
         """
         n_params = 2000
         n_points = 200
@@ -421,15 +427,21 @@ class TestMemoryCeiling:
 
             # Force computation
             _ = float(jnp.sum(result))
+
+            _current, peak = tracemalloc.get_traced_memory()
         except jax.errors.JaxRuntimeError as e:
-            tracemalloc.stop()
-            if "RESOURCE_EXHAUSTED" in str(e) or "out of memory" in str(e).lower():
+            # Only a device (non-CPU) OOM is skippable; on CPU it would hide a
+            # real host-memory regression.
+            if jax.default_backend() != "cpu" and (
+                "RESOURCE_EXHAUSTED" in str(e) or "out of memory" in str(e).lower()
+            ):
                 pytest.skip("Skipped due to GPU memory exhaustion")
             raise
+        finally:
+            tracemalloc.stop()
 
-        # Get peak memory
-        _current, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+        assert result.shape == (n_params,)
+        assert bool(jnp.all(jnp.isfinite(result))), "matvec returned non-finite values"
 
         peak_mb = peak / (1024 * 1024)
 
@@ -437,7 +449,8 @@ class TestMemoryCeiling:
         # Note: Actual peak will depend on JAX tracing overhead, but should be far below 500MB
         assert peak_mb < 500, (
             f"Peak memory {peak_mb:.1f}MB should be < 500MB for {n_params} params. "
-            f"O(p^2) would be ~200MB just for J^T J storage."
+            f"A dense J^T J would be only ~{n_params**2 * 8 / 2**20:.0f}MB, so "
+            f"this bound catches gross blow-ups, not O(p^2) storage."
         )
 
     @pytest.mark.slow
