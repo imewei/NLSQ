@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -53,7 +52,7 @@ def _freeze_options(obj: Any, reserved: frozenset[str]) -> None:
             f"{type(obj).__name__}.options must not contain {clash}: set them on "
             f"{type(obj).__name__} or pass them to curve_fit_large directly."
         )
-    object.__setattr__(obj, "options", MappingProxyType(dict(obj.options)))
+    object.__setattr__(obj, "options", dict(obj.options))
 
 
 @dataclass(frozen=True)
@@ -102,7 +101,8 @@ class InMemory:
         Extra keyword options forwarded to the fit. Keys that this class or
         the fit sets itself (its fields, ``sigma``, ``bounds``,
         ``absolute_sigma``, ``check_finite`` and the multi-start keywords)
-        raise ``TypeError``. Stored as a private read-only copy.
+        raise ``TypeError``. Stored as a private copy (so the spec stays picklable and
+        deep-copyable).
 
     Notes
     -----
@@ -137,7 +137,8 @@ class Chunked:
         Extra keyword options forwarded to the fit. Keys that this class or
         the fit sets itself (its fields, ``sigma``, ``bounds``,
         ``absolute_sigma``, ``check_finite`` and the multi-start keywords)
-        raise ``TypeError``. Stored as a private read-only copy.
+        raise ``TypeError``. Stored as a private copy (so the spec stays picklable and
+        deep-copyable).
 
     Notes
     -----

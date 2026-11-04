@@ -97,14 +97,12 @@ def test_non_colliding_option_accepted_and_forwardable():
 
 
 @pytest.mark.parametrize("cls", [InMemory, Chunked])
-def test_options_are_private_read_only_copy(cls):
+def test_options_are_private_copy(cls):
     original = {"ftol": 1e-9}
     strategy = cls(options=original)
     original["ftol"] = 1.0
     original["xtol"] = 1.0
     assert dict(strategy.options) == {"ftol": 1e-9}
-    with pytest.raises(TypeError):
-        strategy.options["gtol"] = 1.0  # type: ignore[index]
 
 
 def test_legacy_auto_has_independent_options():
@@ -114,3 +112,18 @@ def test_legacy_auto_has_independent_options():
     assert dict(auto.in_memory.options) == {"ftol": 1e-9}
     assert dict(auto.chunked.options) == {"ftol": 1e-9}
     assert auto.in_memory.options is not auto.chunked.options
+
+
+@pytest.mark.parametrize("cls", [InMemory, Chunked])
+def test_options_copied_and_spec_copyable(cls):
+    import copy
+    import dataclasses
+    import pickle
+
+    src = {"loss": "soft_l1"}
+    spec = cls(options=src)
+    src["loss"] = "linear"
+    assert spec.options["loss"] == "soft_l1"
+    assert copy.deepcopy(spec) == spec
+    assert pickle.loads(pickle.dumps(spec)) == spec
+    assert dataclasses.replace(spec).options == spec.options
