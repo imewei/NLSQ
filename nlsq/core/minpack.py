@@ -4118,11 +4118,13 @@ class CurveFit:
         ----------
         method : str | None, optional
             Optimization algorithm. Options:
+
             - 'trf' (default): Trust Region Reflective
             - 'lm': accepted for SciPy compatibility (unbounded problems only);
               currently runs the same trust-region solver as 'trf'
             - 'hybrid_streaming': Adaptive Hybrid Streaming Optimizer (for large datasets)
             - 'auto': Memory-based automatic selection (streaming/chunked/standard)
+
             If None, auto-selects 'trf'.
         """
         # Check for hybrid_streaming method early and delegate
