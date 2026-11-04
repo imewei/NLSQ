@@ -2,8 +2,9 @@
 
 ``fit_with_strategy`` holds the path bodies that ``curve_fit_large`` used to
 contain: source validation, ``Auto`` resolution, and the in-memory, chunked,
-hybrid and exact paths. Engines are imported inside the functions, so importing
-this module loads none of them.
+hybrid and exact paths. This module imports the engines inside
+the functions, not at its own top level. Importing it still runs
+``nlsq/streaming/__init__.py``, which loads them; ``import nlsq`` alone does not.
 """
 
 from __future__ import annotations

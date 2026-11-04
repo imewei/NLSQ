@@ -1,12 +1,15 @@
 # Documentation Changelog
 
 ## Unreleased
-- Large-fit strategy: new `api/nlsq.streaming.large_fit.rst` documents the six strategy
-  types (`Auto`, `InMemory`, `Chunked`, `Hybrid`, `Exact`, `Multistart`) and
-  `fit_with_strategy`, linked from `api/modules.rst`. Code changes the page describes:
+- Large-fit strategy: new `api/nlsq.streaming.large_fit.rst` documents the five strategy
+  types (`Auto`, `InMemory`, `Chunked`, `Hybrid`, `Exact`), the `Multistart` settings object
+  nested in `InMemory`/`Chunked`, and `fit_with_strategy`, linked from `api/modules.rst`. Code changes the page describes:
   - `curve_fit_large(..., strategy=...)` keyword; legacy keywords build the same strategy.
     An explicit strategy combined with a non-default legacy path option (including any
     `np.ndarray` value) raises `TypeError`.
+  - `InMemory.options` / `Chunked.options` keys that the strategy or the fit sets itself
+    (for example `stability`, `multistart`, `sigma`, `chunk_size`) now raise `TypeError`
+    instead of being silently overwritten.
   - A chunked fit that returns no `pcov` now raises `RuntimeError` instead of returning an
     identity matrix.
   - Error precedence for `method="hybrid_streaming"` changed: the unrecognized-keyword

@@ -215,7 +215,7 @@ Complete Module Listing
 - :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v0.4.2)
 - :doc:`nlsq.streaming.phases` - Phase classes (WarmupPhase, GaussNewtonPhase, etc.) (NEW in v0.4.3)
 - :doc:`nlsq.streaming.exact_lm` - ``ExactSolverError`` for ``curve_fit_large(method="exact_streaming")``
-- :doc:`nlsq.streaming.large_fit` - Strategy types (``Auto``, ``InMemory``, ``Chunked``, ``Hybrid``, ``Exact``, ``Multistart``) and ``fit_with_strategy`` behind ``curve_fit_large(strategy=...)``
+- :doc:`nlsq.streaming.large_fit` - Five strategy types (``Auto``, ``InMemory``, ``Chunked``, ``Hybrid``, ``Exact``), the ``Multistart`` settings object, and ``fit_with_strategy`` behind ``curve_fit_large(strategy=...)``
 
 **Global Optimization Modules** (NEW in v0.3.3+):
 - :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers

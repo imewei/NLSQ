@@ -1,7 +1,9 @@
 """Strategy specifications for large-dataset fitting.
 
-Frozen dataclasses describing how a large fit is run. This module imports no
-engines; it only declares configuration.
+Frozen dataclasses describing how a large fit is run. This module itself imports
+no engines; it only declares configuration. (Importing it still runs
+``nlsq/streaming/__init__.py``, which loads the engines; ``import nlsq`` alone
+loads none of them.)
 """
 
 from __future__ import annotations
@@ -90,7 +92,8 @@ class InMemory:
     stability : {"auto", "check", False}
         Numerical stability mode.
     rescale_data : bool
-        Rescale data when stability handling is active.
+        Reserved: data rescaling is currently disabled in ``curve_fit``; with
+        ``stability="auto"`` it only warns when rescaling would have applied.
     max_jacobian_elements_for_svd : int
         Largest Jacobian size for which SVD checks are run.
     multistart : Multistart

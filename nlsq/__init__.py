@@ -1001,10 +1001,13 @@ def curve_fit_large(
 
     Returns
     -------
-    popt : ndarray
-        Fitted parameters.
-    pcov : ndarray
-        Parameter covariance matrix.
+    popt, pcov : ndarray
+        The chunked, ``hybrid_streaming`` and ``exact_streaming`` paths return
+        the tuple ``(popt, pcov)``: fitted parameters and their covariance.
+    result : CurveFitResult or tuple
+        The in-memory path returns whatever ``curve_fit`` returns: a
+        ``CurveFitResult`` (which unpacks as ``popt, pcov``), or the special-output
+        tuple when options such as ``full_output=True`` are passed.
 
     Notes
     -----
