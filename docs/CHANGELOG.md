@@ -1,6 +1,26 @@
 # Documentation Changelog
 
 ## Unreleased
+- Large-fit strategy: new `api/nlsq.streaming.large_fit.rst` documents the five strategy
+  types (`Auto`, `InMemory`, `Chunked`, `Hybrid`, `Exact`), the `Multistart` settings object
+  nested in `InMemory`/`Chunked`, and `fit_with_strategy`, linked from `api/modules.rst`. Code changes the page describes:
+  - `curve_fit_large(..., strategy=...)` keyword; legacy keywords build the same strategy.
+    An explicit strategy combined with a non-default legacy path option (including any
+    `np.ndarray` value) raises `TypeError`.
+  - `InMemory.options` / `Chunked.options` keys that the strategy or the fit sets itself
+    (for example `stability`, `multistart`, `sigma`, `chunk_size`) now raise `TypeError`
+    instead of being silently overwritten.
+  - `fit_with_strategy` keywords that the strategy owns (for example `stability` with `InMemory`,
+    or `ftol` / `n_points` with `Exact`) now raise `TypeError` instead of being silently
+    overwritten or bypassing a check.
+  - A chunked fit that returns no `pcov` now raises `RuntimeError` instead of returning an
+    identity matrix.
+  - Error precedence for `method="hybrid_streaming"` changed: the unrecognized-keyword
+    `TypeError` and hybrid config-value errors are now raised before data and source
+    validation (empty data, chunk factory), not after it.
+  - `curve_fit_large` return annotation corrected.
+  - Known limitation: the chunked path ignores `stability`, `rescale_data`,
+    `max_jacobian_elements_for_svd` and multistart.
 - `/dev-suite:docs update --full` pass for the exact streaming solver and the 2026-11-01
   benchmark rerun: new `api/nlsq.streaming.exact_lm.rst` (`ExactSolverError`) linked from
   `api/modules.rst`; `exact-streaming` label on the reference section; the large-dataset

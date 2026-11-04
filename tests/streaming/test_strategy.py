@@ -80,7 +80,7 @@ def test_hybrid_rejects_unknown_fit_kwarg():
     # strict signature and fails loudly, as it does when called directly.
     cfg = HybridStreamingConfig()
     built = build_large_strategy("hybrid", cfg)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="not_a_kwarg"):
         built.fit(model, X, Y, P0, not_a_kwarg=1)
 
 
@@ -124,10 +124,145 @@ def test_chunked_forwards_common_kwargs_and_does_not_mutate_config(monkeypatch):
 @pytest.mark.parametrize("tol", ["ftol", "xtol"])
 def test_hybrid_build_rejects_ftol_xtol(tol):
     # Only gtol has a build-time mapping (gauss_newton_tol).
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match=rf"hybrid strategy got unexpected \['{tol}'\]"):
         build_large_strategy("hybrid", HybridStreamingConfig(), **{tol: 1e-6})
 
 
 def test_unknown_kind_raises_value_error():
     with pytest.raises(ValueError, match="kind"):
-        build_large_strategy("exact", None)  # type: ignore[arg-type]
+        build_large_strategy("bogus", None)  # type: ignore[arg-type]
+
+
+def test_exact_build_looks_up_engine_at_build_time(monkeypatch):
+    seen: dict = {}
+    sentinel = object()
+
+    def fake(*args, **kwargs):
+        seen.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("nlsq.streaming.exact_lm.exact_lm_fit", fake)
+    strategy = build_large_strategy("exact", None)
+    assert strategy.fit(model, X, Y, P0, chunk_size=10) is sentinel
+    assert seen == {"chunk_size": 10}
+
+
+@pytest.mark.parametrize(
+    ("kind", "target"),
+    [
+        ("exact", "nlsq.streaming.exact_lm.exact_lm_fit"),
+        ("in_memory", "nlsq.curve_fit"),
+    ],
+)
+def test_adapter_keeps_engine_resolved_at_build_time(monkeypatch, kind, target):
+    original, replacement = object(), object()
+    monkeypatch.setattr(target, lambda *a, **k: original)
+    strategy = build_large_strategy(kind, None)
+    # Re-patching after construction must not redirect the built adapter
+    monkeypatch.setattr(target, lambda *a, **k: replacement)
+    assert strategy.fit(model, X, Y, P0) is original
+
+
+def test_exact_build_rejects_config():
+    with pytest.raises(TypeError, match="exact strategy takes no config"):
+        build_large_strategy("exact", object())
+
+
+def test_exact_build_rejects_common_kwargs():
+    with pytest.raises(TypeError, match="exact strategy takes no config"):
+        build_large_strategy("exact", None, ftol=1e-3)
+
+
+class _LazySource:
+    """Array-like with shape/len/slicing whose conversion to ndarray is forbidden."""
+
+    shape = (10,)
+
+    def __len__(self):
+        return 10
+
+    def __getitem__(self, key):
+        raise AssertionError("check_exact_sources must not read the source")
+
+    def __array__(self, *args, **kwargs):
+        raise AssertionError("check_exact_sources must not convert the source")
+
+
+def test_check_exact_sources_rejects_2d_xdata():
+    from nlsq.streaming.strategy import check_exact_sources
+
+    with pytest.raises(ValueError, match="must be 1-D for method='exact_streaming'"):
+        check_exact_sources(np.zeros((4, 2)), np.zeros(4), None, None)
+
+
+def test_check_exact_sources_never_converts_lazy_source():
+    from nlsq.streaming.strategy import check_exact_sources
+
+    check_exact_sources(_LazySource(), _LazySource(), _LazySource(), None)
+
+
+def test_normalize_p0_bounds_defaults_p0_from_signature():
+    from nlsq.streaming.strategy import normalize_p0_bounds
+
+    def f(x, a, b):
+        return a * x + b
+
+    p0, (lb, ub) = normalize_p0_bounds(f, None, (-np.inf, np.inf))
+    np.testing.assert_array_equal(p0, np.ones(2))
+    assert lb.shape == ub.shape == (2,)
+
+
+def test_chunked_unpack_without_pcov_raises_runtime_error():
+    class OnlyX:
+        x = np.ones(2)
+
+    strategy = build_large_strategy("chunked", LDMemoryConfig(memory_limit_gb=1.0))
+    with pytest.raises(RuntimeError, match="Unexpected result format"):
+        strategy.unpack(OnlyX())
+
+
+def test_chunked_unpack_with_popt_but_no_pcov_raises_runtime_error():
+    class OnlyPopt:
+        popt = np.ones(2)
+
+    strategy = build_large_strategy("chunked", LDMemoryConfig(memory_limit_gb=1.0))
+    with pytest.raises(RuntimeError, match="Unexpected result format"):
+        strategy.unpack(OnlyPopt())
+
+
+def test_chunked_unpack_returns_popt_and_pcov():
+    class Res:
+        popt = np.ones(2)
+        pcov = np.eye(2)
+
+    strategy = build_large_strategy("chunked", LDMemoryConfig(memory_limit_gb=1.0))
+    res = Res()
+    popt, pcov = strategy.unpack(res)
+    assert popt is res.popt
+    assert pcov is res.pcov
+
+
+def test_hybrid_unpack_without_pcov_returns_inf_matrix():
+    strategy = build_large_strategy("hybrid", HybridStreamingConfig())
+    x, pcov = strategy.unpack({"x": np.ones(2)})
+    assert pcov.shape == (2, 2)
+    assert np.isinf(pcov).all()
+    np.testing.assert_array_equal(x, np.ones(2))
+
+
+def test_exact_unpack_raises_exact_solver_error_with_result():
+    from nlsq.streaming.exact_lm import ExactSolverError
+
+    native = {"success": False, "termination": "stalled", "message": "no progress"}
+    with pytest.raises(
+        ExactSolverError, match=r"^exact_streaming fit failed \(stalled\)"
+    ) as excinfo:
+        build_large_strategy("exact", None).unpack(native)
+    assert excinfo.value.result is native
+
+
+def test_exact_unpack_returns_x_and_pcov_on_success():
+    native = {"success": True, "x": np.ones(2), "pcov": np.eye(2)}
+    x, pcov = build_large_strategy("exact", None).unpack(native)
+    assert x is native["x"]
+    assert pcov is native["pcov"]

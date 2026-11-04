@@ -401,6 +401,9 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     ".nlsq_cache",
+    "agents",  # agent-skill config (issue tracker, triage labels), not published docs
+    "adr",  # architecture decision records, not published docs
+    "superpowers",  # agent plans/specs, not published docs
 ]
 autodoc_typehints = "description"
 

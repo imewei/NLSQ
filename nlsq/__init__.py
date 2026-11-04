@@ -26,6 +26,7 @@ Examples
 """
 
 import faulthandler
+import inspect
 import os
 import sys
 import threading
@@ -110,7 +111,7 @@ except ImportError:
 
 # Standard library imports needed at module level
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from nlsq.callbacks import (
     CallbackBase,
@@ -133,6 +134,10 @@ from nlsq.result import OptimizeResult, OptimizeWarning
 from nlsq.types import ArrayLike, BoundsTuple, MethodLiteral, ModelFunction
 
 _dbg("types imported")
+
+if TYPE_CHECKING:
+    from nlsq.result import CurveFitResult
+    from nlsq.streaming.specs import LargeStrategy
 
 # =============================================================================
 # LAZY IMPORT SYSTEM
@@ -718,16 +723,6 @@ def fit(
     )
 
 
-def _default_p0(f: ModelFunction) -> np.ndarray:
-    """Ones for every parameter after ``x`` in ``f``'s signature (curve_fit's p0=None)."""
-    from inspect import signature
-
-    args = signature(f).parameters
-    if len(args) < 2:
-        raise ValueError("Unable to determine number of fit parameters.")
-    return np.ones(len(args) - 1)
-
-
 _EXACT_DEFAULTS: dict[str, Any] = {
     "stability": False,
     "rescale_data": True,
@@ -739,34 +734,10 @@ _EXACT_SOLVER_KWARGS = frozenset({"ftol", "xtol", "gtol", "max_nfev", "n_points"
 _NOT_EXACT = "is not supported by method='exact_streaming'"
 
 
-def _curve_fit_exact_streaming(
-    f: ModelFunction,
-    xdata: Any,
-    ydata: Any,
-    p0: ArrayLike | None,
-    *,
-    sigma: Any,
-    absolute_sigma: bool,
-    check_finite: bool,
-    bounds: Any,
-    memory_limit_gb: float | None,
-    show_progress: bool,
-    chunk_size: int | None,
-    multistart: bool,
-    unsupported: dict[str, Any],
-    solver_kwargs: dict[str, Any],
-) -> tuple[np.ndarray, np.ndarray]:
-    """``curve_fit_large(method="exact_streaming")``: argument policy, then exact_lm_fit.
-
-    Validates from ``shape``/``len`` only, so array-like sources (``np.memmap``,
-    ``h5py.Dataset``, ``zarr.Array``, any object with ``shape``, ``len`` and slicing) are
-    never read whole here; objects without ``shape`` (lists, tuples) are converted.
-    A callable ``xdata`` is a chunk factory: ``ydata`` and ``sigma`` must be None and
-    ``n_points`` (accepted only then) is optional; blocks are validated as they arrive.
-    """
-    from nlsq.core.least_squares import prepare_bounds
-    from nlsq.streaming import exact_lm
-
+def _check_exact_legacy_options(
+    unsupported: dict[str, Any], multistart: bool, solver_kwargs: dict[str, Any]
+) -> None:
+    """Reject options ``method="exact_streaming"`` does not support (first failure wins)."""
     extra = sorted(set(solver_kwargs) - _EXACT_SOLVER_KWARGS)
     if extra:
         raise TypeError(
@@ -779,74 +750,114 @@ def _curve_fit_exact_streaming(
     if multistart:
         raise ValueError(f"multistart=True {_NOT_EXACT} (also set by global_search)")
 
-    factory = exact_lm.is_chunk_factory(xdata)
-    if factory:
-        if ydata is not None:
-            raise ValueError(
-                "ydata must be None when xdata is a chunk factory (callable): the "
-                "factory yields (x, y) or (x, y, sigma) blocks"
-            )
-        if sigma is not None:
-            raise ValueError(
-                "sigma must be None with a chunk factory: yield (x, y, sigma) blocks "
-                "instead"
-            )
-    elif solver_kwargs.get("n_points") is not None:
-        raise ValueError(
-            "n_points is accepted only with a chunk factory (callable xdata); array "
-            "sources take their length from their shape"
-        )
-    else:
-        solver_kwargs = {k: v for k, v in solver_kwargs.items() if k != "n_points"}
 
-    shapes = {}
-    for name, a in (("xdata", xdata), ("ydata", ydata), ("sigma", sigma)):
-        if factory or (name == "sigma" and a is None):  # factory: checked per block
-            continue
-        shape = a.shape if hasattr(a, "shape") else np.shape(a)
-        if len(shape) != 1:
-            why = (
-                "; multi-feature (2-D) xdata is not supported by exact_streaming"
-                if name == "xdata" and len(shape) > 1
-                else ""
-            )
-            raise ValueError(
-                f"{name} must be 1-D for method='exact_streaming', got shape {shape}{why}"
-            )
-        shapes[name] = shape[0]
-    if not factory:
-        n_x, n_y = shapes["xdata"], shapes["ydata"]
-        if n_x != n_y:
-            raise ValueError(
-                f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
-            )
-        if n_x < 2:
-            raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
+# The legacy path options of curve_fit_large, in signature order; a strategy owns them
+_LEGACY_PATH_OPTIONS = (
+    "method",
+    "stability",
+    "rescale_data",
+    "max_jacobian_elements_for_svd",
+    "auto_size_detection",
+    "size_threshold",
+    "chunk_size",
+    "multistart",
+    "n_starts",
+    "global_search",
+    "sampler",
+    "center_on_p0",
+    "scale_factor",
+)
 
-    p0_arr = _default_p0(f) if p0 is None else np.atleast_1d(np.asarray(p0, float))
-    # (p,) shapes and lb < ub elementwise; prepare_bounds only broadcasts scalars
-    lb, ub = exact_lm.check_bounds(prepare_bounds(bounds, len(p0_arr)), len(p0_arr))
 
-    res = exact_lm.exact_lm_fit(
-        f,
-        xdata,
-        ydata,
-        p0_arr,
-        bounds=(lb, ub),
-        chunk_size=chunk_size,
-        check_finite=check_finite,
-        sigma=sigma,
-        absolute_sigma=absolute_sigma,
-        memory_limit_gb=memory_limit_gb,
-        show_progress=show_progress,
-        **solver_kwargs,
+def _same_value(value: Any, default: Any) -> bool:
+    """``value == default`` as a plain bool; ndarray values (any size) never match."""
+    if isinstance(value, np.ndarray):
+        return False
+    try:
+        return bool(value == default)
+    except (TypeError, ValueError):
+        return False
+
+
+def _legacy_to_strategy(**legacy: Any) -> "LargeStrategy":
+    """Translate curve_fit_large's legacy options (and extra kwargs) into a strategy.
+
+    Omitted legacy path options take their ``curve_fit_large`` defaults; any
+    other keyword is an engine option (``**kwargs`` of ``curve_fit_large``).
+    """
+    from nlsq.streaming.specs import (
+        Auto,
+        Chunked,
+        Exact,
+        FitMethod,
+        Hybrid,
+        InMemory,
+        Multistart,
     )
-    if not res["success"]:
-        raise exact_lm.ExactSolverError(
-            f"exact_streaming fit failed ({res['termination']}): {res['message']}",
-            res,
+
+    kwargs = dict(legacy)
+    opts = {
+        name: kwargs.pop(name, _LEGACY_DEFAULTS[name]) for name in _LEGACY_PATH_OPTIONS
+    }
+    method = opts["method"]
+    multistart = opts["multistart"]
+    n_starts = opts["n_starts"]
+    if opts["global_search"]:
+        multistart = True
+        n_starts = 20
+
+    if method == "exact_streaming":
+        _check_exact_legacy_options(
+            {name: opts[name] for name in _EXACT_DEFAULTS}, multistart, kwargs
         )
-    return res["x"], res["pcov"]
+        # kwargs now holds only Exact fields (ftol, xtol, gtol, max_nfev, n_points)
+        return Exact(chunk_size=opts["chunk_size"], **kwargs)
+
+    if method == "hybrid_streaming":
+        from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+        verbose = kwargs.pop("verbose", 1)
+        overrides = {
+            key: kwargs.pop(key)
+            for key in list(kwargs)
+            if hasattr(HybridStreamingConfig, key)
+        }
+        if kwargs:
+            raise TypeError(
+                "Unrecognized keyword argument(s) for method="
+                f"'hybrid_streaming': {sorted(kwargs)}. These are not "
+                "HybridStreamingConfig fields.",
+            )
+        return Hybrid(config=HybridStreamingConfig(**overrides), verbose=verbose)
+
+    # Always built, even when disabled: method="multi-start" uses the sampling values
+    ms = Multistart(
+        n_starts=n_starts,
+        sampler=opts["sampler"],
+        center_on_p0=opts["center_on_p0"],
+        scale_factor=opts["scale_factor"],
+        enabled=multistart,
+    )
+    fit_method = cast("FitMethod | None", method)
+    return Auto(
+        size_threshold=opts["size_threshold"],
+        auto_size_detection=opts["auto_size_detection"],
+        in_memory=InMemory(
+            method=fit_method,
+            stability=opts["stability"],
+            rescale_data=opts["rescale_data"],
+            max_jacobian_elements_for_svd=opts["max_jacobian_elements_for_svd"],
+            multistart=ms,
+            options=kwargs,
+        ),
+        # Chunked has no stability fields: the chunk fits ignore them (documented)
+        chunked=Chunked(
+            chunk_size=opts["chunk_size"],
+            method=fit_method,
+            multistart=ms,
+            options=kwargs,
+        ),
+    )
 
 
 # Convenience function for large dataset curve fitting
@@ -877,8 +888,9 @@ def curve_fit_large(
     sampler: Literal["lhs", "sobol", "halton"] = "lhs",
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
+    strategy: "LargeStrategy | None" = None,
     **kwargs: Any,
-) -> tuple[np.ndarray, np.ndarray] | OptimizeResult:
+) -> "CurveFitResult | tuple[Any, ...]":
     """Curve fitting with automatic memory management for large datasets.
 
     Automatically selects processing strategy based on dataset size:
@@ -973,6 +985,15 @@ def curve_fit_large(
         Center multi-start samples around p0. Default: True.
     scale_factor : float, optional
         Scale factor for exploration region. Default: 1.0.
+    strategy : Auto, InMemory, Chunked, Hybrid or Exact, optional
+        An explicit fitting strategy from ``nlsq.streaming``. Default ``None``
+        builds one from the options above, as before. When given, the
+        strategy owns every path option: ``method``, ``stability``,
+        ``rescale_data``, ``max_jacobian_elements_for_svd``,
+        ``auto_size_detection``, ``size_threshold``, ``chunk_size``,
+        ``multistart``, ``n_starts``, ``global_search``, ``sampler``,
+        ``center_on_p0`` and ``scale_factor`` must stay at their defaults and
+        no extra keyword arguments may be passed (``TypeError`` otherwise).
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss). With
         ``method="exact_streaming"`` only ftol, xtol, gtol, max_nfev and n_points are
@@ -980,14 +1001,36 @@ def curve_fit_large(
 
     Returns
     -------
-    popt : ndarray
-        Fitted parameters.
-    pcov : ndarray
-        Parameter covariance matrix.
+    popt, pcov : ndarray
+        The chunked, ``hybrid_streaming`` and ``exact_streaming`` paths return
+        the tuple ``(popt, pcov)``: fitted parameters and their covariance.
+    result : CurveFitResult or tuple
+        The in-memory path returns whatever ``curve_fit`` returns: a
+        ``CurveFitResult`` (which unpacks as ``popt, pcov``), or the special-output
+        tuple when options such as ``full_output=True`` are passed.
 
     Notes
     -----
     All large datasets use streaming optimization for 100% data utilization.
+
+    **Options ignored by chunked processing**
+
+    The chunked path (at or above ``size_threshold``, or whenever
+    ``auto_size_detection=False``) does not forward ``stability``,
+    ``rescale_data`` or ``max_jacobian_elements_for_svd`` to the per-chunk fits,
+    and the multi-start options (``multistart``, ``n_starts``, ``global_search``,
+    ``sampler``, ``center_on_p0``, ``scale_factor``) have no effect on them. These
+    options only take effect on the in-memory path (fewer than ``size_threshold``
+    points).
+
+    **Explicit strategies**
+
+    Without ``strategy``, the options are translated into
+    ``Auto(size_threshold, auto_size_detection, in_memory=InMemory(...),
+    chunked=Chunked(...))``, ``Hybrid(config, verbose)`` for
+    ``method="hybrid_streaming"`` or ``Exact(...)`` for
+    ``method="exact_streaming"``. Passing the strategy directly gives the same
+    fit with the settings in one object.
 
     **Important: Model Function Requirements for Chunking**
 
@@ -1029,6 +1072,12 @@ def curve_fit_large(
     ...                             p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]),
     ...                             multistart=True, n_starts=10)
 
+    With an explicit strategy (always chunked, 500 points per chunk):
+
+    >>> from nlsq.streaming import Chunked
+    >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata, p0=[1, 2, 3],
+    ...                             strategy=Chunked(chunk_size=500))
+
     Using external logger for diagnostics:
 
     >>> import logging
@@ -1037,11 +1086,6 @@ def curve_fit_large(
     >>> result = fitter.fit(model_func, xdata, ydata, p0=[1, 2])
     >>> # Chunk failures now appear in myapp's logs
     """
-    # Handle global_search shorthand
-    if global_search:
-        multistart = True
-        n_starts = 20
-
     # Reject removed sampling parameters
     removed_params = {"enable_sampling", "sampling_threshold", "max_sampled_size"}
     for param in removed_params:
@@ -1051,270 +1095,60 @@ def curve_fit_large(
                 "This parameter was removed in v0.2.0. Use streaming instead.",
             )
 
-    # Hoisted above np.asarray: a lazy source must not be read whole
-    if method == "exact_streaming":
-        return _curve_fit_exact_streaming(
-            f,
-            xdata,
-            ydata,
-            p0,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            check_finite=check_finite,
-            bounds=bounds,
-            memory_limit_gb=memory_limit_gb,
-            show_progress=show_progress,
-            chunk_size=chunk_size,
-            multistart=multistart,
-            unsupported={
-                "stability": stability,
-                "rescale_data": rescale_data,
-                "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
-                "auto_size_detection": auto_size_detection,
-                "size_threshold": size_threshold,
-            },
-            solver_kwargs=kwargs,
-        )
-
-    from nlsq.streaming.exact_lm import is_chunk_factory
-
-    if is_chunk_factory(xdata) or ydata is None:
-        raise ValueError(
-            "a chunk factory (callable xdata, ydata=None) requires "
-            "method='exact_streaming'; pass xdata and ydata arrays otherwise"
-        )
-
-    # Input validation
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
-
-    # Check for edge cases (scipy convention: 2-D xdata is (k, M), points on last axis)
-    n_x = xdata.shape[-1] if xdata.ndim > 1 else len(xdata)
-    if n_x == 0:
-        raise ValueError("`xdata` cannot be empty.")
-    if len(ydata) == 0:
-        raise ValueError("`ydata` cannot be empty.")
-    if n_x != len(ydata):
-        raise ValueError(
-            f"`xdata` and `ydata` must have the same length: {n_x} vs {len(ydata)}.",
-        )
-    if n_x < 2:
-        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
-
-    n_points = n_x
-
-    # Handle hybrid_streaming method specially
-    if method == "hybrid_streaming":
-        from nlsq.streaming.hybrid_config import HybridStreamingConfig
-        from nlsq.streaming.strategy import build_large_strategy
-
-        # Extract verbosity from kwargs
-        verbose = kwargs.pop("verbose", 1)
-
-        # Create configuration (allow kwargs to override defaults)
-        config_overrides = {}
-        for key in list(kwargs.keys()):
-            if hasattr(HybridStreamingConfig, key):
-                config_overrides[key] = kwargs.pop(key)
-
+    legacy = {
+        "method": method,
+        "stability": stability,
+        "rescale_data": rescale_data,
+        "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
+        "auto_size_detection": auto_size_detection,
+        "size_threshold": size_threshold,
+        "chunk_size": chunk_size,
+        "multistart": multistart,
+        "n_starts": n_starts,
+        "global_search": global_search,
+        "sampler": sampler,
+        "center_on_p0": center_on_p0,
+        "scale_factor": scale_factor,
+    }
+    if strategy is None:
+        strategy = _legacy_to_strategy(**legacy, **kwargs)
+    else:
+        # The strategy owns every path option; detection is by default value.
+        for name, value in legacy.items():
+            if not _same_value(value, _LEGACY_DEFAULTS[name]):
+                raise TypeError(
+                    f"curve_fit_large() got {name}={value!r} together with "
+                    "strategy=; set it on the strategy instead",
+                )
         if kwargs:
             raise TypeError(
-                "Unrecognized keyword argument(s) for method="
-                f"'hybrid_streaming': {sorted(kwargs)}. These are not "
-                "HybridStreamingConfig fields.",
+                f"curve_fit_large() got keyword argument(s) {sorted(kwargs)} "
+                "together with strategy=; set them on the strategy instead",
             )
 
-        config = (
-            HybridStreamingConfig(**config_overrides)
-            if config_overrides
-            else HybridStreamingConfig()
-        )
+    from nlsq.streaming.large_fit import fit_with_strategy
 
-        # Prepare p0 and bounds
-        if p0 is None:
-            p0 = _default_p0(f)
-
-        p0 = np.atleast_1d(p0)
-        from nlsq.core.least_squares import prepare_bounds
-
-        lb, ub = prepare_bounds(bounds, len(p0))
-        bounds_tuple = (
-            (lb, ub)
-            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
-            else None
-        )
-
-        # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
-        large_strategy = build_large_strategy("hybrid", config)
-
-        # Run optimization
-        result_dict = large_strategy.fit(
-            f,
-            xdata,
-            ydata,
-            p0,
-            bounds=bounds_tuple,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            callback=kwargs.get("callback"),
-            verbose=verbose,
-        )
-
-        # Convert to tuple format for backward compatibility
-        popt = result_dict["x"]
-        pcov = result_dict.get("pcov", np.full((len(p0), len(p0)), np.inf))
-
-        return popt, pcov
-
-    # Auto-detect if we should use large dataset processing
-    if auto_size_detection and n_points < size_threshold:
-        # Use regular curve_fit for small datasets
-        # Rebuild kwargs for curve_fit
-        fit_kwargs = kwargs.copy()
-        if p0 is not None:
-            fit_kwargs["p0"] = p0
-        if sigma is not None:
-            fit_kwargs["sigma"] = sigma
-        _lb, _ub = bounds
-        _lb = np.atleast_1d(np.asarray(_lb, dtype=float))
-        _ub = np.atleast_1d(np.asarray(_ub, dtype=float))
-        if not (np.all(np.isneginf(_lb)) and np.all(np.isposinf(_ub))):
-            fit_kwargs["bounds"] = bounds
-        if method is not None:
-            fit_kwargs["method"] = method
-        fit_kwargs["absolute_sigma"] = absolute_sigma
-        fit_kwargs["check_finite"] = check_finite
-        fit_kwargs["stability"] = stability
-        fit_kwargs["rescale_data"] = rescale_data
-        fit_kwargs["max_jacobian_elements_for_svd"] = max_jacobian_elements_for_svd
-        # Add multi-start parameters
-        fit_kwargs["multistart"] = multistart
-        fit_kwargs["n_starts"] = n_starts
-        fit_kwargs["sampler"] = sampler
-        fit_kwargs["center_on_p0"] = center_on_p0
-        fit_kwargs["scale_factor"] = scale_factor
-
-        return curve_fit(f, xdata, ydata, **fit_kwargs)
-
-    # Use large dataset processing
-    # Import lazy modules needed for large dataset processing
-    from dataclasses import replace
-
-    from nlsq.config import (
-        LargeDatasetConfig,
-        MemoryConfig,
-        get_memory_config,
-        large_dataset_context,
-        memory_context,
-    )
-    from nlsq.streaming.large_dataset import LDMemoryConfig
-    from nlsq.streaming.strategy import build_large_strategy
-
-    # Configure memory settings if provided
-    if memory_limit_gb is None:
-        # Auto-detect available memory
-        try:
-            import psutil
-
-            available_gb = psutil.virtual_memory().available / (1024**3)
-            memory_limit_gb = min(8.0, available_gb * 0.7)  # Use 70% of available
-        except ImportError:
-            memory_limit_gb = 8.0  # Conservative default
-
-    # Create memory configuration
-    if chunk_size is not None and chunk_size <= 0:
-        raise ValueError(f"chunk_size must be positive, got {chunk_size}")
-    # Default ceiling: a tenth of the data, but never below the 1000-point floor
-    # (or the whole input if smaller), so tiny inputs fit as one chunk, not many.
-    max_chunk_size = (
-        min(1_000_000, max(n_points // 10, min(1000, n_points)))
-        if chunk_size is None
-        else chunk_size
-    )
-    memory_config = MemoryConfig(
-        progress_reporting=show_progress,
-        # The floor must not exceed the ceiling (small n_points or chunk_size)
-        min_chunk_size=min(max(1000, n_points // 10000), max_chunk_size),
-        max_chunk_size=max_chunk_size,
+    return fit_with_strategy(
+        strategy,
+        f,
+        xdata,
+        ydata,
+        p0,
+        sigma=sigma,
+        absolute_sigma=absolute_sigma,
+        bounds=bounds,
+        check_finite=check_finite,
+        memory_limit_gb=memory_limit_gb,
+        show_progress=show_progress,
     )
 
-    # Create large dataset configuration (v0.2.0: no more sampling params)
-    large_dataset_config = LargeDatasetConfig(
-        enable_automatic_solver_selection=True,
-    )
 
-    # Use context managers to temporarily set configuration
-    # Layer only the chunk bounds and progress flag over the user's global
-    # settings; the fitter below gets its limit explicitly.
-    context_config = replace(
-        get_memory_config(),
-        progress_reporting=memory_config.progress_reporting,
-        min_chunk_size=memory_config.min_chunk_size,
-        max_chunk_size=memory_config.max_chunk_size,
-    )
-    with memory_context(context_config), large_dataset_context(large_dataset_config):
-        # Build the chunked engine (LargeDatasetFitter) inside the contexts
-        large_strategy = build_large_strategy(
-            "chunked",
-            LDMemoryConfig(
-                memory_limit_gb=memory_limit_gb,
-                min_chunk_size=memory_config.min_chunk_size,
-                max_chunk_size=memory_config.max_chunk_size,
-            ),
-            show_progress=show_progress,
-            memory_limit_gb=memory_limit_gb,
-        )
-
-        # Handle sigma parameter by including it in kwargs if provided
-        if sigma is not None:
-            kwargs["sigma"] = sigma
-        kwargs["absolute_sigma"] = absolute_sigma
-        kwargs["check_finite"] = check_finite
-
-        # Add multi-start parameters to kwargs
-        kwargs["multistart"] = multistart
-        kwargs["n_starts"] = n_starts
-        kwargs["sampler"] = sampler
-        kwargs["center_on_p0"] = center_on_p0
-        kwargs["scale_factor"] = scale_factor
-
-        # Convert p0 to appropriate type for LargeDatasetFitter
-        # LargeDatasetFitter expects np.ndarray | list | None (no tuple or jnp.ndarray)
-        converted_p0: np.ndarray | list | None
-        if p0 is None:
-            converted_p0 = None
-        elif isinstance(p0, list):
-            converted_p0 = p0
-        else:
-            # Convert tuple, jnp.ndarray, or np.ndarray to np.ndarray
-            converted_p0 = np.asarray(p0)
-
-        # Provide default method if None
-        final_method = method if method is not None else "trf"
-
-        # Perform the fit (fit_with_progress when show_progress)
-        result = large_strategy.fit(
-            f,
-            xdata,
-            ydata,
-            converted_p0,
-            bounds=bounds,
-            method=final_method,
-            **kwargs,
-        )
-
-        # Extract popt and pcov from result
-        if hasattr(result, "popt") and hasattr(result, "pcov"):
-            return result.popt, result.pcov
-        if hasattr(result, "x"):
-            # Fallback: construct basic covariance matrix
-            popt = result.x
-            # Create identity covariance matrix if not available
-            pcov = np.eye(len(popt))
-            return popt, pcov
-        raise RuntimeError(
-            f"Unexpected result format from large dataset fitter: {result}",
-        )
+# Read from the signature so the defaults are written down once
+_LEGACY_DEFAULTS: dict[str, Any] = {
+    name: param.default
+    for name, param in inspect.signature(curve_fit_large).parameters.items()
+    if name in _LEGACY_PATH_OPTIONS
+}
 
 
 # Optional: Provide convenience access to submodules for advanced users

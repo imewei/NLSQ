@@ -1,6 +1,7 @@
 """curve_fit_large(method="exact_streaming") dispatch, argument policy and the fit() gate."""
 
 import pickle
+import re
 
 import jax.numpy as jnp
 import numpy as np
@@ -133,10 +134,61 @@ def test_solver_kwargs_are_forwarded(data, spy):
     assert (kw["ftol"], kw["xtol"], kw["gtol"]) == (1e-10, 1e-11, 1e-12)
 
 
+# Word-for-word the messages of main's _curve_fit_exact_streaming
+_UNKNOWN_MSG = (
+    "Unrecognized keyword argument(s) for method='exact_streaming': {extra}. "
+    "Accepted: ['ftol', 'gtol', 'max_nfev', 'n_points', 'xtol']."
+)
+_NOT_SUPPORTED_MSG = (
+    "{name}={value!r} is not supported by method='exact_streaming'; "
+    "leave it at its default"
+)
+_MULTISTART_MSG = (
+    "multistart=True is not supported by method='exact_streaming' "
+    "(also set by global_search)"
+)
+
+
+def _full(msg):
+    return rf"^{re.escape(msg)}$"
+
+
 @pytest.mark.parametrize("bad", ["foo", "verbose", "loss", "callback"])
 def test_unknown_kwarg_typeerror(data, spy, bad):
-    with pytest.raises(TypeError, match=rf"exact_streaming.*\['{bad}'\]"):
+    with pytest.raises(TypeError, match=_full(_UNKNOWN_MSG.format(extra=[bad]))):
         curve_fit_large(exp_model, *data, p0=EXP.p0, method=M, **{bad: 1})
+    assert not spy
+
+
+def test_two_unknown_kwargs_are_listed_sorted(data, spy):
+    with pytest.raises(
+        TypeError, match=_full(_UNKNOWN_MSG.format(extra=["alpha", "zeta"]))
+    ):
+        curve_fit_large(exp_model, *data, p0=EXP.p0, method=M, zeta=1, alpha=2)
+    assert not spy
+
+
+def test_exact_option_errors_report_in_fixed_order(data, spy):
+    # unknown kwarg (TypeError) -> unsupported default (ValueError) -> multistart
+    everything = {"bogus": 1, "stability": "auto", "rescale_data": False}
+    with pytest.raises(TypeError, match=_full(_UNKNOWN_MSG.format(extra=["bogus"]))):
+        curve_fit_large(
+            exp_model, *data, p0=EXP.p0, method=M, multistart=True, **everything
+        )
+    del everything["bogus"]
+    msg = _NOT_SUPPORTED_MSG.format(name="stability", value="auto")
+    with pytest.raises(ValueError, match=_full(msg)):
+        curve_fit_large(
+            exp_model, *data, p0=EXP.p0, method=M, multistart=True, **everything
+        )
+    del everything["stability"]
+    msg = _NOT_SUPPORTED_MSG.format(name="rescale_data", value=False)
+    with pytest.raises(ValueError, match=_full(msg)):
+        curve_fit_large(
+            exp_model, *data, p0=EXP.p0, method=M, multistart=True, **everything
+        )
+    with pytest.raises(ValueError, match=_full(_MULTISTART_MSG)):
+        curve_fit_large(exp_model, *data, p0=EXP.p0, method=M, multistart=True)
     assert not spy
 
 
@@ -165,7 +217,8 @@ class Lazy1D:
 
 @pytest.mark.parametrize(("name", "value"), NON_DEFAULT)
 def test_unsupported_arguments_valueerror(data, spy, name, value):
-    with pytest.raises(ValueError, match=rf"^{name}={value!r} is not supported by "):
+    msg = _NOT_SUPPORTED_MSG.format(name=name, value=value)
+    with pytest.raises(ValueError, match=_full(msg)):
         curve_fit_large(exp_model, *data, p0=EXP.p0, method=M, **{name: value})
     assert not spy
 
@@ -173,8 +226,8 @@ def test_unsupported_arguments_valueerror(data, spy, name, value):
 @pytest.mark.parametrize(
     ("kwargs", "pattern"),
     [
-        ({"multistart": True}, r"^multistart=True is not supported by "),
-        ({"global_search": True}, r"^multistart=True is not supported by "),
+        ({"multistart": True}, _full(_MULTISTART_MSG)),
+        ({"global_search": True}, _full(_MULTISTART_MSG)),
         ({"sigma": Lazy1D((N, N))}, r"^sigma must be 1-D for method='exact_streaming'"),
         ({"bounds": (1.0, 0.0)}, r"^each lower bound must be strictly less"),
         ({"bounds": (0.0, 0.0)}, r"^each lower bound must be strictly less"),
@@ -265,6 +318,11 @@ def test_p0_none_infers_parameter_count(data, spy):
         ValueError, match="Unable to determine number of fit parameters"
     ):
         curve_fit_large(lambda x: x, *data, method=M)
+
+
+def test_exact_complex_list_p0_raises_type_error(data):
+    with pytest.raises(TypeError):
+        curve_fit_large(exp_model, *data, p0=[1 + 1j, 1.0, 1.0], method=M)
 
 
 def test_hybrid_streaming_default_p0(data, monkeypatch):

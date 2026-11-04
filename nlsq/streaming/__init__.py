@@ -18,6 +18,15 @@ from nlsq.streaming.large_dataset import (
     estimate_memory_requirements,
     fit_large_dataset,
 )
+from nlsq.streaming.specs import (
+    Auto,
+    Chunked,
+    Exact,
+    Hybrid,
+    InMemory,
+    LargeStrategy,
+    Multistart,
+)
 from nlsq.streaming.telemetry import (
     DefenseLayerTelemetry,
     get_defense_telemetry,
@@ -26,11 +35,18 @@ from nlsq.streaming.telemetry import (
 
 __all__ = [
     "AdaptiveHybridStreamingOptimizer",
+    "Auto",
+    "Chunked",
     "DefenseLayerTelemetry",
+    "Exact",
     "ExactSolverError",
+    "Hybrid",
     "HybridStreamingConfig",
+    "InMemory",
     "LDMemoryConfig",
     "LargeDatasetFitter",
+    "LargeStrategy",
+    "Multistart",
     "estimate_memory_requirements",
     "fit_large_dataset",
     "get_defense_telemetry",
