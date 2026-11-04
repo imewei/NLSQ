@@ -65,3 +65,52 @@ def test_streaming_exports():
     from nlsq.streaming import Auto, Chunked, Exact, Hybrid, InMemory, Multistart
 
     assert all((Auto, Chunked, Exact, Hybrid, InMemory, Multistart))
+
+
+@pytest.mark.parametrize("cls", [InMemory, Chunked])
+@pytest.mark.parametrize("key", ["multistart", "sigma", "method", "bounds", "n_starts"])
+def test_options_colliding_with_strategy_keys_raise(cls, key):
+    with pytest.raises(TypeError, match=key):
+        cls(options={key: 1})
+
+
+@pytest.mark.parametrize(
+    ("cls", "key"),
+    [
+        (InMemory, "stability"),
+        (InMemory, "rescale_data"),
+        (InMemory, "max_jacobian_elements_for_svd"),
+        (Chunked, "chunk_size"),
+    ],
+)
+def test_options_colliding_with_class_specific_keys_raise(cls, key):
+    with pytest.raises(TypeError, match=key):
+        cls(options={key: 1})
+
+
+def test_non_colliding_option_accepted_and_forwardable():
+    strategy = InMemory(options={"ftol": 1e-9})
+    assert dict(strategy.options) == {"ftol": 1e-9}
+    assert {**strategy.options, "xtol": 1e-6} == {"ftol": 1e-9, "xtol": 1e-6}
+    assert dataclasses.replace(strategy, method="trf").options == {"ftol": 1e-9}
+    assert Chunked(options={"ftol": 1e-9}).options["ftol"] == 1e-9
+
+
+@pytest.mark.parametrize("cls", [InMemory, Chunked])
+def test_options_are_private_read_only_copy(cls):
+    original = {"ftol": 1e-9}
+    strategy = cls(options=original)
+    original["ftol"] = 1.0
+    original["xtol"] = 1.0
+    assert dict(strategy.options) == {"ftol": 1e-9}
+    with pytest.raises(TypeError):
+        strategy.options["gtol"] = 1.0  # type: ignore[index]
+
+
+def test_legacy_auto_has_independent_options():
+    from nlsq import _legacy_to_strategy
+
+    auto = _legacy_to_strategy(ftol=1e-9)
+    assert dict(auto.in_memory.options) == {"ftol": 1e-9}
+    assert dict(auto.chunked.options) == {"ftol": 1e-9}
+    assert auto.in_memory.options is not auto.chunked.options

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -16,6 +17,41 @@ if TYPE_CHECKING:
 # nlsq.types.MethodLiteral omits "lm"; "hybrid_streaming" and "exact_streaming"
 # are selected by strategy type and never reach these specs.
 FitMethod = Literal["trf", "lm", "auto", "cmaes", "multi-start"]
+
+# Keys that nlsq.streaming.large_fit assigns after merging ``options`` with the call
+# kwargs (and the multistart/method/bounds keywords it passes explicitly); a colliding
+# key in ``options`` would be silently overwritten, so it is rejected up front.
+_COMMON_RESERVED = frozenset(
+    {
+        "sigma",
+        "bounds",
+        "absolute_sigma",
+        "check_finite",
+        "multistart",
+        "n_starts",
+        "sampler",
+        "center_on_p0",
+        "scale_factor",
+        "method",
+    }
+)
+_IN_MEMORY_RESERVED = _COMMON_RESERVED | {
+    "stability",
+    "rescale_data",
+    "max_jacobian_elements_for_svd",
+}
+_CHUNKED_RESERVED = _COMMON_RESERVED | {"chunk_size"}
+
+
+def _freeze_options(obj: Any, reserved: frozenset[str]) -> None:
+    """Reject keys of ``obj.options`` that the strategy owns; store a private copy."""
+    clash = sorted(set(obj.options) & reserved)
+    if clash:
+        raise TypeError(
+            f"{type(obj).__name__}.options must not contain {clash}: set them on "
+            f"{type(obj).__name__} or pass them to curve_fit_large directly."
+        )
+    object.__setattr__(obj, "options", MappingProxyType(dict(obj.options)))
 
 
 @dataclass(frozen=True)
@@ -60,7 +96,15 @@ class InMemory:
     multistart : Multistart
         Multi-start settings (disabled by default).
     options : Mapping
-        Extra keyword options forwarded to the fit.
+        Extra keyword options forwarded to the fit. Keys that this class or
+        the fit sets itself (its fields, ``sigma``, ``bounds``,
+        ``absolute_sigma``, ``check_finite`` and the multi-start keywords)
+        raise ``TypeError``. Stored as a private read-only copy.
+
+    Notes
+    -----
+    Instances are immutable but, because ``options`` is a mapping, not
+    hashable.
     """
 
     method: FitMethod | None = None
@@ -69,6 +113,9 @@ class InMemory:
     max_jacobian_elements_for_svd: int = 10_000_000
     multistart: Multistart = field(default_factory=lambda: Multistart(enabled=False))
     options: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _freeze_options(self, _IN_MEMORY_RESERVED)
 
 
 @dataclass(frozen=True)
@@ -84,13 +131,24 @@ class Chunked:
     multistart : Multistart
         Multi-start settings (disabled by default).
     options : Mapping
-        Extra keyword options forwarded to the fit.
+        Extra keyword options forwarded to the fit. Keys that this class or
+        the fit sets itself (its fields, ``sigma``, ``bounds``,
+        ``absolute_sigma``, ``check_finite`` and the multi-start keywords)
+        raise ``TypeError``. Stored as a private read-only copy.
+
+    Notes
+    -----
+    Instances are immutable but, because ``options`` is a mapping, not
+    hashable.
     """
 
     chunk_size: int | None = None
     method: FitMethod | None = None
     multistart: Multistart = field(default_factory=lambda: Multistart(enabled=False))
     options: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _freeze_options(self, _CHUNKED_RESERVED)
 
 
 @dataclass(frozen=True)
