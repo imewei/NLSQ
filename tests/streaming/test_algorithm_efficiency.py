@@ -361,14 +361,18 @@ class TestMemoryCeiling:
 
     @pytest.mark.slow
     @pytest.mark.serial  # Memory-intensive: runs without parallelism to prevent OOM
-    @pytest.mark.timeout(600)  # JIT compilation for 5000-param model needs >120s
-    def test_5000_param_problem_under_500mb(self):
-        """Test 5000-parameter problem stays < 500MB peak RSS.
+    @pytest.mark.timeout(600)  # XLA compile time grows ~p^2: ~190s at p=2000
+    def test_2000_param_problem_under_500mb(self):
+        """Test 2000-parameter problem stays < 500MB peak traced memory.
 
-        For p=5000, O(p^2) would be ~200MB just for J^T J in float64.
+        For p=2000, O(p^2) would be ~32MB just for J^T J in float64.
         With CG implicit matvec, we avoid this O(p^2) storage entirely.
+
+        p=2000 rather than 5000: compiling the Jacobian of a model that takes
+        p positional scalars scales ~p^2 (13s at p=500, 45s at p=1000, 189s at
+        p=2000, ~1450s at p=5000 on CPU), so p=5000 cannot fit the timeout.
         """
-        n_params = 5000
+        n_params = 2000
         n_points = 200
 
         # Create high-order polynomial model
