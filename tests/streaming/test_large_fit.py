@@ -196,15 +196,61 @@ def test_default_exact_forwards_no_solver_kwargs(monkeypatch):
     )  # engine argument, passed once, not as a solver kwarg
 
 
-def test_exact_forwards_non_default_settings_and_kwargs_override(monkeypatch):
+def test_exact_forwards_non_default_settings(monkeypatch):
     seen = _spy_exact(monkeypatch)
     x, y = _data()
     _call(Exact(ftol=1e-6, xtol=1e-7, max_nfev=50), x, y)
-    _call(Exact(ftol=1e-6), x, y, ftol=1e-9)
-    kw, kw_override = seen
+    (kw,) = seen
     assert (kw["ftol"], kw["xtol"], kw["max_nfev"]) == (1e-6, 1e-7, 50)
     assert "gtol" not in kw
-    assert kw_override["ftol"] == 1e-9
+
+
+@pytest.mark.parametrize(
+    ("strategy", "key", "value"),
+    [
+        (InMemory(), "stability", "bogus"),
+        (InMemory(), "method", "lm"),
+        (Chunked(chunk_size=500), "method", "lm"),
+        (Chunked(chunk_size=500), "multistart", True),
+        (Exact(ftol=1e-6), "ftol", 1e-9),
+        (Exact(), "n_points", 7),
+    ],
+    ids=[
+        "in_memory-stability",
+        "in_memory-method",
+        "chunked-method",
+        "chunked-multistart",
+        "exact-ftol",
+        "exact-n_points",
+    ],
+)
+def test_keyword_owned_by_strategy_raises_type_error(strategy, key, value):
+    x, y = _data()
+    with pytest.raises(TypeError, match=rf"\['{key}'\] are owned by"):
+        _call(strategy, x, y, **{key: value})
+
+
+def test_auto_resolved_strategy_rejects_owned_keyword():
+    from nlsq.streaming.specs import Auto
+
+    x, y = _data()
+    with pytest.raises(TypeError, match=r"\['stability'\] are owned by InMemory"):
+        _call(Auto(), x, y, stability="bogus")
+
+
+def test_non_owned_keyword_is_forwarded_for_in_memory(monkeypatch):
+    import nlsq
+
+    seen = {}
+
+    def spy(f, x, y, **kwargs):
+        seen.update(kwargs)
+        return np.ones(2), np.eye(2)
+
+    monkeypatch.setattr(nlsq, "curve_fit", spy)
+    x, y = _data()
+    _call(InMemory(), x, y, loss="soft_l1")
+    assert seen["loss"] == "soft_l1"
 
 
 def test_in_memory_kwargs_override_options(monkeypatch):

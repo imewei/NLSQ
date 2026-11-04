@@ -9,7 +9,7 @@ loads none of them.)
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -55,6 +55,29 @@ def _freeze_options(obj: Any, reserved: frozenset[str]) -> None:
             f"{type(obj).__name__} or pass them to curve_fit_large directly."
         )
     object.__setattr__(obj, "options", dict(obj.options))
+
+
+def reject_owned_kwargs(strategy: Any, kwargs: Mapping[str, Any]) -> None:
+    """Raise ``TypeError`` if ``kwargs`` set a key that ``strategy`` owns.
+
+    Used by ``fit_with_strategy``, whose caller keywords are merged over (or
+    forwarded beside) the strategy's own settings; an owned key would otherwise
+    be silently overwritten (or bypass a check). ``Hybrid`` is not covered.
+    """
+    if isinstance(strategy, InMemory):
+        reserved: frozenset[str] = _IN_MEMORY_RESERVED
+    elif isinstance(strategy, Chunked):
+        reserved = _CHUNKED_RESERVED
+    elif isinstance(strategy, Exact):
+        reserved = frozenset(f.name for f in fields(strategy))
+    else:
+        return
+    clash = sorted(set(kwargs) & reserved)
+    if clash:
+        raise TypeError(
+            f"fit_with_strategy keyword(s) {clash} are owned by "
+            f"{type(strategy).__name__}: set them on {type(strategy).__name__}."
+        )
 
 
 @dataclass(frozen=True)

@@ -22,6 +22,7 @@ from nlsq.streaming.specs import (
     InMemory,
     LargeStrategy,
     Multistart,
+    reject_owned_kwargs,
 )
 
 __all__ = ["fit_with_strategy"]
@@ -69,9 +70,12 @@ def fit_with_strategy(
         Used by the chunked and exact paths; ignored by the others.
     **kwargs
         Extra keyword arguments for the engine. In-memory and chunked: merged
-        over the strategy's ``options``. Hybrid: none accepted (``TypeError``);
-        ``verbose`` and the config live on ``Hybrid``. Exact: merged over the
-        strategy's solver settings.
+        over the strategy's ``options``; a key the strategy owns (see
+        ``InMemory.options``, ``Chunked.options``) raises ``TypeError``. Hybrid:
+        none accepted (``TypeError``); ``verbose`` and the config live on
+        ``Hybrid``. Exact: merged over the strategy's solver settings, except
+        that its own fields (``chunk_size``, ``ftol``, ``xtol``, ``gtol``,
+        ``max_nfev``, ``n_points``) raise ``TypeError``.
 
     Returns
     -------
@@ -170,6 +174,7 @@ def _fit_exact(
         normalize_p0_bounds,
     )
 
+    reject_owned_kwargs(strategy, kwargs)
     check_exact_sources(xdata, ydata, sigma, strategy.n_points)
     if p0 is not None:
         p0 = np.asarray(p0, dtype=float)  # a complex list p0 must raise TypeError
@@ -270,6 +275,7 @@ def _fit_in_memory(
 ) -> Any:
     from nlsq.streaming.strategy import build_large_strategy
 
+    reject_owned_kwargs(strategy, kwargs)
     fit_kwargs = {**strategy.options, **kwargs}
     if sigma is not None:
         fit_kwargs["sigma"] = sigma
@@ -318,6 +324,7 @@ def _fit_chunked(
     from nlsq.streaming.large_dataset import LDMemoryConfig
     from nlsq.streaming.strategy import build_large_strategy
 
+    reject_owned_kwargs(strategy, kwargs)
     chunk_size = strategy.chunk_size
     fit_kwargs = {**strategy.options, **kwargs}
 
