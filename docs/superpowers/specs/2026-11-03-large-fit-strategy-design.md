@@ -89,13 +89,13 @@ My calls (marked so they can be checked):
 - **Staging** (below). `memory_context` / `large_dataset_context` setup stays in `curve_fit_large` until every caller of `build_large_strategy("chunked", ...)` is audited (see Risks).
 - **Return type** annotation becomes `"CurveFitResult | tuple[Any, ...]"` (string; `OptimizeResult` is dropped because no path returns it). No behavior change.
 - **Exact and multistart suboptions.** `n_starts`, `sampler`, `center_on_p0`, `scale_factor` are *accepted and ignored* on `exact_streaming` while `multistart=False`; only `multistart=True` is an error (`test_exact_lm_dispatch.py:222-234`). The shim keeps this.
-- **Exact p0 conversion order.** Exact converts a non-`None` `p0` with `np.asarray(p0, dtype=float)` *before* `np.atleast_1d`/bounds handling, so a complex `p0` still raises `TypeError` and does not emit `ComplexWarning`.
+- **Exact p0 conversion order.** Exact converts a non-`None` `p0` with `np.asarray(p0, dtype=float)` *before* `np.atleast_1d`/bounds handling, so a complex *list* `p0` still raises `TypeError` with no `ComplexWarning`; a complex *ndarray* `p0` keeps today's behavior (cast to float with a `ComplexWarning`).
 - **Validation order.** Non-exact paths validate sources (`is_chunk_factory`, empty, length, `>= 2`) before `strategy.resolve(n_points)`.
 
 ## Behavior changes (all others must be identical)
 
 1. A chunked result with no `pcov` raises `RuntimeError` instead of returning `np.eye`. The only test pinning this is `tests/streaming/test_large_strategy_routing.py:684`, which uses a fake result with `.x` only; it flips to expect `RuntimeError`. The real chunked engine always sets `pcov` (inf on failure; `large_dataset.py:1870, 1934, 1954`). `test_large_dataset.py:879` is unrelated and stays.
-2. Error precedence for inputs that are invalid in two ways at once: a hybrid call with an unknown keyword *and* empty data now reports the keyword `TypeError` first (the shim runs before source validation); before, the empty-data `ValueError` came first. Each error is unchanged for inputs invalid in only one way.
+2. Error precedence for inputs that are invalid in two ways at once: a hybrid call with an unknown keyword *and* empty data now reports the keyword `TypeError` first (the shim runs before source validation); before, the empty-data `ValueError` came first. The same holds for hybrid config-value errors (for example a non-positive `gauss_newton_tol`, raised when the shim builds `HybridStreamingConfig`): they now precede data and source validation. Each error is unchanged for inputs invalid in only one way.
 3. The return annotation is corrected (no runtime effect).
 
 Removed from the earlier draft: "chunked now honors `stability`/`rescale_data`/`max_jacobian_elements_for_svd`". It would have been a no-op (see Intent), so there is no such change.

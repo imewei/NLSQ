@@ -22,7 +22,11 @@ option set to a non-default value and for any extra keyword (``ftol``, ``xtol``,
 ``TypeError``.
 :func:`~nlsq.streaming.large_fit.fit_with_strategy`, called directly, does accept extra
 engine keywords: for ``InMemory`` and ``Chunked`` they are merged over the strategy's
-``options``, ``Exact`` merges them over its solver settings, and ``Hybrid`` accepts none.
+``options`` (so a keyword wins over an ``options`` entry of the same name). A keyword the
+strategy owns raises ``TypeError``: for ``InMemory`` and ``Chunked`` the same keys that are
+rejected in ``options``, for ``Exact`` its own fields (``chunk_size``, ``ftol``, ``xtol``,
+``gtol``, ``max_nfev``, ``n_points``). Other ``Exact`` keywords go to the solver, and
+``Hybrid`` accepts none.
 
 .. code-block:: python
 

@@ -10,6 +10,9 @@
   - `InMemory.options` / `Chunked.options` keys that the strategy or the fit sets itself
     (for example `stability`, `multistart`, `sigma`, `chunk_size`) now raise `TypeError`
     instead of being silently overwritten.
+  - `fit_with_strategy` keywords that the strategy owns (for example `stability` with `InMemory`,
+    or `ftol` / `n_points` with `Exact`) now raise `TypeError` instead of being silently
+    overwritten or bypassing a check.
   - A chunked fit that returns no `pcov` now raises `RuntimeError` instead of returning an
     identity matrix.
   - Error precedence for `method="hybrid_streaming"` changed: the unrecognized-keyword
