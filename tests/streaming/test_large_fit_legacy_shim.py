@@ -86,20 +86,21 @@ def test_legacy_mapping_carries_stability_on_in_memory_only():
         (
             {"method": "exact_streaming", "stability": "auto"},
             ValueError,
-            r"stability='auto' is not supported by method='exact_streaming'; "
-            r"leave it at its default",
+            r"^stability='auto' is not supported by method='exact_streaming'; "
+            r"leave it at its default$",
         ),
         (
             {"method": "exact_streaming", "loss": "huber"},
             TypeError,
-            r"Unrecognized keyword argument\(s\) for method='exact_streaming': "
-            r"\['loss'\]",
+            r"^Unrecognized keyword argument\(s\) for method='exact_streaming': "
+            r"\['loss'\]\. Accepted: \['ftol', 'gtol', 'max_nfev', 'n_points', "
+            r"'xtol'\]\.$",
         ),
         (
             {"method": "hybrid_streaming", "callback": print},
             TypeError,
-            r"Unrecognized keyword argument\(s\) for method='hybrid_streaming': "
-            r"\['callback'\]\. These are not HybridStreamingConfig fields\.",
+            r"^Unrecognized keyword argument\(s\) for method='hybrid_streaming': "
+            r"\['callback'\]\. These are not HybridStreamingConfig fields\.$",
         ),
     ],
     ids=["exact_stability", "exact_loss", "hybrid_callback"],
@@ -401,3 +402,17 @@ def test_hybrid_rejects_gtol_as_on_main():
     # d2de6bc8 raised the same TypeError: gtol is not a HybridStreamingConfig field
     with pytest.raises(TypeError, match=r"'hybrid_streaming': \['gtol'\]"):
         _legacy_to_strategy(method="hybrid_streaming", gtol=1e-6)
+
+
+def test_shim_and_curve_fit_large_emit_no_deprecation_warning():
+    # pyproject filterwarnings hide DeprecationWarning, so record with "always"
+    import warnings
+
+    x = np.linspace(0.0, 5.0, 200)
+    y = 2.0 * np.exp(-0.5 * x)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _legacy_to_strategy(method="trf", stability="check", loss="huber")
+        _legacy_to_strategy(method="exact_streaming", ftol=1e-9)
+        curve_fit_large(model, x, y, p0=[1.5, 0.4])
+    assert [w for w in caught if issubclass(w.category, DeprecationWarning)] == []

@@ -164,8 +164,9 @@ def test_exact_forwards_explicit_numpy_scalar_tolerance_verbatim(monkeypatch):
     curve_fit_large(model, x, y, p0=[1.5, 0.4], method="exact_streaming", gtol=tol)
     assert len(seen) == 2
     for kw in seen:
-        assert "gtol" in kw
+        assert kw["gtol"] is tol  # the very object, not a re-built float
         assert type(kw["gtol"]) is np.float32
+        assert kw["gtol"] == np.float32(1e-8)
 
 
 def _spy_exact(monkeypatch):
@@ -331,3 +332,34 @@ def test_auto_dispatches_on_sample_count(
         np.zeros(n_points),
     )
     assert called == [expected]
+
+
+@pytest.mark.parametrize(
+    ("xdata", "ydata", "match"),
+    [
+        (np.zeros(0), np.zeros(0), "`xdata` cannot be empty"),
+        (np.zeros(5), np.zeros(4), "must have the same length: 5 vs 4"),
+        (np.zeros(1), np.zeros(1), "Need at least 2 data points"),
+    ],
+    ids=["empty", "length_mismatch", "single_point"],
+)
+def test_auto_is_not_resolved_when_sources_are_invalid(
+    monkeypatch, xdata, ydata, match
+):
+    from nlsq.streaming.specs import Auto
+
+    def boom(self, n_points):
+        raise AssertionError("Auto.resolve ran before source validation")
+
+    monkeypatch.setattr(Auto, "resolve", boom)
+    with pytest.raises(ValueError, match=match):
+        _call(Auto(), xdata, ydata)
+
+
+def test_in_memory_returns_the_engine_result_object(monkeypatch):
+    import nlsq
+
+    sentinel = object()
+    monkeypatch.setattr(nlsq, "curve_fit", lambda f, x, y, **kw: sentinel)
+    x, y = _data()
+    assert _call(InMemory(), x, y) is sentinel

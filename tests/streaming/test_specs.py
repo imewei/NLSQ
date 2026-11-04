@@ -61,10 +61,16 @@ def test_options_defaults_not_shared():
     assert InMemory().options is not InMemory().options
 
 
-def test_streaming_exports():
-    from nlsq.streaming import Auto, Chunked, Exact, Hybrid, InMemory, Multistart
+@pytest.mark.parametrize(
+    "name",
+    ["Auto", "Chunked", "Exact", "Hybrid", "InMemory", "Multistart", "LargeStrategy"],
+)
+def test_streaming_exports(name):
+    from nlsq import streaming
+    from nlsq.streaming import specs
 
-    assert all((Auto, Chunked, Exact, Hybrid, InMemory, Multistart))
+    assert getattr(streaming, name) is getattr(specs, name)
+    assert name in streaming.__all__
 
 
 @pytest.mark.parametrize("cls", [InMemory, Chunked])

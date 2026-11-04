@@ -147,6 +147,22 @@ def test_exact_build_looks_up_engine_at_build_time(monkeypatch):
     assert seen == {"chunk_size": 10}
 
 
+@pytest.mark.parametrize(
+    ("kind", "target"),
+    [
+        ("exact", "nlsq.streaming.exact_lm.exact_lm_fit"),
+        ("in_memory", "nlsq.curve_fit"),
+    ],
+)
+def test_adapter_keeps_engine_resolved_at_build_time(monkeypatch, kind, target):
+    original, replacement = object(), object()
+    monkeypatch.setattr(target, lambda *a, **k: original)
+    strategy = build_large_strategy(kind, None)
+    # Re-patching after construction must not redirect the built adapter
+    monkeypatch.setattr(target, lambda *a, **k: replacement)
+    assert strategy.fit(model, X, Y, P0) is original
+
+
 def test_exact_build_rejects_config():
     with pytest.raises(TypeError, match="exact strategy takes no config"):
         build_large_strategy("exact", object())
@@ -203,6 +219,15 @@ def test_chunked_unpack_without_pcov_raises_runtime_error():
     strategy = build_large_strategy("chunked", LDMemoryConfig(memory_limit_gb=1.0))
     with pytest.raises(RuntimeError, match="Unexpected result format"):
         strategy.unpack(OnlyX())
+
+
+def test_chunked_unpack_with_popt_but_no_pcov_raises_runtime_error():
+    class OnlyPopt:
+        popt = np.ones(2)
+
+    strategy = build_large_strategy("chunked", LDMemoryConfig(memory_limit_gb=1.0))
+    with pytest.raises(RuntimeError, match="Unexpected result format"):
+        strategy.unpack(OnlyPopt())
 
 
 def test_chunked_unpack_returns_popt_and_pcov():
