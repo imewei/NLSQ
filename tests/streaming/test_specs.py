@@ -68,7 +68,10 @@ def test_streaming_exports():
 
 
 @pytest.mark.parametrize("cls", [InMemory, Chunked])
-@pytest.mark.parametrize("key", ["multistart", "sigma", "method", "bounds", "n_starts"])
+@pytest.mark.parametrize(
+    "key",
+    ["multistart", "sigma", "method", "bounds", "n_starts", "p0", "global_search"],
+)
 def test_options_colliding_with_strategy_keys_raise(cls, key):
     with pytest.raises(TypeError, match=key):
         cls(options={key: 1})
@@ -81,6 +84,7 @@ def test_options_colliding_with_strategy_keys_raise(cls, key):
         (InMemory, "rescale_data"),
         (InMemory, "max_jacobian_elements_for_svd"),
         (Chunked, "chunk_size"),
+        (Chunked, "show_progress"),
     ],
 )
 def test_options_colliding_with_class_specific_keys_raise(cls, key):

@@ -26,6 +26,8 @@ _COMMON_RESERVED = frozenset(
     {
         "sigma",
         "bounds",
+        "p0",
+        "global_search",
         "absolute_sigma",
         "check_finite",
         "multistart",
@@ -41,7 +43,7 @@ _IN_MEMORY_RESERVED = _COMMON_RESERVED | {
     "rescale_data",
     "max_jacobian_elements_for_svd",
 }
-_CHUNKED_RESERVED = _COMMON_RESERVED | {"chunk_size"}
+_CHUNKED_RESERVED = _COMMON_RESERVED | {"chunk_size", "show_progress"}
 
 
 def _freeze_options(obj: Any, reserved: frozenset[str]) -> None:
@@ -99,9 +101,9 @@ class InMemory:
         Multi-start settings (disabled by default).
     options : Mapping
         Extra keyword options forwarded to the fit. Keys that this class or
-        the fit sets itself (its fields, ``sigma``, ``bounds``,
-        ``absolute_sigma``, ``check_finite`` and the multi-start keywords)
-        raise ``TypeError``. Stored as a private copy (so the spec stays picklable and
+        the fit sets itself (its fields, ``sigma``, ``bounds``, ``p0``,
+        ``global_search``, ``absolute_sigma``, ``check_finite`` and the
+        multi-start keywords) raise ``TypeError``. Stored as a private copy (so the spec stays picklable and
         deep-copyable).
 
     Notes
@@ -135,9 +137,9 @@ class Chunked:
         Multi-start settings (disabled by default).
     options : Mapping
         Extra keyword options forwarded to the fit. Keys that this class or
-        the fit sets itself (its fields, ``sigma``, ``bounds``,
-        ``absolute_sigma``, ``check_finite`` and the multi-start keywords)
-        raise ``TypeError``. Stored as a private copy (so the spec stays picklable and
+        the fit sets itself (its fields, ``sigma``, ``bounds``, ``p0``,
+        ``global_search``, ``absolute_sigma``, ``check_finite`` and the
+        multi-start keywords) raise ``TypeError``. Stored as a private copy (so the spec stays picklable and
         deep-copyable).
 
     Notes
