@@ -493,7 +493,16 @@ def fit(
         - 'large': Auto-detect dataset size and use appropriate strategy
 
         If None, defaults to 'fast' for small datasets or 'large' for datasets
-        exceeding size_threshold.
+        exceeding size_threshold. Names are case-insensitive; an unknown name
+        raises ValueError. With 'streaming', only ``gtol`` and ``max_nfev`` are
+        mapped (to ``gauss_newton_tol`` / ``gauss_newton_max_iterations``),
+        any other solver option emits a UserWarning, and ``full_output=True`` /
+        ``return_eval=True`` raise ValueError.
+    goal : {'fast', 'robust', 'global', 'memory_efficient', 'quality'}, optional
+        Optimization goal (case-insensitive, or an ``OptimizationGoal``). It sets
+        the ``gtol``/``ftol``/``xtol`` defaults from the number of points;
+        tolerances passed explicitly in ``**kwargs`` take precedence. Unknown
+        names raise ValueError.
     multistart : bool, optional
         Override preset's multi-start setting.
     n_starts : int, optional
@@ -513,7 +522,9 @@ def fit(
     chunk_size : int, optional
         Override automatic chunk size calculation.
     **kwargs
-        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss).
+        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
+        forwarded to the selected backend. With ``preset='streaming'`` only
+        ``gtol`` and ``max_nfev`` are used (see ``preset``).
 
     Returns
     -------

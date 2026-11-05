@@ -666,8 +666,8 @@ class MemoryManager:
         Notes
         -----
         Task Group 7 (1.2a): Uses LRU tracking via OrderedDict.
-        The returned array is added/moved to the end of the pool,
-        marking it as recently used.
+        The array becomes the pooled buffer for its (shape, dtype), replacing
+        any earlier one, and is marked as most recently used.
         """
         key = (arr.shape, arr.dtype)
         # Keep the most recently returned buffer for each shape/dtype.
@@ -792,6 +792,12 @@ class MemoryManager:
         -------
         strategy : dict
             Chunking strategy with chunk_size and n_chunks
+
+        Raises
+        ------
+        MemoryError
+            If ``n_points > 0`` and the memory budget cannot hold even one
+            data point.
         """
         if memory_limit_gb is None:
             memory_limit = self.get_available_memory() * 0.8  # Use 80% of available

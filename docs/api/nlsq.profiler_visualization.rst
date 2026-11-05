@@ -15,10 +15,9 @@ The ``profiler_visualization`` module provides visualization tools for profiling
 Key Features
 ------------
 
-- **Flame graphs** for call stack visualization
-- **Timeline plots** for execution traces
-- **Memory usage plots** over time
-- **Interactive HTML reports**
+- **Timing plots** per profile and across profiles (matplotlib)
+- **HTML reports** and JSON/CSV export
+- **Comparison dashboard** (``ProfilingDashboard``)
 
 Classes
 -------

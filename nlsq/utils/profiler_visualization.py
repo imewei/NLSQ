@@ -37,7 +37,7 @@ class ProfilerVisualization:
     >>> profiler = get_global_profiler()
     >>> viz = ProfilerVisualization(profiler)
     >>> fig = viz.plot_timing_comparison(["test1", "test2"])
-    >>> viz.save_html_report("report.html")
+    >>> viz.generate_html_report("report.html")
     """
 
     def __init__(self, profiler: PerformanceProfiler):

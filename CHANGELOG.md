@@ -212,6 +212,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on GPU); results agree to rounding (about 1e-16 relative), and `exact_lm` keeps
   re-exporting the moved helpers.
 
+### Fixed (whole-codebase audit loop, 2026-11-05)
+- `least_squares(..., data_mask=)` is now applied on the direct-residual and user-`jac` paths
+  (it was ignored there); a mask that is not 1-D or does not match the residual shape raises
+  `ValueError`. (01)
+- `fit(workflow=...)` counts features on the SciPy `(k, M)` axis for memory selection, so a
+  `(k, M)` input no longer counts samples as features. (02)
+- `fit(workflow=..., p0="auto")` resolves the guess before dispatch (it used to become a
+  0-D string array). (03)
+- `fit(workflow=...)` with an explicit `LDMemoryConfig` no longer forwards the routing-only
+  `memory_limit_gb` to the chunk solver. (04)
+- **Behavior change:** CMA-ES results (`method="cmaes"` and the `workflow` CMA-ES routes) keep
+  `success`, `status` and `message` from the optimizer or its NLSQ refinement instead of always
+  reporting success, and `full_output=True` returns `ier=5` (not `1`) for an unsuccessful run.
+  (05, 06)
+- A CMA-ES refinement no longer receives `full_output`/`return_eval`/`timeit`, which made it
+  discard its successful result. (12)
+- Fallback rescaling with `sigma` no longer rescales `f_scale` (whitened residuals are
+  unchanged by the rescale). (07)
+- The `exact_streaming` factory probe keeps at least two points for singleton chunks, and chunk
+  buffers promote the x and y dtypes together (integer `x` with fractional `y` is accepted). (08, 09)
+- **Behavior change:** standalone warmup group-variance regularization now penalizes the
+  physical parameters instead of the normalized ones, so results of fits that use it can change
+  (see the group-variance regularization entry under "Changed (behavior)"). (10)
+- Gauss-Newton best-point tracking includes the initial point, so a rejected trial cannot win;
+  the standalone warmup cost guard no longer divides by an exact-zero initial loss. (11, 14)
+- Hybrid multi-start with `multistart_sampler="sobol"` or `"halton"` works (it raised
+  `TypeError`). (13)
+- `fit(preset="streaming")` forwards `center_on_p0` and `scale_factor`. (15)
+- **Behavior change:** `fit(preset="streaming")` now enforces `check_finite=True`, so
+  non-finite data raises instead of reaching the streaming engine. (27)
+- CLI: an `estimate_p0()` that returns `None` is preserved instead of becoming an object
+  array. (16)
+- GUI: scalar YAML bounds load without crashing the fit snapshot; crash recovery restores
+  workflow settings and pre-fit edits (recovered custom model code still needs an explicit
+  Apply); automatic initial guesses no longer erase explicit bounds. (17, 18, 29)
+- **Behavior change:** `MemoryManager.allocate_array` removes a pooled buffer while it is
+  checked out and `free_array` returns it, so outstanding allocations no longer alias each
+  other; an array is not pooled until `free_array` is called. (19)
+- `safe_serialize` encodes and decodes complex values. (20)
+- A scalar `x0` no longer crashes `InputValidator` error collection. (21)
+- `MemoryManager.estimate_chunking_strategy` raises `MemoryError` when the budget cannot hold
+  one data point (it produced zero-sized chunks and a division by zero). (22)
+- `JAXConfig` memory and large-dataset config getters/setters deep-copy their values. (23)
+- `OptimizationDiagnostics` resets convergence histories and peak memory between fits. (24)
+- `get_jacobian_mode()` falls back with a warning when the config file is valid JSON but not
+  an object. (25)
+- `InputValidator` rejects non-numeric `xdata`/`ydata`/`x0` dtypes and non-1-D `ydata`, reports
+  shape errors before dependent checks, and rejects NaN `ftol`/`xtol`/`gtol`. (28, 31)
+- Post-review fixes: `FallbackResult` supports the `in` operator; a failed CMA-ES NLSQ
+  refinement now reports `success=False`; `fit(workflow=HybridStreamingConfig(...))` raises
+  for a non-linear `loss` and warns about ignored options.
+
 ### Fixed
 - **Silent wrong answer in plain `curve_fit` for small-scale data:** the iterative
   (CG/`lsmr`) trust-region kernel used absolute tolerances and guards, so fits with

@@ -851,7 +851,7 @@ def detect_parameter_scale_mismatch(
     >>> p0 = np.array([1e-3, 1e3, 1.0])
     >>> has_mismatch, ratio = detect_parameter_scale_mismatch(p0)
     >>> print(f"Mismatch: {has_mismatch}, Ratio: {ratio:.2e}")
-    Mismatch: True, Ratio: 1.00e+06
+    Mismatch: False, Ratio: 1.00e+06
     """
     p0 = np.asarray(p0)
 

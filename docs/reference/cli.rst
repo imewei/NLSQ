@@ -251,7 +251,10 @@ other code, start processes, reach the network or write files. Blocked
 categories include:
 
 * ``exec``/``eval``/``compile`` and ``__import__``, reflection helpers
-  (``getattr``, ``setattr``) and dunder attribute chains;
+  (``getattr``, ``setattr``); any ``_``-prefixed attribute except ``__name__``,
+  ``__doc__`` and ``__version__`` (so a model class using ``self._k`` needs
+  ``trusted: true``); and attributes named like blocked modules (for example
+  ``.string``, ``.profiler``);
 * process, thread and interpreter control (``os``, ``subprocess``,
   ``multiprocessing``, ``threading``, ``signal``, ``cProfile``, ``pdb`` ...);
 * network modules (``socket``, ``urllib``, ``http``, ``requests`` ...);
