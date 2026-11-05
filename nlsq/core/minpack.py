@@ -50,7 +50,6 @@ import logging
 import time
 import warnings
 from collections.abc import Callable
-from inspect import signature
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -4707,7 +4706,6 @@ class CurveFit:
 
         return_full = full_output
 
-        # self.res = res
         post_time = time.time() - st
 
         # Log curve fit completion
@@ -4723,7 +4721,6 @@ class CurveFit:
             feval = f(jnp_xdata, *popt)
             feval = np.array(feval)
             if none_mask:
-                # data_mask = np.ndarray.astype(data_mask, bool)
                 return popt, _pcov, feval[data_mask]
             # A user data_mask leaves padding rows (flength) in feval; strip them.
             return popt, _pcov, feval[:m]

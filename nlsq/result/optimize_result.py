@@ -17,8 +17,6 @@ For dictionary conversion, use::
     result.to_dict()  # Convert to dict
 """
 
-from typing import Any
-
 
 class OptimizeResult(dict):
     """Optimization result container for NLSQ curve fitting operations.

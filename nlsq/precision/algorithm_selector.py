@@ -584,11 +584,6 @@ class AlgorithmSelector:
             explanation.append(
                 "Trust Region Reflective (TRF) algorithm selected (currently the only supported algorithm in NLSQ)",
             )
-        # Future support for other algorithms
-        # elif alg == 'lm':
-        #     explanation.append("Levenberg-Marquardt (LM) algorithm selected for good convergence properties")
-        # elif alg == 'dogbox':
-        #     explanation.append("Dogbox algorithm selected for bounded optimization")
 
         # Loss function
         loss = recommendations["loss"]

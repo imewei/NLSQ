@@ -266,21 +266,7 @@ def update_tr_radius(
     return Delta, ratio
 
 
-# Construction and minimization of quadratic functions.
-
-
-#     b = np.dot(g, s)
-
-#     if s0 is not None:
-#         u = J.dot(s0)
-#         b += np.dot(u, v)
-#         c = 0.5 * np.dot(u, u) + np.dot(g, s0)
-#         if diag is not None:
-#             b += np.dot(s0 * diag, s)
-#             c += 0.5 * np.dot(s0 * diag, s0)
-#         return a, b, c
-#     else:
-#         return a, b
+# Minimization of quadratic functions.
 
 
 def minimize_quadratic_1d(a, b, lb, ub, c=0):
