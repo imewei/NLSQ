@@ -18,6 +18,7 @@ so ``mock.patch("nlsq.streaming.<module>.<Class>")`` still takes effect and
 from __future__ import annotations
 
 import dataclasses
+import functools
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
@@ -79,6 +80,25 @@ class _HybridStrategy:
         if not native.get("success", True):
             raise RuntimeError(f"hybrid_streaming fit failed: {native.get('message')}")
         return x, native.get("pcov", np.full((len(x), len(x)), np.inf))
+
+
+def scipy_layout_to_points_first(f: Any, x: Any) -> tuple[Any, Any]:
+    """Adapt a scipy-layout ``(k, M)`` problem to the hybrid engine's contract.
+
+    The hybrid engine (and ``_HybridStrategy.fit``) takes multi-dimensional x
+    points-first, ``(M, k)``, and chunks along axis 0. Callers holding scipy's
+    ``(k, M)`` layout pass ``f, x`` through here: it returns the transposed x
+    and a model that gives the user's ``f`` its ``(k, chunk)`` layout back.
+    No-op for 1-D x.
+    """
+    if np.ndim(x) <= 1:
+        return f, x
+
+    @functools.wraps(f)
+    def f_points_first(xc: Any, *params: Any) -> Any:
+        return f(xc.T, *params)
+
+    return f_points_first, np.asarray(x).T
 
 
 class _ChunkedStrategy:

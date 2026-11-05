@@ -167,6 +167,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom CLI models: the validator also rejects `yaml.unsafe_load`/`pandas.read_pickle`
   style deserialization; `batch --no-continue-on-error` now lists skipped workflows.
 
+### Changed (behavior, whole-codebase review rounds 5-8)
+- Custom CLI model validator (still a denylist, not a sandbox; `trusted: true` is the escape
+  hatch): attribute access is now checked like imports. Attributes named like blocked modules
+  and any `_`-prefixed attribute (except `__name__`/`__doc__`/`__version__`) are rejected, so a
+  model using `self._x` needs `trusted: true`. `match`/`case` keyword attributes, the `string`
+  module, `scipy.io` and `profiler` are blocked; string annotations are rejected.
+- `curve_fit(auto_bounds=True)`: if the result sits on an inferred bound, it is refit once with
+  that bound relaxed and the better fit is returned with an `OptimizeWarning`; now applies on
+  every route (full_output/return_eval/timeit, multistart, fallback). `auto_bounds` with
+  `method="cmaes"` infers bounds first; `method="lm"` + `auto_bounds` raises a clear error.
+- `method="cmaes"` honours `full_output`, `return_eval` and `timeit` (same tuple shapes as TRF).
+- Unknown keyword arguments to `curve_fit` now emit an `OptimizeWarning` ("Ignoring unknown
+  keyword argument(s)") instead of being silently dropped (SciPy raises `TypeError`).
+- `multistart=True`: the user's `p0` is the first start and takes one of the `n_starts` slots;
+  tuple output modes work; `nan_policy="omit"` + `p0=None` works.
+- `nlsq.fit(goal=...)` is validated and applied when `workflow=None` (unknown goal raises);
+  legacy `preset=` names are case-insensitive, unknown presets raise, `preset="streaming"` maps
+  `gtol`/`max_nfev` to the hybrid optimizer, rejects `full_output`/`return_eval`, and warns about
+  ignored options. 2-D `(k, M)` `x` is handled on all `fit()` hybrid routes.
+- Hybrid streaming honours `absolute_sigma=True`; max-iterations `OptimizeWarning` is attributed
+  to the caller. Chunked `curve_fit_large` with 2-D `(k, M)` `x` now counts M points.
+- `nan_policy="omit"` drops the right rows for points-first `x`; negative `sigma` is accepted as
+  in SciPy (only zero is rejected on the always-on path).
+
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
   preparation with curve_fit, and nan_policy is read once in the shared step.
@@ -191,6 +215,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Chunked/streaming fits with 2-D `xdata` of shape `(k, M)` are now chunked along the
   points axis (previously the whole dataset ran as one in-memory chunk, ignoring
   `chunk_size`/`memory_limit_gb`).
+- `nlsq.fit(..., workflow=HybridStreamingConfig(...))` and `preset="streaming"` with 2-D
+  `xdata` of scipy layout `(k, M)` now fit correctly (the hybrid engine saw `k` "points",
+  returning `success=False` and an infinite covariance). `curve_fit(method="hybrid_streaming")`
+  keeps its documented points-first `(n_points, n_features)` layout. `nan_policy="omit"`
+  now masks the right axis for that layout; `SparseJacobianComputer` handles `(k, N)` arrays;
+  the rescale fallback returns results in the original units; recovery no longer rejects
+  fits with cost above 1e10; custom-model validation blocks more code-execution modules
+  (`cProfile`, `profile`, `trace`, `bdb`, `pdb`, ...) and a failing user `bounds()` is now an
+  error instead of a silently unconstrained fit.
+- Differential testing against SciPy (round 7): `multistart=True` with `full_output`,
+  `return_eval` or `timeit` returns the tuple instead of raising `TypeError`; multistart
+  now evaluates the user's `p0` as its first start (so it is never worse than a single
+  start, and `n_starts` is the total number of starts including `p0`; with a given `p0`,
+  `n_starts=N` samples `N-1` further points); hybrid streaming honors
+  `absolute_sigma=True` (previously `pcov` was always scaled by the residual variance);
+  `auto_bounds=True` refits without an inferred bound when the solution sits on it (with
+  an `OptimizeWarning`) and `method="lm"` with `auto_bounds` names `auto_bounds` in its
+  error; `nan_policy="omit"` with NaN in `y` works with `auto_bounds`/`multistart` and
+  `p0=None`; a NumPy (non-JAX) `jac=` callable raises a clear `TypeError`; the hybrid
+  max-iterations `OptimizeWarning` is attributed to the caller. Custom-model validation
+  also rejects string annotations that are evaluated at import time, pickle-capable
+  readers (`numpy.lib.format.read_array`, `NpzFile`) and serialized-executable loaders.
 - `detect_collinearity`/`check_problem_stability` no longer build an `N x N` matrix for
   `(N, k)` data; `AlgorithmSelector` counts points from `ydata` for 2-D `xdata`.
 - Whole-codebase review rounds 3-4: ~60 further fixes across core, streaming, stability,

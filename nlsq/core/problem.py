@@ -198,30 +198,42 @@ _VALID_NAN_POLICIES = frozenset({"raise", "omit", "propagate"})
 
 @overload
 def finite_rows(
-    xdata: np.ndarray, ydata: np.ndarray
+    xdata: np.ndarray, ydata: np.ndarray, points_axis_last: bool = True
 ) -> tuple[np.ndarray, np.ndarray]: ...
 
 
 @overload
-def finite_rows(xdata: object, ydata: object) -> tuple[object, object]: ...
+def finite_rows(
+    xdata: object, ydata: object, points_axis_last: bool = True
+) -> tuple[object, object]: ...
 
 
-def finite_rows(xdata: object, ydata: object) -> tuple[object, object]:
+def finite_rows(
+    xdata: object, ydata: object, points_axis_last: bool = True
+) -> tuple[object, object]:
     """Return (xdata, ydata) restricted to rows where both are finite.
 
-    Only 1-D ``xdata`` (or ``(k, m)`` with points on the last axis) of the
-    same length as ``ydata`` is filtered; anything else is returned unchanged.
+    Only 1-D ``xdata``, or 2-D ``xdata`` with the points on the last axis
+    ``(k, m)`` (``points_axis_last=True``) or the first axis ``(m, k)``
+    (``points_axis_last=False``), of the same length as ``ydata`` is filtered;
+    anything else is returned unchanged.
     """
     try:
         xa, ya = np.asarray(xdata, float), np.asarray(ydata, float)
     except (TypeError, ValueError):
         return xdata, ydata
-    if ya.ndim != 1 or xa.shape[-1:] != ya.shape:
+    pts_axis = -1 if (xa.ndim == 1 or points_axis_last) else 0
+    if ya.ndim != 1 or xa.ndim == 0 or xa.shape[pts_axis] != ya.shape[0]:
         return xdata, ydata
-    valid = np.isfinite(ya) & (
-        np.isfinite(xa) if xa.ndim == 1 else np.all(np.isfinite(xa), axis=0)
-    )
-    return xa[..., valid], ya[valid]
+    valid = np.isfinite(ya) & _finite_points(xa, points_axis_last)
+    return np.compress(valid, xa, axis=pts_axis), ya[valid]
+
+
+def _finite_points(xdata: np.ndarray, points_axis_last: bool) -> np.ndarray:
+    """Per-point finiteness mask of ``xdata`` (1-D, or 2-D in either layout)."""
+    if xdata.ndim == 1:
+        return np.isfinite(xdata)
+    return np.all(np.isfinite(xdata), axis=0 if points_axis_last else 1)
 
 
 def _determine_parameter_count(
@@ -755,6 +767,7 @@ def _preprocess_input_data(
             ydata,
             sigma,
             xdims,
+            ctx.x_points_axis_last,
         )
 
     return xdata, ydata, m, xdims, sigma, omit_mask
@@ -765,6 +778,7 @@ def _omit_nonfinite_rows(
     ydata: np.ndarray,
     sigma: np.ndarray | None,
     xdims: int,
+    points_axis_last: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
     """Drop rows with non-finite x/y (or a non-finite 1D sigma entry).
 
@@ -778,6 +792,9 @@ def _omit_nonfinite_rows(
         sigma is row/column-extracted to match the same mask.
     xdims : int
         xdata.ndim, to select row-wise vs column-wise masking.
+    points_axis_last : bool
+        For multi-dimensional ``xdata``: points on the last axis ``(k, m)``
+        (standard path) or the first axis ``(m, k)`` (hybrid streaming).
 
     Returns
     -------
@@ -787,8 +804,7 @@ def _omit_nonfinite_rows(
         way to stay aligned.
     """
     y_valid = np.isfinite(ydata)
-    x_valid = np.isfinite(xdata) if xdims == 1 else np.all(np.isfinite(xdata), axis=0)
-    valid_mask = y_valid & x_valid
+    valid_mask = y_valid & _finite_points(xdata, points_axis_last)
 
     sigma_arr = np.asarray(sigma) if sigma is not None else None
     sigma_1d = sigma_arr is not None and sigma_arr.ndim == 1
@@ -801,7 +817,9 @@ def _omit_nonfinite_rows(
 
     omit_mask = valid_mask
     ydata = ydata[valid_mask]
-    xdata = xdata[valid_mask] if xdims == 1 else xdata[:, valid_mask]
+    xdata = (
+        xdata[:, valid_mask] if xdims > 1 and points_axis_last else xdata[valid_mask]
+    )
     if sigma_1d:
         sigma = sigma_arr[valid_mask]  # type: ignore[index]  # sigma_arr is not None whenever sigma_1d is True
     elif sigma_arr is not None and sigma_arr.ndim == 2:
@@ -911,7 +929,7 @@ def prepare_problem(
     # estimate runs before NaN removal (steps 5-7), so with nan_policy='omit'
     # it must see only the finite rows or it returns NaN.
     if nan_policy == "omit" and _is_auto_p0(p0):
-        x_est, y_est = finite_rows(xdata, ydata)
+        x_est, y_est = finite_rows(xdata, ydata, ctx.x_points_axis_last)
     else:
         x_est, y_est = xdata, ydata
     n, p0 = _determine_parameter_count(f, p0, x_est, y_est, ctx=ctx)

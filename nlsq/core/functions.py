@@ -462,7 +462,7 @@ def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     indices = np.where(ydata > half_max)[0]
 
     if len(indices) > 1:
-        fwhm = xdata[indices[-1]] - xdata[indices[0]]
+        fwhm = np.ptp(xdata[indices])
         # FWHM = 2.355 * sigma → sigma = FWHM / 2.355
         sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
     else:
@@ -566,7 +566,7 @@ def estimate_p0_lorentzian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterLis
     indices = np.where(ydata > half_max)[0]
 
     if len(indices) > 1:
-        fwhm = xdata[indices[-1]] - xdata[indices[0]]
+        fwhm = np.ptp(xdata[indices])
         # FWHM = 2 * gamma → gamma = FWHM / 2
         gamma = fwhm / 2
     else:

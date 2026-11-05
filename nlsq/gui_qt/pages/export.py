@@ -603,6 +603,11 @@ class ExportPage(QWidget):
         """
         state = self._app_state.state
 
+        # repr() of nan/inf is a bare name: the script must define it
+        nonfinite = any(
+            a is not None and not np.all(np.isfinite(np.asarray(a, dtype=float)))
+            for a in (state.xdata, state.ydata, state.sigma, state.p0)
+        )
         needs_file = state.xdata is not None and not self._inline_data(for_bundle)
         lines = [
             '"""',
@@ -619,6 +624,11 @@ class ExportPage(QWidget):
             '"""',
             "",
             "import numpy as np",
+            *(
+                ["from numpy import inf, nan  # inlined non-finite values"]
+                if nonfinite
+                else []
+            ),
             "from nlsq import fit",
             "",
         ]

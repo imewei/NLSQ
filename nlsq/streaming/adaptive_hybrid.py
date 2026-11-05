@@ -3682,6 +3682,7 @@ class AdaptiveHybridStreamingOptimizer:
         JTJ_final: jnp.ndarray,
         residual_sum_sq: float,
         n_points: int,
+        absolute_sigma: bool = False,
     ) -> dict[str, Any]:
         """Run Phase 3: Denormalization and covariance transform.
 
@@ -3702,6 +3703,10 @@ class AdaptiveHybridStreamingOptimizer:
             Total sum of squared residuals
         n_points : int
             Total number of data points
+        absolute_sigma : bool, default=False
+            If True the data weights are absolute (sigma=1 here, as no sigma is
+            supported), so the covariance is not scaled by the residual
+            variance -- same as ``scipy.optimize.curve_fit``.
 
         Returns
         -------
@@ -3740,11 +3745,14 @@ class AdaptiveHybridStreamingOptimizer:
         cov_orig = self._transform_covariance(cov_norm)
 
         # Step 4: Apply residual variance scaling
-        pcov, sigma_sq = self._apply_residual_variance(
-            cov_orig,
-            residual_sum_sq,
-            n_points,
-        )
+        if absolute_sigma:
+            pcov, sigma_sq = cov_orig, 1.0
+        else:
+            pcov, sigma_sq = self._apply_residual_variance(
+                cov_orig,
+                residual_sum_sq,
+                n_points,
+            )
         if degenerate:
             # keep the all-inf fallback (inf * sigma^2 would be NaN for a perfect fit)
             pcov = cov_orig
@@ -4249,6 +4257,22 @@ class AdaptiveHybridStreamingOptimizer:
                 "JTJ_final": JTJ_fb,
                 "residual_sum_sq": residual_sum_sq_fb,
             }
+        if (
+            phase2_failure is None
+            and phase2_result["convergence_reason"] == "Maximum iterations reached"
+        ):
+            import warnings
+
+            from nlsq.result import OptimizeWarning
+
+            warnings.warn(
+                "hybrid streaming stopped at max iterations; "
+                "result may not be converged",
+                OptimizeWarning,
+                # Attribute the warning to the first frame outside nlsq (the
+                # user's call site), however many nlsq layers sit in between.
+                skip_file_prefixes=(str(Path(__file__).resolve().parents[1]),),
+            )
         phase2_duration = time.time() - phase2_start
         phase_timings["phase2_gauss_newton"] = phase2_duration
         phase_iterations["phase2"] = phase2_result["iterations"]
@@ -4274,6 +4298,7 @@ class AdaptiveHybridStreamingOptimizer:
             JTJ_final=phase2_result["JTJ_final"],
             residual_sum_sq=phase2_result["residual_sum_sq"],
             n_points=n_points,
+            absolute_sigma=absolute_sigma,
         )
         phase3_duration = time.time() - phase3_start
         phase_timings["phase3_finalize"] = phase3_duration

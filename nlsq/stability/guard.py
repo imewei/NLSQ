@@ -464,8 +464,9 @@ class NumericalStabilityGuard:
                 f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})",
             )
             # Efficient diagonal regularization - 99% memory reduction vs jnp.eye(m, n)
+            # Relative to max_sv: cond is scale-invariant, so the shift must be too.
             J = J.at[diag_indices, diag_indices].add(
-                jnp.asarray(self.regularization_factor, J.dtype)
+                jnp.asarray(self.regularization_factor * max_sv, J.dtype)
             )
             regularized = True
 

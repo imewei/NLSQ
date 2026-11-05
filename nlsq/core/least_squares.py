@@ -1563,6 +1563,25 @@ class LeastSquares:
             tr_options = {}
         if "options" in timeout_kwargs:
             raise TypeError("'options' is not a supported keyword argument")
+        if timeout_kwargs:
+            # Nothing downstream reads these: warn rather than swallow them.
+            # (Warning, not TypeError: several internal callers still forward
+            # extras through this layer.)
+            from nlsq.result import OptimizeWarning
+
+            hint = (
+                " Note: there is no `seed` argument; multi-start sampling is "
+                "deterministic and CMA-ES is seeded via "
+                "cmaes_config=CMAESConfig(seed=...)."
+                if "seed" in timeout_kwargs
+                else ""
+            )
+            warn(
+                f"Ignoring unknown keyword argument(s): {sorted(timeout_kwargs)}."
+                + hint,
+                OptimizeWarning,
+                stacklevel=4,
+            )
 
         # NLSQ always computes exact Jacobians via JAX autodiff, so it has no
         # finite-difference path (diff_step) or sparsity-pattern-guided

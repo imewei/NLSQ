@@ -22,6 +22,13 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _is_points_last_2d(xdata: object, n_data: int) -> bool:
+    """True for a 2-D ndarray laid out (n_features, n_points)."""
+    return (
+        isinstance(xdata, np.ndarray) and xdata.ndim == 2 and xdata.shape[-1] == n_data
+    )
+
+
 class SparseJacobianComputer:
     """Compute and manage sparse Jacobians for large-scale problems.
 
@@ -189,6 +196,9 @@ class SparseJacobianComputer:
             # y_chunk/mask_chunk.
             if isinstance(xdata, list | tuple):
                 x_chunk = [coord[start:end] for coord in xdata]
+            elif _is_points_last_2d(xdata, n_data):
+                # (k, N) ndarray: slice the points axis, not the features.
+                x_chunk = xdata[:, start:end]
             elif hasattr(xdata, "__getitem__"):
                 x_chunk = xdata[start:end]
             else:
@@ -516,7 +526,9 @@ class SparseOptimizer:
             _pattern, sparsity = self.sparse_computer.detect_sparsity_pattern(
                 func,
                 x0,
-                xdata[sample_indices],
+                xdata[:, sample_indices]
+                if _is_points_last_2d(xdata, n_data)
+                else xdata[sample_indices],
                 sample_size,
             )
 

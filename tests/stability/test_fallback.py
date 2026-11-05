@@ -276,6 +276,14 @@ class TestFallbackOrchestratorRescaleDispatch:
             calls.append((f, xd, yd, kw))
             if len(calls) == 1:
                 raise RuntimeError("simulated failure of original-scale fit")
+            if len(calls) == 3:  # final refit on the original problem
+                assert xd is xdata and yd is ydata
+                assert kw["p0"] == pytest.approx([true_a, true_c])
+
+                class RefitResult:
+                    x = np.array([true_a, true_c])
+
+                return RefitResult()
 
             # The second attempt (RescaleProblemStrategy) must receive data
             # rescaled to an O(1) range, and no leaked internal scale keys.
@@ -309,7 +317,7 @@ class TestFallbackOrchestratorRescaleDispatch:
         result = orchestrator.fit_with_fallback(linear, xdata, ydata, p0=[1.0, 1.0])
 
         assert result.fallback_strategy_used == "rescale_problem"
-        assert len(calls) == 2
+        assert len(calls) == 3
 
     def test_orchestrator_scales_2d_sigma_quadratically(self, monkeypatch):
         """1-D sigma is a std-dev and scales linearly with y (sigma/y_scale),
@@ -328,8 +336,12 @@ class TestFallbackOrchestratorRescaleDispatch:
             calls.append(kw)
             if len(calls) == 1:
                 raise RuntimeError("simulated failure of original-scale fit")
-
-            np.testing.assert_allclose(kw["sigma"], cov_2d / (y_scale**2), rtol=1e-10)
+            if len(calls) == 3:  # refit: original sigma restored
+                np.testing.assert_array_equal(kw["sigma"], cov_2d)
+            else:
+                np.testing.assert_allclose(
+                    kw["sigma"], cov_2d / (y_scale**2), rtol=1e-10
+                )
 
             class FakeResult:
                 x = np.array([true_a, true_c])
@@ -345,7 +357,7 @@ class TestFallbackOrchestratorRescaleDispatch:
             linear, xdata, ydata, p0=[1.0, 1.0], sigma=cov_2d
         )
 
-        assert len(calls) == 2
+        assert len(calls) == 3
 
 
 class TestFallbackOrchestrator:
@@ -636,3 +648,95 @@ class TestFallbackIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestRescaleFallbackReturnsOriginalUnits:
+    """A fit won by RescaleProblemStrategy must report original-unit fields."""
+
+    def test_stats_match_direct_fit(self, monkeypatch):
+        import nlsq.core.minpack as mp
+
+        def model(x, a, b):
+            return a * jnp.exp(-b * x)
+
+        rng = np.random.default_rng(0)
+        x = np.linspace(0, 10, 200)
+        y = 1e5 * (2.5 * np.exp(-0.5 * x) + 0.01 * rng.standard_normal(200))
+        real = mp.curve_fit
+        direct = real(model, x, y, p0=[2e5, 0.5], absolute_sigma=True)
+
+        calls = {"n": 0}
+
+        def flaky(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("forced first failure")
+            return real(*a, **k)
+
+        monkeypatch.setattr(mp, "curve_fit", flaky)
+        r = FallbackOrchestrator(
+            strategies=[RescaleProblemStrategy()]
+        ).fit_with_fallback(model, x, y, p0=[2e5, 0.5], absolute_sigma=True)
+        assert r.fallback_strategy_used == "rescale_problem"
+        popt, pcov = r
+        np.testing.assert_allclose(popt, direct[0], rtol=1e-3)
+        np.testing.assert_allclose(
+            np.sqrt(np.diag(pcov)), np.sqrt(np.diag(direct[1])), rtol=1e-3
+        )
+        np.testing.assert_allclose(r.rmse, direct.rmse, rtol=1e-3)
+        np.testing.assert_allclose(np.asarray(r.xdata), x)
+        np.testing.assert_allclose(np.asarray(r.ydata), y)
+
+
+class TestFitRescaledKwargs:
+    """_fit_rescaled must honour full_output/jac/f_scale of the user's call."""
+
+    @staticmethod
+    def _problem():
+        from nlsq.stability.fallback import _fit_rescaled
+
+        rng = np.random.default_rng(0)
+        x = np.linspace(0, 10, 200)
+        y = 3 * np.exp(-0.4 * x) + 0.01 * rng.standard_normal(200)
+
+        def f(x, a, b):
+            return a * jnp.exp(-b * x)
+
+        def jac(x, a, b):
+            x = jnp.asarray(x)
+            e = jnp.exp(-b * x)
+            return jnp.stack([e, -a * x * e], axis=-1)
+
+        info = {
+            "_x_scale": np.ptp(x),
+            "_y_scale": np.ptp(y),
+            "_x_offset": x.min(),
+            "_y_offset": y.min(),
+        }
+        return _fit_rescaled, f, jac, x, y, info
+
+    def test_full_output_mode_succeeds_and_keeps_return_type(self):
+        import nlsq.core.minpack as mp
+
+        fit, f, _jac, x, y, info = self._problem()
+        out = fit(mp.curve_fit, f, x, y, {"p0": [1.0, 1.0], "full_output": True}, info)
+        direct = mp.curve_fit(f, x, y, p0=[1.0, 1.0], full_output=True)
+        assert type(out) is type(direct)
+        np.testing.assert_allclose(out[0], direct[0], rtol=1e-3)
+
+    def test_analytic_jac_and_f_scale_are_transformed_for_scaled_stage(self):
+        import nlsq.core.minpack as mp
+
+        fit, f, jac, x, y, info = self._problem()
+        seen = []
+
+        def spy(*a, **k):
+            r = mp.curve_fit(*a, **k)
+            seen.append(r)
+            return r
+
+        out = fit(spy, f, x, y, {"p0": [1.0, 1.0], "jac": jac, "f_scale": 2.0}, info)
+        scaled, refit = seen
+        np.testing.assert_allclose(scaled.x, [3.0, 0.4], rtol=5e-2)
+        np.testing.assert_allclose(out[0], [3.0, 0.4], rtol=5e-2)
+        assert refit.nfev <= 3

@@ -177,11 +177,10 @@ class TestRecoveryErrorPaths:
         result = {"success": True, "x": np.array([np.nan, 1.0]), "cost": np.nan}
         assert not self.recovery._check_recovery_success(result)
 
-    def test_check_recovery_success_true_with_huge_cost_is_rejected(self):
-        """An explicit success=True with a blown-up (but finite) cost must
-        also be rejected."""
+    def test_check_recovery_success_true_with_huge_finite_cost_is_accepted(self):
+        """A large but finite cost is legitimate for large-magnitude data."""
         result = {"success": True, "x": np.array([1.0, 2.0]), "cost": 1e12}
-        assert not self.recovery._check_recovery_success(result)
+        assert self.recovery._check_recovery_success(result)
 
 
 # Total: 11 comprehensive tests covering recovery error paths
@@ -227,3 +226,23 @@ class TestRecoveryBoundsHandling:
             )
             assert np.all(np.isfinite(p0))
             assert np.all(p0 >= 0.0)
+
+
+class TestRecoveryCostCap:
+    def setup_method(self):
+        self.recovery = OptimizationRecovery(max_retries=1)
+
+    def test_large_finite_cost_accepted(self):
+        res = {"success": True, "x": np.array([1e6, 0.5]), "cost": 5e10}
+        assert self.recovery._check_recovery_success(res)
+
+    @pytest.mark.parametrize("cost", [np.nan, np.inf])
+    def test_nonfinite_cost_rejected(self, cost):
+        res = {"success": True, "x": np.array([1.0, 0.5]), "cost": cost}
+        assert not self.recovery._check_recovery_success(res)
+
+
+def test_numpy_false_success_flag_rejected():
+    rec = OptimizationRecovery(max_retries=1)
+    res = {"success": np.False_, "x": np.array([1.0, 2.0]), "cost": 0.1}
+    assert not rec._check_recovery_success(res)

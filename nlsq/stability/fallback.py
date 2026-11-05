@@ -294,6 +294,41 @@ def _rescale_sigma(sigma: Any, y_scale: float) -> np.ndarray:
     return sigma_arr / y_scale
 
 
+def _fit_rescaled(curve_fit, f, xdata, ydata, kwargs, scale_info):
+    """Fit the rescaled problem, then refit the original from its solution.
+
+    Only popt is unit-invariant: every other field of the scaled fit (pcov,
+    residuals, xdata, ydata, model) is in scaled units. The refit starts at the
+    scaled solution, so it converges immediately and returns a result entirely
+    in the user's units. If the refit fails the exception propagates and the
+    caller moves on to the next strategy instead of returning scaled fields.
+    """
+    xs, ys = scale_info["_x_scale"], scale_info["_y_scale"]
+    xo, yo = scale_info["_x_offset"], scale_info["_y_offset"]
+
+    def scaled_f(x_scaled, *params):
+        return (f(x_scaled * xs + xo, *params) - yo) / ys
+
+    # The scaled stage needs a CurveFitResult (.x), so drop tuple-return modes;
+    # the final refit keeps the user's kwargs and so the user's return type.
+    scaled_kwargs = {
+        k: v
+        for k, v in kwargs.items()
+        if k not in ("full_output", "return_eval", "timeit")
+    }
+    jac = kwargs.get("jac")
+    if callable(jac):
+        # d/dp of (f(x_s*xs + xo, p) - yo) / ys
+        scaled_kwargs["jac"] = lambda x_scaled, *p: jac(x_scaled * xs + xo, *p) / ys
+    if kwargs.get("f_scale") is not None:
+        scaled_kwargs["f_scale"] = kwargs["f_scale"] / ys  # f_scale is in y units
+    sigma = kwargs.get("sigma")
+    if sigma is not None:
+        scaled_kwargs["sigma"] = _rescale_sigma(sigma, ys)
+    scaled = curve_fit(scaled_f, (xdata - xo) / xs, (ydata - yo) / ys, **scaled_kwargs)
+    return curve_fit(f, xdata, ydata, **{**kwargs, "p0": np.asarray(scaled.x)})
+
+
 class RescaleProblemStrategy(FallbackStrategy):
     """Rescale data for numerical stability."""
 
@@ -541,38 +576,18 @@ class FallbackOrchestrator:
 
                 # RescaleProblemStrategy can't rewrite xdata/ydata/f itself
                 # (its apply() only sees kwargs), so it signals a rescaled
-                # fit via these internal keys instead. Build the actual
-                # rescaled data/model here so popt comes back in original
-                # units with no separate inverse-transform step.
-                x_scale = modified_kwargs.pop("_x_scale", None)
-                y_scale = modified_kwargs.pop("_y_scale", None)
-                x_offset = modified_kwargs.pop("_x_offset", None)
-                y_offset = modified_kwargs.pop("_y_offset", None)
-                is_scaled = modified_kwargs.pop("_scaled", False)
-
-                fit_f, fit_xdata, fit_ydata = f, xdata, ydata
-                if is_scaled:
-                    fit_xdata = (xdata - x_offset) / x_scale
-                    fit_ydata = (ydata - y_offset) / y_scale
-
-                    def fit_f(
-                        x_scaled,
-                        *params,
-                        _f=f,
-                        _xs=x_scale,
-                        _xo=x_offset,
-                        _yo=y_offset,
-                        _ys=y_scale,
-                    ):
-                        return (_f(x_scaled * _xs + _xo, *params) - _yo) / _ys
-
-                    if modified_kwargs.get("sigma") is not None:
-                        modified_kwargs["sigma"] = _rescale_sigma(
-                            modified_kwargs["sigma"], y_scale
-                        )
-
-                # Try fit with modified parameters
-                result = curve_fit(fit_f, fit_xdata, fit_ydata, **modified_kwargs)
+                # fit via internal keys; _fit_rescaled builds the scaled
+                # problem and returns a result in the user's original units.
+                scale_info = {
+                    k: modified_kwargs.pop(k, None)
+                    for k in ("_x_scale", "_y_scale", "_x_offset", "_y_offset")
+                }
+                if modified_kwargs.pop("_scaled", False):
+                    result = _fit_rescaled(
+                        curve_fit, f, xdata, ydata, modified_kwargs, scale_info
+                    )
+                else:
+                    result = curve_fit(f, xdata, ydata, **modified_kwargs)
 
                 # Success!
                 strategy.successes += 1

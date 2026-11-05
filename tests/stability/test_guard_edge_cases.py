@@ -568,3 +568,20 @@ class TestJacobianUnitIndependence:
             J_fixed, issues = guard.check_and_fix_jacobian(jnp.asarray(J, jnp.float32))
         assert issues["is_ill_conditioned"] and issues["regularized"]
         assert J_fixed.dtype == jnp.float32
+
+
+class TestJacobianRegularizationScaleInvariance:
+    def test_relative_change_is_scale_independent(self):
+        rng = np.random.default_rng(0)
+        x = np.linspace(0, 1, 100)
+        base = np.column_stack([np.ones(100), x, x + 1e-13 * rng.standard_normal(100)])
+        guard = NumericalStabilityGuard()
+        rel = []
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for scale in (1.0, 1e-12, 1e12):
+                J = jnp.asarray(scale * base)
+                Jf, issues = guard.check_and_fix_jacobian(J)
+                assert issues["regularized"]
+                rel.append(float(jnp.max(jnp.abs(Jf - J)) / jnp.max(jnp.abs(J))))
+        assert_allclose(rel, rel[0], rtol=1e-6)

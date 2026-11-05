@@ -238,3 +238,97 @@ class TestCallbackReceivesPhysicalParams:
         assert seen
         # normalized p0 would be [1, 1]; physical p0 is [8, 0.2]
         np.testing.assert_allclose(seen[0], [8.0, 0.2], rtol=1e-6)
+
+
+class TestMaxIterationsWarning:
+    """Phase 2 stopping at max iterations warns once (success semantics unchanged)."""
+
+    def _fit(self, **kw):
+        rng = np.random.default_rng(0)
+        x = np.linspace(0, 5, 300)
+        y = 3.0 * np.exp(-0.7 * x) + 0.01 * rng.normal(size=x.size)
+        opt = AdaptiveHybridStreamingOptimizer(_fast_config(**kw))
+        return opt.fit((x, y), _exp_model, [1.0, 1.0], verbose=0)
+
+    def test_warns_when_stopped_at_max_iterations(self):
+        from nlsq.result import OptimizeWarning
+
+        with pytest.warns(OptimizeWarning, match="max iterations") as rec:
+            r = self._fit(gauss_newton_max_iterations=1)
+        assert r["message"] == "Maximum iterations reached"
+        assert (
+            sum(
+                "hybrid streaming stopped at max iterations" in str(w.message)
+                for w in rec
+            )
+            == 1
+        )
+
+    def test_no_warning_when_converged(self):
+        import warnings
+
+        from nlsq.result import OptimizeWarning
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", OptimizeWarning)
+            r = self._fit(gauss_newton_max_iterations=50)
+        assert r["message"] != "Maximum iterations reached"
+
+
+class TestHybridAbsoluteSigma:
+    """F2: hybrid covariance ignored absolute_sigma=True."""
+
+    @pytest.mark.parametrize("absolute_sigma", [True, False])
+    def test_pcov_matches_curve_fit(self, absolute_sigma):
+        from nlsq import curve_fit
+        from nlsq.streaming.strategy import build_large_strategy
+
+        rng = np.random.default_rng(3)
+        x = np.linspace(0, 10, 2000)
+        y = 2.0 * x + 1.0 + 0.2 * rng.normal(size=x.size)
+
+        def lin(x, a, b):
+            return a * x + b
+
+        _, ref = curve_fit(lin, x, y, p0=[1, 1], absolute_sigma=absolute_sigma)
+        strategy = build_large_strategy(
+            "hybrid", _fast_config(gauss_newton_max_iterations=50)
+        )
+        native = strategy.fit(
+            lin,
+            x,
+            y,
+            np.array([1.0, 1.0]),
+            absolute_sigma=absolute_sigma,
+            verbose=0,
+        )
+        np.testing.assert_allclose(
+            np.asarray(native["pcov"]), np.asarray(ref), rtol=1e-3
+        )
+
+
+class TestMaxIterationsWarningAttribution:
+    def test_warning_points_at_caller_even_through_strategy_and_multistart(self):
+        import warnings
+
+        from nlsq.result import OptimizeWarning
+        from nlsq.streaming.strategy import build_large_strategy
+
+        rng = np.random.default_rng(0)
+        x = np.linspace(0, 5, 300)
+        y = 3.0 * np.exp(-0.7 * x) + 0.01 * rng.normal(size=x.size)
+        cfg = _fast_config(
+            gauss_newton_max_iterations=1, enable_multistart=True, n_starts=3
+        )
+        strategy = build_large_strategy("hybrid", cfg)
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always")
+            strategy.fit(_exp_model, x, y, np.array([1.0, 1.0]), verbose=0)
+        hits = [
+            w
+            for w in rec
+            if issubclass(w.category, OptimizeWarning)
+            and "stopped at max iterations" in str(w.message)
+        ]
+        assert len(hits) == 1
+        assert hits[0].filename == __file__

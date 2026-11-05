@@ -227,7 +227,11 @@ def _fit_hybrid(
     kwargs: dict[str, Any],
 ) -> Any:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
-    from nlsq.streaming.strategy import build_large_strategy, normalize_p0_bounds
+    from nlsq.streaming.strategy import (
+        build_large_strategy,
+        normalize_p0_bounds,
+        scipy_layout_to_points_first,
+    )
 
     if kwargs:
         # curve_fit_large's shim builds the config; Hybrid takes no engine kwargs
@@ -249,21 +253,13 @@ def _fit_hybrid(
     # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
     large_strategy = build_large_strategy("hybrid", config)
 
-    # The engine takes multi-dimensional x as (n_points, n_features) and chunks
-    # along axis 0, while curve_fit_large's contract is scipy's (k, M): hand
-    # it the transpose and give the user's model its (k, chunk) layout back.
-    if xdata.ndim > 1:
-        user_f = f
-
-        def f(x, *params):
-            return user_f(x.T, *params)
-
-        xdata = xdata.T
+    # curve_fit_large's contract is scipy's (k, M); the engine is points-first.
+    f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
 
     # Run optimization
     native = large_strategy.fit(
-        f,
-        xdata,
+        f_engine,
+        x_engine,
         ydata,
         p0,
         bounds=bounds_tuple,

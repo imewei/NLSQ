@@ -205,3 +205,73 @@ class TestStandaloneScriptData:
         )
         self._page(app_state, qtbot, 6000)._on_export_data_csv()
         assert seen == ["data.csv"]
+
+
+class TestNonFiniteInlineValues:
+    """R5-GUI-1: nan/inf in inlined data or p0 must not be a NameError."""
+
+    @staticmethod
+    def _page(app_state, qtbot, x, y, sigma=None, p0=None):
+        from nlsq.gui_qt.pages.export import ExportPage
+
+        app_state.set_data(x, y, sigma)
+        app_state.set_model("custom", model_func=lambda x, a, b: a * x + b)
+        app_state.state.p0 = p0
+        app_state.set_fit_result(FakeFitResult([2.0, 1.0]))
+        page = ExportPage(app_state)
+        qtbot.addWidget(page)
+        return page
+
+    @staticmethod
+    def _run(code):
+        ns: dict = {}
+        with pytest.raises(ValueError):  # the fit itself rejects non-finite input
+            exec(compile(code, "script", "exec"), ns)
+        return ns  # reached fit(): data/p0 definitions did not NameError
+
+    @pytest.mark.parametrize("which", ["x", "y", "sigma"])
+    def test_nan_in_inline_data(self, app_state, qtbot, which, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        y = 2 * x + 1
+        sigma = np.full(30, 0.1)
+        {"x": x, "y": y, "sigma": sigma}[which][3] = np.nan
+        page = self._page(app_state, qtbot, x, y, sigma)
+        ns = self._run(page.generate_python_code())
+        assert np.isnan(ns[{"x": "xdata", "y": "ydata", "sigma": "sigma"}[which]]).any()
+
+    def test_inf_in_data_and_p0(self, app_state, qtbot, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        y = 2 * x + 1
+        y[5] = np.inf
+        page = self._page(app_state, qtbot, x, y, p0=[np.inf, 1.0])
+        ns = self._run(page.generate_python_code())
+        assert np.isinf(ns["ydata"]).any() and np.isinf(ns["p0"][0])
+
+    def test_inf_p0_with_finite_data(self, app_state, qtbot, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        page = self._page(app_state, qtbot, x, 2 * x + 1, p0=[-np.inf, 1.0])
+        ns = self._run(page.generate_python_code())
+        assert ns["p0"][0] == -np.inf
+
+    def test_infinite_bounds_run(self, app_state, qtbot, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        page = self._page(app_state, qtbot, x, 2 * x + 1, p0=[1.0, 1.0])
+        app_state.state.bounds = ([None, 0.0], [10.0, None])
+        ns: dict = {}
+        exec(compile(page.generate_python_code(), "script", "exec"), ns)
+        np.testing.assert_allclose(ns["popt"], [2.0, 1.0], rtol=1e-5)
+
+    def test_data_csv_path_parses_nan(self, app_state, qtbot, tmp_path):
+        x = np.linspace(0, 1, 30)
+        y = 2 * x + 1
+        y[3] = np.nan
+        page = self._page(app_state, qtbot, x, y)
+        page.export_csv(str(tmp_path / "data.csv"), include_data=True)
+        ns: dict = {"__file__": str(tmp_path / "fit_script.py")}
+        with pytest.raises(ValueError):
+            exec(compile(page.generate_python_code(for_bundle=True), "s", "exec"), ns)
+        assert np.isnan(ns["ydata"]).any()

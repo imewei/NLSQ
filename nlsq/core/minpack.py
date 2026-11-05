@@ -70,6 +70,7 @@ _jax_config = JAXConfig()
 
 import jax.numpy as jnp
 from jax import jit
+from jax.errors import TracerArrayConversionError
 from jax.scipy.linalg import cholesky as jax_cholesky
 from jax.scipy.linalg import svd as jax_svd
 
@@ -654,9 +655,12 @@ def fit(  # noqa: C901
                 n_points=n_points,
                 **kwargs,
             )
+        accepted = ["auto", "auto_global", "hpc"] + [
+            k for k in WORKFLOW_PRESETS if k not in REMOVED_PRESETS
+        ]
         raise ValueError(
-            f"Unknown workflow '{workflow}'. Must be 'auto', one of "
-            f"{list(WORKFLOW_PRESETS.keys())}, or a config object.",
+            f"Unknown workflow '{workflow}'. Must be one of "
+            f"{accepted}, or a config object.",
         )
 
     raise ValueError(
@@ -708,7 +712,10 @@ def _fit_with_config(
     from nlsq.global_optimization import GlobalOptimizationConfig
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
     from nlsq.streaming.large_dataset import LDMemoryConfig
-    from nlsq.streaming.strategy import build_large_strategy
+    from nlsq.streaming.strategy import (
+        build_large_strategy,
+        scipy_layout_to_points_first,
+    )
 
     n_points = len(ydata)
 
@@ -766,9 +773,10 @@ def _fit_with_config(
             config,
             **({"gtol": kwargs["gtol"]} if "gtol" in kwargs else {}),
         )
+        f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
         result_dict = large_strategy.fit(
-            f,
-            xdata,
+            f_engine,
+            x_engine,
             ydata,
             p0_arr,
             bounds=bounds_tuple,
@@ -1040,7 +1048,10 @@ def _fit_with_preset(  # noqa: C901
     if strategy == "streaming":
         # Streaming optimization path
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
-        from nlsq.streaming.strategy import build_large_strategy
+        from nlsq.streaming.strategy import (
+            build_large_strategy,
+            scipy_layout_to_points_first,
+        )
 
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
@@ -1073,9 +1084,10 @@ def _fit_with_preset(  # noqa: C901
         )
 
         large_strategy = build_large_strategy("hybrid", config)
+        f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
         result_dict = large_strategy.fit(
-            f,
-            xdata,
+            f_engine,
+            x_engine,
             ydata,
             p0_arr,
             bounds=bounds_tuple,
@@ -1780,7 +1792,10 @@ def _fit_global_multistart(
         return result
     # Streaming with multi-start (FR-004)
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
-    from nlsq.streaming.strategy import build_large_strategy
+    from nlsq.streaming.strategy import (
+        build_large_strategy,
+        scipy_layout_to_points_first,
+    )
 
     _check_finite_for_streaming(xdata, ydata, check_finite)
 
@@ -1810,9 +1825,10 @@ def _fit_global_multistart(
     )
 
     large_strategy = build_large_strategy("hybrid", config)
+    f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
     result_dict = large_strategy.fit(
-        f,
-        xdata,
+        f_engine,
+        x_engine,
         ydata,
         p0_arr,
         bounds=bounds,
@@ -1983,7 +1999,8 @@ def _apply_auto_bounds(
     p0: NDArray[np.floating[Any]] | Literal["auto"] | None,
     bounds_safety_factor: float,
     kwargs: dict[str, Any],
-) -> None:
+    method: str | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """Apply automatic bounds inference from data characteristics.
 
     Infers reasonable bounds based on data ranges, initial parameter guess,
@@ -2004,8 +2021,24 @@ def _apply_auto_bounds(
         Safety multiplier for automatic bounds.
     kwargs : dict
         Keyword arguments dict to update with merged bounds.
+    method : str or None
+        Requested method; 'lm' cannot be combined with inferred bounds.
+
+    Returns
+    -------
+    user_lb, user_ub : ndarray
+        The caller's bounds per parameter (infinite where unset).
     """
     from nlsq.precision.bound_inference import infer_bounds, merge_bounds
+
+    if method == "lm":
+        raise ValueError(
+            "auto_bounds=True infers parameter bounds, which method='lm' does "
+            "not support; use method='trf' or 'dogbox', or set auto_bounds=False."
+        )
+
+    # nan_policy='omit' drops non-finite rows later; inference must not see them.
+    xdata, ydata = finite_rows(xdata, ydata)
 
     if p0 is None or _is_auto_p0(p0):
         from nlsq.precision.parameter_estimation import estimate_initial_parameters
@@ -2028,6 +2061,117 @@ def _apply_auto_bounds(
 
     # Update kwargs with merged bounds
     kwargs["bounds"] = merged_bounds
+
+    # User bounds as per-parameter arrays (+-inf where unset): the sides still
+    # infinite are the ones that carry an *inferred* bound.
+    n_params = len(merged_bounds[0])
+    user_lb, user_ub = (
+        np.broadcast_to(np.asarray(b, dtype=float), (n_params,)).copy()
+        for b in user_bounds
+    )
+    return user_lb, user_ub
+
+
+def _raise_clear_jac_trace_error(exc: Exception, jac: Any) -> None:
+    """Re-raise a JAX tracing failure under a user ``jac`` as a clear TypeError."""
+    if isinstance(exc, TracerArrayConversionError) and callable(jac):
+        raise TypeError(
+            "jac (and the model) must be JAX-traceable: use jax.numpy, not "
+            "numpy, inside a user-supplied jac."
+        ) from exc
+
+
+def _drop_internal_routing_kwargs(kwargs: dict[str, Any]) -> None:
+    """Drop routing keys no optimizer layer reads (curve_fit_large / multi-start
+    plumbing), so anything left for least_squares is a genuinely unknown keyword."""
+    for key in (
+        "nan_policy",
+        "multistart",
+        "n_starts",
+        "sampler",
+        "center_on_p0",
+        "scale_factor",
+    ):
+        kwargs.pop(key, None)
+
+
+_OUTPUT_FLAGS = ("full_output", "return_eval", "timeit")
+
+
+def _curve_fit_with_auto_bounds(
+    run: Callable[..., Any],
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    bounds_safety_factor: float,
+    method: str | None,
+    kwargs: dict[str, Any],
+) -> Any:
+    """Run ``curve_fit`` with inferred bounds, guarding against heuristic clipping.
+
+    ``run(**kwargs)`` is a bound ``curve_fit`` (``auto_bounds`` off). If a fitted
+    parameter sits on a bound that was *inferred* (not set by the caller), refit
+    once with that side relaxed to the caller's bound, starting from the result;
+    the refit is kept (with an OptimizeWarning) only if its cost is lower.
+    The guard works on every route (multistart, fallback, CMA-ES, ...): the
+    inner fits run without the SciPy-style output flags, and when the caller
+    asked for one the final fit is re-run once at the final bounds and
+    ``p0=popt`` so the requested tuple is returned.
+    """
+    user_lb, user_ub = _apply_auto_bounds(
+        f,
+        xdata,
+        ydata,
+        kwargs.get("p0"),
+        bounds_safety_factor,
+        kwargs,
+        kwargs.get("method") or method,
+    )
+    flags = {k: kwargs[k] for k in _OUTPUT_FLAGS if kwargs.get(k)}
+    plain = {**kwargs, **dict.fromkeys(flags, False)}
+    result = run(**plain)
+    final: dict[str, Any] = {}
+
+    popt = getattr(result, "popt", None)
+    if popt is not None:
+        popt = np.asarray(popt, dtype=float)
+        lb, ub = (np.asarray(b, dtype=float) for b in kwargs["bounds"])
+        at_lb = np.isinf(user_lb) & np.isfinite(lb)
+        at_lb &= popt - lb <= 1e-6 * np.maximum(1.0, np.abs(lb))
+        at_ub = np.isinf(user_ub) & np.isfinite(ub)
+        at_ub &= ub - popt <= 1e-6 * np.maximum(1.0, np.abs(ub))
+        if at_lb.any() or at_ub.any():
+            relaxed = {
+                "bounds": (np.where(at_lb, user_lb, lb), np.where(at_ub, user_ub, ub)),
+                "p0": popt,
+            }
+            try:
+                refit = run(**{**plain, **relaxed})
+            except Exception:  # keep the original result if the relaxed fit fails
+                refit = None
+            refit_popt = getattr(refit, "popt", None)
+            if (
+                refit_popt is not None
+                and np.all(np.isfinite(refit_popt))
+                and refit["cost"] < result["cost"]
+            ):
+                import warnings
+
+                idx = np.flatnonzero(at_lb | at_ub).tolist()
+                warnings.warn(
+                    f"auto_bounds: parameter(s) {idx} ended on an inferred bound, "
+                    "which is only a heuristic; refit without it. Pass explicit "
+                    "bounds to override.",
+                    OptimizeWarning,
+                    stacklevel=3,
+                )
+                result, final = refit, relaxed
+                popt = np.asarray(refit_popt, dtype=float)
+    if flags and popt is not None:
+        return run(**{**kwargs, **final, "p0": popt})
+    if flags:
+        return run(**kwargs)
+    return result
 
 
 def _apply_stability_checks(
@@ -2370,6 +2514,30 @@ def _run_cmaes_optimization(
         "method": "cmaes",
     }
 
+    return _apply_output_flags(result, f, xdata, kwargs)
+
+
+def _apply_output_flags(
+    result: CurveFitResult,
+    f: ModelFunction,
+    xdata: ArrayLike,
+    kwargs: dict[str, Any],
+) -> Any:
+    """Format a CurveFitResult as the SciPy-style tuple the caller asked for.
+
+    Same shapes as ``CurveFit.curve_fit``: ``return_eval`` -> (popt, pcov, f(x));
+    ``full_output`` -> (popt, pcov, infodict, mesg, ier); ``timeit`` ->
+    (popt, pcov, result, post_time, ctime) (no separate timings: both 0.0).
+    Otherwise the result is returned unchanged.
+    """
+    popt, pcov = result.popt, result.pcov
+    if kwargs.get("return_eval"):
+        return popt, pcov, np.asarray(f(jnp.asarray(xdata), *popt))
+    if kwargs.get("full_output"):
+        info = {"nfev": result.get("nfev"), "fvec": None}
+        return popt, pcov, info, result.get("message", ""), 1
+    if kwargs.get("timeit"):
+        return popt, pcov, result, 0.0, 0.0
     return result
 
 
@@ -2454,7 +2622,7 @@ def _run_fallback_optimization(
     fallback_verbose: bool,
     multistart: bool,
     n_starts: int,
-) -> CurveFitResult:
+) -> Any:
     """Run optimization with automatic fallback strategies.
 
     Parameters
@@ -2480,8 +2648,9 @@ def _run_fallback_optimization(
 
     Returns
     -------
-    result : CurveFitResult
-        Optimization result.
+    result : FallbackResult or tuple
+        FallbackResult wrapping the CurveFitResult, or the plain tuple for
+        timeit/return_eval/full_output.
     """
     from nlsq.stability.fallback import FallbackOrchestrator
 
@@ -2504,12 +2673,16 @@ def _run_fallback_optimization(
 
     result = orchestrator.fit_with_fallback(f, xdata, ydata, **fallback_kwargs)
 
+    # timeit/return_eval/full_output make curve_fit return a plain tuple: hand
+    # it back exactly as the non-fallback call would (FallbackResult iteration
+    # delegates to the tuple, so `in` / item assignment on it is unsafe).
+    inner = result.result
+    if not isinstance(inner, CurveFitResult):
+        return inner
+
     # Add empty multi-start diagnostics for consistency
-    if (
-        not hasattr(result, "multistart_diagnostics")
-        and "multistart_diagnostics" not in result
-    ):
-        result["multistart_diagnostics"] = {
+    if "multistart_diagnostics" not in inner:
+        inner["multistart_diagnostics"] = {
             "n_starts_configured": n_starts if multistart else 0,
             "bypassed": True,
         }
@@ -2625,7 +2798,10 @@ def curve_fit(
 
         The inferred bounds are merged with any user-provided bounds via the
         ``bounds`` parameter. User bounds take precedence where specified.
-        Default: False.
+        Inferred bounds are heuristics and can exclude the true solution: if the
+        fit ends on an inferred bound, it is refit once without that bound and
+        the better result is returned with an ``OptimizeWarning``. Not
+        supported with ``method='lm'``. Default: False.
     bounds_safety_factor : float, optional
         Safety multiplier for automatic bounds (larger = more conservative).
         Only used when auto_bounds=True. Default: 10.0.
@@ -2772,6 +2948,10 @@ def curve_fit(
     -----
     This function creates a CurveFit instance internally and calls its curve_fit method.
 
+    Unlike ``scipy.optimize.curve_fit``, exhausting ``max_nfev``/``maxfev`` does
+    not raise ``RuntimeError``: NLSQ emits an ``OptimizeWarning`` and returns the
+    best-effort result with ``success=False``.
+
     Repeated fits reuse a model's compiled residual and Jacobian (autodiff,
     no ``jac``) when the model traces to an identical computation: every call
     traces ``f`` abstractly (and its Jacobian, if it uses ``custom_jvp`` or
@@ -2890,6 +3070,38 @@ def curve_fit(
         kwargs.setdefault(_name, _value)
     args = ()
 
+    # Inferred bounds: delegate to a driver that re-invokes this function with
+    # auto_bounds off, so the clipping guard covers every route.
+    if auto_bounds:
+        _inner = {
+            "stability": stability,
+            "rescale_data": rescale_data,
+            "max_jacobian_elements_for_svd": max_jacobian_elements_for_svd,
+            "fallback": fallback,
+            "max_fallback_attempts": max_fallback_attempts,
+            "fallback_verbose": fallback_verbose,
+            "multistart": multistart,
+            "n_starts": n_starts,
+            "global_search": global_search,
+            "sampler": sampler,
+            "center_on_p0": center_on_p0,
+            "scale_factor": scale_factor,
+            "method": method,
+            "cmaes_config": cmaes_config,
+            "compute_diagnostics": compute_diagnostics,
+            "diagnostics_level": diagnostics_level,
+            "diagnostics_config": diagnostics_config,
+        }
+        return _curve_fit_with_auto_bounds(
+            lambda **kw: curve_fit(f, xdata, ydata, **{**_inner, **kw}),
+            f,
+            xdata,
+            ydata,
+            bounds_safety_factor,
+            method,
+            kwargs,
+        )
+
     # Handle global_search shorthand
     if global_search:
         multistart = True
@@ -2904,10 +3116,6 @@ def curve_fit(
     verbose = kwargs.get("verbose", 1)
     if verbose >= 2:
         _log_memory_budget_diagnostics(xdata, ydata, p0)
-
-    # Handle automatic bounds inference
-    if auto_bounds:
-        _apply_auto_bounds(f, xdata, ydata, p0, bounds_safety_factor, kwargs)
 
     # Handle numerical stability checks and fixes
     if stability:
@@ -3721,6 +3929,7 @@ class CurveFit:
             Optimization result (popt, pcov) or CurveFitResult object
         """
         from nlsq.core.workflow import MemoryBudgetSelector
+        from nlsq.streaming.strategy import scipy_layout_to_points_first
 
         # Convert ydata to array for size determination
         ydata_arr = np.asarray(ydata, float)
@@ -3763,9 +3972,12 @@ class CurveFit:
             # without it, _curve_fit_hybrid_streaming falls back to its own
             # default HybridStreamingConfig() and silently ignores the
             # memory-budget-computed batch/chunk size that was just selected.
-            return self._curve_fit_hybrid_streaming(
-                f=f,
-                xdata=xdata,
+            # This method takes scipy's (k, M) x; the hybrid method is
+            # points-first, so adapt the model and x on the way in.
+            f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
+            result = self._curve_fit_hybrid_streaming(
+                f=f_engine,
+                xdata=x_engine,
                 ydata=ydata,
                 p0=p0,
                 sigma=sigma,
@@ -3782,6 +3994,11 @@ class CurveFit:
                 config=config,
                 **kwargs,
             )
+            if isinstance(result, CurveFitResult):
+                # Report the caller's model and x, not the points-first adapters.
+                result["model"] = f
+                result["xdata"] = xdata
+            return result
 
         if strategy == "chunked":
             # sigma/data_mask would need to be sliced consistently with each
@@ -3928,6 +4145,8 @@ class CurveFit:
         if "max_nfev" not in kwargs:
             kwargs["max_nfev"] = kwargs.pop("maxfev", None)
 
+        _drop_internal_routing_kwargs(kwargs)
+
         # Determine the appropriate solver and configure tr_solver
         tr_solver = self._select_tr_solver(solver, m, n, batch_size)
         if tr_solver is not None and kwargs.get("tr_solver") is None:
@@ -4010,6 +4229,7 @@ class CurveFit:
                     **kwargs,
                 )
             except Exception as e:
+                _raise_clear_jac_trace_error(e, jac)
                 if self.enable_recovery:
                     self.logger.warning(
                         "Optimization failed, attempting recovery",
@@ -4103,8 +4323,9 @@ class CurveFit:
 
         if not res.success:
             if res.status == 0:
-                # Maximum iterations reached: warn and return best-effort result.
-                # Matches SciPy curve_fit behavior (OptimizeWarning, not exception).
+                # Maximum iterations reached: warn and return a best-effort
+                # result (success=False). SciPy's curve_fit raises RuntimeError
+                # here; NLSQ deliberately warns instead (see curve_fit Notes).
                 max_nfev = kwargs.get("max_nfev") or len(p0) * 100
                 import warnings
 
@@ -4293,7 +4514,9 @@ class CurveFit:
             array_like structure. It will be scaled according to provided `sigma`.
             If None (default), the Jacobian will be determined using JAX's automatic
             differentiation (AD) capabilities. We recommend not using an analytical
-            Jacobian, as it is usually faster to use AD.
+            Jacobian, as it is usually faster to use AD. A user ``jac`` is
+            traced by JAX, so it must be written with ``jax.numpy`` (a
+            NumPy-only callable raises ``TypeError``).
             The returned array must have shape ``(n_params, m)`` (the transpose
             of SciPy's ``(m, n_params)``). SciPy-style ``(m, n_params)`` output is
             also accepted when ``m != n_params``; when ``m == n_params`` the

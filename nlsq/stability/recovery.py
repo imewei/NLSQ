@@ -396,7 +396,7 @@ class OptimizationRecovery:
 
         # An explicit False is unambiguous -- trust it immediately.
         success = _get_value(result, "success")
-        if success is False:
+        if success is not None and not bool(success):
             return False
 
         # Validate parameters/cost whenever available. Even an explicit
@@ -420,7 +420,7 @@ class OptimizationRecovery:
             # Check cost if available
             cost = _get_value(result, "cost")
             if cost is not None:
-                if not np.isfinite(cost) or cost > 1e10:
+                if not np.isfinite(cost):
                     return False
 
             return True

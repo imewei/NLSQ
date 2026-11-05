@@ -459,6 +459,10 @@ def _call_preset(key: str, *, n_points: int = N, **overrides: Any) -> Any:
 
 def _drive_fit_preset_streaming(ctx: SimpleNamespace, **kw: Any) -> Any:
     with pytest.warns(FutureWarning, match="preset"):
+        if "ftol" in kw or "xtol" in kw:
+            # no hybrid equivalent: warned about, not silently dropped
+            with pytest.warns(UserWarning, match="ftol"):
+                return nlsq.fit(MODEL, X, Y, p0=P0, preset="streaming", **kw)
         return nlsq.fit(MODEL, X, Y, p0=P0, preset="streaming", **kw)
 
 
@@ -480,12 +484,16 @@ def _drive_fit_preset_streaming_full(ctx: SimpleNamespace) -> Any:
 
 
 def _check_fit_preset_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
-    # gtol/ftol/xtol are dropped on this route; only multistart settings reach
-    # the config, and sigma/absolute_sigma/callback/verbose/bounds reach fit().
+    # gtol maps to gauss_newton_tol; ftol/xtol have no hybrid equivalent (warned,
+    # not forwarded). Multistart settings reach the config, and
+    # sigma/absolute_sigma/callback/verbose/bounds reach fit().
     expect_hybrid_ctor(
         rec,
         HybridStreamingConfig(
-            enable_multistart=True, n_starts=4, multistart_sampler="sobol"
+            enable_multistart=True,
+            n_starts=4,
+            multistart_sampler="sobol",
+            gauss_newton_tol=1e-3,
         ),
         "fit(preset=streaming) config",
     )
