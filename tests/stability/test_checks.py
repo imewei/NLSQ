@@ -105,7 +105,7 @@ class TestDetectCollinearity:
         np.random.seed(42)
         x1 = np.random.randn(100)
         x2 = np.random.randn(100)
-        xdata = np.column_stack([x1, x2])
+        xdata = np.vstack([x1, x2])  # (k, N): one row per variable
 
         has_coll, pairs = detect_collinearity(xdata)
 
@@ -116,7 +116,7 @@ class TestDetectCollinearity:
         """Test with perfectly collinear variables."""
         x1 = np.linspace(0, 10, 100)
         x2 = 2.0 * x1  # Perfect linear relationship
-        xdata = np.column_stack([x1, x2])
+        xdata = np.vstack([x1, x2])  # (k, N): one row per variable
 
         has_coll, pairs = detect_collinearity(xdata)
 
@@ -129,7 +129,7 @@ class TestDetectCollinearity:
         np.random.seed(42)
         x1 = np.linspace(0, 10, 100)
         x2 = 2.0 * x1 + 0.1 * np.random.randn(100)  # Nearly collinear
-        xdata = np.column_stack([x1, x2])
+        xdata = np.vstack([x1, x2])  # (k, N): one row per variable
 
         has_coll, _pairs = detect_collinearity(xdata)
 
@@ -143,6 +143,69 @@ class TestDetectCollinearity:
 
         assert has_coll is False
         assert len(pairs) == 0
+
+
+class TestCollinearityLayout:
+    """Multi-variable xdata is (k, N); correlate the k rows, not the N points."""
+
+    def test_independent_rows_not_flagged_and_single_pair(self):
+        rng = np.random.default_rng(0)
+        X = rng.uniform(0, 1, (2, 500))
+        has_coll, pairs = detect_collinearity(X)
+        assert has_coll is False and pairs == []
+        report = check_problem_stability(X, X[0] + 2 * X[1], [1.0, 2.0])
+        assert report["has_collinearity"] is False
+        assert report["collinear_pairs"] == []
+
+    def test_affine_collinear_rows_flagged(self):
+        rng = np.random.default_rng(0)
+        x1 = rng.uniform(0, 1, 500)
+        X = np.vstack([x1, 2 * x1 + 1])
+        has_coll, pairs = detect_collinearity(X)
+        assert has_coll is True
+        assert len(pairs) == 1 and pairs[0][:2] == (0, 1)
+
+    def test_n_by_1_skipped_cheaply(self):
+        import time
+        import tracemalloc
+
+        X = np.random.default_rng(2).uniform(0, 1, (5000, 1))
+        tracemalloc.start()
+        t = time.time()
+        out = detect_collinearity(X)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        assert out == (False, [])
+        assert time.time() - t < 0.5 and peak < 10e6
+
+    def test_n_by_k_layout_independent_not_flagged(self):
+        X = np.random.default_rng(3).uniform(0, 1, (50, 2))
+        assert detect_collinearity(X) == (False, [])
+
+    def test_k_by_n_short_independent_not_flagged(self):
+        X = np.random.default_rng(3).uniform(0, 1, (2, 50))
+        assert detect_collinearity(X) == (False, [])
+
+    def test_collinear_detected_in_both_layouts(self):
+        x1 = np.random.default_rng(4).uniform(0, 1, 50)
+        X = np.vstack([x1, 2 * x1 + 1])
+        for layout in (X, X.T):
+            has_coll, pairs = detect_collinearity(layout)
+            assert has_coll is True and len(pairs) == 1
+
+    def test_check_problem_stability_n_by_1_no_collinearity(self):
+        X = np.random.default_rng(5).uniform(0, 1, (3000, 1))
+        report = check_problem_stability(X, X[:, 0] * 2, [1.0])
+        assert report["has_collinearity"] is False
+
+    def test_large_n_is_cheap(self):
+        # (N, N) correlation of 6000 points would need ~290 MB and seconds
+        X = np.random.default_rng(1).uniform(0, 1, (2, 6000))
+        import time
+
+        t = time.time()
+        detect_collinearity(X)
+        assert time.time() - t < 1.0
 
 
 class TestCheckProblemStability:
@@ -369,7 +432,7 @@ class TestIntegration:
         np.random.seed(42)
         x1 = np.linspace(0, 10, 100)
         x2 = 2.0 * x1 + 0.01 * np.random.randn(100)
-        xdata = np.column_stack([x1, x2])
+        xdata = np.vstack([x1, x2])  # (k, N): one row per variable
         y = 3.0 * x1 + 4.0 * x2 + 1.0
 
         report = check_problem_stability(xdata, y)

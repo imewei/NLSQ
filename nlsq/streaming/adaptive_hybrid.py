@@ -46,11 +46,13 @@ from nlsq.precision.parameter_normalizer import (
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
+from nlsq.streaming.phases.warmup import _clip_update_norm, _create_lbfgs_optimizer
 from nlsq.streaming.telemetry import (
     DefenseLayerTelemetry,
     get_defense_telemetry,
     reset_defense_telemetry,
 )
+from nlsq.utils.bounds_sampling import sample_in_bounds
 from nlsq.utils.logging import get_logger
 
 # Lazy import cache for CheckpointManager to avoid circular imports
@@ -263,6 +265,9 @@ class AdaptiveHybridStreamingOptimizer:
         if (iteration + 1) % max(1, self.config.callback_frequency) != 0:
             return
         try:
+            # Callers see physical parameters, not the optimizer's normalized ones.
+            if self.normalizer is not None:
+                params = self.normalizer.denormalize(params)
             self._fit_callback(params, loss, iteration)
         except Exception as exc:
             # exc_info=True preserves the traceback pointing into the user's
@@ -628,16 +633,43 @@ class AdaptiveHybridStreamingOptimizer:
 
         Notes
         -----
-        The actual scan body function is created inline in _compute_cost_scan,
-        as it needs to capture the current params in a closure.
-        This setup method primarily validates that prerequisites are met.
+        The scan cost is ONE jitted function of (params, padded data, n_points)
+        so repeated cost evaluations reuse the compiled executable. It closes
+        over the normalized model only, so it must be rebuilt per setup.
         """
         if self.normalized_model is None:
             raise RuntimeError(
                 "_setup_scan_functions must be called after _setup_normalization",
             )
 
-        # Mark scan functions as available (bodies created inline in each method)
+        normalized_model = self.normalized_model
+
+        def scan_cost(params, x_padded, y_padded, n_points, chunk_size):
+            n_chunks = x_padded.shape[0] // chunk_size
+            x_ndim = x_padded.ndim
+
+            def scan_body(carry, chunk_idx):
+                start = chunk_idx * chunk_size
+                if x_ndim == 1:
+                    x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
+                else:
+                    x_chunk = jax.lax.dynamic_slice(
+                        x_padded,
+                        (start, 0),
+                        (chunk_size, x_padded.shape[1]),
+                    )
+                y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
+                mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
+                # See _fill_padded_rows: guards NaN/Inf from evaluating the
+                # model at padded rows before masking.
+                safe_x_chunk = _fill_padded_rows(x_chunk, mask)
+                residuals = y_chunk - normalized_model(safe_x_chunk, *params)
+                return carry + jnp.sum((residuals * mask) ** 2), None
+
+            total, _ = jax.lax.scan(scan_body, jnp.array(0.0), jnp.arange(n_chunks))
+            return total
+
+        self._scan_cost_fn = jax.jit(scan_cost, static_argnums=(4,))
         self._cost_scan_body_compiled = True
 
         if self.config.verbose >= 2:
@@ -679,90 +711,6 @@ class AdaptiveHybridStreamingOptimizer:
             # Use scan on GPU/TPU, loops on CPU
             return platform in ("gpu", "cuda", "rocm", "tpu")
         return False  # Default to loops if no devices detected
-
-    def _prepare_chunked_data(
-        self,
-        x_data: jnp.ndarray,
-        y_data: jnp.ndarray,
-        chunk_size: int,
-    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, int]:
-        """Prepare data for scan by padding and reshaping into fixed-size chunks.
-
-        Parameters
-        ----------
-        x_data : array_like
-            Full x data of shape (n_points,) or (n_points, n_features)
-        y_data : array_like
-            Full y data of shape (n_points,)
-        chunk_size : int
-            Size of each chunk
-
-        Returns
-        -------
-        x_chunks : array_like
-            Reshaped x data of shape (n_chunks, chunk_size, ...)
-        y_chunks : array_like
-            Reshaped y data of shape (n_chunks, chunk_size)
-        mask_chunks : array_like
-            Validity mask of shape (n_chunks, chunk_size), 1.0 for valid points
-        n_valid_points : int
-            Number of valid (non-padded) points
-
-        Notes
-        -----
-        Pads data with zeros to make n_points evenly divisible by chunk_size.
-        Uses a mask to ensure padded points don't contribute to cost or gradients.
-        """
-        n_points = x_data.shape[0]
-        n_chunks = (n_points + chunk_size - 1) // chunk_size
-        padded_size = n_chunks * chunk_size
-        pad_size = padded_size - n_points
-
-        # Create validity mask (1.0 for valid, 0.0 for padded)
-        mask = jnp.ones(n_points, dtype=jnp.float64)
-
-        if pad_size > 0:
-            # Pad x_data with zeros
-            if x_data.ndim == 1:
-                x_padded = jnp.pad(
-                    x_data,
-                    (0, pad_size),
-                    mode="constant",
-                    constant_values=0,
-                )
-            else:
-                x_padded = jnp.pad(
-                    x_data,
-                    ((0, pad_size), (0, 0)),
-                    mode="constant",
-                    constant_values=0,
-                )
-
-            # Pad y_data with zeros (mask will exclude these)
-            y_padded = jnp.pad(
-                y_data,
-                (0, pad_size),
-                mode="constant",
-                constant_values=0,
-            )
-
-            # Pad mask with zeros (invalid)
-            mask = jnp.pad(mask, (0, pad_size), mode="constant", constant_values=0)
-        else:
-            x_padded = x_data
-            y_padded = y_data
-
-        # Reshape into chunks
-        if x_padded.ndim == 1:
-            x_chunks = x_padded.reshape(n_chunks, chunk_size)
-        else:
-            n_features = x_padded.shape[1]
-            x_chunks = x_padded.reshape(n_chunks, chunk_size, n_features)
-
-        y_chunks = y_padded.reshape(n_chunks, chunk_size)
-        mask_chunks = mask.reshape(n_chunks, chunk_size)
-
-        return x_chunks, y_chunks, mask_chunks, n_points
 
     @staticmethod
     def _content_fingerprint(data: jnp.ndarray) -> tuple:
@@ -815,7 +763,18 @@ class AdaptiveHybridStreamingOptimizer:
         # identity-based invalidation was rejected).
         cache = getattr(self, "_padded_cache", None)
         if cache is not None:
-            c_hash_x, c_hash_y, c_cs, c_xp, c_yp, c_np, c_nc = cache
+            c_hash_x, c_hash_y, c_cs, c_xp, c_yp, c_np, c_nc, c_x, c_y = cache
+            # jax arrays are immutable and the cache holds strong refs, so
+            # identity (no id() recycling possible) implies equal content --
+            # skips the O(n) fingerprint reductions + host syncs per call.
+            if (
+                c_x is x_data
+                and c_y is y_data
+                and c_cs == chunk_size
+                and isinstance(x_data, jax.Array)
+                and isinstance(y_data, jax.Array)
+            ):
+                return c_xp, c_yp, c_np, c_nc
             x_hash = self._content_fingerprint(x_data)
             y_hash = self._content_fingerprint(y_data)
             if c_hash_x == x_hash and c_hash_y == y_hash and c_cs == chunk_size:
@@ -845,6 +804,8 @@ class AdaptiveHybridStreamingOptimizer:
             y_padded,
             n_points,
             n_chunks,
+            x_data,
+            y_data,
         )
         return x_padded, y_padded, n_points, n_chunks
 
@@ -889,53 +850,15 @@ class AdaptiveHybridStreamingOptimizer:
         chunk_size = self.config.chunk_size
 
         # B006: Use cached padded flat arrays + dynamic_slice
-        x_padded, y_padded, n_points, n_chunks = self._get_padded_data(
+        x_padded, y_padded, n_points, _n_chunks = self._get_padded_data(
             x_data,
             y_data,
             chunk_size,
         )
 
-        # Capture model and data for scan body closure
-        normalized_model = self.normalized_model
-        x_ndim = x_padded.ndim
-
-        chunk_indices = jnp.arange(n_chunks)
-
-        def scan_body(carry, chunk_idx):
-            """Scan body for masked cost computation using dynamic_slice."""
-            start = chunk_idx * chunk_size
-
-            if x_ndim == 1:
-                x_chunk = jax.lax.dynamic_slice(x_padded, (start,), (chunk_size,))
-            else:
-                x_chunk = jax.lax.dynamic_slice(
-                    x_padded,
-                    (start, 0),
-                    (chunk_size, x_padded.shape[1]),
-                )
-            y_chunk = jax.lax.dynamic_slice(y_padded, (start,), (chunk_size,))
-
-            mask = jnp.where(start + jnp.arange(chunk_size) < n_points, 1.0, 0.0)
-
-            # See _fill_padded_rows: guards NaN/Inf from evaluating the model
-            # at padded rows before masking.
-            safe_x_chunk = _fill_padded_rows(x_chunk, mask)
-            predictions = normalized_model(safe_x_chunk, *params)
-            residuals = y_chunk - predictions
-            masked_residuals = residuals * mask
-            return carry + jnp.sum(masked_residuals**2), None
-
-        # Initialize carry
-        init_carry = jnp.array(0.0)
-
-        # Run scan over chunk indices
-        total_cost, _ = jax.lax.scan(
-            scan_body,
-            init_carry,
-            chunk_indices,
+        return float(
+            self._scan_cost_fn(params, x_padded, y_padded, n_points, chunk_size)
         )
-
-        return float(total_cost)
 
     def _compute_cost_only(
         self,
@@ -1030,9 +953,9 @@ class AdaptiveHybridStreamingOptimizer:
         ):
             n_points = len(x_data)
             var_lambda = self.config.group_variance_lambda
+            physical = self.normalizer.denormalize(params)
             for start, end in self.config.group_variance_indices:
-                group_params = params[start:end]
-                group_var = jnp.var(group_params)
+                group_var = jnp.var(physical[start:end])
                 total_cost += (
                     var_lambda
                     * float(jnp.where(jnp.isfinite(group_var), group_var, 0.0))
@@ -1072,39 +995,32 @@ class AdaptiveHybridStreamingOptimizer:
         samples = sampler(n_starts, n_params, rng_key=rng_key)
         samples = np.asarray(samples)
 
-        # Scale samples to bounds or around p0
-        if bounds is not None and self.config.center_on_p0:
-            # Center samples around p0 within bounds
-            lb, ub = np.asarray(bounds[0]), np.asarray(bounds[1])
-            p0 = np.asarray(self.original_p0)
+        # Scale samples to bounds or around p0. One-sided/unbounded dims have an
+        # infinite span, so they sample p0 +/- halfwidth (clipped to bounds)
+        # instead of lb + u * inf (which produced NaN/inf candidates).
+        p0 = np.asarray(self.original_p0, dtype=np.float64)
+        scale_factor = self.config.scale_factor
+        halfwidth = (np.abs(p0) + 0.1) * scale_factor
 
-            # Scale factor controls how much of the bounds to explore
-            scale = self.config.scale_factor
-
-            # Center around p0 with scaled range
-            range_half = (ub - lb) * scale / 2
-            center_lb = np.maximum(lb, p0 - range_half)
-            center_ub = np.minimum(ub, p0 + range_half)
-
-            # Scale samples to centered bounds
-            candidates = center_lb + samples * (center_ub - center_lb)
-
-        elif bounds is not None:
-            # Scale samples to full bounds
-            lb, ub = np.asarray(bounds[0]), np.asarray(bounds[1])
-            candidates = lb + samples * (ub - lb)
-
+        if bounds is not None:
+            lb = np.asarray(bounds[0], dtype=np.float64)
+            ub = np.asarray(bounds[1], dtype=np.float64)
+            if self.config.center_on_p0:
+                # Explore only a scale_factor-sized window of each finite range
+                with np.errstate(invalid="ignore"):
+                    span = ub - lb
+                range_half = np.where(
+                    np.isfinite(span), span * scale_factor / 2, halfwidth
+                )
+                lb, ub = (
+                    np.maximum(lb, p0 - range_half),
+                    np.minimum(ub, p0 + range_half),
+                )
+                halfwidth = range_half
+            candidates = sample_in_bounds(samples, lb, ub, p0, halfwidth)
         else:
             # No bounds: scale around p0 with heuristic range
-            p0 = np.asarray(self.original_p0)
-            scale_factor = self.config.scale_factor
-
-            # Use p0 magnitude as scale (avoid zero)
-            p0_scale = np.abs(p0) + 0.1
-            range_half = p0_scale * scale_factor
-
-            # Center samples around p0
-            candidates = p0 + (samples - 0.5) * 2 * range_half
+            candidates = p0 + (samples - 0.5) * 2 * halfwidth
 
         self.multistart_candidates = jnp.asarray(candidates)
 
@@ -1144,6 +1060,23 @@ class AdaptiveHybridStreamingOptimizer:
                 for c in self.multistart_candidates
             ],
         )
+
+        # Never let a non-finite candidate into the tournament.
+        finite_mask = np.all(np.isfinite(normalized_candidates), axis=1)
+        if not finite_mask.all():
+            import warnings
+
+            warnings.warn(
+                f"Dropping {int((~finite_mask).sum())} non-finite multistart "
+                "candidate(s) before tournament selection.",
+            )
+            normalized_candidates = normalized_candidates[finite_mask]
+            if len(normalized_candidates) == 0:
+                self.multistart_diagnostics = {
+                    "error": "no finite candidates",
+                    "fallback": True,
+                }
+                return self.normalized_params
 
         # Create tournament selector
         self.tournament_selector = TournamentSelector(
@@ -1193,6 +1126,8 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Return best candidate
             best_normalized = best_candidates[0]
+            if not np.all(np.isfinite(np.asarray(best_normalized))):
+                raise ValueError("tournament selected a non-finite candidate")
             self.multistart_best_candidate = best_normalized
 
             return jnp.asarray(best_normalized)
@@ -1259,46 +1194,7 @@ class AdaptiveHybridStreamingOptimizer:
             if initial_step_size is not None
             else self.config.lbfgs_initial_step_size
         )
-
-        # Configure line search based on config
-        line_search_type = self.config.lbfgs_line_search
-        if line_search_type == "backtracking":
-            # Backtracking line search with Armijo condition
-            linesearch = optax.scale_by_backtracking_linesearch(
-                max_backtracking_steps=20,
-                slope_rtol=1e-4,  # Armijo condition parameter
-                decrease_factor=0.8,
-                increase_factor=1.5,
-                max_learning_rate=step_size,
-            )
-        else:
-            # Default to zoom linesearch (Wolfe conditions)
-            # This is the default optax.lbfgs linesearch
-            linesearch = optax.scale_by_zoom_linesearch(
-                max_linesearch_steps=20,
-                initial_guess_strategy="one",
-            )
-
-        # Create L-BFGS optimizer
-        # Note: optax.lbfgs uses the learning_rate to scale the initial step guess
-        optimizer = optax.lbfgs(
-            learning_rate=step_size,
-            memory_size=self.config.lbfgs_history_size,
-            scale_init_precond=True,  # Use scaled identity for cold start
-            linesearch=linesearch,
-        )
-
-        # Chain with gradient clipping if configured
-        if self.config.gradient_clip_value is not None:
-            optimizer = optax.chain(
-                optax.clip_by_global_norm(self.config.gradient_clip_value),
-                optimizer,
-            )
-
-        # Initialize optimizer state
-        opt_state = optimizer.init(params)
-
-        return optimizer, opt_state
+        return _create_lbfgs_optimizer(self.config, params, step_size)
 
     def _lbfgs_step(
         self,
@@ -1495,6 +1391,9 @@ class AdaptiveHybridStreamingOptimizer:
         var_lambda = self.config.group_variance_lambda
         var_indices = self.config.group_variance_indices
 
+        norm_scales = self.normalizer.scales
+        norm_offsets = self.normalizer.offsets
+
         # Capture residual weighting state for closure
         # Note: We capture the current state; if weights are updated via set_residual_weights,
         # a new loss function should be created by calling _create_warmup_loss_fn again
@@ -1560,8 +1459,11 @@ class AdaptiveHybridStreamingOptimizer:
                 # include elements from the PREVIOUS group instead of raising.
                 # Pad params so every max_group_size window fits without ever
                 # needing to clamp; the mask below already ignores the padding.
+                # Variance is taken over PHYSICAL parameters, not the
+                # normalized ones the optimizer works in.
+                physical_params = params * norm_scales + norm_offsets
                 padded_params = jnp.concatenate(
-                    [params, jnp.zeros(max_group_size, dtype=params.dtype)],
+                    [physical_params, jnp.zeros(max_group_size, dtype=params.dtype)],
                 )
 
                 def var_body(i, penalty):
@@ -1620,9 +1522,7 @@ class AdaptiveHybridStreamingOptimizer:
         Uses jnp.minimum for JIT compatibility - no Python conditionals.
         Small epsilon (1e-10) added to denominator to prevent division by zero.
         """
-        update_norm = jnp.linalg.norm(updates)
-        scale = jnp.minimum(1.0, max_norm / (update_norm + 1e-10))
-        return updates * scale
+        return _clip_update_norm(updates, max_norm)
 
     def _check_phase1_switch_criteria(
         self,
@@ -2967,13 +2867,18 @@ class AdaptiveHybridStreamingOptimizer:
             and self.config.group_variance_indices
         ):
             var_lambda = self.config.group_variance_lambda
+            # Variance is over PHYSICAL params p = D q + o (D = diag(scales));
+            # chain rule: grad_q = D grad_p, H_q = D H_p D.
+            physical = self.normalizer.denormalize(current_params)
+            scales = self.normalizer.scales
             for start, end in self.config.group_variance_indices:
-                group_params = current_params[start:end]
+                group_params = physical[start:end]
+                d = scales[start:end]
                 n_group = end - start
                 group_mean = jnp.mean(group_params)
 
                 # Gradient of variance: ∂Var/∂p_i = (2/n) * (p_i - mean)
-                grad_var = (2.0 / n_group) * (group_params - group_mean)
+                grad_var = d * (2.0 / n_group) * (group_params - group_mean)
 
                 # JTr/JTJ are the gradient/Hessian of the HALF-cost 0.5*SSR
                 # model (see _solve_gauss_newton_step: step solves JTJ@d=JTr
@@ -2995,7 +2900,7 @@ class AdaptiveHybridStreamingOptimizer:
                     (n_group, n_group),
                     dtype=jnp.float64,
                 )
-                H_var = diag_term - off_diag_term
+                H_var = d[:, None] * (diag_term - off_diag_term) * d[None, :]
 
                 # Add to JTJ for the group block (n_points- and 0.5-scaled, see above)
                 JTJ = JTJ.at[start:end, start:end].add(
@@ -4181,6 +4086,9 @@ class AdaptiveHybridStreamingOptimizer:
         # lose the prior fit's state on an unrelated validation failure.
         self.best_params_global = None
         self.best_cost_global = float("inf")
+        # Same reasoning: otherwise a second fit() appends to the first fit's
+        # history (and, pre-copy, mutated the first result's diagnostics).
+        self.phase_history.clear()
 
         # Progress callback, invoked from Phase 1/2 loops via
         # _invoke_fit_callback() every config.callback_frequency iterations.
@@ -4400,7 +4308,7 @@ class AdaptiveHybridStreamingOptimizer:
                 "gradient_norm": phase2_result["gradient_norm"],
                 "convergence_reason": phase2_result["convergence_reason"],
             },
-            "phase_history": self.phase_history,
+            "phase_history": list(self.phase_history),
         }
 
         # A phase falling back to best-known params (see try/except above) is

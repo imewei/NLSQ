@@ -217,26 +217,30 @@ See :doc:`configuration` for the full configuration reference.
    export:
      results_file: "results.json"
 
-**Built-in Workflow Presets:**
+**Fitting settings:**
 
-.. list-table::
-   :header-rows: 1
-   :widths: 25 75
+The CLI runner calls ``curve_fit``. Set initial guesses, bounds, tolerances and
+evaluation limits directly under ``fitting``:
 
-   * - Preset
-     - Description
-   * - ``standard``
-     - Standard curve_fit() with default tolerances (1e-8)
-   * - ``quality``
-     - Highest precision with multi-start (tolerances 1e-10)
-   * - ``fast``
-     - Speed-optimized with looser tolerances (1e-6)
-   * - ``large_robust``
-     - Chunked processing with multi-start for large datasets
-   * - ``streaming``
-     - AdaptiveHybridStreamingOptimizer for huge datasets
-   * - ``hpc_distributed``
-     - Multi-GPU/node configuration for HPC clusters (PBS)
+.. code-block:: yaml
+
+   fitting:
+     p0: [2.0, 0.5, 0.0]
+     bounds:
+       lower: [0.0, 0.0, -1.0]
+       upper: [10.0, 5.0, 1.0]
+     ftol: 1.0e-8
+     xtol: 1.0e-8
+     gtol: 1.0e-8
+     max_nfev: 200
+
+``fitting.termination`` and ``model.parameters`` do not configure CLI fits.
+When ``fitting.p0`` is omitted or ``auto``, the runner tries the model's
+``estimate_p0`` helper. Omitted bounds use the model's ``bounds`` helper when
+available. ``model.auto_p0`` and ``model.auto_bounds`` do not control this behavior.
+Global workflow presets, multi-start, CMA-ES and distributed execution are
+available through the Python API; the CLI does not dispatch these workflows
+from ``workflow`` or ``global_optimization`` YAML keys.
 
 Exit Codes
 ----------

@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from nlsq.gui_qt.plots import _downsample
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -124,7 +126,9 @@ class ResidualsPlotWidget(QWidget):
         )
 
         # Compute standardized residuals
-        std = np.std(self._residuals)
+        # NaN residuals must not poison the scale: use finite values only
+        finite = self._residuals[np.isfinite(self._residuals)]
+        std = np.std(finite) if finite.size else 0.0
         if std > 0:
             self._std_residuals = self._residuals / std
         else:
@@ -310,23 +314,8 @@ class ResidualsPlotWidget(QWidget):
         x: NDArray,
         y: NDArray,
     ) -> tuple[NDArray, NDArray]:
-        """Downsample data if it exceeds the threshold.
-
-        Args:
-            x: X data array
-            y: Y data array
-
-        Returns:
-            Tuple of (downsampled_x, downsampled_y)
-        """
-        n = len(x)
-        if n <= self.DOWNSAMPLE_THRESHOLD:
-            return x, y
-
-        # Calculate stride
-        stride = n // self.DOWNSAMPLE_THRESHOLD
-
-        return x[::stride], y[::stride]
+        """Downsample paired data with the widget threshold."""
+        return _downsample(x, y, self.DOWNSAMPLE_THRESHOLD)
 
     def get_statistics(self) -> dict:
         """Get residuals statistics.

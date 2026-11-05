@@ -316,3 +316,32 @@ class TestTRFSpecialCases(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize("sc", [1.0, 1e-3, 1e-5])
+def test_curve_fit_auto_solver_is_y_scale_invariant(sc):
+    """solver='auto' (CG/lsmr for m*n >= 10000) must stay accurate when y is scaled."""
+    from scipy.optimize import curve_fit as scipy_curve_fit
+
+    rng = np.random.default_rng(0)
+    x = np.linspace(0, 5, 10007)
+    y = 2.0 * np.exp(-1.3 * x) + 0.5 + 0.05 * rng.standard_normal(x.size)
+    p_ref, _ = scipy_curve_fit(
+        lambda x, a, b, c: a * np.exp(-b * x) + c,
+        x,
+        y,
+        p0=[1, 1, 1],
+        ftol=1e-14,
+        xtol=1e-14,
+        gtol=1e-14,
+    )
+    popt = np.asarray(
+        curve_fit(
+            lambda x, a, b, c: a * jnp.exp(-b * x) + c,
+            x,
+            y * sc,
+            p0=[sc, 1.0, sc],
+        ).popt
+    )
+    assert abs(popt[1] - p_ref[1]) < 1e-5
+    np.testing.assert_allclose(popt[[0, 2]] / sc, p_ref[[0, 2]], rtol=1e-5)

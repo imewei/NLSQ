@@ -45,8 +45,6 @@ model:
   path: "models/biology_models.py"
   function: "michaelis_menten"
 
-  auto_p0: true
-  auto_bounds: true
 
   model_id: "michaelis_menten_v1"
 
@@ -59,14 +57,12 @@ fitting:
   # Weighted fitting uses sigma from data
   # absolute_sigma=True uses sigma as actual measurement uncertainties
   # absolute_sigma=False uses sigma as relative weights
-  objective:
-    weights: null     # Will use sigma column from data
+  absolute_sigma: true  # Sigma column contains measurement uncertainties
 
-  termination:
-    ftol: 1.0e-8
-    xtol: 1.0e-8
-    gtol: 1.0e-8
-    max_iterations: 200
+  ftol: 1.0e-8
+  xtol: 1.0e-8
+  gtol: 1.0e-8
+  max_nfev: 200
 
 # ==============================================================================
 # EXPORT CONFIGURATION

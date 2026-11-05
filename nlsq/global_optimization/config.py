@@ -38,7 +38,7 @@ Custom configuration:
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Literal
 
 # Import CMA-ES presets to include in global PRESETS
@@ -323,16 +323,7 @@ class GlobalOptimizationConfig:
         >>> d['n_starts']
         20
         """
-        return {
-            "n_starts": self.n_starts,
-            "sampler": self.sampler,
-            "center_on_p0": self.center_on_p0,
-            "scale_factor": self.scale_factor,
-            "elimination_rounds": self.elimination_rounds,
-            "elimination_fraction": self.elimination_fraction,
-            "batches_per_round": self.batches_per_round,
-            "_preset": self._preset,
-        }
+        return {f.name: getattr(self, f.name) for f in fields(GlobalOptimizationConfig)}
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "GlobalOptimizationConfig":
@@ -356,16 +347,7 @@ class GlobalOptimizationConfig:
         20
         """
         # Filter to known fields
-        known_fields = {
-            "n_starts",
-            "sampler",
-            "center_on_p0",
-            "scale_factor",
-            "elimination_rounds",
-            "elimination_fraction",
-            "batches_per_round",
-            "_preset",
-        }
+        known_fields = {f.name for f in fields(GlobalOptimizationConfig)}
         filtered = {k: v for k, v in d.items() if k in known_fields}
         return cls(**filtered)
 

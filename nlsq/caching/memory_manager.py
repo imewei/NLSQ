@@ -631,7 +631,9 @@ class MemoryManager:
         When an array is reused from the pool, it is moved to the end
         (most recently used) to enable proper LRU eviction.
         """
-        key = (shape, dtype)
+        # Normalize so keys match free_array's (arr.shape, arr.dtype)
+        shape_t = (shape,) if isinstance(shape, int | np.integer) else tuple(shape)
+        key = (shape_t, np.dtype(dtype))
 
         # Check pool for existing array
         if key in self.memory_pool:

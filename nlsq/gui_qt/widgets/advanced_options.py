@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
 if TYPE_CHECKING:
     from nlsq.gui_qt.theme import ThemeConfig
 
+from nlsq.gui_qt.widgets.param_config import _FloatEdit
+
 __all__ = ["AdvancedOptionsWidget"]
 
 
@@ -81,26 +83,17 @@ class AdvancedOptionsWidget(QWidget):
         layout = QFormLayout(widget)
 
         # gtol
-        self._gtol_spin = QDoubleSpinBox()
-        self._gtol_spin.setDecimals(12)
-        self._gtol_spin.setRange(1e-15, 1.0)
-        self._gtol_spin.setValue(1e-8)
+        self._gtol_spin = _FloatEdit(1e-8, 1e-15, 1.0)
         self._gtol_spin.setToolTip("Gradient tolerance for convergence")
         layout.addRow("Gradient Tolerance (gtol):", self._gtol_spin)
 
         # ftol
-        self._ftol_spin = QDoubleSpinBox()
-        self._ftol_spin.setDecimals(12)
-        self._ftol_spin.setRange(1e-15, 1.0)
-        self._ftol_spin.setValue(1e-8)
+        self._ftol_spin = _FloatEdit(1e-8, 1e-15, 1.0)
         self._ftol_spin.setToolTip("Function tolerance for convergence")
         layout.addRow("Function Tolerance (ftol):", self._ftol_spin)
 
         # xtol
-        self._xtol_spin = QDoubleSpinBox()
-        self._xtol_spin.setDecimals(12)
-        self._xtol_spin.setRange(1e-15, 1.0)
-        self._xtol_spin.setValue(1e-8)
+        self._xtol_spin = _FloatEdit(1e-8, 1e-15, 1.0)
         self._xtol_spin.setToolTip("Parameter tolerance for convergence")
         layout.addRow("Parameter Tolerance (xtol):", self._xtol_spin)
 

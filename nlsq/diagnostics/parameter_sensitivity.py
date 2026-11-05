@@ -648,11 +648,11 @@ class ParameterSensitivityAnalyzer:
         if len(positive_eigenvalues) == 0:
             return 0.0
 
-        sum_eigenvalues = np.sum(positive_eigenvalues)
-        sum_eigenvalues_squared = np.sum(positive_eigenvalues**2)
-
-        if sum_eigenvalues_squared <= 0:
-            return 0.0
+        # Participation ratio is scale invariant. Normalize before squaring
+        # so finite tiny/large spectra cannot underflow to zero or overflow.
+        scaled_eigenvalues = positive_eigenvalues / np.max(positive_eigenvalues)
+        sum_eigenvalues = np.sum(scaled_eigenvalues)
+        sum_eigenvalues_squared = np.sum(scaled_eigenvalues**2)
 
         # Participation ratio
         effective_dim = (sum_eigenvalues**2) / sum_eigenvalues_squared

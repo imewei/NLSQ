@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from inspect import signature
-from typing import Any
+from typing import Any, overload
 
 import jax.numpy as jnp
 import numpy as np
@@ -179,6 +179,51 @@ def pad_fit_data(
     return xdata, ydata
 
 
+def _n_params_from_signature(f: Callable) -> int:
+    """Count positional fit parameters after the independent variable.
+
+    Variadics and keyword-only options are not fit parameters, as in SciPy.
+    """
+    return (
+        sum(
+            p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            for p in signature(f).parameters.values()
+        )
+        - 1
+    )
+
+
+_VALID_NAN_POLICIES = frozenset({"raise", "omit", "propagate"})
+
+
+@overload
+def finite_rows(
+    xdata: np.ndarray, ydata: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]: ...
+
+
+@overload
+def finite_rows(xdata: object, ydata: object) -> tuple[object, object]: ...
+
+
+def finite_rows(xdata: object, ydata: object) -> tuple[object, object]:
+    """Return (xdata, ydata) restricted to rows where both are finite.
+
+    Only 1-D ``xdata`` (or ``(k, m)`` with points on the last axis) of the
+    same length as ``ydata`` is filtered; anything else is returned unchanged.
+    """
+    try:
+        xa, ya = np.asarray(xdata, float), np.asarray(ydata, float)
+    except (TypeError, ValueError):
+        return xdata, ydata
+    if ya.ndim != 1 or xa.shape[-1:] != ya.shape:
+        return xdata, ydata
+    valid = np.isfinite(ya) & (
+        np.isfinite(xa) if xa.ndim == 1 else np.all(np.isfinite(xa), axis=0)
+    )
+    return xa[..., valid], ya[valid]
+
+
 def _determine_parameter_count(
     f: Callable,
     p0: np.ndarray | str | None,
@@ -251,11 +296,9 @@ def _determine_parameter_count(
 
     # Fall back: determine n from function signature, p0 stays None
     # (will be initialized to defaults in _prepare_bounds_and_initial_guess)
-    sig = signature(f)
-    args = sig.parameters
-    if len(args) < 2:
+    n = _n_params_from_signature(f)
+    if n < 1:
         raise ValueError("Unable to determine number of fit parameters.")
-    n = len(args) - 1
 
     return n, p0  # type: ignore[return-value]  # p0 is only a str for the 'auto' sentinel, which is resolved above
 
@@ -392,6 +435,7 @@ def _validate_and_sanitize_inputs(
     p0: np.ndarray,
     bounds: tuple | None = None,
     check_finite: bool = True,
+    sigma: np.ndarray | None = None,
     *,
     ctx: PrepareContext,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -440,6 +484,18 @@ def _validate_and_sanitize_inputs(
     for warning in security_warnings:
         ctx.logger.warning("Input validation warning", warning=warning)
 
+    # Always-on sigma check, independent of enable_stability: a zero sigma gives
+    # an infinite weight (previously a misleading "Residuals are not finite").
+    # Negative sigma is accepted as in SciPy; strict sigma > 0 is part of the
+    # enable_stability validation below.
+    sigma_errors, _ = security_validator._validate_sigma(
+        sigma, ydata, check_finite, strict=False
+    )
+    if sigma_errors:
+        error_msg = f"Input validation failed: {'; '.join(sigma_errors)}"
+        ctx.logger.error("Input validation failed", error=error_msg)
+        raise ValueError(error_msg)
+
     if ctx.enable_stability:
         try:
             errors, warnings_list, xdata_clean, ydata_clean = (
@@ -449,6 +505,7 @@ def _validate_and_sanitize_inputs(
                     ydata,
                     p0,
                     bounds=bounds,
+                    sigma=sigma,
                     check_finite=check_finite,
                 )
             )
@@ -677,6 +734,7 @@ def _preprocess_input_data(
         p0,
         bounds=bounds,
         check_finite=effective_check_finite,
+        sigma=sigma,
         ctx=ctx,
     )
 
@@ -840,10 +898,23 @@ def prepare_problem(
     """
     if kwargs is None:
         kwargs = {}
+    if nan_policy is None:  # scipy's default; behaves as 'raise'
+        nan_policy = "raise"
+    if nan_policy not in _VALID_NAN_POLICIES:
+        raise ValueError(
+            f"nan_policy must be one of {sorted(_VALID_NAN_POLICIES)}, "
+            f"got {nan_policy!r}"
+        )
     xdata, ydata = x, y
 
-    # Step 1: Determine parameter count and auto-estimate p0 if needed
-    n, p0 = _determine_parameter_count(f, p0, xdata, ydata, ctx=ctx)
+    # Step 1: Determine parameter count and auto-estimate p0 if needed. The
+    # estimate runs before NaN removal (steps 5-7), so with nan_policy='omit'
+    # it must see only the finite rows or it returns NaN.
+    if nan_policy == "omit" and _is_auto_p0(p0):
+        x_est, y_est = finite_rows(xdata, ydata)
+    else:
+        x_est, y_est = xdata, ydata
+    n, p0 = _determine_parameter_count(f, p0, x_est, y_est, ctx=ctx)
 
     # Step 2: Validate solver configuration
     _validate_solver_config(solver, batch_size)

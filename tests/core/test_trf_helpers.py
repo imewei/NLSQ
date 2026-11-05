@@ -598,5 +598,20 @@ class TestSolverLsmrEndToEnd:
         np.testing.assert_allclose(popt, [2.0, 1.0], atol=1e-3)
 
 
+def test_jac_scale_uses_robust_scaled_jacobian():
+    """x_scale='jac' with a robust loss must scale from the robust-scaled J (scipy)."""
+    from nlsq.core.loss_functions import LossFunctionsJIT
+
+    trf = TrustRegionReflective()
+    loss = LossFunctionsJIT().get_loss_function("cauchy")
+    J = jnp.array([[10.0, 1.0], [20.0, 2.0], [30.0, 0.5]])
+    f = jnp.array([5.0, -8.0, 12.0])
+    state = trf._initialize_trf_state(
+        np.array([1.0, 1.0]), f, J, loss, "jac", 1.0, jnp.ones(3, dtype=bool)
+    )
+    _, expected = trf.cJIT.compute_jac_scale(state["J"])
+    np.testing.assert_allclose(state["scale_inv"], expected, rtol=1e-12)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

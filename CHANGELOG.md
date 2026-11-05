@@ -143,6 +143,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus the warning) instead of silently; entries below ~1e-308 after scaling still
   underflow to zero, as before.
 
+### Changed (behavior, whole-codebase review rounds 3-4)
+- **Group-variance regularization** (`enable_group_variance_regularization=True`, hybrid
+  streaming and the `phases/` Gauss-Newton path) now penalizes the variance of the
+  *physical* (denormalized) parameters with the exact chain rule (`grad_q = D grad_p`,
+  `H_q = D H_p D`) and the `n_points/2` scaling used by the data term. Fits that enable it
+  return different `popt`/`pcov` than before (the previous value penalized normalized
+  parameters). The hybrid `callback` now receives physical parameters.
+- `curve_fit` input validation: a zero `sigma` raises `ValueError` even with
+  `enable_stability=False` (was an unclear "Residuals are not finite" error). Negative
+  1-D `sigma` is still accepted, as in SciPy. An invalid `nan_policy` raises
+  `ValueError`; `nan_policy=None` behaves as SciPy's default (`'raise'`).
+- The number of fit parameters is read from the model's positional signature, as SciPy
+  does: keyword-only arguments are not counted, and `f(x, *p)` with `p0=None` raises
+  `ValueError("Unable to determine number of fit parameters.")` instead of silently
+  fitting one parameter.
+- `fallback=True` results support `popt, pcov = ...` unpacking and indexing;
+  `AddParameterBoundsStrategy` derives its bounds from `infer_bounds()`; the recovery
+  `_multi_start` samples half-infinite bounds with a finite window (shared helper
+  `nlsq.utils.bounds_sampling.sample_in_bounds`, also used by hybrid multistart).
+- A callback raising `StopOptimization` ends the fit with `status=-2` (SciPy's code);
+  `success` stays `True` and the best-so-far parameters are returned.
+- Custom CLI models: the validator also rejects `yaml.unsafe_load`/`pandas.read_pickle`
+  style deserialization; `batch --no-continue-on-error` now lists skipped workflows.
+
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
   preparation with curve_fit, and nan_policy is read once in the shared step.
@@ -159,6 +183,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-exporting the moved helpers.
 
 ### Fixed
+- **Silent wrong answer in plain `curve_fit` for small-scale data:** the iterative
+  (CG/`lsmr`) trust-region kernel used absolute tolerances and guards, so fits with
+  `|y| ~ 1e-5` could stop far from the optimum (parameter error 0.216 vs 2.8e-7 now,
+  matching SciPy). The kernel now uses a relative tolerance and tiny guards. An explicit
+  user `tr_solver` is respected.
+- Chunked/streaming fits with 2-D `xdata` of shape `(k, M)` are now chunked along the
+  points axis (previously the whole dataset ran as one in-memory chunk, ignoring
+  `chunk_size`/`memory_limit_gb`).
+- `detect_collinearity`/`check_problem_stability` no longer build an `N x N` matrix for
+  `(N, k)` data; `AlgorithmSelector` counts points from `ydata` for 2-D `xdata`.
+- Whole-codebase review rounds 3-4: ~60 further fixes across core, streaming, stability,
+  CLI, GUI and utils.
 - `curve_fit_large(..., auto_size_detection=False)` no longer raises
   `ValueError: min_chunk_size (1000) cannot be larger than max_chunk_size` for inputs under
   10,000 points or an explicit `chunk_size` below 1000. The minimum chunk size is now

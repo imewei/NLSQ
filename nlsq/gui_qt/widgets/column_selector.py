@@ -236,6 +236,32 @@ class ColumnSelectorWidget(QWidget):
 
         return selection
 
+    def set_selection(self, selection: dict[str, int | str | None]) -> None:
+        """Assign columns by zero-based index or by their loaded names."""
+        combos = {
+            "x": self._x_combo,
+            "y": self._y_combo,
+            "z": self._z_combo,
+            "sigma": self._sigma_combo,
+        }
+        assignments = []
+        for role, column in selection.items():
+            if column is None and role != "sigma":
+                continue
+            column_index = (
+                self._column_names.index(column) if isinstance(column, str) else column
+            )
+            combo = combos[role]
+            index = combo.findData(column_index)
+            if index < 0:
+                raise ValueError(f"Unknown {role} column: {column}")
+            assignments.append((combo, index))
+        for combo, index in assignments:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(index)
+            combo.blockSignals(False)
+        self._on_selection_changed()
+
     def set_mode(self, mode: str) -> None:
         """Set the data mode.
 

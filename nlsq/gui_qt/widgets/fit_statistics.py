@@ -139,6 +139,9 @@ class FitStatisticsWidget(QWidget):
         from nlsq.gui_qt.theme import DARK_THEME
 
         self._theme: ThemeConfig = DARK_THEME
+        # ThemeConfig attribute names of the semantic colors currently applied
+        self._r2_color_attr: str | None = None
+        self._status_color_attr: str | None = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -193,15 +196,13 @@ class FitStatisticsWidget(QWidget):
         """
         # R² with theme-aware semantic color coding
         self._r2_card.set_value(f"{r_squared:.6f}")
-        if r_squared >= 0.99:
-            self._r2_card.set_value_color(self._theme.stat_good)
-        elif r_squared >= 0.95:
-            # Interpolate between stat_good and stat_warning at 95%
-            self._r2_card.set_value_color(self._theme.stat_good)
+        if r_squared >= 0.95:
+            self._r2_color_attr = "stat_good"
         elif r_squared >= 0.9:
-            self._r2_card.set_value_color(self._theme.stat_warning)
+            self._r2_color_attr = "stat_warning"
         else:
-            self._r2_card.set_value_color(self._theme.stat_bad)
+            self._r2_color_attr = "stat_bad"
+        self._r2_card.set_value_color(getattr(self._theme, self._r2_color_attr))
 
         # RMSE
         self._rmse_card.set_value(f"{rmse:.6g}")
@@ -221,10 +222,11 @@ class FitStatisticsWidget(QWidget):
         # Convergence status
         if converged:
             self._status_card.set_value("Converged")
-            self._status_card.set_value_color(self._theme.stat_good)
+            self._status_color_attr = "stat_good"
         else:
             self._status_card.set_value("Did not converge")
-            self._status_card.set_value_color(self._theme.stat_bad)
+            self._status_color_attr = "stat_bad"
+        self._status_card.set_value_color(getattr(self._theme, self._status_color_attr))
 
     def clear(self) -> None:
         """Clear all statistics."""
@@ -235,6 +237,8 @@ class FitStatisticsWidget(QWidget):
         self._bic_card.set_value("-")
         self._iter_card.set_value("-")
         self._status_card.set_value("-")
+        self._r2_color_attr = None
+        self._status_color_attr = None
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
@@ -255,3 +259,11 @@ class FitStatisticsWidget(QWidget):
             self._status_card,
         ):
             card.apply_theme(theme)
+
+        # apply_theme resets value colors to text_primary; restore semantic ones
+        for card, attr in (
+            (self._r2_card, self._r2_color_attr),
+            (self._status_card, self._status_color_attr),
+        ):
+            if attr is not None:
+                card.set_value_color(getattr(theme, attr))

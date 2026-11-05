@@ -236,6 +236,14 @@ def handle_fit(args: argparse.Namespace) -> int:
         if result is None:
             return 1
 
+        # curve_fit warns (not raises) on non-convergence.
+        if result.get("success") is False:
+            print(
+                f"\nError: fit did not converge: {result.get('message')}",
+                file=sys.stderr,
+            )
+            return 1
+
         return 0
 
     except ConfigError as e:

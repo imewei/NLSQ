@@ -12,10 +12,9 @@ import weakref
 from collections.abc import Callable
 
 _closure_serial_counter = itertools.count()
-_closure_serial_registry: "weakref.WeakKeyDictionary[Callable, int]" = (
-    weakref.WeakKeyDictionary()
-)
-_closure_serial_lock = threading.Lock()
+_closure_serial_registry: dict[int, tuple[weakref.ReferenceType, int]] = {}
+# Cyclic GC can run a weakref callback while closure_serial holds this lock.
+_closure_serial_lock = threading.RLock()
 
 
 def closure_serial(func: Callable) -> int:
@@ -25,15 +24,27 @@ def closure_serial(func: Callable) -> int:
     closure is garbage-collected, CPython is free to reuse its address for
     an unrelated object created immediately after. A hash keyed on id(func)
     computed for that new object would then collide with a still-cached
-    entry meant for the old, GC'd object. The WeakKeyDictionary registry
+    entry meant for the old, GC'd object. The identity-based weakref registry
     assigns each live function object a serial the first time it's seen and
     never reassigns it to a different object, so a genuinely new object
     always misses the lookup and gets a fresh, higher serial even if its
     id() happens to match a dead one's.
     """
+    key = id(func)
+
+    def discard(ref: weakref.ReferenceType) -> None:
+        with _closure_serial_lock:
+            entry = _closure_serial_registry.get(key)
+            if entry is not None and entry[0] is ref:
+                del _closure_serial_registry[key]
+
     with _closure_serial_lock:
-        serial = _closure_serial_registry.get(func)
-        if serial is None:
-            serial = next(_closure_serial_counter)
-            _closure_serial_registry[func] = serial
+        entry = _closure_serial_registry.get(key)
+        if entry is not None and entry[0]() is func:
+            return entry[1]
+        # WeakKeyDictionary uses referent equality, which can merge distinct
+        # callable objects whose comparison excludes behavior-affecting state.
+        ref = weakref.ref(func, discard)
+        serial = next(_closure_serial_counter)
+        _closure_serial_registry[key] = (ref, serial)
         return serial

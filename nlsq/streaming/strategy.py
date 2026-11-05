@@ -97,6 +97,10 @@ class _ChunkedStrategy:
         return run(f, x, y, p0=p0, **common)
 
     def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
+        if not getattr(native, "success", True):
+            raise RuntimeError(
+                f"chunked fit failed: {getattr(native, 'message', None)}"
+            )
         if hasattr(native, "popt") and hasattr(native, "pcov"):
             return native.popt, native.pcov
         raise RuntimeError(
@@ -204,13 +208,13 @@ def build_large_strategy(
 
 
 def default_p0(f: Callable[..., Any]) -> np.ndarray:
-    """Ones for every parameter after ``x`` in ``f``'s signature (curve_fit's p0=None)."""
-    from inspect import signature
+    """Ones for positional fit parameters after ``x`` (curve_fit's p0=None)."""
+    from nlsq.core.problem import _n_params_from_signature
 
-    args = signature(f).parameters
-    if len(args) < 2:
+    n_params = _n_params_from_signature(f)
+    if n_params < 1:
         raise ValueError("Unable to determine number of fit parameters.")
-    return np.ones(len(args) - 1)
+    return np.ones(n_params)
 
 
 def normalize_p0_bounds(

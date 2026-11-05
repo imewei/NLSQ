@@ -621,18 +621,11 @@ def fit(
     if use_streaming or preset == "streaming":
         # Use AdaptiveHybridStreaming for streaming preset
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
-        from nlsq.streaming.strategy import build_large_strategy
+        from nlsq.streaming.strategy import build_large_strategy, default_p0
 
         # Prepare p0
         if p0 is None:
-            from inspect import signature
-
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
-                raise ValueError("Unable to determine number of fit parameters.")
-            n_params = len(args) - 1
-            p0 = np.ones(n_params)
+            p0 = default_p0(f)
         p0 = np.atleast_1d(p0)
 
         # Prepare bounds

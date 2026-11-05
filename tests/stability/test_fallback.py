@@ -140,6 +140,16 @@ class TestAddParameterBoundsStrategy:
         assert len(modified["bounds"][0]) == 2  # Lower bounds
         assert len(modified["bounds"][1]) == 2  # Upper bounds
 
+    @pytest.mark.parametrize("p0", [[1.0, 50.0], [-2.0, 1.0], [0.0, 1.0]])
+    def test_inferred_bounds_valid_and_contain_p0(self, p0):
+        strategy = AddParameterBoundsStrategy()
+        xdata = np.linspace(0, 10, 100)
+        ydata = 2.0 * np.exp(-0.3 * xdata)
+        p0 = np.array(p0)
+        lb, ub = strategy.apply({"p0": p0, "_xdata": xdata, "_ydata": ydata})["bounds"]
+        assert np.all(lb < ub)
+        assert np.all(lb <= p0) and np.all(p0 <= ub)
+
     def test_existing_bounds_preserved(self):
         """Test that existing bounds are not overwritten."""
         strategy = AddParameterBoundsStrategy()
@@ -543,6 +553,24 @@ class TestFallbackResult:
         assert np.array_equal(fb_result.x, mock_result.x)
         assert fb_result.cost == mock_result.cost
         assert fb_result.success == mock_result.success
+
+
+class TestFallbackResultUnpacking:
+    """FallbackResult must behave like a normal curve_fit return."""
+
+    def test_tuple_unpack_and_index(self):
+        import nlsq
+
+        x = np.linspace(0, 5, 50)
+        y = 3.0 * x + 2.0
+        r = nlsq.curve_fit(linear, x, y, p0=[1.0, 1.0], fallback=True)
+        assert isinstance(r, FallbackResult)
+        popt, _pcov = r
+        np.testing.assert_allclose(popt, [3.0, 2.0], rtol=1e-5)
+        np.testing.assert_allclose(r[0], popt)
+        assert len(r) == len(r.result)
+        assert hasattr(r, "fallback_strategy_used")
+        assert r.fallback_attempts >= 1
 
 
 class TestFallbackIntegration:

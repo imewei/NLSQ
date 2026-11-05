@@ -329,8 +329,16 @@ class UnifiedCache:
         # Compile outside lock (expensive, don't serialize)
         logger.debug(f"Cache miss for key {cache_key[:8]}..., compiling")
         start_time = time.time()
+        jit_target = func
+        if not inspect.isfunction(func):
+            # JAX also keys on callable equality. A distinct Python function
+            # keeps equal callable instances/bound methods from sharing traces.
+            @wraps(func)
+            def jit_target(*args, **kwargs):
+                return func(*args, **kwargs)
+
         compiled_func = jax.jit(
-            func,
+            jit_target,
             static_argnums=static_argnums,
             donate_argnums=donate_argnums,
         )

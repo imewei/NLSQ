@@ -118,6 +118,47 @@ class TestModelRegistryBuiltinRetrieval:
 class TestModelRegistryCustomModels:
     """Tests for custom model loading from external Python files."""
 
+    @pytest.mark.serial
+    @pytest.mark.parametrize(
+        ("signature", "expression"),
+        [("x, a", "a * transform(x)"), ("x, *params", "params[0] * transform(x)")],
+    )
+    def test_helpers_before_model_preserve_parameter_defaults(
+        self, tmp_path: Path, monkeypatch, signature, expression
+    ):
+        """Non-fitting utilities must not take ownership of model defaults."""
+        monkeypatch.chdir(tmp_path)
+        model_file = tmp_path / "helpers_first.py"
+        model_file.write_text(
+            "def transform(x):\n"
+            "    return x * x\n"
+            "def metadata(*, kind):\n"
+            "    return kind\n"
+            f"def first_model({signature}):\n"
+            f"    return {expression}\n"
+            "def estimate_p0(xdata, ydata):\n"
+            "    return [2.0]\n"
+            "def bounds():\n"
+            "    return ([0.0], [3.0])\n"
+            "def second_model(x, b):\n"
+            "    return b * x\n"
+        )
+        registry = ModelRegistry()
+        config = {"type": "custom", "path": str(model_file)}
+        first = registry.get_model(
+            str(model_file), {**config, "function": "first_model"}
+        )
+
+        assert first.estimate_p0(None, None) == [2.0]
+        assert first.bounds() == ([0.0], [3.0])
+        np.testing.assert_array_equal(first(np.array([1.0, 2.0]), 2.0), [2.0, 8.0])
+
+        second = registry.get_model(
+            str(model_file), {**config, "function": "second_model"}
+        )
+        assert not hasattr(second, "estimate_p0")
+        assert not hasattr(second, "bounds")
+
     def test_load_custom_model_from_file(self, tmp_path: Path, monkeypatch):
         """Test loading a custom model from an external Python file."""
         # Change to tmp_path so validate_path allows the model file

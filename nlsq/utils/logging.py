@@ -20,7 +20,8 @@ NLSQ_LOG_DIR : str
 NLSQ_TRACE_JAX : str
     Set to "1" to trace JAX compilation events
 NLSQ_SAVE_ITERATIONS : str
-    Directory to save optimization iteration history
+    Directory to save optimization iteration history. A boolean flag value
+    (1/true/yes) enables recording and saves into NLSQ_LOG_DIR (default: ".")
 
 Example
 -------
@@ -154,8 +155,11 @@ class NLSQLogger:
         if getattr(root_nlsq, "_nlsq_initialized", False) or root_nlsq.handlers:
             return
 
-        # Console handler
-        console_handler = logging.StreamHandler(sys.stdout)
+        # Console handler on stderr: stdout is reserved for program output
+        # (e.g. `nlsq fit --stdout` JSON). Skipped when the application has
+        # configured the root logger, since records propagate there and would
+        # otherwise print twice.
+        console_handler = logging.StreamHandler(sys.stderr)
 
         # Check modes
         debug_mode = os.getenv("NLSQ_DEBUG", "0") == "1"
@@ -175,7 +179,8 @@ class NLSQLogger:
             formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
         console_handler.setFormatter(formatter)
-        root_nlsq.addHandler(console_handler)
+        if not logging.getLogger().handlers:
+            root_nlsq.addHandler(console_handler)
 
         # Optional file handler for debug mode
         if debug_mode:
@@ -667,9 +672,12 @@ class NLSQLogger:
         save_dir = output_dir or os.getenv("NLSQ_SAVE_ITERATIONS")
         if not save_dir:
             return
+        # A boolean flag (as set by enable_performance_tracking) is not a path.
+        if save_dir.lower() in ("1", "true", "yes"):
+            save_dir = os.getenv("NLSQ_LOG_DIR", ".")
 
         save_path = Path(save_dir)
-        save_path.mkdir(exist_ok=True)
+        save_path.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = save_path / f"optimization_history_{self.name}_{timestamp}.npz"
@@ -746,6 +754,14 @@ def set_global_level(level: int | LogLevel):
     # Also set for root NLSQ logger
     root_logger = logging.getLogger("nlsq")
     root_logger.setLevel(level)
+
+    # The console handler has its own threshold fixed at creation; keep it in
+    # step or enable_verbose_mode() would still print nothing below WARNING.
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(
+            handler, logging.FileHandler
+        ):
+            handler.setLevel(level)
 
 
 def enable_debug_mode():

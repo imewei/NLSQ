@@ -127,7 +127,7 @@ class TestMemoryPoolEfficiency:
             ]
 
             for shape in shapes:
-                key = (shape, np.float64)
+                key = (shape, np.dtype(np.float64))
                 if key in manager.memory_pool:
                     hits += 1
                 else:
@@ -239,7 +239,7 @@ class TestMemoryPoolEfficiency:
 
             for _ in range(10):
                 for shape in common_shapes:
-                    key = (shape, np.float64)
+                    key = (shape, np.dtype(np.float64))
                     if key in manager.memory_pool:
                         hits += 1
                     else:
@@ -298,7 +298,7 @@ class TestLRUEvictionPatterns:
 
             # Check that hot shapes are still in pool
             for shape in hot_shapes:
-                key = (shape, np.float64)
+                key = (shape, np.dtype(np.float64))
                 assert key in manager.memory_pool, (
                     f"Hot shape {shape} should be preserved after LRU eviction"
                 )

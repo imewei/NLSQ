@@ -197,8 +197,9 @@ class ResultsPage(QWidget):
             result: The fit result object (OptimizeResult)
         """
         if result is None:
-            self._status_label.setText("No fit results available")
-            self._status_label.setStyleSheet("color: gray;")
+            self.clear()
+            self._last_result = None
+            self._export_btn.setEnabled(False)
             return
 
         try:
@@ -649,7 +650,9 @@ class ResultsPage(QWidget):
             Tuple of (lower_band, upper_band)
         """
         # Compute numerical gradient of model w.r.t. parameters
-        eps = 1e-8
+        # Step scaled to |p| so p + h != p for large parameters (an absolute
+        # 1e-8 step gives J = 0 once |p| >~ 1e8).
+        eps = float(np.sqrt(np.finfo(float).eps))
         # Ensure popt is a mutable numpy array (handle JAX arrays)
         popt = np.array(popt)
         n_params = len(popt)
@@ -658,13 +661,17 @@ class ResultsPage(QWidget):
         # Jacobian: df/dp at each x point
         J = np.zeros((n_points, n_params))
 
-        y_base = model_func(x, *popt)
+        y_base = np.asarray(model_func(x, *popt), dtype=float)
 
         for i in range(n_params):
+            h = eps * max(1.0, abs(popt[i]))
             popt_plus = popt.copy()
-            popt_plus[i] += eps
-            y_plus = model_func(x, *popt_plus)
-            J[:, i] = (y_plus - y_base) / eps
+            popt_plus[i] += h
+            popt_minus = popt.copy()
+            popt_minus[i] -= h
+            y_plus = np.asarray(model_func(x, *popt_plus), dtype=float)
+            y_minus = np.asarray(model_func(x, *popt_minus), dtype=float)
+            J[:, i] = (y_plus - y_minus) / (2.0 * h)
 
         # Variance at each point: diag(J @ pcov @ J.T)
         # More efficient: sum((J @ pcov) * J, axis=1)

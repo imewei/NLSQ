@@ -657,11 +657,10 @@ class MultiStartOrchestrator:
                 )
             except Exception as e:
                 # Fall back to signature inspection
-                from inspect import signature
+                from nlsq.streaming.strategy import default_p0
 
-                sig = signature(f)
-                n_params = len(sig.parameters) - 1  # Exclude x
-                p0 = np.ones(n_params)
+                p0 = default_p0(f)
+                n_params = len(p0)
                 self.logger.debug(
                     f"Could not estimate p0, using defaults: {e}",
                     n_params=n_params,

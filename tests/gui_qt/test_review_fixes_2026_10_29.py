@@ -279,7 +279,8 @@ class TestGeneratedScript:
             "polynomial", {"degree": 2}, get_model("polynomial", {"degree": 2})
         )
         ns = _run_generated(self._page(app_state, qtbot).generate_python_code())
-        np.testing.assert_allclose(ns["popt"], [1, 2, 3], rtol=1e-6)
+        # descending powers (jnp.polyval), same as the GUI model
+        np.testing.assert_allclose(ns["popt"], [3, 2, 1], rtol=1e-6)
 
     def test_data_embedded_at_full_precision(self, app_state, qtbot):
         xp = np.array([0.123456789012, 1.000000001, 2.5])

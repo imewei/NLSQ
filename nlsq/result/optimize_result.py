@@ -45,6 +45,9 @@ class OptimizeResult(dict):
         - 3: Function value convergence (delta_f/f < ftol)
         - 0: Maximum iterations reached
         - -1: Evaluation limit exceeded
+        - -2: Stopped by a callback raising ``StopOptimization`` (matches
+          SciPy's status; ``success`` stays True so the best-so-far
+          parameters are returned rather than raising)
         - -3: Inner loop iteration limit (algorithm-specific)
 
     message : str

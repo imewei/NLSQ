@@ -81,6 +81,8 @@ from nlsq.core.least_squares import LeastSquares, prepare_bounds
 from nlsq.core.problem import (
     PrepareContext,
     _is_auto_p0,
+    _n_params_from_signature,
+    finite_rows,
     prepare_problem,
 )
 from nlsq.core.problem import pad_fit_data as _pad_fit_data
@@ -480,11 +482,9 @@ def fit(  # noqa: C901
 
         if not estimated_success:
             # Fallback to inference from function signature
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
+            n_params = _n_params_from_signature(f)
+            if n_params < 1:
                 raise ValueError("Unable to determine number of fit parameters.")
-            n_params = len(args) - 1
 
     # Convert goal string to OptimizationGoal enum if needed
     goal_enum = _parse_goal_parameter(goal)
@@ -744,11 +744,9 @@ def _fit_with_config(
 
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
+            n_params = _n_params_from_signature(f)
+            if n_params < 1:
                 raise ValueError("Unable to determine number of fit parameters.")
-            n_params = len(args) - 1
             p0 = np.ones(n_params)
         p0_arr = np.atleast_1d(p0)
 
@@ -1046,11 +1044,9 @@ def _fit_with_preset(  # noqa: C901
 
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
+            n_params = _n_params_from_signature(f)
+            if n_params < 1:
                 raise ValueError("Unable to determine number of fit parameters.")
-            n_params = len(args) - 1
             p0 = np.ones(n_params)
         p0_arr = np.atleast_1d(p0)
 
@@ -1790,9 +1786,7 @@ def _fit_global_multistart(
 
     # Prepare p0
     if p0 is None or _is_auto_p0(p0):
-        sig = signature(f)
-        args = sig.parameters
-        n_params = len(args) - 1
+        n_params = _n_params_from_signature(f)
         p0 = np.ones(n_params)
     p0_arr = np.atleast_1d(p0)
 
@@ -1931,6 +1925,55 @@ def _log_memory_budget_diagnostics(
         )
     except Exception as e:
         logger.debug(f"[NLSQ] Memory budget diagnostics unavailable: {e}")
+
+
+def _prepare_wrapper_p0(
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+    p0: Any,
+    stability: Any,
+    multistart: bool,
+    method: str | None,
+    kwargs: dict[str, Any],
+) -> Any:
+    """Validate method="cmaes" and resolve p0="auto" for the wrapper routes.
+
+    The stability, CMA-ES and multi-start routes need a numeric p0; the plain
+    CurveFit path resolves the "auto" sentinel itself.
+    """
+    bounds = kwargs.get("bounds")
+    if method == "cmaes" and bounds is None:
+        raise ValueError('method="cmaes" requires bounds')
+    if _is_auto_p0(p0) and (
+        stability
+        or multistart
+        or method in ("cmaes", "multi-start")
+        or (method == "auto" and bounds is not None)
+    ):
+        p0 = _resolve_auto_p0(f, xdata, ydata)
+        kwargs["p0"] = p0
+    return p0
+
+
+def _resolve_auto_p0(
+    f: ModelFunction,
+    xdata: ArrayLike,
+    ydata: ArrayLike,
+) -> NDArray[np.floating[Any]] | None:
+    """Replace the ``p0="auto"`` sentinel with an estimate (None if it fails).
+
+    Mirrors ``problem._determine_parameter_count``: on failure p0 becomes None
+    so downstream routes use their own defaults.
+    """
+    from nlsq.precision.parameter_estimation import estimate_initial_parameters
+
+    try:
+        x_f, y_f = finite_rows(xdata, ydata)
+        return np.atleast_1d(estimate_initial_parameters(f, x_f, y_f, "auto"))
+    except Exception as e:
+        _logger.warning(f"p0='auto' estimation failed, using defaults: {e}")
+        return None
 
 
 def _apply_auto_bounds(
@@ -2855,6 +2898,8 @@ def curve_fit(
     # Extract p0 for use in preprocessing steps
     p0 = _extract_p0_from_args(args, kwargs)
 
+    p0 = _prepare_wrapper_p0(f, xdata, ydata, p0, stability, multistart, method, kwargs)
+
     # Verbose memory budget diagnostics (verbose >= 2)
     verbose = kwargs.get("verbose", 1)
     if verbose >= 2:
@@ -3686,11 +3731,7 @@ class CurveFit:
             n_params = len(np.atleast_1d(p0))
         else:
             # Estimate parameter count by inspecting function signature
-            import inspect
-
-            sig = inspect.signature(f)
-            # Subtract 1 for xdata parameter
-            n_params = max(1, len(sig.parameters) - 1)
+            n_params = max(1, _n_params_from_signature(f))
 
         # Get memory_limit_gb from kwargs if provided
         memory_limit_gb = kwargs.pop("memory_limit_gb", None)
@@ -3889,7 +3930,7 @@ class CurveFit:
 
         # Determine the appropriate solver and configure tr_solver
         tr_solver = self._select_tr_solver(solver, m, n, batch_size)
-        if tr_solver is not None:
+        if tr_solver is not None and kwargs.get("tr_solver") is None:
             kwargs["tr_solver"] = tr_solver
 
         # Handle minibatch processing if requested
@@ -4461,7 +4502,8 @@ class CurveFit:
             if none_mask:
                 # data_mask = np.ndarray.astype(data_mask, bool)
                 return popt, _pcov, feval[data_mask]
-            return popt, _pcov, feval
+            # A user data_mask leaves padding rows (flength) in feval; strip them.
+            return popt, _pcov, feval[:m]
 
         xdata, ydata = self._drop_unobserved_rows(res, xdata, ydata, data_mask)
 

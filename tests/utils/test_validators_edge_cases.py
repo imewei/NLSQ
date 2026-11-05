@@ -451,11 +451,24 @@ class TestValidateSigma:
         errors, warnings = self.validator._validate_sigma(sigma, ydata)
         assert len(errors) > 0 or len(warnings) > 0
 
+    def test_sigma_covariance_matrix_valid(self):
+        """A full (m, m) covariance sigma may have negative off-diagonals."""
+        cov = np.array([[1.0, -0.2, 0.0], [-0.2, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        errors, _ = self.validator._validate_sigma(cov, np.ones(3))
+        assert errors == []
+
+    def test_sigma_nan_allowed_when_check_finite_off(self):
+        """NaN sigma entries are left to nan_policy when check_finite is False."""
+        sigma = np.array([0.1, np.nan, 0.1])
+        errors, _ = self.validator._validate_sigma(sigma, np.ones(3), False)
+        assert errors == []
+
     def test_sigma_scalar(self):
         """Test with scalar sigma (should be broadcast)."""
         sigma = 0.1
         ydata = np.array([1.0, 2.0, 3.0])
-        _errors, _warnings = self.validator._validate_sigma(sigma, ydata)
+        errors, _warnings = self.validator._validate_sigma(sigma, ydata)
+        assert errors == []
         # Scalar sigma should be valid (broadcast to all points)
         # Depending on implementation, this may pass or need conversion
 

@@ -658,6 +658,9 @@ class FitVisualizer:
         preset = STYLE_PRESETS.get(style_name, STYLE_PRESETS["publication"])
         figure_size = config.get("figure_size", preset.get("figure_size", [6.0, 4.5]))
 
+        # hist()/norm.fit() raise on NaN/Inf (e.g. a diverged fit).
+        residuals = np.asarray(residuals)[np.isfinite(residuals)]
+
         fig, ax = plt.subplots(figsize=figure_size, layout="constrained")
 
         histogram_config = config.get("histogram", {})
@@ -686,7 +689,7 @@ class FitVisualizer:
         )
 
         # Overlay normal distribution fit
-        if histogram_config.get("show_normal_fit", True):
+        if histogram_config.get("show_normal_fit", True) and residuals.size:
             mu, std = stats.norm.fit(residuals)
             # Guard against std == 0 (e.g. perfect fit, all residuals identical),
             # which would cause norm.pdf to return inf/nan.

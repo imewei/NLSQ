@@ -757,3 +757,23 @@ class TestGlobalMemoryManagerIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPoolKeyNormalization(unittest.TestCase):
+    """allocate_array and free_array must agree on the pool key."""
+
+    def test_freed_array_is_reused(self):
+        mm = MemoryManager()
+        x = np.ones((7, 3))
+        mm.free_array(x)
+        y = mm.allocate_array((7, 3))
+        self.assertIs(y, x)
+        self.assertEqual(len(mm.memory_pool), 1)
+        mm.clear_pool()
+
+    def test_allocate_then_free_single_entry(self):
+        mm = MemoryManager()
+        a = mm.allocate_array((5, 2))
+        mm.free_array(a)
+        self.assertEqual(len(mm.memory_pool), 1)
+        mm.clear_pool()

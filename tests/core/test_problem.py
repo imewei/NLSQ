@@ -224,3 +224,163 @@ class TestMaskNormalization:
         prep = _prepare(x, y, data_mask=[True] * (N - 1) + [False])
         assert isinstance(prep.mask, np.ndarray)
         assert prep.n_effective == N - 1
+
+
+def _exp_decay(x, a, b):
+    return a * jnp.exp(-b * x)
+
+
+def _decay_data(n=50):
+    x = np.linspace(0, 4, n)
+    y = 2.5 * np.exp(-1.3 * x) + 0.05 * np.random.default_rng(0).normal(size=n)
+    return x, y
+
+
+class TestCurveFitApiRegressions:
+    """Regression tests for the curve_fit wrapper/prepare_problem review findings."""
+
+    def test_auto_p0_with_nan_omit(self):
+        # API2: p0='auto' was estimated on NaN data before NaN removal.
+        from nlsq.core.functions import gaussian
+
+        x = np.linspace(0, 10, 200)
+        y = 10 * np.exp(-((x - 5) ** 2) / 2)
+        y[7] = np.nan
+        r = curve_fit(gaussian, x, y, p0="auto", nan_policy="omit")
+        np.testing.assert_allclose(r.popt, [10.0, 5.0, 1.0], rtol=1e-3)
+
+    @pytest.mark.parametrize(
+        "kw",
+        [
+            {"method": "cmaes", "bounds": (0, 10)},
+            {"multistart": True, "n_starts": 3, "bounds": ([0, 0], [10, 10])},
+            {"stability": "check"},
+        ],
+    )
+    def test_auto_p0_wrapper_routes(self, kw):
+        # API3: the raw 'auto' sentinel crashed cmaes / multistart / stability.
+        x, y = _decay_data()
+        r = curve_fit(_exp_decay, x, y, p0="auto", **kw)
+        np.testing.assert_allclose(r.popt, [2.5, 1.3], atol=0.15)
+
+    def test_return_eval_strips_padding_with_data_mask(self):
+        # API5: padded rows leaked when a user data_mask was given.
+        x, y = _decay_data()
+        mask = np.ones(50, bool)
+        mask[::5] = False
+        out = CurveFit(flength=64).curve_fit(
+            _exp_decay, x, y, p0=[1, 1], data_mask=mask, return_eval=True
+        )
+        assert len(out[2]) == 50
+
+    def test_invalid_nan_policy_raises(self):
+        # API6
+        x, y = _decay_data()
+        with pytest.raises(ValueError, match="nan_policy"):
+            curve_fit(_exp_decay, x, y, p0=[1, 1], nan_policy="bogus")
+
+    def test_nan_policy_none_is_scipy_default_raise(self):
+        # scipy's default is nan_policy=None (== 'raise'); must stay accepted.
+        x, y = _decay_data()
+        popt, _ = curve_fit(_exp_decay, x, y, p0=[1, 1], nan_policy=None)
+        ref, _ = curve_fit(_exp_decay, x, y, p0=[1, 1], nan_policy="raise")
+        np.testing.assert_allclose(popt, ref)
+        y_nan = y.copy()
+        y_nan[3] = np.nan
+        with pytest.raises(ValueError):
+            curve_fit(_exp_decay, x, y_nan, p0=[1, 1], nan_policy=None)
+
+    def test_cmaes_requires_bounds(self):
+        # API7
+        x, y = _decay_data()
+        with pytest.raises(ValueError, match="requires bounds"):
+            curve_fit(_exp_decay, x, y, p0=[1, 1], method="cmaes")
+
+    def test_zero_sigma_rejected(self):
+        # UCL4: zero sigma failed with a misleading "Residuals are not finite".
+        x, y = _decay_data()
+        sigma = np.full(50, 0.1)
+        sigma[3] = 0.0
+        with pytest.raises(ValueError, match="sigma values must be non-zero"):
+            curve_fit(_exp_decay, x, y, p0=[1, 1], sigma=sigma)
+
+    @pytest.mark.parametrize("absolute_sigma", [False, True])
+    def test_negative_sigma_matches_scipy(self, absolute_sigma):
+        # Only the sign of a residual weight flips, so SciPy (and HEAD) accept it.
+        import scipy.optimize as so
+
+        x, y = _decay_data()
+        sigma = 0.05 + 0.1 * np.random.default_rng(1).random(50)
+        sigma[3] = -sigma[3]
+        ref = so.curve_fit(
+            lambda x, a, b: a * np.exp(-b * x),
+            x,
+            y,
+            p0=[1, 1],
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+        )
+        r = curve_fit(
+            _exp_decay, x, y, p0=[1, 1], sigma=sigma, absolute_sigma=absolute_sigma
+        )
+        # NLSQ vs SciPy differ by ~4e-6 in pcov even for all-positive sigma
+        # (termination tolerance), so compare to SciPy at 1e-4 ...
+        np.testing.assert_allclose(r.popt, ref[0], rtol=1e-6)
+        np.testing.assert_allclose(r.pcov, ref[1], rtol=1e-4)
+        # ... and pin the sign-invariance tightly against NLSQ's own positive run.
+        r_pos = curve_fit(
+            _exp_decay,
+            x,
+            y,
+            p0=[1, 1],
+            sigma=np.abs(sigma),
+            absolute_sigma=absolute_sigma,
+        )
+        np.testing.assert_allclose(r.popt, r_pos.popt, rtol=1e-9)
+        np.testing.assert_allclose(r.pcov, r_pos.pcov, rtol=1e-9)
+
+    def test_negative_sigma_rejected_in_strict_mode(self):
+        sigma = np.array([0.1, -0.1, 0.1])
+        errors, _ = InputValidator()._validate_sigma(sigma, np.ones(3))
+        assert any("must be positive" in e for e in errors)
+        errors, _ = InputValidator()._validate_sigma(sigma, np.ones(3), strict=False)
+        assert errors == []
+
+    def test_scalar_and_covariance_sigma_still_valid(self):
+        x, y = _decay_data()
+        curve_fit(_exp_decay, x, y, p0=[1, 1], sigma=0.1)
+        cov = np.diag(np.full(50, 0.01))
+        cov[0, 1] = cov[1, 0] = -0.001  # negative off-diagonal is legitimate
+        curve_fit(_exp_decay, x, y, p0=[1, 1], sigma=cov)
+
+
+class TestExplicitTrSolverAndKwOnlyParams:
+    def test_explicit_tr_solver_is_respected(self, monkeypatch):
+        # m*n >= 10000 makes solver='auto' pick lsmr; an explicit tr_solver must win.
+        from nlsq.core.least_squares import LeastSquares
+
+        seen = []
+        orig = LeastSquares.least_squares
+
+        def spy(self, *a, **kw):
+            seen.append(kw.get("tr_solver"))
+            return orig(self, *a, **kw)
+
+        monkeypatch.setattr(LeastSquares, "least_squares", spy)
+        x = np.linspace(0, 4, 5001)
+        y = 2.5 * np.exp(-1.3 * x) + 0.5
+        f = lambda x, a, b, c: a * jnp.exp(-b * x) + c
+        curve_fit(f, x, y, p0=[1, 1, 0], tr_solver="exact")
+        assert seen and set(seen) == {"exact"}
+        seen.clear()
+        curve_fit(f, x, y, p0=[1, 1, 0])
+        assert set(seen) == {"lsmr"}  # 'auto' selection unchanged
+
+    @pytest.mark.parametrize("p0", [None, "auto"])
+    def test_keyword_only_params_not_counted(self, p0):
+        def f(x, a, b, *, c=0.0):
+            return a * x + b + c
+
+        x = np.linspace(0, 1, 50)
+        r = curve_fit(f, x, 2 * x + 1, p0=p0)
+        np.testing.assert_allclose(r.popt, [2.0, 1.0], atol=1e-6)

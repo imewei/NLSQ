@@ -751,3 +751,28 @@ class TestCallbackIntegration:
         assert monitor.iteration_count == 2
         report = monitor.get_report()
         assert report.available is True
+
+
+class TestImbalanceIgnoresConvergedIterations:
+    """GRAD-002 must not be triggered by roundoff-level converged gradients."""
+
+    def test_converged_tail_not_flagged(self) -> None:
+        monitor = GradientMonitor(DiagnosticsConfig(imbalance_threshold=1e6))
+        for g in (
+            [8.0, 105.0, 127.0],
+            [16.0, 17.5, 4.3],
+            [0.01, 0.03, 0.05],
+            [4.7e-9, 5e-6, 1.3e-8],
+            [4.7e-14, 4.8e-8, 6.8e-13],  # ratio 1e6 but norm ~1e-13 of initial
+        ):
+            monitor.record_gradient(np.array(g), cost=1.0)
+        report = monitor.get_report()
+        assert report.max_imbalance_ratio < 1e3
+        assert not [i for i in report.issues if i.code == "GRAD-002"]
+
+    def test_nonconverged_imbalance_still_flagged(self) -> None:
+        monitor = GradientMonitor(DiagnosticsConfig(imbalance_threshold=1e6))
+        monitor.record_gradient(np.array([1e3, 1.0, 1e-4]), cost=1.0)
+        monitor.record_gradient(np.array([9e2, 1.0, 1e-4]), cost=1.0)
+        report = monitor.get_report()
+        assert [i for i in report.issues if i.code == "GRAD-002"]

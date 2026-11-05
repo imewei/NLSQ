@@ -163,6 +163,9 @@ class ConvergenceMonitor:
             return False, 0.0
 
         recent_costs = list(self.cost_history)[-5:]
+        if not np.all(np.isfinite(recent_costs)):
+            # A NaN/Inf cost is divergence (see detect_divergence), not stagnation.
+            return False, 0.0
         cost_variance = float(np.var(recent_costs))
         cost_mean = float(np.mean(recent_costs))
 
@@ -199,6 +202,10 @@ class ConvergenceMonitor:
             return False, 0.0
 
         costs = np.array(self.cost_history)
+
+        # NaN comparisons are all False, which would report a blown-up fit as healthy.
+        if not np.all(np.isfinite(costs)):
+            return True, 1.0
 
         # Check if cost is increasing
         if len(costs) >= 5:

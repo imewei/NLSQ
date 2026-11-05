@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from nlsq.gui_qt.plots import _downsample
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -232,25 +234,8 @@ class FitPlotWidget(QWidget):
         x: NDArray,
         y: NDArray,
     ) -> tuple[NDArray, NDArray]:
-        """Downsample data if it exceeds the threshold.
-
-        Uses a simple stride-based downsampling for performance.
-
-        Args:
-            x: X data array
-            y: Y data array
-
-        Returns:
-            Tuple of (downsampled_x, downsampled_y)
-        """
-        n = len(x)
-        if n <= self.DOWNSAMPLE_THRESHOLD:
-            return x, y
-
-        # Calculate stride
-        stride = n // self.DOWNSAMPLE_THRESHOLD
-
-        return x[::stride], y[::stride]
+        """Downsample paired data with the widget threshold."""
+        return _downsample(x, y, self.DOWNSAMPLE_THRESHOLD)
 
     def _update_visibility(self) -> None:
         """Update visibility of plot elements based on checkboxes."""

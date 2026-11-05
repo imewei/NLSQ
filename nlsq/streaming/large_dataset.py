@@ -182,6 +182,16 @@ class ChunkBuffer:
         return self.data[: self.valid_length]
 
 
+def _scipy_x(x):
+    """Return multi-dimensional x in scipy's (k, M) layout.
+
+    LargeDatasetFitter works points-first, (M, k), internally so that sizing,
+    shuffling and chunking run along the points axis; every call into the
+    model or the per-chunk ``curve_fit`` converts back. No-op for 1-D x.
+    """
+    return x.T if getattr(x, "ndim", 1) > 1 else x
+
+
 class ChunkBufferPool:
     """Pre-allocated buffer pool for streaming chunk operations (FR-006).
 
@@ -1358,11 +1368,9 @@ class LargeDatasetFitter:
             if p0 is None:
                 # Try to infer from function signature
                 try:
-                    from inspect import signature
+                    from nlsq.streaming.strategy import default_p0
 
-                    sig = signature(f)
-                    n_params = len(sig.parameters) - 1  # Subtract x parameter
-                    p0_test = np.ones(n_params)
+                    p0_test = default_p0(f)
                 except Exception:
                     # Fallback to 2 parameters
                     p0_test = np.ones(2)
@@ -1374,7 +1382,7 @@ class LargeDatasetFitter:
 
             # Call model function with test data
             try:
-                output_test = f(x_test, *p0_test)
+                output_test = f(_scipy_x(x_test), *p0_test)
             except Exception as e:
                 raise ValueError(
                     f"Model function failed on test data: {type(e).__name__}: {e}\n"
@@ -1505,7 +1513,7 @@ class LargeDatasetFitter:
         # Run exploration on full data
         result = orchestrator.fit(
             f=f,
-            xdata=xdata,
+            xdata=_scipy_x(xdata),
             ydata=ydata,
             p0=p0,
             bounds=bounds,
@@ -1688,6 +1696,9 @@ class LargeDatasetFitter:
         """Internal implementation of fitting algorithm."""
 
         fit_start_time = time.time()
+        if getattr(xdata, "ndim", 1) > 1:
+            # scipy layout (k, M) -> points-first (M, k); see _scipy_x.
+            xdata = np.asarray(xdata).T
         n_points = len(xdata)
 
         # Estimate number of parameters from function signature or p0
@@ -1696,10 +1707,9 @@ class LargeDatasetFitter:
         else:
             # Try to infer from function signature
             try:
-                from inspect import signature
+                from nlsq.core.problem import _n_params_from_signature
 
-                sig = signature(f)
-                n_params = len(sig.parameters) - 1  # Subtract x parameter
+                n_params = _n_params_from_signature(f)
             except Exception:
                 n_params = 2  # Conservative default
 
@@ -1830,7 +1840,7 @@ class LargeDatasetFitter:
         try:
             popt, _pcov = self.curve_fit.curve_fit(
                 f,
-                xdata,
+                _scipy_x(xdata),
                 ydata,
                 p0=p0,
                 bounds=bounds,
@@ -2287,7 +2297,7 @@ class LargeDatasetFitter:
             )
             popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                 f,
-                x_valid,
+                _scipy_x(x_valid),
                 y_valid,
                 p0=perturbed_params,
                 bounds=bounds,
@@ -2314,7 +2324,9 @@ class LargeDatasetFitter:
             # convergence), instead of it being silently dropped once
             # _accum_information has started accumulating.
             chunk_result["pcov_chunk"] = pcov_chunk
-            chunk_result["ssr_chunk"] = self._chunk_ssr(f, x_valid, y_valid, popt_chunk)
+            chunk_result["ssr_chunk"] = self._chunk_ssr(
+                f, x_valid, y_valid, popt_chunk, kwargs.get("sigma")
+            )
             chunk_result["n_chunk"] = len(y_valid)
 
             return chunk_result, popt_chunk
@@ -2342,7 +2354,7 @@ class LargeDatasetFitter:
     @staticmethod
     def _chunk_ssr(f, x, y, popt, sigma=None) -> float:
         """Sum of squared (sigma-weighted) residuals of ``f`` at ``popt``."""
-        r = np.asarray(y, dtype=float) - np.asarray(f(x, *popt), dtype=float)
+        r = np.asarray(y, dtype=float) - np.asarray(f(_scipy_x(x), *popt), dtype=float)
         if sigma is not None:
             r = r / np.asarray(sigma, dtype=float)
         return float(r @ r)
@@ -2686,10 +2698,7 @@ class LargeDatasetFitter:
 
         # sigma is aligned with the full xdata/ydata, not any one chunk -- pop
         # it out and re-slice per chunk below instead of forwarding it whole
-        # via **kwargs (which would raise a per-chunk shape mismatch). Retry
-        # attempts (_retry_failed_chunk) fit against the un-sliced, possibly
-        # zero-padded x_chunk/y_chunk, so sigma is intentionally left out of
-        # their kwargs -- an unweighted retry is safer than a wrong-length one.
+        # via **kwargs (which would raise a per-chunk shape mismatch).
         full_sigma = kwargs.pop("sigma", None)
         # Chunks are fitted with absolute_sigma=True so their covariances are
         # unscaled and combine as true information; the caller's choice is
@@ -2781,12 +2790,12 @@ class LargeDatasetFitter:
                 buffer_pool=buffer_pool,
             ):
                 chunk_start_time = time.time()
+                chunk_kwargs = kwargs
+                sigma_valid = None
                 try:
                     # Use only valid data points (exclude zero-padding)
                     x_valid = x_chunk[:valid_length]
                     y_valid = y_chunk[:valid_length]
-                    chunk_kwargs = kwargs
-                    sigma_valid = None
                     if full_sigma is not None:
                         # Reconstructs the chunk boundary DataChunker.create_chunks
                         # used, which is only valid because this call passes
@@ -2808,7 +2817,7 @@ class LargeDatasetFitter:
                         chunk_kwargs = {**kwargs, "sigma": sigma_valid}
                     popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                         f,
-                        x_valid,
+                        _scipy_x(x_valid),
                         y_valid,
                         p0=current_params,
                         bounds=bounds,
@@ -2873,7 +2882,7 @@ class LargeDatasetFitter:
                         method=method,
                         solver=solver,
                         valid_length=valid_length,
-                        **kwargs,
+                        **chunk_kwargs,
                     )
                     # Fold a successful retry into the same precision-weighted
                     # accumulator every other successful chunk goes through

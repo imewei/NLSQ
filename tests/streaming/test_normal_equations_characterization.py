@@ -131,7 +131,10 @@ def run_phases_accumulate_chunk():
     return np.asarray(jtj), np.asarray(jtr), float(cost)
 
 
-# Captured from the unmodified code (see module docstring).
+# Captured from the unmodified code (see module docstring). The four
+# ``hybrid_pen_*`` / ``hybrid_ragged_*`` entries were re-captured on 2026-11-04
+# when the group-variance penalty moved from normalized to physical parameters
+# (an intentional correctness fix, not a refactor drift).
 GOLDEN = {
     "exact_lm": {
         "x": [2.0011127994390256, 1.3003529583685232],
@@ -158,19 +161,19 @@ GOLDEN = {
         ],
     },
     "hybrid_pen_scan": {
-        "x": [1.9914201296045526, 1.2659764128226814],
-        "rss": 51.66824287612398,
+        "x": [1.9860233185007954, 1.3095526853503199],
+        "rss": 50.928023778944485,
         "pcov": [
-            [3.2696704640810668e-06, 2.0791088435790158e-06],
-            [2.0791088435790158e-06, 2.6443861162447973e-06],
+            [3.333467855747359e-06, 2.1984236130354847e-06],
+            [2.1984236130354847e-06, 2.9002396563823016e-06],
         ],
     },
     "hybrid_pen_loop": {
-        "x": [1.9914201296045526, 1.2659764128226814],
-        "rss": 51.66824287612398,
+        "x": [1.9860233185007954, 1.3095526853503199],
+        "rss": 50.928023778944485,
         "pcov": [
-            [3.2696704640810875e-06, 2.079108843579029e-06],
-            [2.079108843579029e-06, 2.644386116244803e-06],
+            [3.333467855747359e-06, 2.1984236130354847e-06],
+            [2.1984236130354847e-06, 2.9002396563823016e-06],
         ],
     },
     "hybrid_chunk": {
@@ -191,19 +194,19 @@ GOLDEN = {
     },
     # chunk_size=6000 -> chunks of 6000, 6000, 6000, 2000 (ragged tail), penalty on.
     "hybrid_ragged_scan": {
-        "x": [1.9914201296045526, 1.2659764128226814],
-        "rss": 51.66824287612398,
+        "x": [1.9860233185007954, 1.3095526853503199],
+        "rss": 50.92802377894448,
         "pcov": [
-            [3.2696704640810914e-06, 2.0791088435790344e-06],
-            [2.0791088435790344e-06, 2.644386116244809e-06],
+            [3.3334678557473604e-06, 2.1984236130354864e-06],
+            [2.1984236130354864e-06, 2.9002396563823033e-06],
         ],
     },
     "hybrid_ragged_loop": {
-        "x": [1.9914201296045526, 1.2659764128226814],
-        "rss": 51.66824287612398,
+        "x": [1.9860233185007954, 1.3095526853503199],
+        "rss": 50.92802377894448,
         "pcov": [
-            [3.269670464081091e-06, 2.07910884357903e-06],
-            [2.07910884357903e-06, 2.644386116244803e-06],
+            [3.3334678557473604e-06, 2.1984236130354864e-06],
+            [2.1984236130354864e-06, 2.9002396563823033e-06],
         ],
     },
     # GaussNewtonPhase._gauss_newton_iteration from p0_norm + [0.3, -0.2], radius 1.0.
@@ -213,9 +216,9 @@ GOLDEN = {
         "step": [0.2393817160828744, 0.7716573655329735],
     },
     "phases_iter_pen": {
-        "new_cost": 424.8078163421925,
-        "gradient_norm": 3432.758834603918,
-        "step": [0.2393817356061301, 0.7716573477717127],
+        "new_cost": 455.1139749869176,
+        "gradient_norm": 3474.4455679089638,
+        "step": [0.22866766199561414, 0.767498902697394],
     },
 }
 
@@ -270,8 +273,10 @@ def test_hybrid_phase2_ragged_tail_golden(strategy):
 
 @pytest.mark.parametrize("penalty", [False, True], ids=["no_penalty", "penalty"])
 def test_phases_iteration_golden(penalty):
-    """phases/ scales the group-variance penalty differently from adaptive_hybrid
-    (no n_points, no 0.5); pin that as it is today."""
+    """phases/ group-variance penalty: n_points/2-scaled, over physical params.
+
+    Re-captured 2026-11-04 (penalty case only) after the SWM3 n_points/2 scaling
+    fix and the move of the variance to denormalized parameters."""
     cost, gnorm, step = run_phases_iteration(penalty)
     g = GOLDEN[f"phases_iter_{'pen' if penalty else 'nopen'}"]
     _assert_close(cost, g["new_cost"])

@@ -5,7 +5,6 @@ the best optimization algorithm and parameters.
 """
 
 from collections.abc import Callable
-from inspect import signature
 
 import numpy as np
 
@@ -99,7 +98,7 @@ class AlgorithmSelector:
         xdata = np.asarray(xdata)
         ydata = np.asarray(ydata)
 
-        n_points = len(xdata) if xdata.ndim == 1 else xdata.shape[0]
+        n_points = len(ydata)  # xdata may be (k, N), so count observations via y
 
         # Estimate number of parameters
         n_params = self._estimate_n_params(f, p0)
@@ -173,9 +172,9 @@ class AlgorithmSelector:
             return len(p0)
 
         try:
-            sig = signature(f)
-            # Count parameters excluding x
-            return len(sig.parameters) - 1
+            from nlsq.core.problem import _n_params_from_signature
+
+            return _n_params_from_signature(f)
         except (TypeError, ValueError):
             # Default guess
             return 3
@@ -211,7 +210,13 @@ class AlgorithmSelector:
         # Check for noise level (using local variation)
         if len(ydata) > 10:
             # Estimate noise from differences
-            diff = np.diff(ydata)
+            # Successive differences are only a noise proxy along sorted x.
+            y_ordered = (
+                ydata[np.argsort(xdata)]
+                if xdata.ndim == 1 and len(xdata) == len(ydata)
+                else ydata
+            )
+            diff = np.diff(y_ordered)
             noise_estimate = np.median(np.abs(diff))
             signal_range = np.ptp(ydata)
             results["snr_estimate"] = signal_range / (noise_estimate + 1e-10)

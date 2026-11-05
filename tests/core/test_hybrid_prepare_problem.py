@@ -94,7 +94,8 @@ def test_hybrid_check_finite_false_behaviour_unchanged(reached):
 
     with pytest.raises(ValueError, match="array must not contain infs or NaNs"):
         _run(x, y_nan, p0=P0)
-    with pytest.raises(ValueError, match="array must not contain infs or NaNs"):
+    # An invalid nan_policy is now rejected up front (was silently accepted).
+    with pytest.raises(ValueError, match="nan_policy must be one of"):
         _run(x, y_nan, p0=P0, nan_policy="bogus")
 
     with pytest.raises(_Reached):

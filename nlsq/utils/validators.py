@@ -363,6 +363,8 @@ class InputValidator:
         self,
         sigma: Any | None,
         ydata: np.ndarray,
+        check_finite: bool = True,
+        strict: bool = True,
     ) -> tuple[list[str], list[str]]:
         """Validate uncertainty (sigma) parameters.
 
@@ -372,6 +374,11 @@ class InputValidator:
             Uncertainties in ydata
         ydata : np.ndarray
             Dependent variable data
+        check_finite : bool
+            Report NaN/Inf sigma entries (off when nan_policy handles them).
+        strict : bool
+            Require sigma > 0. When False only sigma == 0 is rejected (SciPy
+            accepts negative sigma: the sign only flips a squared residual).
 
         Returns
         -------
@@ -388,13 +395,24 @@ class InputValidator:
 
         try:
             sigma = np.asarray(sigma)
-            if sigma.shape != ydata.shape:
+            ydata = np.asarray(ydata)
+            # Valid shapes (as in scipy): scalar, 1-D like ydata, or a full
+            # (m, m) covariance matrix.
+            is_cov = (
+                sigma.ndim == 2 and ydata.ndim == 1 and sigma.shape == (ydata.size,) * 2
+            )
+            if sigma.ndim != 0 and sigma.shape != ydata.shape and not is_cov:
                 errors.append("sigma must have same shape as ydata")
 
-            if np.any(sigma <= 0):
-                errors.append("sigma values must be positive")
+            # Applies to scale (scalar/1-D) sigma, not a covariance matrix
+            # (off-diagonals may be negative).
+            if not is_cov:
+                if strict and np.any(sigma <= 0):
+                    errors.append("sigma values must be positive")
+                elif not strict and np.any(sigma == 0):
+                    errors.append("sigma values must be non-zero")
 
-            if not np.all(np.isfinite(sigma)):
+            if check_finite and not np.all(np.isfinite(sigma)):
                 errors.append("sigma contains NaN or Inf values")
 
         except Exception as e:
@@ -710,7 +728,7 @@ class InputValidator:
         warnings_list.extend(bounds_warnings)
 
         # Step 9: Validate sigma if provided
-        sigma_errors, sigma_warnings = self._validate_sigma(sigma, ydata)
+        sigma_errors, sigma_warnings = self._validate_sigma(sigma, ydata, check_finite)
         errors.extend(sigma_errors)
         warnings_list.extend(sigma_warnings)
 

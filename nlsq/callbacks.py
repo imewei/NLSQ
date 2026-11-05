@@ -305,7 +305,10 @@ class EarlyStopping(CallbackBase):
     Notes
     -----
     Raises StopOptimization exception when patience is exceeded, which
-    will be caught by the optimizer and treated as successful convergence.
+    will be caught by the optimizer, which reports ``status=-2`` (as
+    SciPy does) and returns the best-so-far parameters; ``success`` stays True
+    so ``curve_fit`` does not raise. State
+    is reset automatically when a new fit starts, so one instance can be reused.
     """
 
     def __init__(
@@ -319,6 +322,7 @@ class EarlyStopping(CallbackBase):
         self.verbose = verbose
         self.best_cost = np.inf
         self.wait = 0
+        self._last_iter = -1
 
     def __call__(
         self,
@@ -328,6 +332,11 @@ class EarlyStopping(CallbackBase):
         info: dict[str, Any],
     ) -> None:
         """Check for improvement and stop if patience exceeded."""
+        # Iteration numbers restart each fit, so a non-increasing one means a new fit
+        if iteration <= self._last_iter:
+            self.best_cost = np.inf
+            self.wait = 0
+        self._last_iter = iteration
         # NaN cost must not count as improvement or patience increment
         if not np.isfinite(cost):
             return

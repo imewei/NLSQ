@@ -36,6 +36,7 @@ Example Usage
 """
 
 import difflib
+import functools
 import inspect
 import logging
 import types
@@ -43,6 +44,8 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from nlsq.cli.errors import ModelError
 from nlsq.cli.model_validation import (
@@ -547,6 +550,10 @@ class ModelRegistry:
     ) -> ModelFunction:
         """Attach estimate_p0 and bounds methods from module to model.
 
+        Resolution order: ``estimate_<fn>_p0`` / ``<fn>_bounds``, then bare
+        ``estimate_p0`` / ``bounds`` only for the first model defined in the
+        module.
+
         Parameters
         ----------
         model : ModelFunction
@@ -559,15 +566,78 @@ class ModelRegistry:
         model : ModelFunction
             The model with attached utilities.
         """
-        if hasattr(module, "estimate_p0"):
-            estimate_p0_func = module.estimate_p0
-            if callable(estimate_p0_func):
-                model.estimate_p0 = estimate_p0_func  # type: ignore[attr-defined]
+        # Per-function helpers win: ``estimate_<fn>_p0`` / ``<fn>_bounds``.
+        # Bare ``estimate_p0`` / ``bounds`` belong to the FIRST model function
+        # defined in the module (the template's convention); applying them to
+        # any other model would silently use another model's p0/bounds.
+        name = getattr(model, "__name__", "")
+        fn_p0 = getattr(module, f"estimate_{name}_p0", None) or getattr(
+            module, f"{name}_estimate_p0", None
+        )
+        fn_bounds = getattr(module, f"{name}_bounds", None)
 
-        if hasattr(module, "bounds"):
-            bounds_func = module.bounds
-            if callable(bounds_func):
-                model.bounds = bounds_func  # type: ignore[attr-defined]
+        def has_fit_parameters(function: Any) -> bool:
+            """Require positional x plus positional or variadic fit parameters."""
+            parameters = inspect.signature(function).parameters.values()
+            positional = sum(
+                p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                for p in parameters
+            )
+            variadic = any(p.kind == p.VAR_POSITIONAL for p in parameters)
+            return positional >= 2 or (positional >= 1 and variadic)
+
+        models = sorted(
+            (
+                f
+                for n, f in vars(module).items()
+                if inspect.isfunction(f)
+                and f.__module__ == module.__name__
+                and n not in ("estimate_p0", "bounds", "parameter_names")
+                and not n.startswith(("_", "estimate_"))
+                and not n.endswith(("_bounds", "_p0"))
+                and has_fit_parameters(f)
+            ),
+            key=lambda f: f.__code__.co_firstlineno,
+        )
+        owns_bare = not models or models[0] is model
+
+        if not callable(fn_p0) and owns_bare:
+            fn_p0 = getattr(module, "estimate_p0", None)
+        if not callable(fn_bounds) and owns_bare:
+            fn_bounds = getattr(module, "bounds", None)
+
+        # Never hand the optimiser a p0/bounds sized for a different model.
+        params = list(inspect.signature(model).parameters.values())
+        n_params = (
+            None if any(p.kind == p.VAR_POSITIONAL for p in params) else len(params) - 1
+        )
+
+        def checked(function: Any, what: str, size: Any) -> Any:
+            @functools.wraps(function)
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
+                value = function(*args, **kwargs)
+                n = size(value)
+                if (
+                    n_params is not None
+                    and n != n_params
+                    and not (
+                        what == "bounds" and n == 1  # scalar bound broadcasts
+                    )
+                ):
+                    raise ValueError(
+                        f"{function.__name__}() returned {what} of length {n}, but "
+                        f"model '{name}' has {n_params} parameter(s)"
+                    )
+                return value
+
+            return wrapper
+
+        if callable(fn_p0):
+            model.estimate_p0 = checked(fn_p0, "p0", len)  # type: ignore[attr-defined]
+        if callable(fn_bounds):
+            model.bounds = checked(  # type: ignore[attr-defined]
+                fn_bounds, "bounds", lambda b: np.size(b[0])
+            )
 
         return model
 

@@ -183,7 +183,7 @@ def test_export_script_and_csv_carry_sigma_and_tolerances(qapp, tmp_path):
     st.fit_result = run_fit(st)
 
     page = ExportPage(aps)
-    code = page.generate_python_code()
+    code = page.generate_python_code(for_bundle=True)
     for needle in (
         "sigma=sigma",
         "gtol=0.0001",
@@ -196,10 +196,34 @@ def test_export_script_and_csv_carry_sigma_and_tolerances(qapp, tmp_path):
     assert lines[0] == "x,y,y_fit,residuals,sigma"
     assert float(lines[1].split(",")[-1]) == sig[0]
 
-    ns: dict = {"__x": x, "__y": y, "__s": sig}
-    code = code.replace(
-        "xdata = np.linspace(0, 10, 30)  # Replace with your data", "xdata = __x"
-    ).replace("ydata = np.zeros(30)  # Replace with your data", "ydata = __y")
-    code = code.replace("sigma = np.ones(30)  # Replace with your sigma", "sigma = __s")
+    page.export_csv(str(tmp_path / "data.csv"), include_data=True)
+    ns: dict = {"__file__": str(tmp_path / "fit_script.py")}
     exec(code, ns)
     assert np.allclose(ns["popt"], np.asarray(st.fit_result.popt), rtol=1e-6)
+
+
+@pytest.mark.serial
+def test_open_file_shortcut_respects_refused_navigation(qtbot, monkeypatch):
+    """GUI-1: no file dialog while navigation to the data page is refused."""
+    import numpy as np
+
+    from nlsq.gui_qt.app_state import AppState
+    from nlsq.gui_qt.main_window import MainWindow
+
+    st = AppState()
+    w = MainWindow(st)
+    qtbot.addWidget(w)
+    st.set_data(np.arange(5.0), np.arange(5.0))
+    st.set_model("custom", model_func=lambda x, a: a * x)
+    called = []
+    monkeypatch.setattr(
+        w._pages["data_loading"], "_on_browse", lambda: called.append(1)
+    )
+    w._nav_list.setCurrentRow(2)
+    st.state.fit_running = True
+    w._on_open_file_shortcut()
+    assert w._page_stack.currentIndex() == 2
+    assert called == []
+    st.state.fit_running = False
+    w._on_open_file_shortcut()
+    assert called == [1]

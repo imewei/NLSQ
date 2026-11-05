@@ -237,6 +237,11 @@ class TestNLSQLogger(unittest.TestCase):
     def test_verbose_mode(self):
         """Test verbose mode logging."""
         os.environ["NLSQ_VERBOSE"] = "1"
+        # The console handler is only attached when the application has not
+        # configured the root logger; pytest's capture handlers count as that.
+        saved_root = logging.getLogger().handlers[:]
+        logging.getLogger().handlers[:] = []
+        self.addCleanup(lambda: logging.getLogger().handlers.extend(saved_root))
         logger = NLSQLogger("verbose_test")
 
         # In verbose mode, info messages should be shown

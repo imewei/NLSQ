@@ -10,6 +10,10 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 __all__: list[str] = [
     "FitPlotWidget",
@@ -24,6 +28,14 @@ _pg_state = {"configured": False}
 
 
 _log = logging.getLogger(__name__)
+
+
+def _downsample(x: NDArray, y: NDArray, threshold: int) -> tuple[NDArray, NDArray]:
+    """Keep paired plot data on the existing floor-division stride."""
+    if len(x) <= threshold:
+        return x, y
+    stride = len(x) // threshold
+    return x[::stride], y[::stride]
 
 
 def _configure_pyqtgraph() -> None:

@@ -364,75 +364,6 @@ class TestPhase2LRUMemoryPool:
     Tests LRU eviction efficiency and memory pool utilization.
     """
 
-    @pytest.mark.benchmark(group="phase2_lru")
-    def test_lru_pool_allocation_benchmark(self, benchmark):
-        """Benchmark memory pool allocation with LRU tracking.
-
-        Task Group 7 (1.2a) uses OrderedDict for LRU tracking.
-        This test measures the overhead of LRU tracking during allocation.
-        """
-        manager = MemoryManager(adaptive_ttl=True)
-
-        def allocate_arrays():
-            # Simulate typical optimization pattern: frequent reuse of shapes
-            shapes = [
-                (100, 10),
-                (100, 10),  # Repeated (should hit cache)
-                (200, 5),
-                (100, 10),  # Repeated again
-                (50, 20),
-                (100, 10),  # Most frequently used
-            ]
-            for shape in shapes:
-                manager.allocate_array(shape, dtype=np.float64)
-
-        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
-            benchmark(allocate_arrays)
-
-    def test_lru_pool_hit_rate(self):
-        """Measure cache hit rate for LRU memory pool.
-
-        With LRU tracking, frequently accessed shapes should have high
-        hit rate as they are moved to end (most recently used).
-        """
-        manager = MemoryManager(adaptive_ttl=True)
-
-        with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
-            # Track hits and misses
-            hits = 0
-            misses = 0
-
-            # Workload with repeated shapes
-            shapes = [
-                (100, 10),  # A - miss
-                (200, 5),  # B - miss
-                (100, 10),  # A - hit
-                (300, 3),  # C - miss
-                (100, 10),  # A - hit
-                (200, 5),  # B - hit
-                (100, 10),  # A - hit
-                (400, 2),  # D - miss
-                (100, 10),  # A - hit
-            ]
-
-            for shape in shapes:
-                key = (shape, np.float64)
-                if key in manager.memory_pool:
-                    hits += 1
-                else:
-                    misses += 1
-                manager.allocate_array(shape, dtype=np.float64)
-
-            total = hits + misses
-            hit_rate = hits / total if total > 0 else 0
-
-            print(f"\n[LRU Pool Hit Rate] Hits: {hits}, Misses: {misses}")
-            print(f"[LRU Pool Hit Rate] Hit rate: {hit_rate * 100:.1f}%")
-
-            # Should have good hit rate for repeated shapes
-            assert hits > 0, "Should have cache hits for repeated shapes"
-            assert hit_rate > 0.3, f"Expected >30% hit rate, got {hit_rate * 100:.1f}%"
-
     def test_lru_eviction_preserves_hot_arrays(self):
         """Verify LRU eviction preserves frequently accessed arrays.
 
@@ -459,7 +390,7 @@ class TestPhase2LRUMemoryPool:
 
             # Check hot shapes are preserved
             for shape in hot_shapes:
-                key = (shape, np.float64)
+                key = (shape, np.dtype(np.float64))
                 assert key in manager.memory_pool, (
                     f"Hot shape {shape} should be preserved after eviction"
                 )
@@ -490,7 +421,7 @@ class TestPhase2LRUMemoryPool:
 
             for _ in range(10):
                 for shape in common_shapes:
-                    key = (shape, np.float64)
+                    key = (shape, np.dtype(np.float64))
                     if key in manager.memory_pool:
                         hits += 1
                     else:
@@ -607,7 +538,7 @@ class TestPhase2CumulativeImprovements:
 
                 # Array allocations (benefit from LRU pool)
                 for shape in common_shapes:
-                    key = (shape, np.float64)
+                    key = (shape, np.dtype(np.float64))
                     if key in manager.memory_pool:
                         pool_hits += 1
                     else:

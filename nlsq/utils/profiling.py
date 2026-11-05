@@ -317,9 +317,13 @@ def profile_transfers_runtime(
     trace_path.mkdir(parents=True, exist_ok=True)
 
     # Run function with profiler trace
+    started = finished = False
+    result = None
     try:
         with jax.profiler.trace(str(trace_path)):
+            started = True
             result = func(*args, **kwargs)
+            finished = True
 
         # Analyze trace for transfer events
         # Note: Detailed trace analysis would require parsing the trace files
@@ -335,8 +339,11 @@ def profile_transfers_runtime(
         return result, transfer_stats
 
     except Exception as e:
-        # Profiling failed, return result without stats
-        result = func(*args, **kwargs)
+        if started and not finished:
+            raise  # the user's function raised; never run it a second time
+        # Profiler start/stop failed: don't re-run a function that already ran
+        if not finished:
+            result = func(*args, **kwargs)
         return result, {
             "transfer_count": None,
             "transfer_bytes": None,

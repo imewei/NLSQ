@@ -144,7 +144,7 @@ def jacobian_mode_selector(
 
 TERMINATION_MESSAGES = {
     -3: "Inner optimization loop exceeded maximum iterations.",
-    -2: "Maximum iterations reached.",
+    -2: "Stopped because `callback` function raised `StopOptimization`.",
     -1: "Improper input parameters status returned from `leastsq`",
     0: "The maximum number of function evaluations is exceeded.",
     1: "`gtol` termination condition is satisfied.",
@@ -1440,7 +1440,8 @@ class LeastSquares:
             Processed result with message and success flag
         """
         result.message = TERMINATION_MESSAGES[result.status]
-        result.success = result.status > 0
+        # -2 = user callback stop: best-so-far result is usable, curve_fit must not raise
+        result.success = result.status > 0 or result.status == -2
 
         # Log convergence
         self.logger.convergence(

@@ -249,6 +249,17 @@ def _fit_hybrid(
     # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
     large_strategy = build_large_strategy("hybrid", config)
 
+    # The engine takes multi-dimensional x as (n_points, n_features) and chunks
+    # along axis 0, while curve_fit_large's contract is scipy's (k, M): hand
+    # it the transpose and give the user's model its (k, chunk) layout back.
+    if xdata.ndim > 1:
+        user_f = f
+
+        def f(x, *params):
+            return user_f(x.T, *params)
+
+        xdata = xdata.T
+
     # Run optimization
     native = large_strategy.fit(
         f,

@@ -6,7 +6,8 @@
 # Usage:
 #   nlsq fit workflows/04_polynomial_fit.yaml
 #
-# Polynomial model: f(x) = a0 + a1*x + a2*x^2 + ... + an*x^n
+# Polynomial coefficients use descending powers, as in numpy.polyval:
+# f(x) = a0*x^n + a1*x^(n-1) + ... + an
 # The degree parameter controls the polynomial order.
 # ==============================================================================
 
@@ -33,11 +34,11 @@ data:
 # MODEL CONFIGURATION - POLYNOMIAL
 # ==============================================================================
 model:
-  # Polynomial model type generates p(x) = sum(ai * x^i)
+  # Polynomial model type uses descending powers, matching numpy.polyval.
   type: "polynomial"
 
   # Polynomial degree (number of terms = degree + 1)
-  # degree=3 means: a0 + a1*x + a2*x^2 + a3*x^3
+  # degree=3 means: a0*x^3 + a1*x^2 + a2*x + a3
   degree: 3
 
   # Model ID for tracking
@@ -47,11 +48,10 @@ model:
 # FITTING CONFIGURATION
 # ==============================================================================
 fitting:
-  termination:
-    ftol: 1.0e-10
-    xtol: 1.0e-10
-    gtol: 1.0e-10
-    max_iterations: 100
+  ftol: 1.0e-10
+  xtol: 1.0e-10
+  gtol: 1.0e-10
+  max_nfev: 100
 
 # ==============================================================================
 # EXPORT CONFIGURATION
@@ -89,7 +89,7 @@ visualization:
   main_plot:
     title: null
     x_label: "$x$"
-    y_label: "$y = a_0 + a_1 x + a_2 x^2 + a_3 x^3$"
+    y_label: "$y = a_0 x^3 + a_1 x^2 + a_2 x + a_3$"
     show_grid: false              # Minimal style - no grid
     grid_alpha: 0.0
 

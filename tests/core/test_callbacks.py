@@ -491,3 +491,36 @@ def test_curve_fit_without_callback_parameter(simple_data, simple_model):
 
     # Should converge normally
     assert 90 < popt[0] < 110
+
+
+def test_early_stopping_instance_reused_across_fits():
+    """A reused EarlyStopping must behave like a fresh one on the second fit."""
+    import jax.numpy as jnp
+
+    def f(x, a, b):
+        return a * jnp.exp(-b * x)
+
+    x = np.linspace(0, 4, 50)
+    y_a = 2.5 * np.exp(-1.3 * x)
+    y_b = 50 * np.exp(-0.3 * x) + np.random.default_rng(1).normal(size=50)
+    es = EarlyStopping(patience=2, verbose=False)
+    curve_fit(f, x, y_a, p0=[1, 1], callback=es)
+    reused = curve_fit(f, x, y_b, p0=[1, 1], callback=es)
+    fresh = curve_fit(
+        f, x, y_b, p0=[1, 1], callback=EarlyStopping(patience=2, verbose=False)
+    )
+    np.testing.assert_allclose(reused.popt, fresh.popt)
+    assert reused.get("nit") == fresh.get("nit")
+
+
+def test_callback_stop_reports_status_minus_two(simple_data, simple_model):
+    """A user-requested stop is not ftol convergence: status -2 (scipy), no exception."""
+    x, y = simple_data
+
+    def stop_at_two(iteration, cost, params, info):
+        if iteration >= 2:
+            raise StopOptimization("enough")
+
+    res = curve_fit(simple_model, x, y, p0=[80, 0.4, 5], callback=stop_at_two)
+    assert res.status == -2
+    assert "callback" in res.message

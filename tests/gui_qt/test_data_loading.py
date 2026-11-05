@@ -46,3 +46,22 @@ class TestAppStateDataChangedRefresh:
         # Guard compares identity with the arrays already on the page —
         # confirms the no-op path was taken rather than a second refresh.
         assert app_state.state.xdata is page._xdata
+
+
+class TestRestore2DData:
+    """GUI9: restoring a 2-D (k, n) xdata session must not raise."""
+
+    def test_restore_2d_xdata(self, qtbot, app_state):
+        from nlsq.gui_qt.pages.data_loading import DataLoadingPage
+
+        page = DataLoadingPage(app_state)
+        qtbot.addWidget(page)
+
+        n = 10
+        x2 = np.vstack([np.arange(float(n)), np.arange(float(n)) ** 2])
+        z = np.arange(float(n))
+        app_state.set_data(x2, z, file_name="restored2d.csv")
+
+        assert page._file_path_label.text() == "restored2d.csv"
+        assert page._xdata.shape == (2, n)
+        assert page._raw_data.shape == (n, 3)

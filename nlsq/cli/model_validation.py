@@ -111,6 +111,12 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "write_array_header_2_0",
         "ctypeslib",
         "f2py",
+        # Deserialisation that executes code (PyYAML python tags, pickle)
+        "unsafe_load",
+        "unsafe_load_all",
+        "UnsafeLoader",
+        "FullLoader",
+        "read_pickle",
         # Network access
         "socket",
         "urlopen",
@@ -228,6 +234,10 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "shelve",
         "dill",
         "cloudpickle",
+        # yaml.unsafe_load("!!python/object/apply:...") and
+        # pandas.read_pickle() execute arbitrary code on load
+        "yaml",
+        "pandas",
         # Introspection / sandbox-escape helpers
         "inspect",
         "dis",
@@ -267,6 +277,8 @@ _DANGEROUS_STRING_SUBSTRINGS: tuple[str, ...] = (
     "__code__",
     "__import__",
     "__loader__",
+    # PyYAML python tags (consumed by an unsafe loader)
+    "!!python/",
 )
 
 

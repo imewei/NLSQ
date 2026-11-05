@@ -25,6 +25,7 @@ __all__ = ["TrustRegionJITFunctions"]
 # Algorithm constants
 LOSS_FUNCTION_COEFF = 0.5  # Coefficient for loss function (0.5 * ||f||^2)
 NUMERICAL_ZERO_THRESHOLD = 1e-14  # Threshold for values considered numerically zero
+_CG_TINY = 1e-300  # CG division guard (not a tolerance; keeps CG scale-invariant)
 DEFAULT_TOLERANCE = 1e-8  # Default tolerance for iterative solvers (matches outer ftol/gtol/xtol defaults)
 # Fixed CG iteration limit — prevents shape-dependent recompilation.
 # The while_loop convergence check provides early exit for small problems.
@@ -127,17 +128,29 @@ def _conjugate_gradient_solve(
     J_scaled = J * d[None, :]
     b = -J_scaled.T @ f
 
+    # Solve for a normalized RHS: otherwise the CG curvature p^T A p
+    # squares the magnitude of b as well as J and can underflow even when
+    # A, b and the true solution are all representable. Restore the solution
+    # and residual norm to the original RHS scale after the iteration.
+    b_scale = jnp.max(jnp.abs(b))
+    b_scale = jnp.where(b_scale > 0, b_scale, 1.0)
+    b = b / b_scale
+
     x0 = jnp.zeros(n, dtype=b.dtype)
     r0 = b
     p0 = r0
     rsold0 = jnp.dot(r0, r0)
-    tol_sq = tol * tol
+    # The float64 floor underflows to zero for float32 inputs. Keep a
+    # representable positive divisor without changing the float64 guard.
+    cg_tiny = max(_CG_TINY, float(jnp.finfo(b.dtype).tiny))
+    # Relative to ||J^T f||^2 so the stopping rule is invariant to the scale of f
+    tol_sq = tol * tol * rsold0
 
     init_state = (x0, r0, p0, rsold0, 0)
 
     def cond_fn(state: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, int]):
         _x, _r, _p, rsold, i = state
-        return (i < CG_MAX_ITERATIONS) & (rsold >= tol_sq)
+        return (i < CG_MAX_ITERATIONS) & (rsold > tol_sq)
 
     def body_fn(state: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, int]):
         x, r, p, rsold, i = state
@@ -147,19 +160,16 @@ def _conjugate_gradient_solve(
         Ap = JTJp + alpha * p
 
         pAp = jnp.dot(p, Ap)
-        safe_pAp = jnp.where(
-            pAp > NUMERICAL_ZERO_THRESHOLD,
-            pAp,
-            NUMERICAL_ZERO_THRESHOLD,
-        )
+        # Positivity guard only: an absolute floor would be scale dependent
+        safe_pAp = jnp.where(pAp > cg_tiny, pAp, cg_tiny)
         alpha_cg = rsold / safe_pAp
 
         x_new = x + alpha_cg * p
         r_new = r - alpha_cg * Ap
         rsnew = jnp.dot(r_new, r_new)
 
-        safe_rsold = jnp.where(rsold > 1e-30, rsold, 1.0)
-        beta = jnp.where(rsold > 1e-30, rsnew / safe_rsold, 0.0)
+        safe_rsold = jnp.where(rsold > cg_tiny, rsold, 1.0)
+        beta = jnp.where(rsold > cg_tiny, rsnew / safe_rsold, 0.0)
         p_new = r_new + beta * p
 
         return (x_new, r_new, p_new, rsnew, i + 1)
@@ -167,7 +177,7 @@ def _conjugate_gradient_solve(
     final_state = lax.while_loop(cond_fn, body_fn, init_state)
     x_final, _r_final, _p_final, rsold_final, n_iter = final_state
 
-    return x_final, jnp.sqrt(rsold_final), n_iter
+    return x_final * b_scale, jnp.sqrt(rsold_final) * b_scale, n_iter
 
 
 @jit

@@ -78,7 +78,7 @@ def _reject_stale_checkpoint(
         )
 
 
-def _create_fitness_function(  # noqa: C901
+def _create_fitness_function(
     model_func: Callable,
     xdata: jax.Array,
     ydata: jax.Array,
@@ -156,62 +156,39 @@ def _create_fitness_function(  # noqa: C901
         else:
             sigma_chunked = None
 
-        # Create validity mask for the last chunk (handles padding)
-        if remainder > 0:
-            last_chunk_mask = jnp.arange(data_chunk_size) < remainder
-        else:
-            last_chunk_mask = jnp.ones(data_chunk_size, dtype=bool)
-
-        @jax.jit
-        def compute_chunk_ssr(
-            params_bounded: jax.Array,
-            x_chunk: jax.Array,
-            y_chunk: jax.Array,
-            sigma_chunk: jax.Array | None,
-            valid_mask: jax.Array,
-        ) -> jax.Array:
-            """Compute SSR for one data chunk."""
-            predictions = model_func(x_chunk, *params_bounded)
-            residuals = y_chunk - predictions
-
-            if sigma_chunk is not None:
-                residuals = residuals / sigma_chunk
-
-            # Apply validity mask to handle padding in last chunk
-            residuals_sq = jnp.where(valid_mask, residuals**2, 0.0)
-            return jnp.sum(residuals_sq)
+        # Validity mask per chunk (False on the zero-padded tail)
+        valid_chunked = (
+            jnp.arange(n_chunks * data_chunk_size).reshape(n_chunks, data_chunk_size)
+            < n_data
+        )
 
         def fitness_single_streaming(params_unbounded: jax.Array) -> jax.Array:
-            """Compute fitness by streaming over data chunks."""
+            """Compute fitness by scanning over data chunks.
+
+            lax.scan keeps the traced graph O(1) in the chunk count (a Python
+            loop unrolled one copy of the model per chunk) while accumulating
+            in the same sequential order, so results are bit-identical.
+            """
             params_bounded = transform_to_bounds(
                 params_unbounded,
                 lower_bounds,
                 upper_bounds,
             )
 
-            # Accumulate SSR over chunks
-            ssr_total = jnp.array(0.0)
+            def body(ssr_total, chunk):
+                x_chunk, y_chunk, sigma_chunk, valid_mask = chunk
+                predictions = model_func(x_chunk, *params_bounded)
+                residuals = y_chunk - predictions
+                if sigma_chunk is not None:
+                    residuals = residuals / sigma_chunk
+                residuals_sq = jnp.where(valid_mask, residuals**2, 0.0)
+                return ssr_total + jnp.sum(residuals_sq).astype(ssr_total.dtype), None
 
-            for chunk_idx in range(n_chunks):
-                x_chunk = xdata_chunked[chunk_idx]
-                y_chunk = ydata_chunked[chunk_idx]
-                sigma_chunk = (
-                    sigma_chunked[chunk_idx] if sigma_chunked is not None else None
-                )
-
-                # Use appropriate mask for last chunk
-                if chunk_idx == n_chunks - 1 and remainder > 0:
-                    valid_mask = last_chunk_mask
-                else:
-                    valid_mask = jnp.ones(data_chunk_size, dtype=bool)
-
-                ssr_total = ssr_total + compute_chunk_ssr(
-                    params_bounded,
-                    x_chunk,
-                    y_chunk,
-                    sigma_chunk,
-                    valid_mask,
-                )
+            ssr_total, _ = jax.lax.scan(
+                body,
+                jnp.array(0.0),
+                (xdata_chunked, ydata_chunked, sigma_chunked, valid_chunked),
+            )
 
             return jnp.where(jnp.isfinite(ssr_total), ssr_total, jnp.inf)
 
@@ -502,9 +479,9 @@ class CMAESOptimizer:
             # n_params from somewhere. Infer it from f's signature (same
             # pattern used in large_dataset.py's LargeDatasetFitter).
             try:
-                from inspect import signature
+                from nlsq.core.problem import _n_params_from_signature
 
-                n_params_hint = len(signature(f).parameters) - 1
+                n_params_hint = _n_params_from_signature(f)
             except (TypeError, ValueError):
                 n_params_hint = None
             if n_params_hint is None or n_params_hint < 1:
@@ -1108,7 +1085,7 @@ class CMAESOptimizer:
         final_sigma = self.config.sigma
         original_solution = initial_solution
 
-        while not restarter.exhausted:
+        while True:  # 1 + max_restarts runs; exit via the exhausted check below
             # Get population size for this run
             popsize = restarter.get_next_popsize()
             run_type = "large" if popsize >= base_popsize * 2 else "small"
@@ -1206,6 +1183,9 @@ class CMAESOptimizer:
             if float(state.std) < self.config.tol_x and stagnation_counter < 5:
                 logger.info("BIPOP: Good convergence achieved, stopping restarts early")
                 convergence_reason = "xtol"
+                break
+
+            if restarter.exhausted:
                 break
 
             # Register restart for next iteration

@@ -239,7 +239,7 @@ class CurveFitResult(OptimizeResult):
                 object.__setattr__(
                     self,
                     "_predictions_cache",
-                    np.array(self.ydata) - np.array(self.fun),
+                    np.array(self.ydata) + np.array(self.fun),
                 )
             else:
                 raise AttributeError(
@@ -282,9 +282,9 @@ class CurveFitResult(OptimizeResult):
                 )
             elif hasattr(self, "ydata") and hasattr(self, "fun"):
                 # No model available: best-effort fallback. This is the
-                # optimizer residual and is only the raw residual when no sigma
-                # weighting was applied.
-                object.__setattr__(self, "_residuals_cache", np.array(self.fun))
+                # negated optimizer residual and is only the raw residual when
+                # no sigma weighting was applied.
+                object.__setattr__(self, "_residuals_cache", -np.array(self.fun))
             else:
                 raise AttributeError(
                     "Cannot compute residuals: neither model+data nor fun available",

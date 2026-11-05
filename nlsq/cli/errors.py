@@ -404,7 +404,14 @@ class CLILogger:
             return attr
 
         def wrapper(message: str, *args: Any, **kwargs: Any) -> None:
-            attr(message, *args, extra=kwargs or None)
+            # These are Logger.log() kwargs, not structured fields; putting them
+            # in extra= raises KeyError("Attempt to overwrite ...").
+            real = {
+                k: kwargs.pop(k)
+                for k in ("exc_info", "stack_info", "stacklevel")
+                if k in kwargs
+            }
+            attr(message, *args, extra=kwargs or None, **real)
 
         return wrapper
 

@@ -703,7 +703,8 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         # Compute scaling factors
         jac_scale = isinstance(x_scale, str) and x_scale == "jac"
         if jac_scale:
-            scale, scale_inv = self.cJIT.compute_jac_scale(J)
+            # Robust-loss-scaled J, as scipy and trf_bounds do
+            scale, scale_inv = self.cJIT.compute_jac_scale(state["J"])
             state["scale"], state["scale_inv"] = scale, scale_inv
             state["jac_scale"] = True
         else:
@@ -1246,7 +1247,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             )
         except StopOptimization:
             self.logger.info("Optimization stopped by callback (StopOptimization)")
-            return 2  # User-requested stop
+            return -2  # User-requested stop (scipy: callback stop)
         except Exception as e:
             warnings.warn(
                 f"Callback raised exception: {e}. Continuing optimization.",
@@ -1742,7 +1743,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             njev=njev,
             nit=iteration,  # Number of iterations performed
             status=termination_status,
-            success=termination_status > 0,
+            success=termination_status > 0 or termination_status == -2,
             all_times={},
         )
 
@@ -2398,7 +2399,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             njev=njev,
             nit=iteration,
             status=termination_status,
-            success=termination_status > 0,
+            success=termination_status > 0 or termination_status == -2,
         )
 
     def select_step(

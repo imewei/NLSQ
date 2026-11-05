@@ -29,6 +29,7 @@ from typing import Any, ClassVar, Protocol
 
 import numpy as np
 
+from nlsq.precision.bound_inference import infer_bounds
 from nlsq.utils.logging import get_logger
 
 __all__ = [
@@ -246,17 +247,7 @@ class AddParameterBoundsStrategy(FallbackStrategy):
         if xdata is None or ydata is None:
             return modified  # Can't infer without data
 
-        # Heuristic bounds based on data range
-        y_range = np.ptp(ydata)
-        y_min, y_max = np.min(ydata), np.max(ydata)
-
-        # Conservative bounds: p0 ± 10x, but reasonable for data scale
-        lower = np.maximum(p0 / 10, y_min - y_range)
-        upper = np.minimum(p0 * 10, y_max + y_range)
-
-        # Ensure positive for amplitude-like parameters (heuristic)
-        if np.all(p0 > 0):
-            lower = np.maximum(lower, 0)
+        lower, upper = infer_bounds(xdata, ydata, p0)
 
         modified["bounds"] = (lower, upper)
 
@@ -362,7 +353,20 @@ class FallbackResult:
 
     def __getattr__(self, name):
         """Delegate attribute access to underlying result."""
+        if name == "result":  # not yet set (e.g. during copy/unpickle): avoid recursion
+            raise AttributeError(name)
         return getattr(self.result, name)
+
+    # Dunder lookups bypass __getattr__, so delegate explicitly to let
+    # ``popt, pcov = curve_fit(..., fallback=True)`` work like a normal return.
+    def __iter__(self):
+        return iter(self.result)
+
+    def __getitem__(self, key):
+        return self.result[key]
+
+    def __len__(self):
+        return len(self.result)
 
 
 class FallbackOrchestrator:

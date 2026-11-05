@@ -115,8 +115,9 @@ class PerformanceProfiler:
         """Initialize performance profiler."""
         self.profiles: dict[str, list[ProfileMetrics]] = defaultdict(list)
         self._current_profile: ProfileMetrics | None = None
-        self._start_time: float = 0.0
-        self._context_stack: list[str] = []
+        # Active profiles, innermost last: (name, metrics, start_time). Nested
+        # profile() calls each keep their own start time.
+        self._context_stack: list[tuple[str, ProfileMetrics, float]] = []
 
     def start_profile(self, name: str = "default") -> ProfileMetrics:
         """
@@ -134,8 +135,7 @@ class PerformanceProfiler:
         """
         metrics = ProfileMetrics()
         self._current_profile = metrics
-        self._start_time = time.perf_counter()
-        self._context_stack.append(name)
+        self._context_stack.append((name, metrics, time.perf_counter()))
         return metrics
 
     def end_profile(self, metrics: ProfileMetrics | None = None):
@@ -151,7 +151,13 @@ class PerformanceProfiler:
             metrics = self._current_profile
 
         if metrics is not None:
-            metrics.total_time = time.perf_counter() - self._start_time
+            entry = None
+            for i in range(len(self._context_stack) - 1, -1, -1):
+                if self._context_stack[i][1] is metrics:
+                    entry = self._context_stack.pop(i)
+                    break
+            if entry is not None:
+                metrics.total_time = time.perf_counter() - entry[2]
 
             # Calculate derived metrics
             if metrics.initial_cost > 0:
@@ -160,11 +166,13 @@ class PerformanceProfiler:
                 ) / metrics.initial_cost
 
             # Store profile
-            if self._context_stack:
-                name = self._context_stack.pop()
-                self.profiles[name].append(metrics)
+            if entry is not None:
+                self.profiles[entry[0]].append(metrics)
 
-        self._current_profile = None
+        # Resume the enclosing profile, if any
+        self._current_profile = (
+            self._context_stack[-1][1] if self._context_stack else None
+        )
 
     def profile(self, name: str = "default"):
         """

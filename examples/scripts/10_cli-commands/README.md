@@ -222,8 +222,9 @@ Available models from `nlsq.functions`:
 model:
   type: "builtin"
   name: "exponential_decay"
-  auto_p0: true      # Automatic initial parameter estimation
-  auto_bounds: true  # Automatic parameter bounds
+fitting:
+  p0: auto          # Use the model's estimate_p0 helper
+# Omitted fitting.bounds uses the model's bounds helper when available.
 ```
 
 ### Custom Models
@@ -264,8 +265,7 @@ model:
 ```yaml
 model:
   type: "polynomial"
-  polynomial:
-    degree: 3
+  degree: 3
 ```
 
 ## Workflow Examples
@@ -278,12 +278,11 @@ Simple exponential decay with builtin model:
 model:
   type: "builtin"
   name: "exponential_decay"
-  auto_p0: true
 
 fitting:
-  termination:
-    ftol: 1.0e-8
-    max_iterations: 100
+  p0: auto
+  ftol: 1.0e-8
+  max_nfev: 100
 ```
 
 ### 2. Custom Model (03_custom_model.yaml)
@@ -309,23 +308,15 @@ data:
     sigma: 2  # Uncertainties column
 
 fitting:
-  use_weights: true
+  absolute_sigma: true
 ```
 
-### 4. Global Optimization (06_global_optimization.yaml)
+### 4. Bounded Fitting (06_global_optimization.yaml)
 
-Multi-start optimization for complex landscapes:
-
-```yaml
-workflow: "auto_global"
-n_starts: 15
-sampler: "lhs"          # "lhs", "sobol", or "halton"
-
-global_optimization:
-  cmaes:
-    popsize: 16
-    max_generations: 150
-```
+This historical filename now contains a bounded local fit with explicit
+`fitting.p0` and `fitting.bounds`. The CLI calls `curve_fit`; it does not dispatch
+multi-start or CMA-ES from YAML. For global optimization, use the Python API
+examples in `../07_global_optimization/`.
 
 ### 5. 2D Surface Fitting (07_2d_surface_fit.yaml)
 

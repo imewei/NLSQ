@@ -26,6 +26,10 @@ A custom model file can contain:
    Estimates initial parameter values from data.
    Signature: estimate_p0(xdata, ydata) -> list[float]
    Note: Can use numpy here since it runs once at initialization.
+   Convention: a bare ``estimate_p0`` / ``bounds`` applies ONLY to the first
+   model function defined in the file (here ``damped_oscillator``). For any
+   other model, name the helpers ``estimate_<model>_p0(xdata, ydata)`` and
+   ``<model>_bounds()``; otherwise no defaults are applied to it.
 
 3. **bounds Function** (OPTIONAL):
    Returns default parameter bounds.
