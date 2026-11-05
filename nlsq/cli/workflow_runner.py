@@ -273,7 +273,8 @@ class WorkflowRunner:
             if hasattr(model, "estimate_p0"):
                 try:
                     p0 = model.estimate_p0(xdata, ydata)
-                    p0 = np.asarray(p0)
+                    if p0 is not None:
+                        p0 = np.asarray(p0)
                 except Exception as e:
                     logger.warning(
                         "estimate_p0() of model '%s' failed (%s: %s); "

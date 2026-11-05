@@ -154,7 +154,10 @@ class ParamConfigWidget(QWidget):
         Args:
             checked: Whether auto-estimate is enabled
         """
-        self._table.setEnabled(not checked)
+        for row in range(self._table.rowCount()):
+            initial_value = self._table.cellWidget(row, 1)
+            if initial_value is not None:
+                initial_value.setEnabled(not checked)
         self._emit_config()
 
     def _emit_config(self) -> None:
@@ -193,7 +196,7 @@ class ParamConfigWidget(QWidget):
             self._table.setCellWidget(row, 3, upper_spin)
 
         self._info_label.setText(f"{len(names)} parameters")
-        self._emit_config()
+        self._on_auto_toggled(self.is_auto_p0())
 
     def set_values(
         self,
@@ -216,7 +219,10 @@ class ParamConfigWidget(QWidget):
 
         if bounds is not None:
             lower, upper = bounds
-            for row in range(min(len(lower), self._table.rowCount())):
+            n_params = self._table.rowCount()
+            lower = lower * n_params if len(lower) == 1 else lower
+            upper = upper * n_params if len(upper) == 1 else upper
+            for row in range(min(len(lower), len(upper), n_params)):
                 lower_spin = self._table.cellWidget(row, 2)
                 if isinstance(lower_spin, _FloatEdit):
                     lower_spin.setValue(-math.inf if lower[row] is None else lower[row])
@@ -234,9 +240,6 @@ class ParamConfigWidget(QWidget):
             Tuple of (p0, bounds) where bounds is (lower, upper) or None.
             Bound values are None when infinite (unbounded).
         """
-        if self._auto_p0_check.isChecked():
-            return [], None
-
         p0: list[float] = []
         lower: list[float | None] = []
         upper: list[float | None] = []
@@ -246,7 +249,7 @@ class ParamConfigWidget(QWidget):
             lower_spin = self._table.cellWidget(row, 2)
             upper_spin = self._table.cellWidget(row, 3)
 
-            if isinstance(p0_spin, _FloatEdit):
+            if not self.is_auto_p0() and isinstance(p0_spin, _FloatEdit):
                 p0.append(p0_spin.value())
             if isinstance(lower_spin, _FloatEdit):
                 lv = lower_spin.value()
@@ -256,6 +259,8 @@ class ParamConfigWidget(QWidget):
                 upper.append(None if uv == math.inf else uv)
 
         bounds = (lower, upper) if lower and upper else None
+        if self.is_auto_p0() and not any(v is not None for v in (*lower, *upper)):
+            bounds = None
         return p0, bounds
 
     def is_auto_p0(self) -> bool:

@@ -139,6 +139,12 @@ def _sanitize_array_data(data: Any) -> Any:
     """
     if isinstance(data, list):
         return [_sanitize_array_data(item) for item in data]
+    if isinstance(data, complex):
+        return {
+            "__nlsq_type__": "complex",
+            "real": _sanitize_array_data(data.real),
+            "imag": _sanitize_array_data(data.imag),
+        }
     if isinstance(data, float):
         if np.isnan(data):
             return {"__nlsq_type__": "float", "value": "nan"}
@@ -152,6 +158,12 @@ def _unsanitize_array_data(data: Any) -> Any:
     if isinstance(data, list):
         return [_unsanitize_array_data(item) for item in data]
     if isinstance(data, dict):
+        if data.get("__nlsq_type__") == "complex":
+            real = _unsanitize_array_data(data["real"])
+            imag = _unsanitize_array_data(data["imag"])
+            if not isinstance(real, (int, float)) or not isinstance(imag, (int, float)):
+                raise SafeSerializationError("Complex array parts must be real numbers")
+            return complex(real, imag)
         if data.get("__nlsq_type__") == "float":
             value = data.get("value")
             if value == "nan":

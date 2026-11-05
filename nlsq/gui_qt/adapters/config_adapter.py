@@ -104,15 +104,13 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.auto_p0 = False
     bounds = fitting.get("bounds")
     if isinstance(bounds, dict):
-        lower, upper = np.broadcast_arrays(
-            bounds.get("lower", -np.inf), bounds.get("upper", np.inf)
-        )
+        bounds = (bounds.get("lower", -np.inf), bounds.get("upper", np.inf))
+    if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+        lower, upper = np.broadcast_arrays(bounds[0], bounds[1])
         if state.p0 is not None:
             lower = np.broadcast_to(lower, (len(state.p0),))
             upper = np.broadcast_to(upper, (len(state.p0),))
         state.bounds = (np.atleast_1d(lower).tolist(), np.atleast_1d(upper).tolist())
-    elif isinstance(bounds, (list, tuple)) and len(bounds) == 2:
-        state.bounds = (bounds[0], bounds[1])
 
     if "global_optimization" in fitting:
         go = fitting["global_optimization"]

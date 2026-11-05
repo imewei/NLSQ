@@ -173,6 +173,13 @@ class GaussNewtonPhase:
         """Set pre-compiled cost function."""
         self._cost_fn_compiled = fn
 
+    @staticmethod
+    def _track_best(best_tracker: dict[str, Any], params: Any, cost: float) -> None:
+        """Keep the shared best point paired with its objective value."""
+        if cost < best_tracker.get("best_cost_global", float("inf")):
+            best_tracker["best_cost_global"] = cost
+            best_tracker["best_params_global"] = params
+
     def run(
         self,
         data_source: tuple[jnp.ndarray, jnp.ndarray],
@@ -289,6 +296,7 @@ class GaussNewtonPhase:
         # incl. any group-variance term) so an all-rejected run returns it
         # rather than a rejected trial.
         best_cost = self._compute_cost(current_params, x_data, y_data)
+        self._track_best(best_tracker, current_params, best_cost)
 
         # Gauss-Newton loop
         for iteration in range(self.config.gauss_newton_max_iterations):
@@ -324,9 +332,7 @@ class GaussNewtonPhase:
                 best_params = new_params
 
             # Track global best
-            if new_cost < best_tracker.get("best_cost_global", float("inf")):
-                best_tracker["best_cost_global"] = new_cost
-                best_tracker["best_params_global"] = new_params
+            self._track_best(best_tracker, new_params, new_cost)
 
             # Accept step if cost decreased. On the first iteration
             # (prev_cost still inf), a rejected step must fall back to the

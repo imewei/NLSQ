@@ -14,7 +14,7 @@ Access results using attribute syntax::
 
 For dictionary conversion, use::
 
-    result.to_dict()  # Convert to dict
+    dict(result)  # Convert to a plain dict
 """
 
 
@@ -32,17 +32,18 @@ class OptimizeResult(dict):
         These represent the solution to the nonlinear least squares problem.
 
     success : bool
-        Indicates whether the optimization terminated successfully. True means
-        convergence criteria were satisfied within tolerance limits.
+        Indicates successful termination, including an intentional callback stop
+        that returns the best-so-far parameters.
 
     status : int
         Numerical termination status code indicating why optimization stopped:
 
-        - 1: Gradient convergence (||g||_inf < gtol)
-        - 2: Step size convergence (||dx||/||x|| < xtol)
-        - 3: Function value convergence (delta_f/f < ftol)
-        - 0: Maximum iterations reached
-        - -1: Evaluation limit exceeded
+        - 1: Gradient convergence (gtol)
+        - 2: Function value convergence (ftol)
+        - 3: Step size convergence (xtol)
+        - 4: Both ftol and xtol satisfied
+        - 0: Maximum function evaluations reached
+        - -1: Legacy improper-input status
         - -2: Stopped by a callback raising ``StopOptimization`` (matches
           SciPy's status; ``success`` stays True so the best-so-far
           parameters are returned rather than raising)
@@ -54,31 +55,34 @@ class OptimizeResult(dict):
 
     Objective Function Results
     ---------------------------
-    fun : jax.numpy.ndarray
+    fun : numpy.ndarray or jax.Array
         Final residual vector f(x) at the solution. For curve fitting, these
         are the differences between model predictions and data points.
 
     cost : float
         Final cost function value: 0.5 * ||f(x)||² for standard least squares,
-        or 0.5 * sum(ρ(f_i²/σ²)) for robust loss functions.
+        or 0.5 * C² * sum(ρ((f_i/C)²)) for robust loss functions, where
+        C is f_scale and f contains any observation weighting.
 
-    jac : jax.numpy.ndarray
+    jac : numpy.ndarray or jax.Array
         Final Jacobian matrix J(x) with shape (m, n) where m is number of
-        data points and n is number of parameters. Computed using JAX autodiff.
+        data points and n is number of parameters. Computed using JAX autodiff
+        or a supplied analytical Jacobian.
 
-    grad : jax.numpy.ndarray
+    grad : numpy.ndarray or jax.Array
         Final gradient vector g = J^T * f with shape (n,). Used for
         convergence checking and parameter uncertainty estimation.
 
     Convergence Metrics
     -------------------
     optimality : float
-        Final gradient norm ||g||_inf used for convergence assessment.
-        Should be less than gtol for successful convergence.
+        First-order optimality measure: ||g||_inf for unbounded problems or
+        the bound-scaled gradient norm for bounded problems. Termination via
+        ftol, xtol, or a callback does not require optimality below gtol.
 
-    active_mask : numpy.ndarray
-        Boolean mask indicating which parameters hit bounds (for bounded
-        optimization). Shape (n,) with True for parameters at constraints.
+    active_mask : numpy.ndarray or jax.Array
+        Shape (n,) with -1 for an active lower bound, 1 for an active upper
+        bound, and 0 for an inactive constraint. Unbounded problems use zeros.
 
     Iteration Statistics
     --------------------
@@ -96,13 +100,11 @@ class OptimizeResult(dict):
 
     Algorithm-Specific Results
     ---------------------------
-    pcov : jax.numpy.ndarray, optional
+    pcov : numpy.ndarray or jax.Array, optional
         Parameter covariance matrix with shape (n, n). Provides parameter
         uncertainty estimates. Available when uncertainty estimation is requested.
-        Computed as: pcov = inv(J^T * J) * residual_variance
-
-    active_mask : numpy.ndarray
-        For bounded optimization, indicates which parameters are at bounds.
+        Supplied by the producing optimizer, typically using an inverse or
+        pseudoinverse of J^T * J with residual-variance scaling when applicable.
 
     all_times : dict, optional
         Detailed timing information for algorithm profiling. Contains timing
@@ -162,8 +164,8 @@ class OptimizeResult(dict):
 
     Technical Notes
     ---------------
-    - All JAX arrays are automatically converted to NumPy arrays for compatibility
-    - Covariance matrices use double precision for numerical stability
+    - Values are stored as supplied; arrays may be NumPy or JAX arrays
+    - Covariance computation and precision depend on the producing optimizer
     - Large dataset results may include memory management statistics
     - GPU timing results require explicit timing mode activation
     - Progress monitoring data is stored in algorithm-specific attributes

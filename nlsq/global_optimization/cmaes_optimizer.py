@@ -1304,6 +1304,10 @@ class CMAESOptimizer:
                 "workflow",
                 None,
             )  # Remove if present to avoid conflict
+            # CMAESOptimizer.fit returns a dictionary and needs the native
+            # CurveFitResult here; tuple formatting belongs to its caller.
+            for output_flag in ("full_output", "return_eval", "timeit"):
+                refinement_kwargs.pop(output_flag, None)
 
             n_points = len(ydata_np)
             logger.debug(

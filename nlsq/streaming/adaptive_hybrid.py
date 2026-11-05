@@ -992,7 +992,11 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Generate samples in [0, 1] hypercube
         rng_key = jax.random.PRNGKey(42)  # Fixed seed for reproducibility
-        samples = sampler(n_starts, n_params, rng_key=rng_key)
+        samples = (
+            sampler(n_starts, n_params, rng_key=rng_key)
+            if self.config.multistart_sampler == "lhs"
+            else sampler(n_starts, n_params)
+        )
         samples = np.asarray(samples)
 
         # Scale samples to bounds or around p0. One-sided/unbounded dims have an

@@ -84,7 +84,7 @@ def _mock_app_state(**attrs):
     }
     base.update(attrs)
     app_state = MagicMock()
-    app_state.state = SimpleNamespace(**base)
+    app_state.state = SessionState(**base)
     return app_state
 
 

@@ -320,16 +320,12 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
 
 
 def _infer_n_features(xdata: np.ndarray) -> int:
-    """Number of independent variables in xdata: 1 for a plain 1D array,
-    or xdata.shape[1] for the (n_points, n_features) 2D convention
-    InputValidator._validate_and_convert_arrays uses (e.g. a 2D surface fit).
-    Note: ``CurveFit.curve_fit`` itself (padding, length checks) and SciPy
-    treat 2D xdata as (n_features, n_points); this helper only follows the
-    validator/streaming convention. Feeds MemoryBudget.compute()/MemoryBudgetSelector.select()
-    the real feature count so their data_gb estimate isn't silently
-    1/n_features too small.
+    """Count features in the public SciPy layout ``(n_features, n_points)``.
+
+    Workflow inputs use this layout before any streaming adapter transposes
+    them to points-first. Coordinate tuples have already become 2-D arrays.
     """
-    return xdata.shape[1] if xdata.ndim == 2 else 1
+    return xdata.shape[0] if xdata.ndim == 2 else 1
 
 
 def fit(  # noqa: C901
@@ -455,6 +451,11 @@ def fit(  # noqa: C901
     # Handle empty data
     if n_points == 0:
         raise ValueError("`ydata` must not be empty!")
+
+    # Resolve the sentinel before chunked/CMA-ES adapters convert numeric
+    # guesses to arrays: a 0-D string array is not a parameter vector.
+    if _is_auto_p0(p0):
+        p0 = _resolve_auto_p0(f, xdata_arr, ydata_arr)
 
     # Determine number of parameters (see nlsq.core.problem._determine_parameter_count/_is_auto_p0).
     if p0 is not None and not _is_auto_p0(p0):
@@ -797,6 +798,9 @@ def _fit_with_config(
         return result
 
     if isinstance(config, LDMemoryConfig):
+        # An explicit config owns the budget. Public fit() also forwards its
+        # routing-only memory_limit_gb default; keep it out of the chunk solver.
+        kwargs.pop("memory_limit_gb", None)
         # Chunked processing path. MemoryBudgetSelector already decided
         # chunking is needed because peak memory (data + n_params-scaled
         # Jacobian) exceeds the safe threshold -- that can happen at any
@@ -1652,8 +1656,7 @@ def _fit_global_cmaes(
             "x": result_dict["popt"],
             "popt": result_dict["popt"],
             "pcov": result_dict["pcov"],
-            "success": True,
-            "message": "CMA-ES optimization completed",
+            **_cmaes_termination_fields(result_dict),
             "model": f,
             "xdata": xdata,
             "ydata": ydata,
@@ -2327,6 +2330,20 @@ def _apply_stability_checks(
     return xdata, ydata, args
 
 
+def _cmaes_termination_fields(result: dict[str, Any]) -> dict[str, Any]:
+    """Preserve optimizer/refinement termination when adapting a CMA-ES result."""
+    refinement = result.get("nlsq_result") or {}
+    success = result.get("success", refinement.get("success", True))
+    status = result.get("status", refinement.get("status", 1 if success else 0))
+    return {
+        "success": bool(success),
+        "status": status,
+        "message": result.get(
+            "message", refinement.get("message", "CMA-ES optimization completed")
+        ),
+    }
+
+
 def _run_cmaes_optimization(
     f: ModelFunction,
     xdata: ArrayLike,
@@ -2498,9 +2515,7 @@ def _run_cmaes_optimization(
         nfev=0,
         njev=0,
         nit=0,
-        status=1,  # Success
-        success=True,
-        message="Optimized with CMA-ES",
+        **_cmaes_termination_fields(result_dict),
         xdata=np.asarray(xdata),
         ydata=np.asarray(ydata),
         model=f,
@@ -2534,7 +2549,8 @@ def _apply_output_flags(
         return popt, pcov, np.asarray(f(jnp.asarray(xdata), *popt))
     if kwargs.get("full_output"):
         info = {"nfev": result.get("nfev"), "fvec": None}
-        return popt, pcov, info, result.get("message", ""), 1
+        ier = 1 if result.get("success", False) and result.get("status", 1) > 0 else 5
+        return popt, pcov, info, result.get("message", ""), ier
     if kwargs.get("timeit"):
         return popt, pcov, result, 0.0, 0.0
     return result

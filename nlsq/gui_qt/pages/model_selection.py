@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -285,6 +285,39 @@ class ModelSelectionPage(QWidget):
         self._function_combo.currentIndexChanged.connect(self._on_function_selected)
         self._reset_btn.clicked.connect(self.reset)
         self._apply_btn.clicked.connect(self._on_apply)
+        self._app_state.session_restored.connect(self._restore_session_controls)
+
+    def _restore_session_controls(self) -> None:
+        """Display recovered model code without executing it until Apply."""
+        state = self._app_state.state
+        type_id = {"builtin": 0, "polynomial": 1, "custom": 2}.get(state.model_type, 0)
+        self._type_button_group.button(type_id).setChecked(True)
+        self._builtin_group.setVisible(type_id == 0)
+        self._polynomial_group.setVisible(type_id == 1)
+        self._custom_group.setVisible(type_id == 2)
+        self._current_model_type = state.model_type
+        self._current_config = state.model_config or {}
+        self._current_model = state.model_func
+        if type_id == 0:
+            with QSignalBlocker(self._builtin_combo):
+                self._builtin_combo.setCurrentIndex(
+                    self._builtin_combo.findData(self._current_config.get("name"))
+                )
+        elif type_id == 1:
+            with QSignalBlocker(self._degree_slider):
+                self._degree_slider.setValue(self._current_config.get("degree", 2))
+        else:
+            with (
+                QSignalBlocker(self._code_editor),
+                QSignalBlocker(self._function_combo),
+            ):
+                self._code_editor.set_code(self._current_config.get("code", ""))
+                self._function_combo.clear()
+                self._function_combo.addItems(self._code_editor.get_function_names())
+                self._function_combo.setCurrentText(
+                    self._current_config.get("function", "model")
+                )
+            self._param_list.setText("Recovered code: click Apply to load the model.")
 
     def _on_type_changed(self, type_id: int) -> None:
         """Handle model type change.
@@ -478,6 +511,8 @@ class ModelSelectionPage(QWidget):
 
     def _on_apply(self) -> None:
         """Apply the selected model to app state."""
+        if self._current_model_type == "custom" and self._current_model is None:
+            self._on_function_selected(self._function_combo.currentIndex())
         if self._current_model is None:
             self._show_error("No Model", "Please select or define a model function.")
             return

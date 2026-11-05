@@ -21,6 +21,19 @@ from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
 logger = logging.getLogger(__name__)
 
 
+def _has_numeric_dtype(value: Any) -> bool:
+    """Check NumPy ufunc support without scanning data or discarding imaginary parts."""
+    try:
+        dtype = value.dtype if hasattr(value, "dtype") else np.asarray(value).dtype
+        if dtype.kind in ("m", "M"):
+            return False
+        # Custom numeric dtypes (e.g. JAX bfloat16) need not have kind='f'.
+        np.isfinite(np.empty(0, dtype=dtype))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 class InputValidator:
     """Comprehensive input validation for curve fitting functions."""
 
@@ -120,6 +133,12 @@ class InputValidator:
         if ydata.ndim == 0:
             errors.append("ydata must be at least 1-dimensional")
 
+        coordinates = xdata if isinstance(xdata, tuple) else (xdata,)
+        if not all(_has_numeric_dtype(coord) for coord in coordinates):
+            errors.append("xdata must contain numeric values")
+        if not _has_numeric_dtype(ydata):
+            errors.append("ydata must contain numeric values")
+
         return errors, warnings_list, xdata, ydata, n_points
 
     def _estimate_n_params(self, f: Callable, p0: Any | None) -> int:
@@ -195,6 +214,8 @@ class InputValidator:
         warnings_list: list[str] = []
 
         # Check shapes match
+        if ydata.ndim != 1:
+            errors.append("ydata must be 1-dimensional")
         if len(ydata) != n_points:
             errors.append(
                 f"xdata ({n_points} points) and ydata ({len(ydata)} points) must have same length",
@@ -701,6 +722,8 @@ class InputValidator:
         )
         errors.extend(shape_errors)
         warnings_list.extend(shape_warnings)
+        if shape_errors:
+            return errors, warnings_list, xdata, ydata
 
         # Step 4: Check for degenerate x values
         deg_x_errors, deg_x_warnings = self._check_degenerate_x_values(xdata)
@@ -783,6 +806,10 @@ class InputValidator:
         # Check x0 dimensions and values
         if x0.ndim != 1:
             errors.append("x0 must be 1-dimensional")
+            return errors, x0
+        if not _has_numeric_dtype(x0):
+            errors.append("x0 must contain numeric values")
+            return errors, x0
 
         if len(x0) == 0:
             errors.append("x0 cannot be empty")
@@ -839,11 +866,11 @@ class InputValidator:
         warnings: list[str] = []
 
         # Check positive
-        if ftol <= 0:
+        if not ftol > 0:
             errors.append(f"ftol must be positive, got {ftol}")
-        if xtol <= 0:
+        if not xtol > 0:
             errors.append(f"xtol must be positive, got {xtol}")
-        if gtol <= 0:
+        if not gtol > 0:
             errors.append(f"gtol must be positive, got {gtol}")
 
         # Check very small values

@@ -47,13 +47,18 @@ class TestLRUMemoryPool:
         arr1 = manager.allocate_array(shape1, np.float64, zero=True)
         arr2 = manager.allocate_array(shape2, np.float64, zero=True)
         arr3 = manager.allocate_array(shape3, np.float64, zero=True)
+        for arr in (arr1, arr2, arr3):
+            manager.free_array(arr)
 
         # Record initial order
         keys_initial = list(manager.memory_pool.keys())
         assert len(keys_initial) == 3
 
-        # Re-request array with shape1 - should move to end
+        # Check out and return shape1, making it the most recently used buffer.
         arr1_reused = manager.allocate_array(shape1, np.float64, zero=True)
+        assert arr1_reused is arr1
+        assert (shape1, np.float64) not in manager.memory_pool
+        manager.free_array(arr1_reused)
 
         # Check shape1 is now at the end (most recently used)
         keys_after = list(manager.memory_pool.keys())
@@ -73,7 +78,7 @@ class TestLRUMemoryPool:
         # Allocate more arrays than max_arrays
         for i in range(max_arrays + 3):
             shape = (100 + i,)
-            manager.allocate_array(shape, np.float64, zero=True)
+            manager.free_array(manager.allocate_array(shape, np.float64, zero=True))
 
         assert len(manager.memory_pool) == max_arrays + 3
 
@@ -94,12 +99,12 @@ class TestLRUMemoryPool:
         # Allocate arrays
         shapes = [(100,), (200,), (300,), (400,), (500,)]
         for shape in shapes:
-            manager.allocate_array(shape, np.float64, zero=True)
+            manager.free_array(manager.allocate_array(shape, np.float64, zero=True))
 
         # Access arrays in specific order to mark recent usage
         # Access (300,) and (100,) to make them recently used
-        manager.allocate_array((300,), np.float64, zero=True)
-        manager.allocate_array((100,), np.float64, zero=True)
+        manager.free_array(manager.allocate_array((300,), np.float64, zero=True))
+        manager.free_array(manager.allocate_array((100,), np.float64, zero=True))
 
         # The recently accessed shapes should be at the end
         keys = list(manager.memory_pool.keys())
@@ -309,6 +314,7 @@ class TestIntegration:
             arr = manager.allocate_array(shape, np.float64)
             # Use the array
             arr[:] = np.random.randn(*shape)
+            manager.free_array(arr)
 
         # Most recently used shape should be at end
         keys = list(manager.memory_pool.keys())

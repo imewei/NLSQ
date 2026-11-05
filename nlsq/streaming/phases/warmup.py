@@ -438,6 +438,7 @@ class WarmupPhase:
             Loss function: loss_fn(params, x_batch, y_batch) -> scalar.
         """
         normalized_model = self.normalized_model
+        normalizer = getattr(normalized_model, "normalizer", None)
 
         enable_var_reg = (
             self.config.enable_group_variance_regularization
@@ -498,8 +499,11 @@ class WarmupPhase:
                 # include elements from the PREVIOUS group instead of raising.
                 # Pad params so every max_group_size window fits without ever
                 # needing to clamp; the mask below already ignores the padding.
+                physical_params = (
+                    params if normalizer is None else normalizer.denormalize(params)
+                )
                 padded_params = jnp.concatenate(
-                    [params, jnp.zeros(max_group_size, dtype=params.dtype)],
+                    [physical_params, jnp.zeros(max_group_size, dtype=params.dtype)],
                 )
 
                 def var_body(i, penalty):
@@ -888,6 +892,8 @@ class WarmupPhase:
             Result dict if guard triggered, None otherwise.
         """
         assert self._initial_loss is not None
+        if self._initial_loss == 0:
+            return None
         cost_increase_ratio = loss_value / self._initial_loss
         cost_threshold = 1.0 + self.config.cost_increase_tolerance
 

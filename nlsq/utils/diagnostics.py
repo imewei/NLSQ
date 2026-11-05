@@ -344,6 +344,10 @@ class OptimizationDiagnostics:
         self.problem_name = problem_name
         self.start_time = time.time()
         self.iteration_data = deque(maxlen=10_000)
+        self.convergence_monitor.cost_history.clear()
+        self.convergence_monitor.param_history.clear()
+        self.convergence_monitor.gradient_history.clear()
+        self.convergence_monitor.step_size_history.clear()
         self.warnings_issued = []
         self.numerical_issues = deque(maxlen=1_000)
         self.function_eval_count = 0
@@ -365,6 +369,8 @@ class OptimizationDiagnostics:
             self.initial_params = None
 
         self.initial_memory = self._get_memory_usage()
+
+        self.peak_memory = self.initial_memory
 
     def record_iteration(
         self,

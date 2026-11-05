@@ -369,7 +369,7 @@ class AutoDiffJacobian:
         ) -> jnp.ndarray:
             """Returns the masked jacobian."""
             Jt = jac_func(args, xdata, ydata, data_mask, atransform)
-            J = jnp.where(data_mask, Jt, 0).T
+            J = (jnp.where(data_mask, Jt, 0) if data_mask is not None else Jt).T
             return jnp.atleast_2d(J)
 
         @jit
@@ -1057,7 +1057,12 @@ class LeastSquares:
         else:
             # SciPy compatibility mode
             def wrap_func(fargs, xdata, ydata, data_mask, atransform):
-                return jnp.atleast_1d(fun(fargs, *args, **kwargs))
+                residuals = jnp.atleast_1d(fun(fargs, *args, **kwargs))
+                if data_mask is not None:
+                    if data_mask.shape != residuals.shape:
+                        raise ValueError("Data mask doesn't match residual shape.")
+                    residuals = jnp.where(data_mask, residuals, 0.0)
+                return residuals
 
             rfunc = wrap_func
             if jac is None:
@@ -1065,7 +1070,7 @@ class LeastSquares:
                 jac_func = adj.create_ad_jacobian(
                     wrap_func,
                     x0.size,
-                    masked=False,
+                    masked=True,
                     mode=jacobian_mode_selected,
                 )
             else:
@@ -1073,7 +1078,10 @@ class LeastSquares:
                 jac_callable = jac
 
                 def wrap_jac(fargs, xdata, ydata, data_mask, atransform):
-                    return jnp.atleast_2d(jac_callable(fargs, *args, **kwargs))
+                    J = jnp.atleast_2d(jac_callable(fargs, *args, **kwargs))
+                    if data_mask is not None:
+                        J = jnp.where(data_mask[:, None], J, 0.0)
+                    return J
 
                 jac_func = wrap_jac
 
@@ -1603,6 +1611,10 @@ class LeastSquares:
 
         if data_mask is None and ydata is not None:
             data_mask = jnp.ones(len(ydata), dtype=bool)
+        elif data_mask is not None:
+            data_mask = jnp.asarray(data_mask, dtype=bool)
+            if data_mask.ndim != 1:
+                raise ValueError("Data mask must be one-dimensional.")
 
         # Step 2: Validate inputs (pass prepared_bounds if available)
         x0, lb, ub, ftol, xtol, gtol, x_scale = self._validate_least_squares_inputs(

@@ -1024,9 +1024,8 @@ def _check_workflow_ld_config(rec: Recorder, result: Any, ctx: Any) -> None:
     assert ctor.named["config"] is ctx.config  # used as given, not copied
     expect_unchanged(ctx.config, ctx.before, "workflow=LDMemoryConfig")
     # sigma/absolute_sigma/check_finite/method and all three tolerances are
-    # forwarded (unlike the hybrid route). n_starts=None / memory_limit_gb=None are
-    # nlsq.fit's own passthrough of its named parameters into minpack.fit's
-    # **kwargs, which _fit_with_config then forwards to the engine as-is.
+    # forwarded (unlike the hybrid route). n_starts=None remains a public
+    # passthrough; the memory budget is consumed by the constructor/config.
     expect_fitter_fit(
         rec.only_fit(FITTER),
         p0=np.array(P0),
@@ -1038,7 +1037,6 @@ def _check_workflow_ld_config(rec: Recorder, result: Any, ctx: Any) -> None:
             "absolute_sigma": True,
             "check_finite": False,
             "n_starts": None,
-            "memory_limit_gb": None,
             "gtol": 1e-3,
             "ftol": 1e-4,
             "xtol": 1e-5,

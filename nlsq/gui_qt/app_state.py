@@ -31,6 +31,7 @@ class AppState(QObject):
     # Signals for reactive updates
     data_changed = Signal()  # When xdata/ydata/sigma changes
     model_changed = Signal()  # When model configuration changes
+    session_restored = Signal()  # Rehydrate controls after crash recovery
     fit_started = Signal()  # When fitting begins
     fit_progress = Signal(int, float)  # (iteration, cost)
     fit_completed = Signal(object)  # When fitting completes (result)

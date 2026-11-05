@@ -378,12 +378,12 @@ class TestPhase2LRUMemoryPool:
 
             # Add all arrays to pool
             for shape in hot_shapes + cold_shapes:
-                manager.allocate_array(shape, dtype=np.float64)
+                manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Access hot shapes multiple times
             for _ in range(5):
                 for shape in hot_shapes:
-                    manager.allocate_array(shape, dtype=np.float64)
+                    manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Evict to keep only 3 arrays
             manager.optimize_memory_pool(max_arrays=3)
@@ -426,7 +426,7 @@ class TestPhase2LRUMemoryPool:
                         hits += 1
                     else:
                         new_allocations += 1
-                    manager.allocate_array(shape, dtype=np.float64)
+                    manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             total = hits + new_allocations
             efficiency = hits / total if total > 0 else 0
@@ -543,7 +543,7 @@ class TestPhase2CumulativeImprovements:
                         pool_hits += 1
                     else:
                         pool_misses += 1
-                    manager.allocate_array(shape, dtype=np.float64)
+                    manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             elapsed = time.perf_counter() - start_time
 

@@ -7,7 +7,7 @@ scientific computing tests.
 
 import importlib
 import os
-import shutil
+import tempfile
 
 # CRITICAL: Set JAX environment variables BEFORE importing JAX.
 # JAX initializes its backend on first import. If these are set in a fixture
@@ -23,6 +23,13 @@ os.environ.setdefault("NLSQ_SKIP_GPU_CHECK", "1")
 # to float32 unless explicitly configured. On GPU, float64 is available by default.
 # This must be set before JAX import to ensure consistent behavior.
 os.environ.setdefault("JAX_ENABLE_X64", "true")
+# Collection imports can initialize NLSQ/JAX before session fixtures run.
+# Isolate both workers and concurrent pytest sessions before those imports.
+_worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
+_compilation_cache = tempfile.TemporaryDirectory(
+    prefix=f"nlsq_jax_test_cache_{_worker_id}_"
+)
+os.environ["JAX_COMPILATION_CACHE_DIR"] = _compilation_cache.name
 
 import sys
 
@@ -68,24 +75,14 @@ def configure_jax_for_tests():
     at module level (above), BEFORE JAX is imported. This is critical because
     JAX initializes its backend on first import.
 
-    This fixture only handles the compilation cache, which doesn't need
-    to be set before import.
+    The cache environment is also set before collection imports above.
     """
-    # Enable persistent JAX compilation cache across test sessions.
-    # Scoped per xdist worker: JAX's on-disk cache has no cross-process
-    # locking, so multiple workers sharing one directory can race a write
-    # against a read and produce a truncated/corrupted cache entry (surfaces
-    # as "Error reading persistent compilation cache entry ... incorrect
-    # header check" warnings under -n auto).
-    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
-    cache_dir = f"/tmp/nlsq_jax_test_cache_{worker_id}"
-    os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_dir
-
-    yield
-
-    # Cleanup: Remove JAX compilation cache after test session
-    if os.path.exists(cache_dir):
-        shutil.rmtree(cache_dir, ignore_errors=True)
+    # Apply the setting explicitly too, in case a plugin imported JAX first.
+    jax.config.update("jax_compilation_cache_dir", _compilation_cache.name)
+    try:
+        yield
+    finally:
+        _compilation_cache.cleanup()
 
 
 # ============================================================================
@@ -197,6 +194,7 @@ def pytest_xdist_auto_num_workers(config):
 # ============================================================================
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
     """
     Group tests marked with @pytest.mark.serial to run on the same worker.
@@ -213,6 +211,11 @@ def pytest_collection_modifyitems(config, items):
             # Assign all serial tests to the same xdist group
             # This ensures they run on the same worker, one at a time
             item.add_marker(pytest.mark.xdist_group("serial_memory_tests"))
+        elif not item.get_closest_marker("xdist_group"):
+            # loadgroup otherwise schedules every unmarked test independently.
+            # Retain loadscope's module/class isolation for ordinary tests.
+            scope = item.nodeid.rsplit("::", 1)[0]
+            item.add_marker(pytest.mark.xdist_group(scope))
 
 
 # ============================================================================

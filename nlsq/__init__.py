@@ -639,12 +639,15 @@ def fit(
     # Determine which backend to use
     if use_streaming or preset == "streaming":
         # Use AdaptiveHybridStreaming for streaming preset
+        from nlsq.core.minpack import _check_finite_for_streaming
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
         from nlsq.streaming.strategy import (
             build_large_strategy,
             default_p0,
             scipy_layout_to_points_first,
         )
+
+        _check_finite_for_streaming(xdata, ydata, check_finite)
 
         # Prepare p0
         if p0 is None:
@@ -696,6 +699,8 @@ def fit(
             enable_multistart=effective_multistart and effective_n_starts > 0,
             n_starts=effective_n_starts if effective_multistart else 10,
             multistart_sampler=sampler,
+            center_on_p0=center_on_p0,
+            scale_factor=scale_factor,
             **config_overrides,
         )
 

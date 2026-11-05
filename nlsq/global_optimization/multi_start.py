@@ -573,6 +573,7 @@ class MultiStartOrchestrator:
         """Run multi-start optimization and return best result.
 
         This is the main entry point for multi-start optimization. It:
+
         1. Infers bounds if not provided
         2. Estimates p0 if not provided and center_on_p0=True
         3. Generates LHS starting points; a user-supplied ``p0`` (clipped to the

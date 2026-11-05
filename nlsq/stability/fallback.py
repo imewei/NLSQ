@@ -320,11 +320,13 @@ def _fit_rescaled(curve_fit, f, xdata, ydata, kwargs, scale_info):
     if callable(jac):
         # d/dp of (f(x_s*xs + xo, p) - yo) / ys
         scaled_kwargs["jac"] = lambda x_scaled, *p: jac(x_scaled * xs + xo, *p) / ys
-    if kwargs.get("f_scale") is not None:
-        scaled_kwargs["f_scale"] = kwargs["f_scale"] / ys  # f_scale is in y units
     sigma = kwargs.get("sigma")
     if sigma is not None:
         scaled_kwargs["sigma"] = _rescale_sigma(sigma, ys)
+    elif kwargs.get("f_scale") is not None:
+        # Without sigma, residuals have y units. With sigma, scaling both
+        # data and weights leaves whitened residuals (and f_scale) unchanged.
+        scaled_kwargs["f_scale"] = kwargs["f_scale"] / ys
     scaled = curve_fit(scaled_f, (xdata - xo) / xs, (ydata - yo) / ys, **scaled_kwargs)
     return curve_fit(f, xdata, ydata, **{**kwargs, "p0": np.asarray(scaled.x)})
 

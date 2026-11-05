@@ -254,7 +254,7 @@ class FactorySource:
         self.first_x: Any = (
             xs[0]
             if len(xs) == 1
-            else jnp.concatenate([jnp.asarray(a) for a in xs])[:chunk]
+            else jnp.concatenate([jnp.asarray(a) for a in xs])[: max(chunk, 2)]
         )
 
     def _check(self, item: Any) -> tuple[Any, ...]:

@@ -13,6 +13,7 @@ import logging
 import os
 import stat
 import tempfile
+from dataclasses import fields
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from nlsq.gui_qt.session_state import n_points
+from nlsq.gui_qt.session_state import SessionState, n_points
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
@@ -35,6 +36,66 @@ _UID_SUFFIX = f"_{os.getuid()}" if hasattr(os, "getuid") else ""
 AUTOSAVE_DIR = Path(tempfile.gettempdir()) / f"nlsq_autosave{_UID_SUFFIX}"
 AUTOSAVE_FILE = AUTOSAVE_DIR / "session_autosave.json"
 AUTOSAVE_INTERVAL_MS = 60000  # 1 minute
+
+# Scalar workflow settings are safe to recover without evaluating model code.
+# Runtime state and callables must never be restored from a crash snapshot.
+_RUNTIME_FIELDS = frozenset({"model_func", "fit_result", "fit_running", "fit_aborted"})
+_SETTING_DEFAULTS = {
+    f.name: f.default
+    for f in fields(SessionState)
+    if f.name not in _RUNTIME_FIELDS and isinstance(f.default, (str, bool, int, float))
+}
+_SETTING_TYPES = {name: (type(value),) for name, value in _SETTING_DEFAULTS.items()}
+_SETTING_TYPES.update(
+    {
+        "data_file_name": (str, type(None)),
+        "custom_file_path": (str, type(None)),
+        "checkpoint_dir": (str, type(None)),
+        "defense_preset": (str, type(None)),
+        "batch_max_workers": (int, type(None)),
+        **{
+            name: (int, str, type(None))
+            for name in ("x_column", "y_column", "z_column", "sigma_column")
+        },
+    }
+)
+
+
+def _valid_settings(settings: Any) -> dict[str, Any]:
+    """Copy known JSON configuration values, excluding runtime objects."""
+    if not isinstance(settings, dict):
+        return {}
+    result = {
+        name: value
+        for name, value in settings.items()
+        if name in _SETTING_TYPES and type(value) in _SETTING_TYPES[name]
+    }
+    transforms = settings.get("transforms")
+    if isinstance(transforms, dict) and all(
+        isinstance(k, str) and isinstance(v, str) for k, v in transforms.items()
+    ):
+        result["transforms"] = dict(transforms)
+    return result
+
+
+def _restore_settings(state: SessionState, settings: Any) -> None:
+    """Accept only known scalar settings with their original types."""
+    for name, value in _valid_settings(settings).items():
+        setattr(state, name, value)
+
+
+def _restore_model(state: SessionState) -> None:
+    """Rebuild shipped models; recovered custom code requires explicit Apply."""
+    state.model_func = None
+    if state.model_type not in {"builtin", "polynomial"} or not state.model_config:
+        return
+    from nlsq.cli.errors import ModelError
+    from nlsq.gui_qt.adapters.model_adapter import get_model
+
+    try:
+        state.model_func = get_model(state.model_type, state.model_config)
+    except (ValueError, TypeError, KeyError, ModelError) as exc:
+        logger.warning("Could not restore model selection: %s", exc)
 
 
 def _ensure_private_dir(path: Path) -> None:
@@ -219,6 +280,12 @@ class AutosaveManager(QObject):
 
         # Serialize other state attributes
         data["auto_p0"] = getattr(state, "auto_p0", True)
+        data["settings"] = _valid_settings(
+            {
+                name: getattr(state, name, None)
+                for name in (*_SETTING_TYPES, "transforms")
+            }
+        )
 
         return data
 
@@ -302,6 +369,8 @@ class AutosaveManager(QObject):
         # Restore other attributes
         if "auto_p0" in data:
             state.auto_p0 = data["auto_p0"]
+        _restore_settings(state, data.get("settings"))
+        _restore_model(state)
 
         # Emit signals to update UI
         if state.xdata is not None:
@@ -310,3 +379,4 @@ class AutosaveManager(QObject):
             self._app_state.model_changed.emit()
         if state.xdata is not None or state.model_config is not None:
             self._app_state.page_access_changed.emit()
+        self._app_state.session_restored.emit()

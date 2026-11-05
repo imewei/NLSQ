@@ -2777,7 +2777,9 @@ class LargeDatasetFitter:
         xdata_arr = np.asarray(xdata)
         buffer_pool = self._get_or_create_buffer_pool(
             stats.recommended_chunk_size,
-            dtype=xdata_arr.dtype,
+            # The pool uses one dtype for both buffers; retain y precision
+            # as well (integer x with fractional y is a common input).
+            dtype=np.result_type(xdata_arr.dtype, np.asarray(ydata).dtype),
             x_feature_shape=xdata_arr.shape[1:],
         )
 
