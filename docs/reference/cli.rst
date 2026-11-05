@@ -279,6 +279,40 @@ running ``nlsq``, with no static checks. Use it only for models you authored or
 have reviewed line by line, never for files received from others. A quoted
 value such as ``"false"`` is rejected rather than treated as a boolean.
 
+Strict allowlist mode (opt-in)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Because a denylist cannot be made complete, a stricter **allowlist** mode is
+available. It runs every denylist check and additionally rejects any import or
+attribute chain outside a short list of numeric modules. Enable it per model:
+
+.. code-block:: yaml
+
+   model:
+     type: "custom"
+     path: "my_model.py"
+     function: "my_model"
+     strict: true   # must be a YAML boolean
+
+or globally with the environment variable ``NLSQ_STRICT_MODELS=1``. In strict
+mode only these modules (and their submodules) may be imported:
+``math``, ``cmath``, ``functools``, ``typing``, ``collections.abc``,
+``dataclasses``, ``numpy``, ``jax``, ``jax.numpy``, ``jax.scipy``, ``jax.lax``,
+``scipy.special``, ``scipy.stats``, ``scipy.constants`` (plus ``__future__``).
+Relative and wildcard imports are rejected, so is ``import scipy`` on its own,
+and attribute chains are checked against their full dotted path
+(``jax.config``, ``jax.experimental``, ``numpy.load``, ``scipy.io`` ... are
+blocked). ``open``, ``eval``, ``exec``, ``compile``, ``getattr`` and similar
+names are rejected wherever they appear, and module objects may not be passed
+around as values (use ``jnp.sin``, not ``xp=jnp``). Violation messages begin
+with ``strict allowlist``. ``trusted: true`` still bypasses strict mode (a
+warning is logged).
+
+Strict mode narrows the attack surface but, like the default validator, **is
+not a sandbox**. It is opt-in for one release to measure how many real models
+it rejects; it is planned to become the default after that release, with
+``trusted: true`` as the escape hatch for models that import other packages.
+
 Exit Codes
 ----------
 

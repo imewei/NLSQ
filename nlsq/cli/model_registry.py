@@ -39,6 +39,7 @@ import difflib
 import functools
 import inspect
 import logging
+import os
 import types
 import uuid
 from collections.abc import Callable
@@ -365,6 +366,7 @@ class ModelRegistry:
         function_name: str,
         is_trusted: bool,
         source: bytes | None = None,
+        strict: bool = False,
     ) -> None:
         """Run AST-based security validation on the model file.
 
@@ -378,13 +380,24 @@ class ModelRegistry:
             Whether to skip validation.
         source : bytes, optional
             Exact file bytes to validate (the same bytes that get executed).
+        strict : bool, default=False
+            Enforce the opt-in strict allowlist in addition to the denylist.
 
         Raises
         ------
         ModelError
             If security validation fails and not trusted.
         """
-        validation_result = validate_model(path, trusted=is_trusted, source=source)
+        validation_result = validate_model(
+            path, trusted=is_trusted, source=source, strict=strict
+        )
+        if strict and is_trusted:
+            logger.warning(
+                "Model %s: trusted=true bypasses the strict allowlist (strict "
+                "mode was requested). Violations that would have blocked: %s",
+                path,
+                "; ".join(validation_result.violations[:3]) or "none",
+            )
 
         audit_logger = get_audit_logger()
         audit_logger.log_load_attempt(path, validation_result)
@@ -405,6 +418,12 @@ class ModelRegistry:
                 suggestion=(
                     "Remove dangerous patterns, or set `trusted: true` in the "
                     "YAML config's `model:` block to skip validation"
+                    + (
+                        " (strict allowlist mode is on: only the documented "
+                        "module allowlist is permitted)"
+                        if strict
+                        else ""
+                    )
                 ),
             )
 
@@ -658,6 +677,8 @@ class ModelRegistry:
             - path: str - Path to the Python file
             - function: str - Name of the model function
             - trusted: bool - Skip security validation (default: False)
+            - strict: bool - Enforce the opt-in strict allowlist (default:
+              False; ``NLSQ_STRICT_MODELS=1`` turns it on globally)
         trusted : bool, default=False
             If True, skip security validation. This is a keyword-only
             argument that overrides config["trusted"].
@@ -685,6 +706,16 @@ class ModelRegistry:
                 suggestion="Use an unquoted YAML boolean: `trusted: true`.",
             )
         is_trusted = trusted or config_trusted
+        config_strict = config.get("strict", False)
+        if not isinstance(config_strict, bool):
+            raise ModelError(
+                f"'strict' must be true or false, got {config_strict!r}",
+                model_type="custom",
+                suggestion="Use an unquoted YAML boolean: `strict: true`.",
+            )
+        is_strict = config_strict or os.environ.get(
+            "NLSQ_STRICT_MODELS", ""
+        ).strip().lower() in ("1", "true", "yes", "on")
 
         # Step 2: Validate file exists
         path = self._validate_model_file_exists(file_path, function_name)
@@ -696,7 +727,9 @@ class ModelRegistry:
         source = path.read_bytes()
 
         # Step 4: Security validation - AST-based
-        self._validate_model_security(path, function_name, is_trusted, source)
+        self._validate_model_security(
+            path, function_name, is_trusted, source, strict=is_strict
+        )
 
         # Step 5: Load module dynamically
         module = self._load_module_from_path(path, function_name, source)

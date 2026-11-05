@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Opt-in strict allowlist mode for CLI custom models (`strict: true` in the model
+  config, or `NLSQ_STRICT_MODELS=1`; `validate_model(..., strict=True)`): an
+  `AllowlistVisitor` that subclasses the existing denylist visitor and also requires
+  imports and full attribute chains to fall under a short numeric-module allowlist
+  (`ALLOWLIST_MODULES`, `ALLOWLIST_BLOCKED_ATTRS`). The default denylist behaviour is
+  unchanged; strict mode is planned to become the default after one release.
 - `curve_fit_large(..., method="exact_streaming")` (opt-in; the default path is
   unchanged): an exact full-data Levenberg-Marquardt fit (`nlsq/streaming/exact_lm.py`)
   that accumulates `J^T J`, `J^T r` and the cost over chunks in float64, so the result
