@@ -426,3 +426,6 @@ examples/scripts/10_cli-commands/output/
 node_modules/
 .worktrees/
 conda-bld/
+
+# repomix output
+repomix-output.xml
