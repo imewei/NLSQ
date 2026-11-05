@@ -117,6 +117,13 @@ def test_custom_recovery_waits_for_explicit_apply(app_state, qtbot, monkeypatch)
     model_page = window._pages["model_selection"]
     assert model_page._code_editor.get_code() == code
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    # A regression would raise a modal error dialog, which blocks forever offscreen.
+    for kind in ("critical", "warning"):
+        monkeypatch.setattr(
+            QMessageBox,
+            kind,
+            lambda *a, _kind=kind, **k: pytest.fail(f"{_kind} dialog: {a[1:3]}"),
+        )
     model_page._on_apply()
     assert len(calls) == 1
     assert callable(app_state.state.model_func)
