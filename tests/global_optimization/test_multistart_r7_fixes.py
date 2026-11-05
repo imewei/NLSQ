@@ -61,7 +61,11 @@ class TestNanOmitWithoutP0:
         y[3] = np.nan
         res = curve_fit(_gauss, x, y, nan_policy="omit", multistart=True, n_starts=3)
         assert np.all(np.isfinite(res.popt))
-        np.testing.assert_allclose(res.popt, [3, 0.5, 1.2], rtol=0.1)
+        # The width only enters squared, so +s and -s are the same curve.
+        popt = np.asarray(res.popt)
+        np.testing.assert_allclose(
+            [popt[0], popt[1], abs(popt[2])], [3, 0.5, 1.2], rtol=0.1
+        )
 
 
 class TestUserP0IsACandidate:
