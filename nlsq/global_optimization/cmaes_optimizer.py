@@ -900,6 +900,7 @@ class CMAESOptimizer:
         best_fitness = jnp.array(jnp.inf)
         convergence_reason = "max_generations"
         start_gen = 0
+        loop_stop = self.config.max_generations  # = start_gen if resumed run is done
 
         if checkpointing:
             assert checkpoint_path is not None
@@ -937,6 +938,12 @@ class CMAESOptimizer:
                     f"Resumed CMA-ES from checkpoint at generation {start_gen} "
                     f"({checkpoint_path})",
                 )
+                # The loop checks std < tol_x right after each save, so a
+                # checkpoint with std already below tol_x is a finished run:
+                # return it as-is instead of running one more generation.
+                if float(state.std) < self.config.tol_x:
+                    convergence_reason = "xtol"
+                    loop_stop = start_gen
 
         # Progress milestones for logging (25%, 50%, 75%)
         # Build the dict from a list so later entries don't silently overwrite
@@ -972,7 +979,7 @@ class CMAESOptimizer:
 
         # Main optimization loop
         gen = start_gen - 1
-        for gen in range(start_gen, self.config.max_generations):
+        for gen in range(start_gen, loop_stop):
             key, key_ask, key_tell = jax.random.split(key, 3)
 
             # Ask for new population

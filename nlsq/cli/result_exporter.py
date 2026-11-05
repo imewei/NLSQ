@@ -20,8 +20,11 @@ Example Usage
 """
 
 import csv
+import io
 import json
 import math
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +65,31 @@ def _sanitize_nonfinite(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_sanitize_nonfinite(v) for v in obj]
     return obj
+
+
+def _atomic_write(path: Path, text: str, newline: str | None = None) -> None:
+    """Write ``text`` to a temp file beside ``path`` then ``os.replace`` it."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline=newline) as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _dumps(data: dict[str, Any]) -> str:
+    """Serialize to strict JSON *before* any file is touched; CLIError on failure."""
+    try:
+        return json.dumps(
+            _sanitize_nonfinite(data),
+            cls=NumpyJSONEncoder,
+            indent=2,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as e:
+        raise CLIError(f"Failed to serialize export data: {e}") from e
 
 
 class NumpyJSONEncoder(json.JSONEncoder):
@@ -211,26 +239,31 @@ class ResultExporter:
             Prepared export data with all metadata.
         """
         # Extract parameters
-        popt = _as_numpy(result.get("popt", result.get("x", [])))
-        if isinstance(popt, np.ndarray):
-            popt = popt.tolist()
+        # atleast_1d: a 0-d popt (np.float64) would otherwise break len() in CSV
+        popt = np.atleast_1d(
+            _as_numpy(result.get("popt", result.get("x", [])))
+        ).tolist()
 
         pcov = _as_numpy(result.get("pcov", []))
         if isinstance(pcov, np.ndarray):
             pcov = pcov.tolist()
 
         # Calculate uncertainties from covariance diagonal
-        uncertainties = []
+        uncertainties: list[float] = []
+        uncertainty_warnings: list[str] = []
         if pcov is not None:
             pcov_arr = np.asarray(pcov)
             # `if pcov:` on an ndarray raises ValueError — use explicit None check.
             # Also guard against singular/negative-diagonal covariance (produces NaN).
             if pcov_arr.ndim == 2 and pcov_arr.size > 0:
-                diag = np.diag(pcov_arr)
-                if np.any(diag < 0) or not np.all(np.isfinite(diag)):
-                    uncertainties = [float("nan")] * len(diag)
-                else:
-                    uncertainties = np.sqrt(diag).tolist()
+                diag = np.diag(pcov_arr).astype(float)
+                # inf variance (singular fit) stays inf; negative/NaN -> NaN.
+                valid = diag >= 0
+                uncertainties = np.sqrt(np.where(valid, diag, np.nan)).tolist()
+                uncertainty_warnings = [
+                    f"invalid variance (negative or NaN) for parameter {i}"
+                    for i in np.flatnonzero(~valid)
+                ]
 
         # Calculate statistics
         statistics = self._calculate_statistics(result)
@@ -255,12 +288,15 @@ class ResultExporter:
         metadata_config = config.get("metadata", {})
         model_config = config.get("model", {})
 
+        # YAML may yield dates etc.; stringify non-JSON scalars so export can't fail.
+        def _scalar(v: Any) -> Any:
+            return v if v is None or isinstance(v, (str, int, float, bool)) else str(v)
+
         metadata = {
-            "workflow_name": metadata_config.get("workflow_name", "unknown"),
-            "dataset_id": metadata_config.get("dataset_id", "unknown"),
-            "model_id": model_config.get(
-                "name",
-                model_config.get("function", "custom"),
+            "workflow_name": _scalar(metadata_config.get("workflow_name", "unknown")),
+            "dataset_id": _scalar(metadata_config.get("dataset_id", "unknown")),
+            "model_id": _scalar(
+                model_config.get("name", model_config.get("function", "custom"))
             ),
         }
 
@@ -273,6 +309,9 @@ class ResultExporter:
             "convergence": convergence,
             "metadata": metadata,
         }
+
+        if uncertainty_warnings:
+            export_data["uncertainty_warnings"] = uncertainty_warnings
 
         # Include parameter names if available
         param_names = config.get("model", {}).get("parameter_names")
@@ -369,16 +408,10 @@ class ResultExporter:
         output_path : Path
             Output file path.
         """
+        text = _dumps(data)
         try:
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    _sanitize_nonfinite(data),
-                    f,
-                    cls=NumpyJSONEncoder,
-                    indent=2,
-                    allow_nan=False,
-                )
-        except (OSError, TypeError) as e:
+            _atomic_write(output_path, text)
+        except OSError as e:
             raise CLIError(
                 f"Failed to write JSON file: {e}",
                 context={"output_path": str(output_path)},
@@ -397,7 +430,7 @@ class ResultExporter:
         output_path : Path
             Output file path.
         """
-        popt = data.get("popt", [])
+        popt = np.atleast_1d(data.get("popt", [])).tolist()
         # Copy to avoid mutating the caller's dict in-place
         uncertainties = list(data.get("uncertainties", []))
         statistics = data.get("statistics", {})
@@ -407,12 +440,18 @@ class ResultExporter:
         while len(uncertainties) < len(popt):
             uncertainties.append(float("nan"))
 
+        if len(param_names) > len(popt):
+            raise CLIError(
+                f"{len(param_names)} parameter names given for {len(popt)} parameters",
+                context={"output_path": str(output_path)},
+            )
+
         # Extend (not replace) param names — preserve any names already provided
         while len(param_names) < len(popt):
             param_names.append(f"p{len(param_names)}")
 
         try:
-            with open(output_path, "w", encoding="utf-8", newline="") as f:
+            with io.StringIO(newline="") as f:
                 writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
 
                 # Write header
@@ -438,6 +477,8 @@ class ResultExporter:
                 for conv_name, conv_value in convergence.items():
                     writer.writerow([conv_name, conv_value, "", "convergence"])
 
+                _atomic_write(output_path, f.getvalue(), newline="")
+
         except OSError as e:
             raise CLIError(
                 f"Failed to write CSV file: {e}",
@@ -452,10 +493,4 @@ class ResultExporter:
         data : dict
             Export data dictionary.
         """
-        json_str = json.dumps(
-            _sanitize_nonfinite(data),
-            cls=NumpyJSONEncoder,
-            indent=2,
-            allow_nan=False,
-        )
-        print(json_str)
+        print(_dumps(data))

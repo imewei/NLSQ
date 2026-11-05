@@ -58,6 +58,7 @@ def _run_single_workflow(
         result = run_fit(
             workflow_path=workflow_path,
             verbose=verbose,
+            default_figure_prefix=Path(workflow_path).stem,
         )
 
         return {
@@ -165,6 +166,39 @@ def _calculate_optimal_workers(
     # For threads, limit to 4 to avoid overwhelming JAX with concurrent compilations
     cpu_count = os.cpu_count() or 1
     return min(4, cpu_count, n_workflows)
+
+
+def _warn_output_collisions(workflow_paths: list[str], logger: Any) -> None:
+    """Warn when two workflows in a batch would write the same output file."""
+    import yaml
+
+    owners: dict[str, str] = {}
+    for path in workflow_paths:
+        try:
+            with open(path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
+        except (OSError, yaml.YAMLError):
+            continue  # reported by the workflow run itself
+        if not isinstance(cfg, dict):
+            continue
+        export = cfg.get("export") or {}
+        vis = cfg.get("visualization") or {}
+        targets = []
+        if isinstance(export, dict) and export.get("results_file"):
+            targets.append(export["results_file"])
+        if isinstance(vis, dict) and vis.get("enabled", False):
+            prefix = vis.get("filename_prefix", Path(path).stem)
+            targets.append(
+                Path(vis.get("output_dir", "figures")) / f"{prefix}_combined"
+            )
+        for target in targets:
+            key = os.path.abspath(target)
+            if key in owners and owners[key] != path:
+                logger.warning(
+                    f"Output collision: {owners[key]} and {path} both write "
+                    f"{target}; one will overwrite the other"
+                )
+            owners.setdefault(key, path)
 
 
 def _collect_batch_results(
@@ -400,6 +434,8 @@ def run_batch(
     if verbose:
         logger.info(f"Starting batch processing of {n_workflows} workflows")
         logger.info(f"Using {num_workers} parallel workers (threads)")
+
+    _warn_output_collisions(workflow_paths, logger)
 
     # Step 3: Execute workflows and collect results
     start_time = datetime.now()

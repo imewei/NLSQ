@@ -21,6 +21,7 @@ Example Usage
 >>> output_paths = visualizer.generate(result, data, model, config)
 """
 
+import threading
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -122,6 +123,17 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
 # =============================================================================
 
 
+_DRAW_LOCK = threading.RLock()
+
+
+def _field(result: Any, key: str) -> Any:
+    """Read ``key`` from a result dict or a CurveFitResult (attribute-only fields)."""
+    value = getattr(result, key, None)
+    if value is None and hasattr(result, "get"):
+        value = result.get(key)
+    return value
+
+
 class FitVisualizer:
     """Visualizer for curve fitting results.
 
@@ -199,41 +211,50 @@ class FitVisualizer:
         filename_prefix = vis_config.get("filename_prefix", "fit")
         formats = vis_config.get("formats", ["pdf", "png"])
 
-        # Apply style preset
-        self._apply_style_preset(vis_config)
-
-        # Generate combined plot (main + residuals)
-        fig_combined = self._create_combined_figure(result, data, model, vis_config)
-        combined_paths = self._save_figure(
-            fig_combined,
-            output_dir,
-            f"{filename_prefix}_combined",
-            formats,
-            vis_config,
-        )
-        output_paths.extend(combined_paths)
-        plt.close(fig_combined)
-
-        # Generate histogram if enabled
-        histogram_config = vis_config.get("histogram", {})
-        if histogram_config.get("enabled", False):
-            residuals = self._get_residuals(result, data, model)
-            if residuals is not None:
-                fig_hist = self._create_histogram_figure(residuals, vis_config)
-                hist_paths = self._save_figure(
-                    fig_hist,
-                    output_dir,
-                    f"{filename_prefix}_histogram",
-                    formats,
-                    vis_config,
+        # rc_context mutates global rcParams, so serialize drawing across
+        # batch threads; each figure sees only its own style and it is restored.
+        rc: Any = self._style_rc_params(
+            vis_config
+        )  # matplotlib stubs want Literal keys
+        with _DRAW_LOCK, plt.rc_context(rc=rc):
+            # Generate combined plot (main + residuals)
+            fig_combined = self._create_combined_figure(result, data, model, vis_config)
+            try:
+                output_paths.extend(
+                    self._save_figure(
+                        fig_combined,
+                        output_dir,
+                        f"{filename_prefix}_combined",
+                        formats,
+                        vis_config,
+                    )
                 )
-                output_paths.extend(hist_paths)
-                plt.close(fig_hist)
+            finally:
+                plt.close(fig_combined)
+
+            # Generate histogram if enabled
+            histogram_config = vis_config.get("histogram", {})
+            if histogram_config.get("enabled", False):
+                residuals = self._get_residuals(result, data, model)
+                if residuals is not None:
+                    fig_hist = self._create_histogram_figure(residuals, vis_config)
+                    try:
+                        output_paths.extend(
+                            self._save_figure(
+                                fig_hist,
+                                output_dir,
+                                f"{filename_prefix}_histogram",
+                                formats,
+                                vis_config,
+                            )
+                        )
+                    finally:
+                        plt.close(fig_hist)
 
         return output_paths
 
-    def _apply_style_preset(self, config: dict[str, Any]) -> None:
-        """Apply style preset to matplotlib rcParams.
+    def _style_rc_params(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Build matplotlib rc overrides for the configured style preset.
 
         Parameters
         ----------
@@ -243,22 +264,22 @@ class FitVisualizer:
         style_name = config.get("style", "publication")
         preset = STYLE_PRESETS.get(style_name, STYLE_PRESETS["publication"])
 
-        # Apply font settings
-        plt.rcParams["font.family"] = preset.get("font_family", "serif")
-        plt.rcParams["font.size"] = preset.get("font_size", 10)
-        plt.rcParams["mathtext.fontset"] = preset.get("math_fontset", "cm")
-
-        # Apply line settings
-        plt.rcParams["lines.linewidth"] = preset.get("linewidth", 1.5)
+        rc: dict[str, Any] = {
+            "font.family": preset.get("font_family", "serif"),
+            "font.size": preset.get("font_size", 10),
+            "mathtext.fontset": preset.get("math_fontset", "cm"),
+            "lines.linewidth": preset.get("linewidth", 1.5),
+        }
 
         # Override with config-specific font settings if provided
         font_config = config.get("font", {})
         if "family" in font_config:
-            plt.rcParams["font.family"] = font_config["family"]
+            rc["font.family"] = font_config["family"]
         if "size" in font_config:
-            plt.rcParams["font.size"] = font_config["size"]
+            rc["font.size"] = font_config["size"]
         if "math_fontset" in font_config:
-            plt.rcParams["mathtext.fontset"] = font_config["math_fontset"]
+            rc["mathtext.fontset"] = font_config["math_fontset"]
+        return rc
 
     def _get_color_scheme(self, config: dict[str, Any]) -> dict[str, str]:
         """Get the active color scheme from configuration.
@@ -346,8 +367,9 @@ class FitVisualizer:
         if sigma is not None:
             sigma = np.asarray(sigma)
 
-        popt = np.asarray(result.get("popt", []))
-        pcov = result.get("pcov")
+        popt_raw = _field(result, "popt")
+        popt = np.asarray([] if popt_raw is None else popt_raw, dtype=float)
+        pcov = _field(result, "pcov")
         if pcov is not None:
             pcov = np.asarray(pcov)
 
@@ -479,6 +501,7 @@ class FitVisualizer:
                     popt,
                     pcov,
                     confidence_level,
+                    ndata=len(xdata),
                 )
                 ax.fill_between(
                     x_fit,
@@ -500,8 +523,8 @@ class FitVisualizer:
             )
 
         # Set labels
-        ax.set_xlabel(main_config.get("x_label", "x"))
-        ax.set_ylabel(main_config.get("y_label", "y"))
+        ax.set_xlabel(main_config.get("x_label") or "x")
+        ax.set_ylabel(main_config.get("y_label") or "y")
 
         if main_config.get("title"):
             ax.set_title(main_config["title"])
@@ -606,8 +629,8 @@ class FitVisualizer:
                 )
 
         # Labels
-        ax.set_xlabel(residuals_config.get("x_label", "x"))
-        ax.set_ylabel(residuals_config.get("y_label", "Residual"))
+        ax.set_xlabel(residuals_config.get("x_label") or "x")
+        ax.set_ylabel(residuals_config.get("y_label") or "Residual")
 
         if residuals_config.get("title"):
             ax.set_title(residuals_config["title"])
@@ -685,8 +708,8 @@ class FitVisualizer:
                 ax.legend()
 
         # Labels
-        ax.set_xlabel(histogram_config.get("x_label", "Residual"))
-        ax.set_ylabel(histogram_config.get("y_label", "Frequency"))
+        ax.set_xlabel(histogram_config.get("x_label") or "Residual")
+        ax.set_ylabel(histogram_config.get("y_label") or "Density")
         if histogram_config.get("title"):
             ax.set_title(histogram_config["title"])
 
@@ -699,6 +722,7 @@ class FitVisualizer:
         popt: np.ndarray,
         pcov: np.ndarray,
         confidence_level: float = 0.95,
+        ndata: int | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Calculate confidence bands using error propagation.
 
@@ -717,6 +741,9 @@ class FitVisualizer:
             Parameter covariance matrix.
         confidence_level : float
             Confidence level (default 0.95 for 95% CI).
+        ndata : int, optional
+            Number of fitted data points; sets Student-t dof = ndata - n_params.
+            Falls back to the normal quantile when omitted or dof <= 0.
 
         Returns
         -------
@@ -727,16 +754,21 @@ class FitVisualizer:
         n_params = len(popt)
 
         # Compute Jacobian numerically using finite differences
-        eps = 1e-8
+        popt = np.asarray(popt, dtype=float)
         jacobian = np.zeros((n_points, n_params))
 
-        y0 = model(x, *popt)
+        y0 = np.asarray(model(x, *popt))
 
         for i in range(n_params):
-            params_plus = popt.copy()
-            params_plus[i] += eps
-            y_plus = model(x, *params_plus)
-            jacobian[:, i] = (y_plus - y0) / eps
+            # Central difference with a relative cbrt(eps) step: a fixed 1e-8
+            # forward step vanishes below float resolution when |y| is large.
+            h = np.cbrt(np.finfo(float).eps) * max(1.0, abs(popt[i]))
+            p_plus, p_minus = popt.copy(), popt.copy()
+            p_plus[i] += h
+            p_minus[i] -= h
+            jacobian[:, i] = (
+                np.asarray(model(x, *p_plus)) - np.asarray(model(x, *p_minus))
+            ) / (2 * h)
 
         # Compute variance of predictions: var(y) = J @ pcov @ J.T (diagonal elements)
         # For efficiency, compute element-wise
@@ -747,10 +779,13 @@ class FitVisualizer:
 
         std_prediction = np.sqrt(np.maximum(variance, 0))
 
-        # Compute confidence interval using t-distribution
-        # For large samples, use normal distribution
+        # Student-t quantile (normal fallback when dof is unknown/non-positive)
         alpha = 1 - confidence_level
-        z = stats.norm.ppf(1 - alpha / 2)
+        dof = None if ndata is None else ndata - n_params
+        if dof is not None and dof > 0:
+            z = stats.t.ppf(1 - alpha / 2, dof)
+        else:
+            z = stats.norm.ppf(1 - alpha / 2)
 
         lower = y0 - z * std_prediction
         upper = y0 + z * std_prediction
@@ -779,29 +814,20 @@ class FitVisualizer:
         ndarray or None
             Residual values, or None if cannot be computed.
         """
-        # Try to get from result
-        if "fun" in result and result["fun"] is not None:
-            return np.asarray(result["fun"])
-
-        # Compute from data and fit
-        popt = result.get("popt")
-        if popt is None:
-            return None
-
+        # Data minus model, unweighted. result["fun"] is the sigma-weighted
+        # (model - y)/sigma vector, so it is only a last-resort fallback.
+        popt = _field(result, "popt")
         xdata = data.get("xdata")
         ydata = data.get("ydata")
-        if xdata is None or ydata is None:
-            return None
+        if popt is not None and xdata is not None and ydata is not None:
+            try:
+                y_fit = model(np.asarray(xdata), *np.asarray(popt))
+                return np.asarray(ydata) - np.asarray(y_fit)
+            except Exception:
+                pass
 
-        xdata = np.asarray(xdata)
-        ydata = np.asarray(ydata)
-        popt = np.asarray(popt)
-
-        try:
-            y_fit = model(xdata, *popt)
-            return ydata - y_fit
-        except Exception:
-            return None
+        fun = _field(result, "fun")
+        return None if fun is None else np.asarray(fun)
 
     def _add_statistics_annotation(
         self,
@@ -822,7 +848,7 @@ class FitVisualizer:
         """
         lines = []
 
-        statistics = result.get("statistics", {})
+        statistics = _field(result, "statistics") or {}
 
         if annotation_config.get("show_r_squared", True):
             r_squared = statistics.get("r_squared")

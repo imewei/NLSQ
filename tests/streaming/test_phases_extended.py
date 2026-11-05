@@ -809,7 +809,7 @@ class TestCheckpointManagerSave:
         # Verify HDF5 structure
         with h5py.File(path, "r") as f:
             assert "version" in f.attrs
-            assert f.attrs["version"] == "3.0"
+            assert f.attrs["version"] == "3.1"
             assert "phase_state" in f
 
     def test_save_with_accumulators(self, base_config, tmp_path):

@@ -64,7 +64,7 @@ class TestFaultToleranceCheckpoints:
             with h5py.File(checkpoint_path, "r") as f:
                 # Check version
                 assert "version" in f.attrs
-                assert f.attrs["version"] == "3.0"  # Hybrid optimizer version
+                assert f.attrs["version"] == "3.1"  # Hybrid optimizer version
 
                 # Check phase-specific state exists
                 assert "phase_state" in f
@@ -410,7 +410,7 @@ class TestFaultToleranceIntegration:
             # Verify checkpoint contains validation info
             with h5py.File(checkpoints[0], "r") as f:
                 # Check version
-                assert f.attrs["version"] == "3.0"
+                assert f.attrs["version"] == "3.1"
                 # Parameters should be finite
                 params = jnp.array(f["phase_state/normalized_params"])
                 assert jnp.all(jnp.isfinite(params))

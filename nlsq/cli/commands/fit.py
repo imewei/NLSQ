@@ -23,6 +23,7 @@ from typing import Any
 import yaml
 
 from nlsq.cli.errors import ConfigError, setup_logging
+from nlsq.cli.result_exporter import ResultExporter
 from nlsq.cli.visualization import FitVisualizer
 from nlsq.cli.workflow_runner import WorkflowRunner
 
@@ -33,6 +34,7 @@ def run_fit(
     style_override: str | None = None,
     stdout: bool = False,
     verbose: bool = False,
+    default_figure_prefix: str | None = None,
 ) -> dict[str, Any] | None:
     """Execute a single curve fit from a YAML workflow configuration.
 
@@ -48,6 +50,10 @@ def run_fit(
         If True, output results as JSON to stdout.
     verbose : bool
         If True, enable verbose logging.
+    default_figure_prefix : str, optional
+        Figure filename prefix used when ``visualization.filename_prefix`` is
+        not set (``run_batch`` passes the workflow file stem so parallel
+        workflows do not overwrite each other's figures).
 
     Returns
     -------
@@ -132,6 +138,11 @@ def run_fit(
         logger.info(f"Starting workflow: {workflow_name}")
         logger.info(f"Configuration file: {workflow_path}")
 
+    if default_figure_prefix is not None and isinstance(
+        config.get("visualization"), dict
+    ):
+        config["visualization"].setdefault("filename_prefix", default_figure_prefix)
+
     # Execute workflow
     runner = WorkflowRunner()
     result = runner.run(config)
@@ -195,7 +206,12 @@ def _generate_visualization(
 
         # Generate visualization
         visualizer = FitVisualizer()
-        output_paths = visualizer.generate(result, data_dict, model, config)
+        # The runner result carries no `statistics`; the annotation needs them.
+        vis_result = {
+            **result,
+            "statistics": ResultExporter()._calculate_statistics(result),
+        }
+        output_paths = visualizer.generate(vis_result, data_dict, model, config)
 
         if verbose and output_paths:
             logger.info(f"Generated {len(output_paths)} visualization files")

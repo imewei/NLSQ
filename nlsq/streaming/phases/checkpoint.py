@@ -9,6 +9,7 @@ and provide recovery from failures.
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,22 @@ if TYPE_CHECKING:
     from nlsq.global_optimization.tournament import TournamentSelector
     from nlsq.precision.parameter_normalizer import ParameterNormalizer
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
+
+
+def _find_lbfgs_state(tree: Any) -> Any | None:
+    """Return the ScaleByLBFGSState inside a (possibly chained) optax state."""
+    from optax._src.transform import (  # type: ignore[import-not-found,import-untyped]
+        ScaleByLBFGSState,
+    )
+
+    if isinstance(tree, ScaleByLBFGSState):
+        return tree
+    if isinstance(tree, tuple):
+        for item in tree:
+            found = _find_lbfgs_state(item)
+            if found is not None:
+                return found
+    return None
 
 
 @dataclass
@@ -98,7 +115,8 @@ class CheckpointManager:
         Checkpoint format version (currently "3.0").
     """
 
-    VERSION = "3.0"
+    # 3.1 adds the completion marker; 3.0 files (no marker) still load.
+    VERSION = "3.1"
 
     def __init__(self, config: HybridStreamingConfig) -> None:
         """Initialize CheckpointManager.
@@ -134,8 +152,18 @@ class CheckpointManager:
         """
         checkpoint_path = Path(checkpoint_path)
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        # Write to a temp file and rename so a failed save never clobbers
+        # the previous good checkpoint.
+        tmp_path = checkpoint_path.with_name(checkpoint_path.name + ".tmp")
 
-        with h5py.File(checkpoint_path, "w") as f:
+        try:
+            self._write_all(tmp_path, state)
+            os.replace(tmp_path, checkpoint_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+    def _write_all(self, tmp_path: Path, state: CheckpointState) -> None:
+        with h5py.File(tmp_path, "w") as f:
             self._write_metadata(f)
             phase_state = f.create_group("phase_state")
             self._write_phase_state(phase_state, state)
@@ -146,6 +174,10 @@ class CheckpointManager:
             self._write_normalizer_state(phase_state, state)
             self._write_tournament_state(phase_state, state)
             self._write_multistart_candidates(phase_state, state)
+            # Written last: load() treats its absence as a torn write.
+            f.attrs["completion_marker"] = True
+            f.flush()
+            os.fsync(f.id.get_vfd_handle())
 
     def load(
         self,
@@ -234,11 +266,9 @@ class CheckpointManager:
         if state.phase1_optimizer_state is None:
             return
 
-        opt_state_group = phase_state.create_group("phase1_optimizer_state")
-        inner_state = state.phase1_optimizer_state[0]
-        opt_state_group.create_dataset("count", data=int(inner_state.count))
-
-        if not hasattr(inner_state, "diff_params_memory"):
+        # Locate by type: gradient clipping puts a clip state at index 0.
+        inner_state = _find_lbfgs_state(state.phase1_optimizer_state)
+        if inner_state is None:
             import logging
 
             logging.getLogger(__name__).warning(
@@ -247,6 +277,8 @@ class CheckpointManager:
             )
             return
 
+        opt_state_group = phase_state.create_group("phase1_optimizer_state")
+        opt_state_group.create_dataset("count", data=int(inner_state.count))
         opt_state_group.attrs["optimizer_type"] = "lbfgs"
         opt_state_group.create_dataset("params", data=inner_state.params)
         opt_state_group.create_dataset("updates", data=inner_state.updates)
@@ -391,6 +423,8 @@ class CheckpointManager:
             raise ValueError(
                 f"Incompatible checkpoint version: {version} (expected 3.x)",
             )
+        if version != "3.0" and not f.attrs.get("completion_marker", False):
+            raise ValueError("Checkpoint is incomplete (missing completion marker)")
 
     def _read_normalized_params(self, phase_state: h5py.Group) -> Array | None:
         """Read normalized parameters."""
@@ -399,7 +433,13 @@ class CheckpointManager:
         return jnp.array(phase_state["normalized_params"])
 
     def _read_optimizer_state(self, phase_state: h5py.Group) -> Any | None:
-        """Read Phase 1 optimizer state."""
+        """Read Phase 1 optimizer state.
+
+        The saved L-BFGS state is for diagnostics only and is NOT resumable:
+        the returned tuple lacks the other chain elements (e.g. the line-search
+        state), so it does not match ``optax.lbfgs(...).init`` and cannot be
+        passed to ``update``. Re-initialise the optimizer to resume.
+        """
         if "phase1_optimizer_state" not in phase_state:
             return None
 

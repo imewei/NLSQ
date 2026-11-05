@@ -4021,9 +4021,13 @@ class AdaptiveHybridStreamingOptimizer:
         - best_cost_global: Best cost value globally
         - phase_history: Complete phase history
         """
-        manager = self._get_checkpoint_manager()
-        state = self._create_checkpoint_state()
-        manager.save(checkpoint_path, state)
+        # A checkpoint failure must never abort or degrade the fit itself.
+        try:
+            manager = self._get_checkpoint_manager()
+            state = self._create_checkpoint_state()
+            manager.save(checkpoint_path, state)
+        except Exception as exc:
+            _logger.warning(f"Checkpoint save to {checkpoint_path} failed: {exc!r}")
 
     def _load_checkpoint(self, checkpoint_path: str | Path) -> None:
         """Load checkpoint and restore phase-specific state.
