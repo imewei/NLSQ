@@ -242,6 +242,43 @@ Global workflow presets, multi-start, CMA-ES and distributed execution are
 available through the Python API; the CLI does not dispatch these workflows
 from ``workflow`` or ``global_optimization`` YAML keys.
 
+Custom Models and the Security Validator
+----------------------------------------
+
+``model.type: custom`` loads a Python file and runs it. Before it runs, the file
+is scanned with an AST-based validator that rejects code which could execute
+other code, start processes, reach the network or write files. Blocked
+categories include:
+
+* ``exec``/``eval``/``compile`` and ``__import__``, reflection helpers
+  (``getattr``, ``setattr``) and dunder attribute chains;
+* process, thread and interpreter control (``os``, ``subprocess``,
+  ``multiprocessing``, ``threading``, ``signal``, ``cProfile``, ``pdb`` ...);
+* network modules (``socket``, ``urllib``, ``http``, ``requests`` ...);
+* unsafe deserialisation (``pickle``, ``yaml.unsafe_load``,
+  ``pandas.read_pickle``, ``numpy.load`` with ``allow_pickle``);
+* file writes (``open`` in a write mode, ``numpy.save*``, ``tofile`` ...).
+
+The validator is a **denylist, not a sandbox**. It reduces accidental and
+casual abuse but cannot prove an arbitrary file is safe, so only run custom
+model files you wrote or fully trust.
+
+A file that is rejected, but that you trust, can bypass the scan with the
+``trusted`` key in the workflow configuration:
+
+.. code-block:: yaml
+
+   model:
+     type: "custom"
+     path: "my_model.py"
+     function: "my_model"
+     trusted: true   # must be a YAML boolean; skips the security scan
+
+With ``trusted: true`` the file runs with the full privileges of the user
+running ``nlsq``, with no static checks. Use it only for models you authored or
+have reviewed line by line, never for files received from others. A quoted
+value such as ``"false"`` is rejected rather than treated as a boolean.
+
 Exit Codes
 ----------
 
@@ -254,7 +291,7 @@ Exit Codes
    * - 0
      - Success
    * - 1
-     - General error (configuration, data loading, model, or fitting error)
+     - General error (configuration, data loading, model, or fitting error), or a fit that did not converge
 
 Scripting Examples
 ------------------

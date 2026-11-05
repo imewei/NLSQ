@@ -616,6 +616,8 @@ class ModelRegistry:
             @functools.wraps(function)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 value = function(*args, **kwargs)
+                if value is None:  # "no p0/bounds": let the caller fall back
+                    return value
                 n = size(value)
                 if (
                     n_params is not None
