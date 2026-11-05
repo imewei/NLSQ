@@ -374,25 +374,15 @@ class FittingOptionsPage(QWidget):
 
         # Update state with current options
         if self._guided_radio.isChecked():
-            preset = PRESETS.get(self._preset_combo.currentText(), {})
-            for key, value in preset.items():
-                if hasattr(state, key):
-                    setattr(state, key, value)
+            self._sync_options_to_state(
+                PRESETS.get(self._preset_combo.currentText(), {})
+            )
         else:
-            options = self._advanced_options.get_options()
-            for key, value in options.items():
-                if hasattr(state, key):
-                    setattr(state, key, value)
+            self._sync_options_to_state(self._advanced_options.get_options())
 
         # Update p0 and bounds from param config
-        p0, bounds = self._param_config.get_values()
-        state.bounds = bounds
-        if not self._param_config.is_auto_p0():
-            state.p0 = p0 or None
-            state.auto_p0 = False
-        else:
-            state.auto_p0 = True
-            state.p0 = None
+        self._sync_parameters_to_state(*self._param_config.get_values())
+        state.p0 = state.p0 or None  # zero manual rows -> None, not []
 
         # Clear previous results
         self._cost_plot.reset()

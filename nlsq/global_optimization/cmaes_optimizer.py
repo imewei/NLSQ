@@ -623,7 +623,7 @@ class CMAESOptimizer:
                 sigma,
                 **kwargs,
             )
-            diagnostics.nlsq_refinement = True
+            diagnostics.nlsq_refinement = result.get("success", True)
         else:
             # Return CMA-ES result without refinement
             result = {
@@ -1295,24 +1295,15 @@ class CMAESOptimizer:
         sigma_np = np.asarray(sigma) if sigma is not None else None
 
         try:
-            # Run NLSQ curve_fit for refinement with memory-aware workflow
-            # Use workflow='auto' to auto-select memory strategy (standard/chunked/streaming)
-            # This prevents OOM on large datasets that were handled with data_chunk_size
-            # during the CMA-ES evolutionary phase
+            # Refine with a standard curve_fit (TRF) call. curve_fit has no
+            # ``workflow`` option, so drop it; there is no memory-aware tier
+            # selection here, and very large datasets are fit in one pass.
             refinement_kwargs = {**kwargs}
-            refinement_kwargs.pop(
-                "workflow",
-                None,
-            )  # Remove if present to avoid conflict
+            refinement_kwargs.pop("workflow", None)
             # CMAESOptimizer.fit returns a dictionary and needs the native
             # CurveFitResult here; tuple formatting belongs to its caller.
             for output_flag in ("full_output", "return_eval", "timeit"):
                 refinement_kwargs.pop(output_flag, None)
-
-            n_points = len(ydata_np)
-            logger.debug(
-                f"NLSQ refinement using workflow='auto' for {n_points:,} points",
-            )
 
             result = curve_fit(
                 f,
@@ -1321,7 +1312,6 @@ class CMAESOptimizer:
                 p0=p0_numpy,
                 sigma=sigma_np,
                 bounds=bounds,
-                workflow="auto",  # Memory-aware: auto-selects standard/chunked/streaming
                 **refinement_kwargs,
             )
 
@@ -1352,10 +1342,14 @@ class CMAESOptimizer:
             raise
         except Exception as e:
             logger.warning(f"NLSQ refinement failed: {e}. Using CMA-ES result.")
-            # Return CMA-ES result if refinement fails
+            # Return the CMA-ES point, but flag the failure so callers do not
+            # report an unrefined (rough-pcov) result as a converged fit.
             return {
                 "popt": p0_numpy,
                 "pcov": self._estimate_pcov_from_cmaes(len(p0_numpy)),
+                "success": False,
+                "status": 0,
+                "message": f"CMA-ES completed; NLSQ refinement failed: {e}",
             }
 
     def _estimate_pcov_from_cmaes(self, n_params: int) -> NDArray[np.floating]:

@@ -714,10 +714,12 @@ def _fit_with_config(
     from nlsq.streaming.large_dataset import LDMemoryConfig
     from nlsq.streaming.strategy import (
         build_large_strategy,
+        default_p0,
         scipy_layout_to_points_first,
     )
 
     n_points = len(ydata)
+    user_kwargs = set(kwargs)  # before goal-derived tolerances are injected
 
     # Apply adaptive tolerances if goal is specified and tolerances not in kwargs
     if goal is not None:
@@ -749,12 +751,30 @@ def _fit_with_config(
         # Streaming optimization path
         _check_finite_for_streaming(xdata, ydata, check_finite)
 
+        # The hybrid engine minimizes plain least squares; only callback,
+        # verbose and gtol are read from kwargs. Fail loudly instead of
+        # silently returning a non-robust fit.
+        if kwargs.get("loss", "linear") != "linear":
+            raise ValueError(
+                "The hybrid streaming workflow does not support robust loss "
+                f"(loss={kwargs['loss']!r}); it minimizes plain least squares. "
+                "Use a standard workflow (e.g. fit(..., workflow='auto', "
+                "loss=...) or curve_fit(..., loss=...)) for robust loss."
+            )
+        ignored = sorted(
+            user_kwargs & {"f_scale", "max_nfev", "ftol", "xtol", "x_scale", "jac"}
+        )
+        if ignored:
+            warnings.warn(
+                f"The hybrid streaming workflow ignores {ignored}; configure "
+                "HybridStreamingConfig instead.",
+                OptimizeWarning,
+                stacklevel=3,
+            )
+
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
-            n_params = _n_params_from_signature(f)
-            if n_params < 1:
-                raise ValueError("Unable to determine number of fit parameters.")
-            p0 = np.ones(n_params)
+            p0 = default_p0(f)
         p0_arr = np.atleast_1d(p0)
 
         # Prepare bounds
@@ -1053,15 +1073,13 @@ def _fit_with_preset(  # noqa: C901
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
         from nlsq.streaming.strategy import (
             build_large_strategy,
+            default_p0,
             scipy_layout_to_points_first,
         )
 
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
-            n_params = _n_params_from_signature(f)
-            if n_params < 1:
-                raise ValueError("Unable to determine number of fit parameters.")
-            p0 = np.ones(n_params)
+            p0 = default_p0(f)
         p0_arr = np.atleast_1d(p0)
 
         # Prepare bounds
@@ -2199,12 +2217,13 @@ def _apply_stability_checks(
     f : ModelFunction
         The model function.
     stability : {'auto', 'check'}
-        Stability mode - 'check' warns, 'auto' applies fixes.
+        Stability mode - both warn; neither modifies the data or p0.
     rescale_data : bool
         When True and stability='auto', warn (rather than silently do
-        nothing) if data rescaling/parameter normalization would have
-        triggered. The rescale/normalize is never actually applied here --
-        see the "auto" fix note in this function's implementation for why.
+        nothing) if the data would have qualified for rescaling. The
+        p0 scale-mismatch warning is emitted regardless of this flag. Nothing
+        is rescaled or normalized -- see the "auto" fix note in this
+        function's implementation for why.
     args : tuple
         Positional arguments.
     kwargs : dict
@@ -2542,6 +2561,7 @@ def _apply_output_flags(
     Same shapes as ``CurveFit.curve_fit``: ``return_eval`` -> (popt, pcov, f(x));
     ``full_output`` -> (popt, pcov, infodict, mesg, ier); ``timeit`` ->
     (popt, pcov, result, post_time, ctime) (no separate timings: both 0.0).
+    Unlike TRF, ``infodict`` here holds only ``nfev`` and ``fvec=None``.
     Otherwise the result is returned unchanged.
     """
     popt, pcov = result.popt, result.pcov
@@ -2823,15 +2843,15 @@ def curve_fit(
     stability : {'auto', 'check', False}, optional
         Control numerical stability checks and automatic fixes:
 
-        - 'auto': Check for stability issues and automatically fix the ones
-          that are safe to fix (handle NaN/Inf); warn about the rest
+        - 'auto': Check for stability issues and warn about the ones that are
+          not safely fixable; no data is modified
         - 'check': Check for stability issues and warn, but don't apply fixes
         - False: Skip stability checks entirely (default)
 
-        When 'auto', detected issues are handled before optimization:
+        When 'auto', detected issues are reported before optimization:
 
-        - NaN/Inf values in xdata/ydata are replaced with the mean (always
-          safe, applied automatically)
+        - NaN/Inf values are not modified; they are handled by ``nan_policy``
+          and ``check_finite``
         - Ill-conditioned data (condition number > 1e10), large data ranges
           (> 1e4), and parameter scale mismatches (ratio > 1e6) are *not*
           automatically rescaled/normalized: doing so would silently return
@@ -2843,14 +2863,10 @@ def curve_fit(
 
         Default: False.
     rescale_data : bool, optional
-        Reserved for forward/backward compatibility with the (currently
-        disabled -- see ``stability`` above) automatic data-rescaling fix.
-        When stability='auto', controls whether data is automatically rescaled
-        to [0, 1] for ill-conditioned or large-range data. Set to False for
-        applications where data must maintain physical units (e.g.,
-        time in seconds, frequency in Hz). NaN/Inf handling
-        and parameter normalization are still applied when stability='auto'.
-        Default: True.
+        Kept for compatibility; no data is ever rescaled. When True and
+        stability='auto', a warning is logged if the data would have qualified
+        for rescaling (condition number > 1e10 or a range > 1e4). The p0
+        scale-mismatch warning is emitted regardless. Default: True.
     max_jacobian_elements_for_svd : int, optional
         Maximum number of elements in the Jacobian matrix (m x n) for which
         SVD will be computed during stability checks. For larger Jacobians,
@@ -2890,8 +2906,10 @@ def curve_fit(
         and evaluates each, selecting the best result. This helps find global
         optima in problems with multiple local minima. Default: False.
     n_starts : int, optional
-        Number of starting points for multi-start optimization. Only used when
-        multistart=True or global_search=True. Default: 10.
+        Total number of starting points, including the user's ``p0`` when one
+        is given (it is evaluated first, so ``n_starts - 1`` points are
+        sampled). Only used when multistart=True or global_search=True.
+        Default: 10.
     global_search : bool, optional
         Shorthand for enabling multi-start with n_starts=20. Equivalent to
         multistart=True, n_starts=20. Useful for thorough global search.
@@ -2953,6 +2971,9 @@ def curve_fit(
     - fallback_attempts : int
         Number of optimization attempts before success
 
+    Fallback metadata is not available when ``full_output``, ``return_eval``
+    or ``timeit`` is set: those return the plain tuple.
+
     When multistart=True or global_search=True, the returned object contains:
 
     - multistart_diagnostics : dict
@@ -2969,13 +2990,14 @@ def curve_fit(
 
     Repeated fits reuse a model's compiled residual and Jacobian (autodiff,
     no ``jac``) when the model traces to an identical computation: every call
-    traces ``f`` abstractly (and its Jacobian, if it uses ``custom_jvp`` or
-    ``custom_vjp`` rules), and the traced program's exact structure,
+    traces ``f`` abstractly (and its Jacobian, if it uses ``custom_jvp``
+    rules), and the traced program's exact structure,
     including every value ``f`` read at trace time (globals, closures,
     attributes, files, ...) and the bytes of its constants, is the cache
     key, so changed model state is a cache miss. Models with side effects or
-    callbacks (``jax.debug.print``, ``pure_callback``), user-defined JAX
-    primitives, or a user ``jac`` are not cached.
+    callbacks (``jax.debug.print``, ``pure_callback``), models that use
+    ``custom_vjp``, user-defined JAX primitives, or a user ``jac`` are not
+    cached.
     ``nlsq.clear_cache()`` drops the cache; ``NLSQ_DISABLE_WRAPPER_CACHE=1``
     disables it.
 

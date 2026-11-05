@@ -88,3 +88,21 @@ class TestFitResultInvalidation:
         app_state.set_fit_running(True)
 
         assert received == []
+
+
+def test_set_model_clears_p0_and_bounds_only_when_model_changes():
+    """p0/bounds typed for one model must not carry over to another."""
+    from nlsq.gui_qt.app_state import AppState
+
+    app = AppState()
+    app.set_model("polynomial", {"degree": 2})
+    app.state.p0 = [5.0, 6.0, 7.0]
+    app.state.bounds = ([0.0] * 3, [1.0] * 3)
+
+    app.set_model("polynomial", {"degree": 2})  # same model: keep
+    assert app.state.p0 == [5.0, 6.0, 7.0]
+    assert app.state.bounds is not None
+
+    app.set_model("polynomial", {"degree": 1})  # different model: reset
+    assert app.state.p0 is None
+    assert app.state.bounds is None

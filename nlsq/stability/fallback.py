@@ -405,6 +405,11 @@ class FallbackResult:
     def __len__(self):
         return len(self.result)
 
+    def __contains__(self, key):
+        # Without this, ``in`` falls back to __iter__ and compares arrays (ValueError).
+        # Mirrors attribute delegation: ``"popt" in r`` iff ``r.popt`` resolves.
+        return key in self.result or (isinstance(key, str) and hasattr(self, key))
+
 
 class FallbackOrchestrator:
     """
@@ -544,7 +549,13 @@ class FallbackOrchestrator:
             print(f"Attempt 1/{self.max_attempts}: Original parameters")
 
         try:
-            result = curve_fit(f, xdata, ydata, **kwargs)
+            # _xdata/_ydata are for strategies only; curve_fit would warn on them.
+            result = curve_fit(
+                f,
+                xdata,
+                ydata,
+                **{k: v for k, v in kwargs.items() if k not in ("_xdata", "_ydata")},
+            )
             if self.verbose:
                 print("Success with original parameters!")
             return FallbackResult(result, strategy_used=None, attempts=1)

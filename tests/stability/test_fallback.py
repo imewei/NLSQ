@@ -584,6 +584,50 @@ class TestFallbackResultUnpacking:
         assert hasattr(r, "fallback_strategy_used")
         assert r.fallback_attempts >= 1
 
+    def test_contains_uses_result_keys(self):
+        import nlsq
+
+        x = np.linspace(0, 5, 50)
+        y = 3.0 * x + 2.0
+        r = nlsq.curve_fit(linear, x, y, p0=[1.0, 1.0], fallback=True)
+        assert "popt" in r
+        assert "fallback_strategy_used" in r
+        assert "nonexistent" not in r
+
+    def test_first_attempt_does_not_leak_internal_kwargs(self):
+        import warnings
+
+        import nlsq
+
+        x = np.linspace(0, 5, 50)
+        y = 3.0 * x + 2.0
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            r = nlsq.curve_fit(linear, x, y, p0=[1.0, 1.0], fallback=True)
+        assert r.fallback_attempts == 1
+        assert not [w for w in caught if "unknown keyword" in str(w.message)]
+
+    def test_no_attempt_forwards_internal_kwargs(self, monkeypatch):
+        from nlsq.stability.fallback import FallbackOrchestrator
+
+        seen = []
+
+        def fake_curve_fit(f, xdata, ydata, **kwargs):
+            seen.append(set(kwargs))
+            if len(seen) == 1:
+                raise RuntimeError("first attempt fails")
+            return object()
+
+        monkeypatch.setattr("nlsq.core.minpack.curve_fit", fake_curve_fit)
+        x = np.linspace(0, 5, 50)
+        r = FallbackOrchestrator(verbose=False).fit_with_fallback(
+            linear, x, 3.0 * x + 2.0, p0=[1.0, 1.0]
+        )
+        assert r.fallback_attempts > 1
+        assert len(seen) > 1
+        for keys in seen:
+            assert not {"_xdata", "_ydata"} & keys
+
 
 class TestFallbackIntegration:
     """Integration tests for fallback system."""

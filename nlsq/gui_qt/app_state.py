@@ -93,7 +93,17 @@ class AppState(QObject):
             model_func: The model function callable
             **kwargs: Additional model configuration (legacy)
         """
+        previous = self._state.model_config  # None right after a YAML import
+        model_changed = model_type != self._state.model_type or (
+            config is not None and previous is not None and config != previous
+        )
         self._state.model_type = model_type
+
+        # p0/bounds belong to the previous model's parameters; replaying them
+        # positionally onto a different model silently mis-constrains the fit.
+        if model_changed:
+            self._state.p0 = None
+            self._state.bounds = None
 
         # Store config and function
         if config is not None:
