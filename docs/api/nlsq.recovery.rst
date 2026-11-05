@@ -9,7 +9,7 @@ nlsq.recovery module
 Overview
 --------
 
-The ``nlsq.recovery`` module provides automatic recovery mechanisms for handling optimization
+The ``nlsq.stability.recovery`` module provides automatic recovery mechanisms for handling optimization
 failures. When curve fitting encounters problems like convergence failures, numerical instabilities,
 or ill-conditioned systems, the recovery system intelligently applies various strategies to
 achieve successful optimization.
@@ -50,75 +50,89 @@ The ``OptimizationRecovery`` class implements five recovery strategies, tried in
 Usage Examples
 --------------
 
-Basic Recovery
-~~~~~~~~~~~~~~
+The optimization function passed to ``recover_from_failure`` is called as
+``optimization_func(**modified_state, **kwargs)``, where ``modified_state`` is a copy of
+the state dict with the current strategy's changes applied (for example perturbed
+``params``/``p0``, a different ``method``, new ``ftol``/``xtol``, ``regularization``,
+or ``loss``). It must therefore accept these keys as keyword arguments, and return a
+dict (or an object) with ``success``, ``cost`` and the parameters under ``x`` or
+``params``. A result with non-finite parameters or cost, or outside the ``bounds``
+given in the state, is rejected.
 
-Use recovery to automatically retry failed optimizations:
+The examples below share this setup:
 
 .. code-block:: python
 
-    from nlsq.recovery import OptimizationRecovery
-    from nlsq import LeastSquares
+    import jax.numpy as jnp
     import numpy as np
 
-    # Create recovery system
+    from nlsq import curve_fit
+    from nlsq.stability.recovery import OptimizationRecovery
+
+
+    def model(x, a, b):
+        return a * jnp.exp(-b * x)
+
+
+    x = np.linspace(0, 10, 200)
+    y = 2.5 * np.exp(-0.5 * x)
+
+
+    def optimize(params, method="trf", bounds=(-np.inf, np.inf), **state):
+        """Retry callback: ``state`` absorbs keys the fit does not need."""
+        kwargs = {} if method == "trf" else {"method": method}
+        popt, pcov = curve_fit(model, x, y, p0=params, bounds=bounds, **kwargs)
+        cost = 0.5 * float(np.sum((y - np.asarray(model(x, *popt))) ** 2))
+        return {"x": np.asarray(popt), "cost": cost, "success": True}
+
+Basic Recovery
+~~~~~~~~~~~~~~
+
+Use recovery to automatically retry a failed optimization:
+
+.. code-block:: python
+
     recovery = OptimizationRecovery(max_retries=3, enable_diagnostics=True)
 
+    initial_params = np.array([1.0, 0.1])
+    state = {"params": initial_params, "method": "trf"}
 
-    # Define optimization function
-    def optimize(params, regularization=0):
-        ls = LeastSquares()
-        return ls.least_squares(
-            residual_func, params, method="trf", regularization=regularization
-        )
+    success, result = recovery.recover_from_failure(
+        failure_type="convergence",
+        optimization_state=state,
+        optimization_func=optimize,
+    )
 
-
-    # Initial optimization attempt
-    try:
-        result = optimize(initial_params)
-        if not result.success:
-            # Attempt recovery
-            success, recovered_result = recovery.recover_from_failure(
-                failure_type="convergence",
-                optimization_state={"params": initial_params, "method": "trf"},
-                optimization_func=optimize,
-            )
-            if success:
-                print("Recovery succeeded!")
-                result = recovered_result
-    except Exception as e:
-        print(f"Optimization failed: {e}")
+    if success:
+        print("Recovery succeeded!", result["x"])
+    else:
+        print(result["error"])
 
 Advanced Recovery with Custom State
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Provide detailed optimization state for better recovery:
+Provide more state for better recovery. Extra keyword arguments to
+``recover_from_failure`` are forwarded to the optimization function unchanged:
 
 .. code-block:: python
-
-    from nlsq.recovery import OptimizationRecovery
 
     recovery = OptimizationRecovery(max_retries=5)
 
     optimization_state = {
-        "params": current_params,
-        "p0": initial_guess,
+        "params": initial_params,
+        "p0": initial_params,
         "method": "trf",
-        "xdata": x_data,
-        "ydata": y_data,
-        "bounds": (lower_bounds, upper_bounds),
+        "bounds": ([0.0, 0.0], [10.0, 5.0]),  # solutions outside are rejected
         "iteration": 150,
         "cost": 1.5e-3,
-        "has_outliers": True,
+        "has_outliers": True,  # enables the robust-loss progression
         "regularization": 1e-8,
     }
 
     success, result = recovery.recover_from_failure(
         failure_type="numerical",
         optimization_state=optimization_state,
-        optimization_func=my_optimization_function,
-        additional_kwarg1=value1,
-        additional_kwarg2=value2,
+        optimization_func=optimize,
     )
 
     if success:
@@ -128,50 +142,47 @@ Provide detailed optimization state for better recovery:
 Recovery from Different Failure Types
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Handle specific failure modes:
+``failure_type`` selects which strategies adapt. All strategies are tried in
+order for every failure type; ``"numerical"`` and ``"ill_conditioned"`` additionally
+increase ``regularization``, and ``"outliers"`` (or ``has_outliers=True`` in the
+state) moves ``loss`` through a robust progression starting at ``"huber"``:
 
 .. code-block:: python
 
-    # Convergence failure - try parameter perturbation
-    success, result = recovery.recover_from_failure("convergence", state, opt_func)
+    state = {"params": initial_params, "method": "trf"}
+
+    # Convergence failure
+    success, result = recovery.recover_from_failure("convergence", state, optimize)
 
     # Numerical issues - increase regularization
-    success, result = recovery.recover_from_failure("numerical", state, opt_func)
+    success, result = recovery.recover_from_failure("numerical", state, optimize)
 
     # Ill-conditioned system
-    success, result = recovery.recover_from_failure("ill_conditioned", state, opt_func)
+    success, result = recovery.recover_from_failure("ill_conditioned", state, optimize)
 
-    # Outlier-contaminated data - switch to robust loss
-    state["has_outliers"] = True
-    success, result = recovery.recover_from_failure("outliers", state, opt_func)
+    # Outlier-contaminated data - switch to a robust loss
+    success, result = recovery.recover_from_failure(
+        "outliers", {**state, "has_outliers": True}, optimize
+    )
 
 Diagnostics and Monitoring
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Track recovery attempts and performance:
+Each call appends an entry to ``recovery_history``. With ``enable_diagnostics=True``,
+failed recoveries are also recorded in the diagnostics warnings:
 
 .. code-block:: python
 
-    from nlsq.recovery import OptimizationRecovery
-
     recovery = OptimizationRecovery(max_retries=3, enable_diagnostics=True)
+    success, result = recovery.recover_from_failure("convergence", state, optimize)
 
-    # After multiple recovery attempts
-    success, result = recovery.recover_from_failure("convergence", state, opt_func)
-
-    # Check recovery history
     for attempt in recovery.recovery_history:
         print(f"Failure type: {attempt['failure_type']}")
         print(f"Iteration: {attempt['iteration']}")
         print(f"Cost: {attempt['cost']}")
 
-    # Access diagnostics if enabled
-    if recovery.enable_diagnostics:
-        events = recovery.diagnostics.get_events()
-        for event in events:
-            if event["type"] == "recovery_success":
-                print(f"Successful strategy: {event['data']['strategy']}")
-                print(f"Retry number: {event['data']['retry']}")
+    if recovery.diagnostics is not None:
+        print(recovery.diagnostics.warnings_issued)
 
 Integration with curve_fit
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -180,84 +191,47 @@ Recovery can be integrated into curve fitting workflows:
 
 .. code-block:: python
 
-    from nlsq import curve_fit
-    from nlsq.recovery import OptimizationRecovery
-    import jax.numpy as jnp
-
-
     def fit_with_recovery(f, xdata, ydata, p0, **kwargs):
         """Curve fit with automatic recovery."""
         recovery = OptimizationRecovery(max_retries=3)
 
         try:
-            # Try standard fit
-            popt, pcov = curve_fit(f, xdata, ydata, p0=p0, **kwargs)
-            return popt, pcov
+            return curve_fit(f, xdata, ydata, p0=p0, **kwargs)
         except Exception as e:
-            # Attempt recovery
-            state = {
-                "params": p0,
-                "p0": p0,
-                "xdata": xdata,
-                "ydata": ydata,
-                "method": kwargs.get("method", "trf"),
-                "bounds": kwargs.get("bounds"),
-            }
+            state = {"params": np.asarray(p0, dtype=float), "method": "trf"}
 
-            def opt_func(**state_args):
-                merged_kwargs = {**kwargs, **state_args}
-                return curve_fit(f, xdata, ydata, **merged_kwargs)
+            def opt_func(params, **_):
+                popt, pcov = curve_fit(f, xdata, ydata, p0=params, **kwargs)
+                return {"x": popt, "pcov": pcov, "success": True}
 
             success, result = recovery.recover_from_failure("convergence", state, opt_func)
 
             if success:
-                return result
-            else:
-                raise RuntimeError("Recovery failed") from e
+                return result["x"], result["pcov"]
+            raise RuntimeError("Recovery failed") from e
 
 
-    # Use it
-    popt, pcov = fit_with_recovery(
-        lambda x, a, b: a * jnp.exp(-b * x), x_data, y_data, p0=[1.0, 0.5]
-    )
+    popt, pcov = fit_with_recovery(model, x, y, p0=[1.0, 0.5])
 
 Performance Considerations
 --------------------------
 
-Recovery adds robustness but increases computation time:
-
-**Typical overhead per strategy**:
-
-- Parameter perturbation: +10-50% (depending on noise level)
-- Algorithm switching: +20-100% (full re-optimization with new method)
-- Regularization adjustment: +5-20% (minor overhead)
-- Problem reformulation: +15-30% (data transformation costs)
-- Multi-start: +50-200% (random sampling and re-optimization)
-
-**Total recovery overhead**: Cumulative across strategies tried
+Recovery adds robustness but increases computation time. Strategies are tried in
+order for up to ``max_retries`` rounds, so the worst case is
+``max_retries * 5`` re-optimizations before ``(False, {"error": ...})`` is returned.
 
 **Best practices**:
 
 - Set ``max_retries`` based on problem complexity (3-5 is typical)
-- Enable diagnostics only for debugging (adds 5-10% overhead)
-- Pre-normalize data to reduce need for reformulation strategy
 - Provide good initial guesses to minimize recovery attempts
+- Pass ``bounds`` in the state so that out-of-range recoveries are rejected
+- Disable diagnostics (``enable_diagnostics=False``) if the bookkeeping is not needed
 
-Success Rates
--------------
-
-Typical success rates with recovery enabled:
-
-- **No recovery**: ~60-70% success on difficult problems
-- **With recovery (1 retry)**: ~75-80% success
-- **With recovery (3 retries, all strategies)**: ~85-92% success
-
-Recovery is most effective for:
+Recovery is most useful for:
 
 - Poorly conditioned Jacobians
 - Bad initial parameter guesses
 - Noisy or outlier-contaminated data
-- Stiff differential equation systems
 - Multi-modal objective functions
 
 See Also

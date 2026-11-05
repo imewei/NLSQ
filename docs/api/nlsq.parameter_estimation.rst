@@ -23,9 +23,7 @@ Key Features
 Functions
 ---------
 
-.. autofunction:: nlsq.parameter_estimation.estimate_initial_parameters
-   :noindex:
-.. autofunction:: nlsq.parameter_estimation.infer_parameter_bounds
+.. autofunction:: nlsq.precision.parameter_estimation.estimate_initial_parameters
    :noindex:
 
 Example Usage
@@ -33,7 +31,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.parameter_estimation import estimate_initial_parameters
+   from nlsq.precision.parameter_estimation import estimate_initial_parameters
    import jax.numpy as jnp
 
 

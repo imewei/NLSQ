@@ -33,7 +33,7 @@ Performance Goals
 Classes
 -------
 
-.. autoclass:: nlsq.unified_cache.UnifiedCache
+.. autoclass:: nlsq.caching.unified_cache.UnifiedCache
    :members:
    :noindex:
    :undoc-members:
@@ -44,7 +44,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.unified_cache import UnifiedCache
+   from nlsq.caching.unified_cache import UnifiedCache
    import jax.numpy as jnp
 
    # Create cache with statistics tracking

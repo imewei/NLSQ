@@ -25,7 +25,9 @@ Functions
 
 .. autofunction:: nlsq.utils.error_messages.format_error_message
    :noindex:
-.. autofunction:: nlsq.utils.error_messages.get_suggestion
+.. autofunction:: nlsq.utils.error_messages.analyze_failure
+   :noindex:
+.. autofunction:: nlsq.utils.error_messages.check_convergence_quality
    :noindex:
 
 Example Usage

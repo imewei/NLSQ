@@ -18,11 +18,11 @@ stopping, and save intermediate results.
 Key Features
 ------------
 
-- **Real-time progress monitoring** with rich progress bars
-- **Early stopping** based on convergence criteria
-- **Iteration logging** for debugging and analysis
-- **Result saving** for checkpointing
-- **Custom callbacks** for specialized monitoring
+- **Real-time progress monitoring** with tqdm progress bars
+- **Early stopping** when the cost stops improving
+- **Iteration logging** to stdout or a file
+- **Callback chaining** with ``CallbackChain``
+- **Custom callbacks** by subclassing ``CallbackBase``
 
 Classes
 -------
@@ -44,108 +44,107 @@ Usage Examples
 Progress Bar
 ~~~~~~~~~~~~
 
-Display a real-time progress bar during optimization:
+Display a real-time progress bar during optimization (requires ``tqdm``):
 
 .. code-block:: python
 
+    import jax.numpy as jnp
+    import numpy as np
+
     from nlsq import curve_fit
     from nlsq.callbacks import ProgressBar
-    import jax.numpy as jnp
 
 
     def model(x, a, b):
         return a * jnp.exp(-b * x)
 
 
-    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=ProgressBar())
+    x = np.linspace(0, 10, 200)
+    y = 2.5 * np.exp(-0.5 * x)
+
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], callback=ProgressBar())
 
 Early Stopping
 ~~~~~~~~~~~~~~
 
-Stop optimization when parameters converge:
+Stop optimization when the cost has not improved by at least ``min_delta`` for
+``patience`` consecutive iterations:
 
 .. code-block:: python
 
     from nlsq.callbacks import EarlyStopping
 
-    callback = EarlyStopping(patience=10, min_delta=1e-6, monitor="cost")
+    callback = EarlyStopping(patience=10, min_delta=1e-6, verbose=True)
 
-    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=callback)
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], callback=callback)
 
-    print(f"Stopped at iteration {callback.stopped_iteration}")
+    print(f"Best cost: {callback.best_cost}")
 
 Iteration Logging
 ~~~~~~~~~~~~~~~~~
 
-Log detailed information at each iteration:
+Log cost, gradient norm, function evaluations and elapsed time at each iteration,
+to stdout or to a file:
 
 .. code-block:: python
 
     from nlsq.callbacks import IterationLogger
 
-    logger = IterationLogger(log_every=5, log_cost=True, log_gradient_norm=True)
+    logger = IterationLogger(filename="fit.log", log_params=True)
 
-    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=logger)
-
-    # Access logged history
-    print(logger.history)
-
-Result Saving
-~~~~~~~~~~~~~
-
-Save intermediate results during optimization:
-
-.. code-block:: python
-
-    from nlsq.callbacks import ResultSaver
-
-    saver = ResultSaver(save_every=10, save_path="checkpoints/")
-
-    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=saver)
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], callback=logger)
+    logger.close()  # flush and close the log file
 
 Combining Callbacks
 ~~~~~~~~~~~~~~~~~~~
 
-Use multiple callbacks simultaneously:
+Use multiple callbacks simultaneously with ``CallbackChain``:
 
 .. code-block:: python
 
-    from nlsq.callbacks import CallbackComposer, ProgressBar, EarlyStopping
+    from nlsq.callbacks import CallbackChain, EarlyStopping, IterationLogger
 
-    callbacks = CallbackComposer(
-        [ProgressBar(), EarlyStopping(patience=10), IterationLogger(log_every=5)]
+    callbacks = CallbackChain(
+        EarlyStopping(patience=10),
+        IterationLogger(filename="fit.log"),
     )
 
-    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=callbacks)
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], callback=callbacks)
+    callbacks.close()
 
 Custom Callbacks
 ~~~~~~~~~~~~~~~~
 
-Create your own custom callback by subclassing ``OptimizationCallback``:
+Create your own callback by subclassing ``CallbackBase`` and raising
+``StopOptimization`` to request early termination:
 
 .. code-block:: python
 
-    from nlsq.callbacks import OptimizationCallback
+    from nlsq.callbacks import CallbackBase, StopOptimization
 
 
-    class CustomCallback(OptimizationCallback):
-        def on_iteration_end(self, iteration, params, cost, gradient_norm):
+    class CostThreshold(CallbackBase):
+        def __call__(self, iteration, cost, params, info):
             if cost < 1e-10:
                 print("Excellent fit achieved!")
-                self.stop_training = True
+                raise StopOptimization("cost below threshold")
 
 
-    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=CustomCallback())
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], callback=CostThreshold())
 
-Callback Methods
-----------------
+Callback Interface
+------------------
 
-All callbacks inherit from ``OptimizationCallback`` and can override these methods:
+A callback is any callable (``CallbackBase`` subclasses are the convention) with
+the signature ``callback(iteration, cost, params, info)``:
 
-- ``on_optimization_begin()``: Called before optimization starts
-- ``on_iteration_begin(iteration)``: Called before each iteration
-- ``on_iteration_end(iteration, params, cost, gradient_norm)``: Called after each iteration
-- ``on_optimization_end(result)``: Called after optimization completes
+- ``iteration``: 0-indexed iteration number
+- ``cost``: current cost value
+- ``params``: current parameter values (``numpy.ndarray``)
+- ``info``: dict with additional information such as ``gradient_norm`` and ``nfev``
+
+``CallbackBase.close()`` can be overridden to release resources (files, network
+connections); ``IterationLogger`` uses it to close its log file.
 
 Interactive Notebooks
 ---------------------

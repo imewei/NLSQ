@@ -408,15 +408,17 @@ and detect malformed inputs early:
 
 .. code-block:: python
 
-   from nlsq.utils.validators import InputValidator, validate_security_constraints
+   from nlsq.utils.validators import InputValidator
 
    validator = InputValidator()
 
    # Security checks run automatically and early in the validation pipeline
    errors, warnings, x, y = validator.validate_curve_fit_inputs(model, x, y, p0=p0)
 
-   # Or call directly
-   errors, warnings = validate_security_constraints(x, y, n_params=3)
+   # Or call the method directly with sizes, bounds and the initial guess
+   errors, warnings = validator.validate_security_constraints(
+       n_points=len(x), n_params=3, bounds=([0, 0, 0], [10, 5, 1]), p0=[1.0, 0.5, 0.1]
+   )
 
 **Array Size Limits**:
 
@@ -427,9 +429,11 @@ and detect malformed inputs early:
 
 .. code-block:: python
 
-   # Example: Excessive data size detection
-   x_huge = np.ones(15_000_000_000)  # 15 billion points
-   # Error: "Data size exceeds maximum allowed (10B points)"
+   # Example: Excessive data size detection (sizes only; no array is allocated)
+   errors, warnings = validator.validate_security_constraints(
+       n_points=15_000_000_000, n_params=3
+   )
+   print(errors)  # reports that the data size exceeds the maximum
 
 **Bounds Numeric Range**:
 
@@ -445,13 +449,17 @@ and detect malformed inputs early:
 **Parameter Value Validation**:
 
 - Warns for extreme initial parameters (abs(p0) > 1e50)
-- Errors for NaN/Inf in initial parameters
+- Warns for subnormal initial parameters (abs(p0) < 1e-300)
+- NaN/Inf in ``p0`` is rejected by the regular initial-guess checks in
+  ``validate_curve_fit_inputs`` (see below), not by the security checks
 
 .. code-block:: python
 
-   # Example: Invalid parameter detection
-   p0 = [1.0, np.nan, 0.5]
-   # Error: "Initial parameters contain NaN/Inf values"
+   # Example: Extreme parameter detection
+   errors, warnings = validator.validate_security_constraints(
+       n_points=100, n_params=2, p0=[1.0, 1e60]
+   )
+   print(warnings)  # warns about overflow risk
 
 **Early Fail-Fast**:
 

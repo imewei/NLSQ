@@ -18,12 +18,11 @@ and model to determine reasonable constraints automatically.
 Key Features
 ------------
 
-- **Automatic bounds detection** from data characteristics
-- **Model-aware inference** for common function types
-- **Physical constraints** enforcement (positivity, ranges)
-- **Data-driven estimation** using statistics
-- **Merge with user bounds** for hybrid constraints
-- **Validation** of inferred bounds
+- **Automatic bounds detection** from the data ranges and the initial guess ``p0``
+- **Positivity enforcement** when ``p0`` is positive
+- **Merge with user bounds**, where user-specified bounds take precedence
+- **Multi-start bounds** with a wider default safety factor
+- **Quality analysis** of bounds relative to ``p0``
 
 Classes
 -------
@@ -41,7 +40,9 @@ Functions
    :toctree: generated/
 
    infer_bounds
+   infer_bounds_for_multistart
    merge_bounds
+   analyze_bounds_quality
 
 Usage Examples
 --------------
@@ -53,42 +54,46 @@ Let NLSQ infer parameter bounds automatically:
 
 .. code-block:: python
 
-    from nlsq import curve_fit
     import jax.numpy as jnp
+    import numpy as np
+
+    from nlsq import curve_fit
 
 
     def exponential(x, a, b):
         return a * jnp.exp(-b * x)
 
 
-    # Enable automatic bounds inference
-    result = curve_fit(
-        exponential, x, y, p0=[1.0, 0.5], auto_bounds=True  # Infer bounds automatically
-    )
+    x = np.linspace(0, 10, 200)
+    y = 2.5 * np.exp(-0.5 * x)
 
-    # Access inferred bounds
-    print(f"Inferred bounds: {result.bounds_used}")
+    # Infer bounds from the data and p0, then fit inside them
+    popt, pcov = curve_fit(
+        exponential,
+        x,
+        y,
+        p0=[1.0, 0.5],
+        auto_bounds=True,
+        bounds_safety_factor=10.0,  # larger = more conservative bounds
+    )
 
 Explicit Bounds Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Manually infer and inspect bounds before fitting:
+Manually infer and inspect bounds before fitting. ``infer_bounds`` returns a
+``(lower, upper)`` tuple of arrays:
 
 .. code-block:: python
 
     from nlsq.precision.bound_inference import infer_bounds
 
-    # Infer bounds from data
-    bounds = infer_bounds(exponential, x, y, p0=[1.0, 0.5])
+    lower, upper = infer_bounds(x, y, p0=[1.0, 0.5])
 
-    print(f"Lower bounds: {bounds.lower}")
-    print(f"Upper bounds: {bounds.upper}")
-    print(f"Confidence: {bounds.confidence}")
+    print(f"Lower bounds: {lower}")
+    print(f"Upper bounds: {upper}")
 
     # Use inferred bounds
-    result = curve_fit(
-        exponential, x, y, p0=[1.0, 0.5], bounds=(bounds.lower, bounds.upper)
-    )
+    popt, pcov = curve_fit(exponential, x, y, p0=[1.0, 0.5], bounds=(lower, upper))
 
 Merging with User Bounds
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -100,151 +105,93 @@ Combine automatic inference with user-specified constraints:
     from nlsq.precision.bound_inference import infer_bounds, merge_bounds
 
     # Infer bounds
-    auto_bounds = infer_bounds(exponential, x, y, p0=[1.0, 0.5])
+    auto_bounds = infer_bounds(x, y, p0=[1.0, 0.5])
 
     # User knows that parameter 'a' must be between 0 and 10
     user_bounds = ([0, -np.inf], [10, np.inf])
 
-    # Merge: use user bounds where specified, auto-inferred elsewhere
+    # Merge: user bounds take precedence, inferred bounds fill the rest
     final_bounds = merge_bounds(auto_bounds, user_bounds)
 
-    result = curve_fit(exponential, x, y, p0=[1.0, 0.5], bounds=final_bounds)
+    popt, pcov = curve_fit(exponential, x, y, p0=[1.0, 0.5], bounds=final_bounds)
 
-Model-Specific Inference
-~~~~~~~~~~~~~~~~~~~~~~~~
+Controlling the Inference
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For known model types, inference uses domain knowledge:
-
-.. code-block:: python
-
-    from nlsq.core.functions import gaussian
-    from nlsq.precision.bound_inference import infer_bounds
-
-    # For Gaussian, inference knows:
-    # - Amplitude should be ~ max(y)
-    # - Mean should be in range of x
-    # - Std should be positive and ~ range(x)
-    bounds = infer_bounds(gaussian, x, y, p0=None, model_type="gaussian")
-
-    print(f"Gaussian-specific bounds: {bounds}")
-
-Physical Constraints
-~~~~~~~~~~~~~~~~~~~~
-
-Enforce physical constraints (positivity, ranges):
+``BoundsInference`` is the class behind ``infer_bounds``. It exposes the data
+statistics it used:
 
 .. code-block:: python
 
     from nlsq.precision.bound_inference import BoundsInference
 
     inference = BoundsInference(
-        enforce_positivity=["amplitude", "rate"],  # These must be > 0
-        enforce_ranges={"temperature": (0, 1000)},  # Physical limits
-    )
-
-    bounds = inference.infer(
-        model, x, y, p0, param_names=["amplitude", "rate", "temperature"]
-    )
-
-Data-Driven Estimation
-~~~~~~~~~~~~~~~~~~~~~~
-
-Use data statistics for bounds estimation:
-
-.. code-block:: python
-
-    from nlsq.precision.bound_inference import infer_bounds
-
-    # Uses data statistics (min, max, mean, std)
-    bounds = infer_bounds(
-        model,
         x,
         y,
-        p0,
-        use_data_range=True,  # Use min/max of data
-        margin_factor=1.5,  # Add 50% margin
+        p0=[1.0, 0.5],
+        safety_factor=20.0,  # wider bounds around p0 and the data
+        enforce_positivity=True,  # lower bounds >= 0 when p0 > 0
     )
+    lower, upper = inference.infer()
 
-    print(f"Data-driven bounds: {bounds}")
+    print(inference.y_min, inference.y_max, inference.x_range)
 
-Bounds Validation
-~~~~~~~~~~~~~~~~~
+Multi-Start Bounds
+~~~~~~~~~~~~~~~~~~
 
-Validate inferred or user-provided bounds:
+``infer_bounds_for_multistart`` uses a larger default safety factor (20) so that
+global exploration can cover a broader region, and accepts user bounds directly:
 
 .. code-block:: python
 
-    from nlsq.precision.bound_inference import validate_bounds
+    from nlsq.precision.bound_inference import infer_bounds_for_multistart
 
-    # Check if bounds are reasonable
-    validation_result = validate_bounds(
-        bounds,
-        p0,
-        check_coverage=True,  # Ensure p0 is within bounds
-        check_feasibility=True,  # Ensure bounds make sense
+    lower, upper = infer_bounds_for_multistart(
+        x, y, p0=[1.0, 0.5], user_bounds=([0, 0], [10, np.inf])
     )
 
-    if not validation_result.valid:
-        print(f"Warning: {validation_result.warnings}")
+Bounds Quality
+~~~~~~~~~~~~~~
+
+Check how bounds relate to the initial guess:
+
+.. code-block:: python
+
+    from nlsq.precision.bound_inference import analyze_bounds_quality
+
+    analysis = analyze_bounds_quality((lower, upper), p0=[1.0, 0.5])
+
+    print(analysis["is_feasible"])  # is p0 inside the bounds?
+    print(analysis["avg_bound_ratio"])
+    print(analysis["tight_parameters"], analysis["loose_parameters"])
 
 Inference Strategies
 --------------------
 
-The module uses multiple strategies for bounds inference:
+Each parameter's bounds are the union of two heuristics:
+
+Parameter Magnitude Strategy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Based on the initial guess (``safety_factor`` defaults to 10):
+
+- **Range**: between ``p0 / safety_factor`` and ``p0 * safety_factor``
+- **Zero p0**: symmetric around zero, scaled by the range of ``y``
 
 Data Range Strategy
 ~~~~~~~~~~~~~~~~~~~
 
-Estimates bounds from data characteristics:
+Based on position in the parameter vector:
 
-- **Lower**: `min(y) - margin * range(y)`
-- **Upper**: `max(y) + margin * range(y)`
-- **Margin**: Typically 10-20% of data range
+- **First parameter** (amplitude-like): ``[min(y) - range(y), max(y) + range(y)]``
+- **Second parameter** (rate-like): ``[0.1 / range(x), 10 / range(x)]``
+- **Other parameters** (offsets): ``[min(y) - range(y), max(y) + range(y)]``
 
-Model Type Strategy
-~~~~~~~~~~~~~~~~~~~
+Positivity
+~~~~~~~~~~
 
-Uses domain knowledge for common models:
-
-- **Gaussian**: amplitude ~ max(y), mean ~ median(x), std ~ range(x)/6
-- **Exponential**: amplitude ~ max(y), rate > 0, offset ~ min(y)
-- **Sigmoid**: L ~ max(y), x0 ~ median(x), k > 0
-
-Parameter Name Strategy
-~~~~~~~~~~~~~~~~~~~~~~~
-
-Infers from parameter names:
-
-- **"amplitude", "height"**: 0 to 2*max(y)
-- **"rate", "decay"**: Positive only
-- **"temperature"**: Physical limits (0 to reasonable max)
-- **"concentration"**: Non-negative
-
-Initialization Strategy
-~~~~~~~~~~~~~~~~~~~~~~~
-
-Based on initial parameter guess:
-
-- **Lower**: `p0 / factor` (default factor = 10)
-- **Upper**: `p0 * factor`
-- **Sign preservation**: If p0 > 0, lower = 0
-
-Configuration
--------------
-
-Configure bounds inference behavior:
-
-.. code-block:: python
-
-    from nlsq.precision.bound_inference import BoundsInference
-
-    inference = BoundsInference(
-        default_margin=0.2,  # 20% margin around data range
-        enforce_positivity=[],  # Parameter indices for positivity
-        use_model_heuristics=True,  # Use model-specific knowledge
-        confidence_threshold=0.8,  # Minimum confidence for inference
-        fallback_to_unbounded=True,  # Use inf bounds if uncertain
-    )
+With ``enforce_positivity=True`` and a positive ``p0`` entry, the lower bound is
+clipped at 0 (and at ``1e-10`` for the second, rate-like parameter).
 
 See Also
 --------

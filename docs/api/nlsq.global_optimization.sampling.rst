@@ -28,18 +28,28 @@ The module supports the following sampling strategies:
      - Sobol quasi-random sequences - low discrepancy sampling
    * - ``halton``
      - Halton sequences - deterministic quasi-random sampling
-   * - ``random``
-     - Uniform random sampling
 
 Usage Example
 -------------
 
+All samplers generate points in the unit hypercube ``[0, 1]^n_dims``; use
+``scale_samples_to_bounds`` to map them to parameter bounds.
+
 .. code-block:: python
 
-   from nlsq.global_optimization.sampling import create_sampler
+   import jax
+   import jax.numpy as jnp
 
-   # Create a Latin Hypercube sampler
-   sampler = create_sampler("lhs", n_dims=3, bounds=[(0, 10), (0, 5), (0, 1)])
+   from nlsq.global_optimization.sampling import get_sampler, scale_samples_to_bounds
 
-   # Generate 20 starting points
-   points = sampler.sample(n_points=20)
+   # Get a Latin Hypercube sampler by name ('lhs', 'sobol' or 'halton')
+   sampler = get_sampler("lhs")
+
+   # Generate 20 points in the unit cube (reproducible via rng_key)
+   unit_points = sampler(20, 3, rng_key=jax.random.key(0))
+
+   # Scale to the parameter bounds
+   lb = jnp.array([0.0, 0.0, 0.0])
+   ub = jnp.array([10.0, 5.0, 1.0])
+   points = scale_samples_to_bounds(unit_points, lb, ub)
+   print(points.shape)  # (20, 3)

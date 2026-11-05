@@ -20,33 +20,61 @@ Key Features
 - **Memory usage plots** over time
 - **Interactive HTML reports**
 
-Functions
----------
+Classes
+-------
 
-.. autofunction:: nlsq.utils.profiler_visualization.plot_timeline
+.. autoclass:: nlsq.utils.profiler_visualization.ProfilerVisualization
+   :members:
    :noindex:
-.. autofunction:: nlsq.utils.profiler_visualization.generate_flame_graph
+   :show-inheritance:
+
+.. autoclass:: nlsq.utils.profiler_visualization.ProfilingDashboard
+   :members:
    :noindex:
-.. autofunction:: nlsq.utils.profiler_visualization.create_html_report
-   :noindex:
+   :show-inheritance:
 
 Example Usage
 -------------
 
 .. code-block:: python
 
-   from nlsq.utils.profiler import Profiler
-   from nlsq.utils.profiler_visualization import plot_timeline, create_html_report
+   import jax.numpy as jnp
+
+   from nlsq import curve_fit
+   from nlsq.utils.profiler import PerformanceProfiler
+   from nlsq.utils.profiler_visualization import (
+       ProfilerVisualization,
+       ProfilingDashboard,
+   )
+
+
+   def model(x, a, b):
+       return a * jnp.exp(-b * x)
+
+
+   x = jnp.linspace(0, 10, 1000)
+   y = 2.5 * jnp.exp(-0.5 * x)
 
    # Profile operations
-   profiler = Profiler(enable=True)
-   # ... run profiled code ...
+   profiler = PerformanceProfiler()
+   for name in ("run_a", "run_b"):
+       for _ in range(3):
+           with profiler.profile(name):
+               curve_fit(model, x, y, p0=[1.0, 0.1])
 
-   # Visualize results
-   plot_timeline(profiler.get_results())
+   # Plots (matplotlib Figure, or None if matplotlib is unavailable)
+   viz = ProfilerVisualization(profiler)
+   fig = viz.plot_timing_series("run_a")
 
-   # Generate HTML report
-   create_html_report(profiler.get_results(), output_file="profile_report.html")
+   # HTML report and JSON export
+   viz.generate_html_report("profile_report.html")
+   viz.export_json("profile.json")
+
+   # Side-by-side comparison of several profiles
+   dashboard = ProfilingDashboard(profiler)
+   dashboard.add_profile("run_a")
+   dashboard.add_profile("run_b")
+   print(dashboard.generate_comparison_report())
 
 See Also
 --------

@@ -19,12 +19,11 @@ ill-conditioning, singular matrices, and overflow/underflow.
 Key Features
 ------------
 
-- **Automatic problem diagnosis** for ill-conditioned systems
-- **Intelligent fixes** for numerical stability issues
-- **Condition number monitoring** for matrix health
-- **Scale detection** and normalization
-- **Overflow/underflow prevention**
-- **Singular matrix handling**
+- **Pre-flight problem diagnosis** (``check_problem_stability``) for ill-conditioned data, parameter scale mismatch and collinearity
+- **Condition number estimation** for the independent variable data
+- **Optional data rescaling** (``apply_automatic_fixes``) and NaN/Inf replacement in the data arrays
+- **Safe math operations** and Jacobian checks inside ``NumericalStabilityGuard``
+- **Fallback strategies** in ``nlsq.stability.fallback`` (see :doc:`nlsq.fallback`)
 
 Classes
 -------
@@ -40,116 +39,124 @@ Functions
 
 .. autofunction:: check_problem_stability
 
+.. autofunction:: apply_automatic_fixes
+
+.. autofunction:: estimate_condition_number
+
+.. autofunction:: detect_parameter_scale_mismatch
+
+.. autofunction:: detect_collinearity
+
 Usage Examples
 --------------
 
 Automatic Stability Checking
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Use the stability guard to automatically detect and fix issues:
+``curve_fit`` accepts ``stability="auto"`` (check and fix what is safe to fix),
+``stability="check"`` (warn only) or ``stability=False`` (default, no checks). Ill-conditioned
+data, large data ranges and parameter scale mismatches are reported as warnings but not
+rescaled, because rescaling cannot be inverted soundly for an arbitrary model.
+Use ``x_scale="jac"`` for solver-internal scaling. Non-finite data is controlled by
+``nan_policy`` and ``check_finite``, not by ``stability``.
 
 .. code-block:: python
 
-    from nlsq import curve_fit
     import jax.numpy as jnp
+    import numpy as np
+
+    from nlsq import curve_fit
 
 
     def model(x, a, b):
         return a * jnp.exp(-b * x)
 
 
-    # Enable automatic stability checking
-    result = curve_fit(
-        model, x, y, p0=[1.0, 0.5], stability="auto"  # Automatic detection and fixes
-    )
+    x = np.linspace(0, 10, 200)
+    y = 2.5 * np.exp(-0.5 * x)
+
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], stability="auto")
 
 Manual Stability Analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Manually check problem stability before fitting:
+Manually check problem stability before fitting. The report is a ``dict``:
 
 .. code-block:: python
 
     from nlsq.stability import check_problem_stability
 
-    # Analyze problem stability
-    report = check_problem_stability(model, x, y, p0=[1.0, 0.5])
+    report = check_problem_stability(x, y, p0=[1.0, 0.5])
 
-    print(f"Condition number: {report.condition_number:.2e}")
-    print(f"Is ill-conditioned: {report.is_ill_conditioned}")
-    print(f"Recommended fixes: {report.recommendations}")
+    print(f"Severity: {report['severity']}")  # 'ok', 'warning' or 'critical'
+    print(f"Condition number: {report['condition_number']:.2e}")
+    print(f"Parameter scale ratio: {report['parameter_scale_ratio']}")
+    print(f"Has collinearity: {report['has_collinearity']}")
 
-    if report.is_ill_conditioned:
-        # Apply recommended fixes
-        result = curve_fit(
-            model,
-            x,
-            y,
-            p0=report.rescaled_p0,
-            x_scale=report.x_scale,
-            bounds=report.adjusted_bounds,
-        )
+    for issue_type, message, severity in report["issues"]:
+        print(f"{severity}: {message}")
+    print(f"Recommendations: {report['recommendations']}")
 
-Numerical Issue Fixes
-~~~~~~~~~~~~~~~~~~~~~
+Applying Fixes
+~~~~~~~~~~~~~~
 
-Apply specific fixes for numerical problems:
+``apply_automatic_fixes`` rescales the data when the report calls for it and
+replaces non-finite values. The returned ``fix_info`` records the transformation so
+that it can be undone:
 
 .. code-block:: python
 
-    from nlsq.stability import fix_numerical_issues
+    from nlsq.stability import apply_automatic_fixes
 
-    # Detect and fix issues automatically
-    fixed_x, fixed_y, fixed_p0 = fix_numerical_issues(
-        x, y, p0, fix_overflow=True, fix_scaling=True, fix_singularities=True
+    x_fixed, y_fixed, p0_fixed, fix_info = apply_automatic_fixes(
+        x, y, p0=[1.0, 0.5], stability_report=report
     )
 
-    # Use fixed inputs
-    result = curve_fit(model, fixed_x, fixed_y, p0=fixed_p0)
+    print(fix_info["applied_fixes"])
+    print(fix_info["x_scale"], fix_info["y_scale"])
+
+    # Fits on rescaled data return parameters in the rescaled coordinate system
+    popt, pcov = curve_fit(model, x_fixed, y_fixed, p0=p0_fixed)
+
+Set ``rescale_data=False`` to keep physical units and ``replace_nonfinite=False`` to
+leave NaN/Inf handling to ``curve_fit``.
 
 Condition Number Monitoring
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Monitor matrix condition during optimization:
+Estimate the condition of the data, and check a Jacobian with the guard:
 
 .. code-block:: python
 
-    from nlsq.stability import compute_condition_number, NumericalStabilityGuard
+    import jax
+    import jax.numpy as jnp
 
-    # Create stability guard
-    guard = NumericalStabilityGuard(
-        max_condition_number=1e10, warn_threshold=1e8, auto_fix=True
-    )
+    from nlsq.stability import NumericalStabilityGuard, estimate_condition_number
 
-    # Use guard during fitting
-    result = curve_fit(model, x, y, p0=[1.0, 0.5], callback=guard)
+    cond = estimate_condition_number(x)
+    print(f"Condition number of [1, x, x^2]: {cond:.2e}")
 
-    # Check stability report
-    if guard.stability_report:
-        print(f"Max condition number: {guard.stability_report.max_condition:.2e}")
-        print(f"Applied fixes: {guard.stability_report.applied_fixes}")
+    guard = NumericalStabilityGuard()
+    J = jax.jacfwd(lambda p: model(x, *p))(jnp.array([1.0, 0.5]))
+    J_fixed, issues = guard.check_and_fix_jacobian(J)
+    print(issues["condition_number"])
 
-Scaling Detection
-~~~~~~~~~~~~~~~~~
-
-Detect and fix scaling issues:
+Scale and Collinearity Detection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    from nlsq.stability import detect_scaling_issues
+    from nlsq.stability import detect_collinearity, detect_parameter_scale_mismatch
 
-    # Analyze scaling
-    scaling_report = detect_scaling_issues(x, y, p0)
+    # Parameters spanning many orders of magnitude
+    has_mismatch, ratio = detect_parameter_scale_mismatch(np.array([1e-3, 1e4, 1.0]))
+    print(f"Mismatch: {has_mismatch}, ratio: {ratio:.2e}")
 
-    if scaling_report.needs_rescaling:
-        print(f"X scale factor: {scaling_report.x_scale:.2e}")
-        print(f"Y scale factor: {scaling_report.y_scale:.2e}")
-
-        # Apply scaling
-        x_scaled = x * scaling_report.x_scale
-        y_scaled = y * scaling_report.y_scale
-
-        result = curve_fit(model, x_scaled, y_scaled, p0=p0)
+    # Highly correlated independent variables (short axis = variables)
+    x1 = np.linspace(0, 10, 100)
+    x2 = 2 * x1 + 0.01 * np.random.default_rng(0).normal(size=100)
+    has_coll, pairs = detect_collinearity(np.vstack([x1, x2]))
+    print(f"Collinear: {has_coll}, pairs: {pairs}")
 
 Common Issues and Solutions
 ---------------------------
@@ -160,6 +167,7 @@ Ill-Conditioned Matrices
 **Problem**: Jacobian matrix has very large condition number (>1e10)
 
 **Symptoms**:
+
 - Unreliable parameter estimates
 - Large parameter uncertainties
 - Optimization fails to converge
@@ -168,14 +176,11 @@ Ill-Conditioned Matrices
 
 .. code-block:: python
 
-    # Let NLSQ handle it automatically
-    result = curve_fit(model, x, y, p0=p0, stability="auto")
+    # Warn about conditioning problems
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], stability="check")
 
-    # Or manually rescale
-    from nlsq.stability import check_problem_stability
-
-    report = check_problem_stability(model, x, y, p0)
-    result = curve_fit(model, x, y, p0=report.rescaled_p0)
+    # Solver-internal scaling (no change of coordinates for the caller)
+    popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.5], x_scale="jac")
 
 Overflow/Underflow
 ~~~~~~~~~~~~~~~~~~
@@ -183,21 +188,24 @@ Overflow/Underflow
 **Problem**: Numerical overflow or underflow during evaluation
 
 **Symptoms**:
+
 - NaN or Inf values in results
 - Optimization fails with numerical errors
 
-**Solution**:
+**Solution**: Use the guard's safe operations inside the model, or handle
+non-finite data before fitting:
 
 .. code-block:: python
 
-    from nlsq.stability import fix_numerical_issues
+    guard = NumericalStabilityGuard()
 
-    # Automatically fix overflow/underflow
-    fixed_x, fixed_y, fixed_p0 = fix_numerical_issues(
-        x, y, p0, fix_overflow=True, log_transform_if_needed=True
-    )
+    safe = guard.safe_exp(jnp.array([1.0, 1000.0]))  # no overflow to inf
+    print(safe)
 
-    result = curve_fit(model, fixed_x, fixed_y, p0=fixed_p0)
+    # Drop non-finite data points instead of failing
+    y_bad = y.copy()
+    y_bad[5] = np.nan
+    popt, pcov = curve_fit(model, x, y_bad, p0=[1.0, 0.5], nan_policy="omit")
 
 Singular Matrices
 ~~~~~~~~~~~~~~~~~
@@ -205,43 +213,27 @@ Singular Matrices
 **Problem**: Jacobian matrix is singular or near-singular
 
 **Symptoms**:
+
 - LinAlgError during optimization
 - Infinite parameter uncertainties
 
-**Solution**:
-
-.. code-block:: python
-
-    # Use automatic regularization
-    result = curve_fit(
-        model,
-        x,
-        y,
-        p0=p0,
-        stability="auto",
-        regularization=1e-8,  # Add small regularization
-    )
+**Solution**: Use ``NumericalStabilityGuard.check_and_fix_jacobian`` (which
+regularizes ill-conditioned Jacobians) or ``OptimizationRecovery`` (see
+:doc:`nlsq.recovery`), which increases regularization across retries.
 
 Configuration
 -------------
 
-Configure stability checking behavior:
+``NumericalStabilityGuard`` takes a single option; its thresholds are attributes:
 
 .. code-block:: python
 
-    from nlsq.stability import StabilityConfig
+    guard = NumericalStabilityGuard(max_jacobian_elements_for_svd=1_000_000)
 
-    config = StabilityConfig(
-        max_condition_number=1e10,
-        warn_threshold=1e8,
-        auto_fix=True,
-        fix_overflow=True,
-        fix_scaling=True,
-        fix_singularities=True,
-        verbose=True,
-    )
+    print(guard.condition_threshold)  # 1e12: above this a matrix is ill-conditioned
+    print(guard.regularization_factor)  # 1e-10: default regularization
 
-    result = curve_fit(model, x, y, p0=p0, stability_config=config)
+For ``curve_fit``, the only switch is the ``stability`` argument described above.
 
 See Also
 --------

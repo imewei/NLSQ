@@ -22,66 +22,74 @@ Performance Targets (Task Group 2)
 Classes
 -------
 
-.. autoclass:: nlsq.utils.profiling.TransferProfiler
+.. autoclass:: nlsq.utils.profiling.PerformanceMetrics
    :members:
    :noindex:
    :undoc-members:
    :show-inheritance:
+
+Functions
+---------
+
+.. autofunction:: nlsq.utils.profiling.profile_optimization
+   :noindex:
+.. autofunction:: nlsq.utils.profiling.profile_transfers_runtime
+   :noindex:
+.. autofunction:: nlsq.utils.profiling.analyze_source_transfers
+   :noindex:
+.. autofunction:: nlsq.utils.profiling.compare_transfer_reduction
+   :noindex:
 
 Example Usage
 -------------
 
 .. code-block:: python
 
-   from nlsq.utils.profiling import TransferProfiler
+   import jax.numpy as jnp
 
-   # Create profiler (requires JAX profiler)
-   profiler = TransferProfiler(enable=True)
+   from nlsq import curve_fit
+   from nlsq.utils.profiling import (
+       analyze_source_transfers,
+       profile_optimization,
+       profile_transfers_runtime,
+   )
 
-   # Profile TRF iteration
-   with profiler.profile_iteration(iteration=0):
-       # TRF solver iteration code
-       pass
 
-   # Get diagnostics
-   diagnostics = profiler.get_diagnostics()
-   print(f"Transfer bytes: {diagnostics['transfer_bytes']}")
-   print(f"Transfer count: {diagnostics['transfer_count']}")
-   print(f"Avg per iteration: {diagnostics['avg_bytes_per_iter']:.2f} bytes")
+   def model(x, a, b):
+       return a * jnp.exp(-b * x)
 
-Chrome Trace Visualization
----------------------------
 
-The profiler can generate Chrome trace files for visualization:
+   x = jnp.linspace(0, 10, 1000)
+   y = 2.5 * jnp.exp(-0.5 * x)
 
-.. code-block:: python
+   # Wall-clock timing of an optimization
+   with profile_optimization() as metrics:
+       popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.1])
+   print(f"Total time: {metrics.total_time_sec:.3f} s")
 
-   # Profile with trace output
-   profiler = TransferProfiler(enable=True)
+   # Static analysis of transfer-inducing patterns in source code
+   stats = analyze_source_transfers("y = np.asarray(x)\nz = y.block_until_ready()")
+   print(stats["total_potential_transfers"])
 
-   with profiler.profile_iteration(iteration=0):
-       # Code to profile
-       pass
-
-   # View at chrome://tracing
-   profiler.save_trace("trace.json")
+   # Runtime transfer profiling with the JAX profiler (most useful on GPU)
+   (popt, pcov), transfer_stats = profile_transfers_runtime(
+       curve_fit, model, x, y, p0=[1.0, 0.1]
+   )
+   print(transfer_stats["transfer_count"], transfer_stats["transfer_bytes"])
 
 Requirements
 ------------
 
-The profiler requires the JAX profiler optional dependency:
-
-.. code-block:: bash
-
-   pip install jax[profiler]
+``profile_transfers_runtime`` uses the JAX profiler; the traces it writes
+(``trace_dir``, default: system temp directory) can be inspected in TensorBoard.
+``transfer_stats["profiler_available"]`` reports whether the profiler was usable.
 
 Notes
 -----
 
-- Profiling overhead is minimal (~1-2% when enabled)
-- Transfer bytes are estimated based on array sizes
-- Chrome traces provide detailed timeline visualization
-- Automatically disabled if JAX profiler not available
+- ``analyze_source_transfers`` is static: it counts ``np.array``, ``np.asarray``
+  and ``.block_until_ready`` patterns in source text
+- On CPU, host-device transfers are minimal; runtime profiling is most useful on GPU
 
 See Also
 --------

@@ -31,7 +31,7 @@ Performance Benefits
 Classes
 -------
 
-.. autoclass:: nlsq.sparse_jacobian.SparseJacobianComputer
+.. autoclass:: nlsq.core.sparse_jacobian.SparseJacobianComputer
    :members:
    :noindex:
    :undoc-members:
@@ -42,7 +42,7 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.sparse_jacobian import SparseJacobianComputer
+   from nlsq.core.sparse_jacobian import SparseJacobianComputer
    import jax.numpy as jnp
 
    # Create sparse Jacobian computer
