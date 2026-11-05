@@ -487,15 +487,98 @@ class ExportPage(QWidget):
         x_cols = xdata[None, :] if xdata.ndim == 1 else xdata
         x_head = ["x"] if xdata.ndim == 1 else [f"x{i}" for i in range(len(x_cols))]
 
-        lines = [",".join([*x_head, "y", "y_fit", "residuals"])]
+        # sigma (when present) is the last column so the fit can be reproduced
+        sigma = None if state.sigma is None else np.asarray(state.sigma)
+        sig_head = [] if sigma is None else ["sigma"]
+        sig_col = [] if sigma is None else [sigma]
+
+        y = np.asarray(state.ydata)
         y_fit = self._compute_y_fit()
-        if y_fit is not None:
-            for *xs, y, yf in zip(*x_cols, state.ydata, y_fit, strict=False):
-                lines.append(",".join(map(str, [*xs, y, yf, y - yf])))
-        else:
-            for *xs, y in zip(*x_cols, state.ydata, strict=False):
-                lines.append(",".join(map(str, [*xs, y])) + ",,")
+        fit_cols = (
+            [y_fit, y - np.asarray(y_fit)] if y_fit is not None else [[""] * len(y)] * 2
+        )
+        lines = [",".join([*x_head, "y", "y_fit", "residuals", *sig_head])]
+        lines.extend(
+            ",".join(map(str, row))
+            for row in zip(*x_cols, y, *fit_cols, *sig_col, strict=False)
+        )
         return lines
+
+    def _script_data_lines(self) -> list[str]:
+        """Data section of the reproducibility script."""
+        state = self._app_state.state
+        lines: list[str] = []
+        has_sigma = state.sigma is not None
+        if state.xdata is not None and state.ydata is not None:
+            # Use repr for small arrays, file reference for large
+            n = n_points(state.xdata)
+            if n <= 20:
+                # repr(tolist()) keeps full float64 precision, unlike array2string
+                x_str = repr(np.asarray(state.xdata).tolist())
+                y_str = repr(np.asarray(state.ydata).tolist())
+                lines.extend(
+                    [
+                        "# Data",
+                        f"xdata = np.array({x_str})",
+                        f"ydata = np.array({y_str})",
+                    ],
+                )
+                if has_sigma:
+                    s_str = repr(np.asarray(state.sigma).tolist())
+                    lines.append(f"sigma = np.array({s_str})")
+                lines.append("")
+            else:
+                # data.csv layout: x column(s), y, y_fit, residuals, [sigma]
+                k = 1 if np.ndim(state.xdata) == 1 else len(state.xdata)
+                x_cols = "0" if k == 1 else str(list(range(k)))
+                x_t = "" if k == 1 else ".T"
+                lines.extend(
+                    [
+                        "# Data (load from file)",
+                        f"# xdata = np.loadtxt('data.csv', delimiter=',', skiprows=1, usecols={x_cols}){x_t}",
+                        f"# ydata = np.loadtxt('data.csv', delimiter=',', skiprows=1, usecols={k})",
+                    ],
+                )
+                if has_sigma:
+                    lines.append(
+                        f"# sigma = np.loadtxt('data.csv', delimiter=',', skiprows=1, usecols={k + 3})"
+                    )
+                lines.extend(
+                    [
+                        f"xdata = np.linspace(0, 10, {n})  # Replace with your data",
+                        f"ydata = np.zeros({n})  # Replace with your data",
+                    ],
+                )
+                if has_sigma:
+                    lines.append(f"sigma = np.ones({n})  # Replace with your sigma")
+                lines.append("")
+        return lines
+
+    def _script_fit_kwargs(self, workflow: str) -> list[str]:
+        """fit() keyword lines mirroring the settings the GUI fit used."""
+        state = self._app_state.state
+        # Mirror the settings the GUI fit used so a rerun reproduces its result
+        extra = [
+            f"    gtol={state.gtol!r},",
+            f"    ftol={state.ftol!r},",
+            f"    xtol={state.xtol!r},",
+            f"    loss={state.loss!r},",
+        ]
+        if state.method and state.method != "auto":
+            extra.append(f"    method={state.method!r},")
+        extra.append(
+            f"    max_nfev={min(state.max_function_evals, state.max_iterations)},"
+        )
+        if workflow == "auto_global" and state.n_starts > 0:
+            extra += [
+                f"    n_starts={state.n_starts},",
+                f"    sampler={state.sampler!r},",
+                f"    center_on_p0={state.center_on_p0!r},",
+                f"    scale_factor={state.scale_factor!r},",
+            ]
+        if state.sigma is not None:
+            extra.insert(0, "    sigma=sigma,")
+        return extra
 
     def generate_python_code(self) -> str:
         """Generate Python code for reproducibility.
@@ -566,33 +649,7 @@ class ExportPage(QWidget):
                 ],
             )
 
-        # Add data
-        if state.xdata is not None and state.ydata is not None:
-            # Use repr for small arrays, file reference for large
-            n = n_points(state.xdata)
-            if n <= 20:
-                # repr(tolist()) keeps full float64 precision, unlike array2string
-                x_str = repr(np.asarray(state.xdata).tolist())
-                y_str = repr(np.asarray(state.ydata).tolist())
-                lines.extend(
-                    [
-                        "# Data",
-                        f"xdata = np.array({x_str})",
-                        f"ydata = np.array({y_str})",
-                        "",
-                    ],
-                )
-            else:
-                lines.extend(
-                    [
-                        "# Data (load from file)",
-                        "# xdata = np.loadtxt('data.csv', delimiter=',', usecols=0)",
-                        "# ydata = np.loadtxt('data.csv', delimiter=',', usecols=1)",
-                        f"xdata = np.linspace(0, 10, {n})  # Replace with your data",
-                        f"ydata = np.zeros({n})  # Replace with your data",
-                        "",
-                    ],
-                )
+        lines.extend(self._script_data_lines())
 
         # Determine workflow (3-workflow system v0.6.3)
         workflow = getattr(state, "workflow", "auto") or "auto"
@@ -629,6 +686,8 @@ class ExportPage(QWidget):
 
         lines.append(f'workflow = "{workflow}"  # Options: auto, auto_global, hpc')
 
+        extra = self._script_fit_kwargs(workflow)
+
         lines.extend(
             [
                 "",
@@ -640,6 +699,7 @@ class ExportPage(QWidget):
                 "    p0=p0,",
                 "    bounds=bounds,",
                 "    workflow=workflow,",
+                *extra,
                 ")",
                 "",
                 "# Extract parameters and covariance",

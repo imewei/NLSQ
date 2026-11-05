@@ -623,8 +623,8 @@ def validate_residual_weighting_config(
     if len(weights_arr) == 0:
         raise ConfigValidationError("residual_weights must not be empty")
 
-    if np.any(np.isnan(weights_arr)) or np.any(weights_arr <= 0):
-        raise ConfigValidationError("residual_weights must all be positive")
+    if not np.all(np.isfinite(weights_arr)) or np.any(weights_arr <= 0):
+        raise ConfigValidationError("residual_weights must all be positive and finite")
 
 
 def validate_multistart_config(

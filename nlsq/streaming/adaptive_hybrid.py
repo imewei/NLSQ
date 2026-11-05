@@ -1159,10 +1159,12 @@ class AdaptiveHybridStreamingOptimizer:
         chunk_size = self.config.chunk_size
         n_points = len(x_data)
 
+        shuffle_rng = np.random.default_rng(42)  # local: don't touch global RNG
+
         def data_batch_generator():
             # Shuffle indices for each epoch
             indices = np.arange(n_points)
-            np.random.shuffle(indices)
+            shuffle_rng.shuffle(indices)
 
             # Yield chunks
             for i in range(0, n_points, chunk_size):
@@ -1173,7 +1175,7 @@ class AdaptiveHybridStreamingOptimizer:
             for _ in range(
                 self.config.elimination_rounds * self.config.batches_per_round,
             ):
-                np.random.shuffle(indices)
+                shuffle_rng.shuffle(indices)
                 for i in range(0, n_points, chunk_size):
                     batch_idx = indices[i : i + chunk_size]
                     yield x_data[batch_idx], y_data[batch_idx]

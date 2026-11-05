@@ -128,10 +128,10 @@ def test_hybrid_p0_none_and_bounds_validation_unchanged(reached):
         _run(x, y, p0=P0, bounds=(0, 5))
     np.testing.assert_array_equal(reached["kwargs"]["bounds"][0], [0.0, 0.0])
 
-    # Wrong-length bounds/p0 keep raising the broadcast ValueError.
-    with pytest.raises(ValueError, match="could not be broadcast"):
+    # Wrong-length bounds/p0 raise a clear ValueError naming `bounds`.
+    with pytest.raises(ValueError, match="`bounds` must have length"):
         _run(x, y, p0=P0, bounds=([0, 0, 0], [5, 5, 5]))
-    with pytest.raises(ValueError, match="could not be broadcast"):
+    with pytest.raises(ValueError, match="`bounds` must have length"):
         _run(x, y, p0=[1.0, 1.0, 1.0], bounds=([0, 0], [5, 5]))
 
 

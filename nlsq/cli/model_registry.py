@@ -36,9 +36,9 @@ Example Usage
 """
 
 import difflib
-import importlib.util
 import inspect
 import logging
+import types
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -361,6 +361,7 @@ class ModelRegistry:
         path: Path,
         function_name: str,
         is_trusted: bool,
+        source: bytes | None = None,
     ) -> None:
         """Run AST-based security validation on the model file.
 
@@ -372,13 +373,15 @@ class ModelRegistry:
             Function name (for error messages).
         is_trusted : bool
             Whether to skip validation.
+        source : bytes, optional
+            Exact file bytes to validate (the same bytes that get executed).
 
         Raises
         ------
         ModelError
             If security validation fails and not trusted.
         """
-        validation_result = validate_model(path, trusted=is_trusted)
+        validation_result = validate_model(path, trusted=is_trusted, source=source)
 
         audit_logger = get_audit_logger()
         audit_logger.log_load_attempt(path, validation_result)
@@ -414,6 +417,7 @@ class ModelRegistry:
         self,
         path: Path,
         function_name: str,
+        source: bytes,
     ) -> Any:
         """Load a Python module from a file path.
 
@@ -423,6 +427,10 @@ class ModelRegistry:
             Path to the Python file.
         function_name : str
             Function name (for error messages).
+        source : bytes
+            Exact file bytes that were security-validated. These are compiled
+            directly (not re-read from disk, and no ``__pycache__`` .pyc is
+            consulted), so validated code == executed code.
 
         Returns
         -------
@@ -440,19 +448,12 @@ class ModelRegistry:
             # custom models loaded in the same process (e.g. sys.modules
             # keyed by name, coverage/tracer bookkeeping keyed by module).
             module_name = f"nlsq_custom_model_{uuid.uuid4().hex}"
-            spec = importlib.util.spec_from_file_location(module_name, path)
-            if spec is None or spec.loader is None:
-                raise ModelError(
-                    f"Failed to load custom model file: {path}",
-                    model_name=function_name,
-                    model_type="custom",
-                    context={"path": str(path)},
-                    suggestion="Ensure the file is a valid Python module",
-                )
-
-            module = importlib.util.module_from_spec(spec)
+            module = types.ModuleType(module_name)
+            module.__file__ = str(path)
+            code = compile(source, str(path), "exec")
             with resource_limits():
-                spec.loader.exec_module(module)
+                # Intentional: runs the exact bytes validate_model() approved.
+                exec(code, module.__dict__)  # nosec B102
             return module
         except SyntaxError as e:
             raise ModelError(
@@ -619,11 +620,14 @@ class ModelRegistry:
         # Step 3: Security validation - path traversal
         self._check_path_security(path, function_name, is_trusted)
 
+        # Read once: the validated bytes are the executed bytes.
+        source = path.read_bytes()
+
         # Step 4: Security validation - AST-based
-        self._validate_model_security(path, function_name, is_trusted)
+        self._validate_model_security(path, function_name, is_trusted, source)
 
         # Step 5: Load module dynamically
-        module = self._load_module_from_path(path, function_name)
+        module = self._load_module_from_path(path, function_name, source)
 
         # Step 6: Resolve and validate function
         model = self._resolve_function_from_module(module, function_name, path)

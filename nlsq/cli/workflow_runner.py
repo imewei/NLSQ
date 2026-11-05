@@ -287,6 +287,12 @@ class WorkflowRunner:
                 bounds = (np.asarray(lower), np.asarray(upper))
             elif isinstance(bounds_config, (list, tuple)) and len(bounds_config) == 2:
                 bounds = (np.asarray(bounds_config[0]), np.asarray(bounds_config[1]))
+            else:
+                raise ConfigError(
+                    "fitting.bounds must be {lower, upper} or [lower, upper], "
+                    f"got {bounds_config!r}",
+                    suggestion="Use `bounds: {lower: [...], upper: [...]}`.",
+                )
         elif hasattr(model, "bounds"):
             # Use model's default bounds if no bounds specified
             try:

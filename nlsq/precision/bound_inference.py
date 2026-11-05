@@ -360,6 +360,15 @@ def infer_bounds_for_multistart(
     lower = np.where(np.isfinite(lower), lower, inferred_lower)
     upper = np.where(np.isfinite(upper), upper, inferred_upper)
 
+    # A finite user side beyond the inferred opposite side leaves lower >= upper
+    # (e.g. user lb=100 vs inferred ub=20): widen the filled-in side instead.
+    lo_m, hi_m = np.asarray(merged_bounds[0]), np.asarray(merged_bounds[1])
+    span = np.maximum(np.abs(np.where(np.isfinite(lo_m), lo_m, hi_m)), 1.0)
+    span = np.where(np.isfinite(span), span, 1.0) * safety_factor
+    bad = lower >= upper
+    upper = np.where(bad & np.isfinite(lo_m) & ~np.isfinite(hi_m), lo_m + span, upper)
+    lower = np.where(bad & ~np.isfinite(lo_m) & np.isfinite(hi_m), hi_m - span, lower)
+
     # Final check: if bounds are still not finite, use fallback
     # Vectorized fallback for lower bounds
     if not np.all(np.isfinite(lower)):
@@ -459,6 +468,12 @@ def merge_bounds(
     # Merge bounds: user takes precedence, but use inferred for inf values
     lower_merged = np.where(np.isfinite(lower_user), lower_user, lower_inferred)
     upper_merged = np.where(np.isfinite(upper_user), upper_user, upper_inferred)
+
+    # A user side can sit past the inferred opposite side (e.g. user lb above
+    # the inferred ub); then keep the user's bounds as given.
+    crossed = lower_merged >= upper_merged
+    lower_merged = np.where(crossed, lower_user, lower_merged)
+    upper_merged = np.where(crossed, upper_user, upper_merged)
 
     return lower_merged, upper_merged
 

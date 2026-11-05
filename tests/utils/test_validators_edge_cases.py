@@ -206,13 +206,13 @@ class TestValidateDataShapes:
         """Test with fewer points than parameters."""
         ydata = np.array([1.0, 2.0])
         errors, _warnings = self.validator._validate_data_shapes(2, ydata, 5)
-        assert any("more data points" in e for e in errors)
+        assert any("as many data points" in e for e in errors)
 
     def test_boundary_case_equal_points_params(self):
-        """Test boundary case: points == params."""
+        """Test boundary case: points == params is accepted (matches default path)."""
         ydata = np.array([1.0, 2.0, 3.0])
         errors, _warnings = self.validator._validate_data_shapes(3, ydata, 3)
-        assert any("more data points" in e for e in errors)
+        assert not any("data points" in e for e in errors)
 
 
 class TestValidateFiniteValues:

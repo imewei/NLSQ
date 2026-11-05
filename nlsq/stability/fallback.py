@@ -131,7 +131,12 @@ class AlternativeMethodStrategy(FallbackStrategy):
 class PerturbInitialGuessStrategy(FallbackStrategy):
     """Perturb initial guess to escape local minima."""
 
-    def __init__(self, perturbation_scale: float = 0.1, max_perturbations: int = 3):
+    def __init__(
+        self,
+        perturbation_scale: float = 0.1,
+        max_perturbations: int = 3,
+        seed: int = 0,
+    ):
         super().__init__(
             name="perturb_p0",
             description=f"Perturb initial guess by {perturbation_scale * 100:.0f}%",
@@ -140,6 +145,7 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
         self.perturbation_scale = perturbation_scale
         self.max_perturbations = max_perturbations
         self.perturbation_count = 0
+        self.seed = seed
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Add random perturbation to p0."""
@@ -148,7 +154,9 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
 
         if self.perturbation_count < self.max_perturbations:
             # Add random noise scaled by parameter magnitude (additive for p0=0)
-            noise = np.random.randn(*p0.shape) * self.perturbation_scale
+            # Deterministic per (seed, attempt): no global RNG, no stored generator.
+            rng = np.random.default_rng((self.seed, self.perturbation_count))
+            noise = rng.standard_normal(p0.shape) * self.perturbation_scale
             perturbed_p0 = p0 + noise * np.maximum(np.abs(p0), 1e-3)
 
             # Ensure p0 stays within bounds if provided

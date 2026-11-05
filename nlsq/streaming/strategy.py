@@ -76,6 +76,8 @@ class _HybridStrategy:
 
     def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
         x = native["x"]
+        if not native.get("success", True):
+            raise RuntimeError(f"hybrid_streaming fit failed: {native.get('message')}")
         return x, native.get("pcov", np.full((len(x), len(x)), np.inf))
 
 

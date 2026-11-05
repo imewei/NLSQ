@@ -27,6 +27,7 @@ create_fit_config_from_state
 """
 
 import contextlib
+import logging
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -36,6 +37,8 @@ from nlsq.callbacks import StopOptimization
 from nlsq.core.minpack import fit
 from nlsq.gui_qt.session_state import n_points
 from nlsq.result import CurveFitResult
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Configuration and Protocol Definitions
@@ -269,6 +272,27 @@ class _CallbackWrapper:
         return self._aborted
 
 
+def _resolve_workflow(
+    workflow: str | None, bounds: tuple[np.ndarray, np.ndarray] | None, notes: list[str]
+) -> str:
+    """Pick the workflow; auto_global strictly requires finite bounds.
+
+    Without any finite bound (common for polynomials) it degrades to the local
+    'auto' workflow, and says so in ``notes`` instead of doing it silently.
+    """
+    workflow = workflow or "auto"
+    if workflow == "auto_global" and not (
+        bounds is not None
+        and (np.any(np.isfinite(bounds[0])) or np.any(np.isfinite(bounds[1])))
+    ):
+        notes.append(
+            "global multi-start search needs finite bounds; ran a local "
+            "fit instead (set parameter bounds to enable it)"
+        )
+        return "auto"
+    return workflow
+
+
 def execute_fit(
     xdata: np.ndarray,
     ydata: np.ndarray,
@@ -341,7 +365,10 @@ def execute_fit(
         "gtol": config.gtol,
         "ftol": config.ftol,
         "xtol": config.xtol,
-        "max_nfev": config.max_function_evals,
+        # Every iteration costs >= 1 function evaluation, so capping nfev at
+        # max_iterations bounds the iteration count (the solver has no
+        # separate iteration limit).
+        "max_nfev": min(config.max_function_evals, config.max_iterations),
         "loss": config.loss,
         "absolute_sigma": config.absolute_sigma,
     }
@@ -350,25 +377,8 @@ def execute_fit(
     if callback_wrapper is not None:
         fit_kwargs["callback"] = callback_wrapper
 
-    # Determine workflow (3-workflow system v0.6.3)
-    workflow = config.workflow
-    if workflow is None:
-        workflow = "auto"
-
-    # Fallback logic: auto_global strictly requires bounds.
-    # If using auto_global but no finite bounds are provided (common for polynomials),
-    # degrade to 'auto' (local optimization) to prevent crash.
-    if workflow == "auto_global":
-        is_bounded = False
-        if bounds is not None:
-            # bounds are (lower, upper) arrays at this point
-            b_lower, b_upper = bounds
-            # Check if any bound is finite
-            if np.any(np.isfinite(b_lower)) or np.any(np.isfinite(b_upper)):
-                is_bounded = True
-
-        if not is_bounded:
-            workflow = "auto"
+    notes: list[str] = []
+    workflow = _resolve_workflow(config.workflow, bounds, notes)
 
     # Determine goal
     goal = config.goal
@@ -376,6 +386,13 @@ def execute_fit(
     # For auto_global workflow, pass n_starts parameter
     if workflow == "auto_global" and config.n_starts > 0:
         fit_kwargs["n_starts"] = config.n_starts
+        fit_kwargs["sampler"] = config.sampler
+        fit_kwargs["center_on_p0"] = config.center_on_p0
+        fit_kwargs["scale_factor"] = config.scale_factor
+
+    # fit()'s workflow API has no chunking control (memory-based selection).
+    if config.chunk_size != FitConfig().chunk_size:
+        notes.append("chunk size is not configurable here and was ignored")
 
     # Add method if not auto-selecting
     if config.method and config.method != "auto":
@@ -397,6 +414,13 @@ def execute_fit(
     except Exception as e:
         # Wrap exception with more context
         raise RuntimeError(f"Fitting failed: {e}") from e
+
+    if notes:
+        for note in notes:
+            logger.warning("GUI fit setting not honoured: %s", note)
+        if hasattr(result, "__setitem__"):
+            # Shown on the Results page status line
+            result["gui_notes"] = notes
 
     # Check for abort
     if callback_wrapper is not None and callback_wrapper.aborted:

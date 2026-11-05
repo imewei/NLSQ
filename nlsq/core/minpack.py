@@ -2072,19 +2072,20 @@ def _apply_stability_checks(
             # (and curve_fit) ultimately returns would be silently wrong --
             # in the wrong units for a rescaled fit, or started from a
             # nonsensical point for a "normalized" p0, with no way to invert
-            # either for an arbitrary nonlinear model. Only the NaN/Inf
-            # replacement (always safe -- it never changes the coordinate
-            # system) is applied here, forcing rescale_data=False regardless
-            # of the caller's rescale_data argument.
+            # either for an arbitrary nonlinear model. NaN/Inf imputation is
+            # also disabled (replace_nonfinite=False): it would silently alter
+            # the data before nan_policy/check_finite can raise or omit.
+            # rescale_data=False is forced regardless of the caller's argument.
             xdata_fixed, ydata_fixed, _p0_unused, fix_info = apply_automatic_fixes(
                 xdata,
                 ydata,
                 p0,
                 stability_report=stability_report,
                 rescale_data=False,
+                replace_nonfinite=False,
             )
 
-            # Update data (NaN/Inf replacement only)
+            # Update data (no-op: NaN/Inf is left to nan_policy/check_finite)
             xdata = xdata_fixed
             ydata = ydata_fixed
 

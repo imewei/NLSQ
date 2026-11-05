@@ -31,10 +31,9 @@ SecurityError
 """
 
 import ast
-import importlib.util
 import inspect
 import sys
-import tempfile
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -555,28 +554,19 @@ def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
     namespace : dict
         Namespace dictionary for code execution.
     """
-    # Use importlib to load the code as a module
-    # This avoids using exec() directly while providing the same functionality
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp_file:
-        tmp_file.write(code)
-        tmp_path = tmp_file.name
-
+    # Compile exactly the string the caller validated: going through a temp file
+    # and exec_module would re-read bytes from disk (coding cookie, cached .pyc).
+    module = types.ModuleType("_custom_model_temp")
+    sys.modules["_custom_model_temp"] = module
     try:
-        spec = importlib.util.spec_from_file_location("_custom_model_temp", tmp_path)
-        if spec is None or spec.loader is None:
-            raise ValueError("Failed to create module spec from code")
-
-        module = importlib.util.module_from_spec(spec)
-        sys.modules["_custom_model_temp"] = module
-        spec.loader.exec_module(module)
+        # Intentional: runs the exact string the caller already validated.
+        exec(compile(code, "<custom_model>", "exec"), module.__dict__)  # nosec B102
 
         # Copy module contents to namespace
         for name in dir(module):
             if not name.startswith("_"):
                 namespace[name] = getattr(module, name)
     finally:
-        # Clean up temp file
-        Path(tmp_path).unlink(missing_ok=True)
         sys.modules.pop("_custom_model_temp", None)
 
 

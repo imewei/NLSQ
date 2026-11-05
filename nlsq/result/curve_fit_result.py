@@ -151,6 +151,12 @@ class CurveFitResult(OptimizeResult):
         """Support tuple unpacking: popt, pcov = curve_fit(...)"""
         return iter((self.popt, self.pcov))
 
+    def __getitem__(self, key):
+        """SciPy idiom ``curve_fit(...)[0]`` indexes (popt, pcov); str keys stay dict."""
+        if isinstance(key, (int, slice)):
+            return (self.popt, self.pcov)[key]
+        return super().__getitem__(key)
+
     @property
     def popt(self):
         """Fitted parameters (alias for self.x).
@@ -504,7 +510,9 @@ class CurveFitResult(OptimizeResult):
 
         return intervals
 
-    def _finite_diff_jacobian(self, x, popt, eps: float = 1e-8):
+    def _finite_diff_jacobian(
+        self, x, popt, eps: float = float(np.sqrt(np.finfo(float).eps))
+    ):
         """Compute y_pred and the finite-difference Jacobian of ``self.model``
         w.r.t. ``popt`` at ``x``. Shared by ``prediction_interval`` and
         ``confidence_band``, which both need the same parameter-uncertainty
@@ -517,10 +525,12 @@ class CurveFitResult(OptimizeResult):
         n_points = y_pred.shape[0]
         jacobian = np.zeros((n_points, n_params))
         for i in range(n_params):
+            # Relative step: an absolute eps vanishes (p + h == p) for |p| >= 1e8.
+            h = eps * max(abs(float(popt[i])), 1.0)
             params_plus = popt.copy()
-            params_plus[i] += eps
+            params_plus[i] += h
             y_plus = np.array(self.model(x, *params_plus))
-            jacobian[:, i] = (y_plus - y_pred) / eps
+            jacobian[:, i] = (y_plus - y_pred) / h
 
         return y_pred, jacobian
 

@@ -434,7 +434,9 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def validate_model(path: Path, trusted: bool = False) -> ModelValidationResult:
+def validate_model(
+    path: Path, trusted: bool = False, source: bytes | None = None
+) -> ModelValidationResult:
     """Validate a model file for security.
 
     Performs AST-based static analysis to detect dangerous patterns
@@ -446,6 +448,10 @@ def validate_model(path: Path, trusted: bool = False) -> ModelValidationResult:
         Path to the model file to validate.
     trusted : bool, default=False
         If True, skip validation (user explicitly trusts the model).
+    source : bytes, optional
+        Raw file bytes to validate instead of reading ``path``. Callers that
+        go on to execute the file pass the same bytes to the executor so the
+        validated and executed code are identical.
 
     Returns
     -------
@@ -475,8 +481,10 @@ def validate_model(path: Path, trusted: bool = False) -> ModelValidationResult:
 
     # Parse and analyze AST
     try:
-        with open(path, encoding="utf-8") as f:
-            source = f.read()
+        # Parse raw bytes so a PEP 263 coding cookie is honoured exactly as
+        # the interpreter honours it at execution time.
+        if source is None:
+            source = path.read_bytes()
         tree = ast.parse(source, filename=str(path))
     except SyntaxError as e:
         return ModelValidationResult(

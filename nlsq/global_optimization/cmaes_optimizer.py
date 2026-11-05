@@ -276,7 +276,7 @@ def _create_fitness_function(  # noqa: C901
 
 
 def _require_finite_bounds(lower_bounds: jax.Array, upper_bounds: jax.Array) -> None:
-    """Raise ``ValueError`` unless every bound -- and every range -- is finite.
+    """Raise ``ValueError`` unless every bound is finite with ``lower < upper``.
 
     ``transform_to_bounds`` computes ``lb + (ub - lb) * sigmoid(x)``: any
     non-finite bound (or a finite-but-overflowing range, e.g.
@@ -293,11 +293,13 @@ def _require_finite_bounds(lower_bounds: jax.Array, upper_bounds: jax.Array) -> 
         jnp.isfinite(lower_bounds)
         & jnp.isfinite(upper_bounds)
         & jnp.isfinite(upper_bounds - lower_bounds)
+        # lb >= ub is an empty/degenerate box (and lb == ub breaks the logit)
+        & (upper_bounds > lower_bounds)
     )
     if not bool(jnp.all(finite)):
         raise ValueError(
             "CMA-ES requires every parameter to have a finite lower AND "
-            "upper bound (no +/-inf, and no overflowing range). Got "
+            "upper bound (no +/-inf, no overflowing range) with lower < upper. Got "
             f"lower={np.asarray(lower_bounds)}, upper={np.asarray(upper_bounds)}.",
         )
 

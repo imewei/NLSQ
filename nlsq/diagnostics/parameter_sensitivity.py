@@ -540,22 +540,19 @@ class ParameterSensitivityAnalyzer:
         -------
         float
             Log10 range of eigenvalues (orders of magnitude).
-            Returns 0.0 if all eigenvalues are zero or only one non-zero eigenvalue.
+            Returns 0.0 if all eigenvalues are zero or there is a single eigenvalue;
+            ``inf`` if any eigenvalue is zero (rank deficiency).
         """
-        # Filter to non-zero eigenvalues
-        nonzero_eigenvalues = eigenvalues[eigenvalues > 0]
-
-        if len(nonzero_eigenvalues) <= 1:
-            # Single eigenvalue or all zeros - no range
+        if len(eigenvalues) <= 1 or np.max(eigenvalues) <= 0:
             return 0.0
 
-        max_eigenvalue = np.max(nonzero_eigenvalues)
-        min_eigenvalue = np.min(nonzero_eigenvalues)
+        max_eigenvalue = np.max(eigenvalues)
+        min_eigenvalue = np.min(eigenvalues)
 
-        # Compute log10 ratio
-        if min_eigenvalue > 0:
-            return float(np.log10(max_eigenvalue / min_eigenvalue))
-        return float("inf")
+        # Null directions (rank deficiency) are infinitely sloppy, not absent.
+        if min_eigenvalue <= 0:
+            return float("inf")
+        return float(np.log10(max_eigenvalue / min_eigenvalue))
 
     def _classify_directions(
         self,
@@ -599,7 +596,7 @@ class ParameterSensitivityAnalyzer:
             # Use geometric mean of sqrt of ratio as threshold
             # For a 3-order range, sqrt = 1.5 orders, so threshold = 10^(-1.5) ~ 0.03
             eigenvalue_range = self._compute_eigenvalue_range(eigenvalues)
-            if eigenvalue_range > 0:
+            if 0 < eigenvalue_range < np.inf:
                 # Threshold based on eigenvalue range
                 # For 3-order range: poorly-determined < 10^(-1.5) * max ~ 3% of max
                 # For 6-order range: poorly-determined < 10^(-3) * max ~ 0.1% of max

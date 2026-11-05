@@ -237,6 +237,11 @@ def _fit_hybrid(
         )
     config = strategy.config if strategy.config is not None else HybridStreamingConfig()
 
+    if check_finite and not (
+        np.isfinite(np.asarray(xdata)).all() and np.isfinite(np.asarray(ydata)).all()
+    ):
+        raise ValueError("x and y must be finite (found NaN or inf)")
+
     # Prepare p0 and bounds
     p0, (lb, ub) = normalize_p0_bounds(f, p0, bounds)
     bounds_tuple = None if _is_unbounded(lb, ub) else (lb, ub)

@@ -133,18 +133,25 @@ class TestDifficultOptimizationProblems:
         y[20] = np.nan
         y[30] = np.nan
 
-        # Should handle with stability='auto'
+        def model(x, a, b):
+            return a * x + b
+
+        # stability='auto' must not impute non-finite data: default policy raises
+        with pytest.raises((ValueError, RuntimeError)):
+            curve_fit(model, x, y, p0=[2, 1], stability="auto", fallback=True)
+
+        # Dropping the bad rows is an explicit opt-in via nan_policy
         result = curve_fit(
-            lambda x, a, b: a * x + b,
+            model,
             x,
             y,
             p0=[2, 1],
             stability="auto",
             fallback=True,
+            nan_policy="omit",
         )
-
-        # stability='auto' should fix NaN values
-        assert result.success or result.x is not None
+        assert result.success
+        np.testing.assert_allclose(result.popt, [2.0, 1.0], atol=0.1)
 
     def test_extreme_parameter_scales(self):
         """Test with extreme parameter scale mismatches."""

@@ -145,31 +145,22 @@ class TestStabilityAutoMode:
         assert result.success
 
     def test_auto_mode_fixes_nan_data(self):
-        """Test that stability='auto' mode fixes NaN data."""
+        """stability='auto' must not impute NaN; nan_policy/check_finite owns it."""
         x = np.linspace(0, 10, 100)
         y = 2.0 * x + 1.0
         y[50] = np.nan  # Introduce NaN
 
-        # Should succeed with auto fix
-        result = curve_fit(
-            lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="auto"
-        )
-
-        assert result.x is not None
-        assert result.success
+        with pytest.raises(ValueError, match="infs or NaNs"):
+            curve_fit(lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="auto")
 
     def test_auto_mode_fixes_inf_data(self):
-        """Test that stability='auto' mode fixes Inf data."""
+        """stability='auto' must not impute Inf; nan_policy/check_finite owns it."""
         x = np.linspace(0, 10, 100)
         x[10] = np.inf  # Introduce Inf
         y = 2.0 * np.where(np.isfinite(x), x, 5.0) + 1.0
 
-        # Should succeed with auto fix
-        result = curve_fit(
-            lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="auto"
-        )
-
-        assert result.x is not None
+        with pytest.raises(ValueError, match="infs or NaNs"):
+            curve_fit(lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="auto")
 
     def test_auto_mode_fixes_parameter_scales(self):
         """Test that stability='auto' mode fixes parameter scale mismatches."""

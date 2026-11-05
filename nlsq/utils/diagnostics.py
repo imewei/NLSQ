@@ -426,11 +426,12 @@ class OptimizationDiagnostics:
                     if self.verbosity >= 2:
                         # Full SVD condition number (expensive: O(mn²))
                         svd_vals = np.linalg.svdvals(jacobian)
-                        condition_number = svd_vals[0] / (svd_vals[-1] + 1e-10)
+                        condition_number = (
+                            svd_vals[0] / svd_vals[-1] if svd_vals[-1] > 0 else np.inf
+                        )
                     else:
-                        # Cheap 1-norm condition estimate (O(nm), ~50-90% faster)
-                        # Uses matrix norms instead of full SVD decomposition
-                        condition_number = np.linalg.cond(jacobian, p=1)
+                        # 2-norm cond; p=1 raises LinAlgError for non-square J
+                        condition_number = np.linalg.cond(jacobian)
                     data["jacobian_condition"] = condition_number
 
                     if condition_number > 1e12:

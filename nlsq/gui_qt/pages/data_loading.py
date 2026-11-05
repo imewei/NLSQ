@@ -310,7 +310,12 @@ class DataLoadingPage(QWidget):
         Args:
             file_path: Path to the file to load
         """
-        from nlsq.gui_qt.adapters.data_adapter import load_from_file
+        from nlsq.cli.data_loaders import DataLoader
+        from nlsq.gui_qt.adapters.data_adapter import (
+            detect_delimiter,
+            load_from_file,
+            parse_numeric_rows,
+        )
 
         format_value = self._format_combo.currentData()
         config: dict[str, Any] = {
@@ -319,21 +324,46 @@ class DataLoadingPage(QWidget):
         }
 
         try:
-            xdata, ydata, sigma = load_from_file(str(file_path), config)
-
-            # Store raw data for preview
-            if sigma is not None:
-                self._raw_data = np.column_stack(
-                    [xdata.T if xdata.ndim == 2 else xdata, ydata, sigma],
+            file_format = DataLoader().detect_format(file_path, config)
+            if file_format in ("ascii", "csv"):
+                # Load the whole numeric table so the ColumnSelector can pick
+                # sigma / z columns (same parsing as the clipboard path).
+                lines = [
+                    ln.split("#")[0]
+                    for ln in file_path.read_text(encoding="utf-8").splitlines()
+                ]
+                lines = [ln for ln in lines if ln.strip()]
+                delimiter = detect_delimiter("\n".join(lines))
+                header = None
+                try:
+                    parse_numeric_rows(lines[:1], delimiter)
+                except ValueError:
+                    header = [
+                        h.strip()
+                        for h in (
+                            lines[0].split(delimiter) if delimiter else lines[0].split()
+                        )
+                    ]
+                    lines = lines[1:]
+                rows = parse_numeric_rows(lines, delimiter)
+                if not rows:
+                    raise ValueError("No valid numeric data found.")
+                self._raw_data = np.array(rows, dtype=np.float64)
+                self._column_names = (
+                    header
+                    if header and len(header) == self._raw_data.shape[1]
+                    else [f"Column {i}" for i in range(self._raw_data.shape[1])]
                 )
             else:
-                self._raw_data = np.column_stack(
-                    [xdata.T if xdata.ndim == 2 else xdata, ydata],
-                )
-
-            # Generate column names
-            n_cols = self._raw_data.shape[1]
-            self._column_names = [f"Column {i}" for i in range(n_cols)]
+                # npz / hdf5: keys, not columns, define the arrays
+                xdata, ydata, sigma = load_from_file(str(file_path), config)
+                cols = [xdata.T if xdata.ndim == 2 else xdata, ydata]
+                if sigma is not None:
+                    cols.append(sigma)
+                self._raw_data = np.column_stack(cols)
+                self._column_names = [
+                    f"Column {i}" for i in range(self._raw_data.shape[1])
+                ]
 
             # Update UI
             self._file_path_label.setText(str(file_path))

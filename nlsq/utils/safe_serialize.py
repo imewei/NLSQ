@@ -81,12 +81,18 @@ def _deserialize_dict_key(key: str) -> str | int | float | bool:
             )
         return value == "True"
     if key.startswith("__int_key__"):
+        text = key[len("__int_key__") :]
         try:
-            return int(key[len("__int_key__") :])
+            int_value = int(text)
         except ValueError as e:
             raise SafeSerializationError(
                 f"Malformed integer key in serialized data: {key!r}",
             ) from e
+        if str(int_value) != text:  # reject '01', '+1', ' 1' (alias canonical keys)
+            raise SafeSerializationError(
+                f"Non-canonical integer key in serialized data: {key!r}",
+            )
+        return int_value
     if key.startswith("__float_key__"):
         try:
             return float(key[len("__float_key__") :])
@@ -223,6 +229,11 @@ def _convert_to_serializable(obj: Any) -> Any:
 
     # Handle numpy arrays (small ones only - large arrays should use HDF5)
     if isinstance(obj, np.ndarray):
+        if obj.dtype.kind not in ("b", "i", "u", "f", "c"):
+            raise SafeSerializationError(
+                f"Cannot serialize array with non-numeric dtype {obj.dtype!r}; "
+                "only numeric and bool dtypes round-trip.",
+            )
         if obj.size > 10_000:
             raise SafeSerializationError(
                 f"NumPy array too large for JSON serialization ({obj.size} elements). "
@@ -253,9 +264,9 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
         dtype = np.dtype(obj["dtype"])
         raw_data = obj["data"]
         shape = tuple(obj["shape"])
-    except KeyError as e:
+    except (KeyError, TypeError, ValueError) as e:
         raise SafeSerializationError(
-            f"Malformed ndarray in serialized data: missing key {e}",
+            f"Malformed ndarray in serialized data: {e!r}",
         ) from e
     # Only allow numeric dtypes — object dtype arrays can hold arbitrary Python
     # objects, defeating the security guarantee of this module. Reject this
@@ -269,6 +280,11 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
             f"{dtype!r}. Only numeric dtypes are allowed.",
         )
     data = _unsanitize_array_data(raw_data)
+    # np.array(["False"], dtype=bool) is True: only accept real JSON booleans.
+    if dtype.kind == "b" and not all(
+        isinstance(v, bool) for v in np.asarray(data, dtype=object).ravel()
+    ):
+        raise SafeSerializationError("Boolean array data must contain only booleans")
     # Validate each dimension is a non-negative integer. A zero dimension
     # makes n_elements=0 which bypasses the limit check while allowing
     # an arbitrarily large logical shape through reshape.
@@ -350,10 +366,15 @@ def _convert_from_serializable(obj: Any) -> Any:
             )
 
         # Regular dict — restore non-string keys from prefixed encoding
-        return {
-            _deserialize_dict_key(key): _convert_from_serializable(value)
-            for key, value in obj.items()
-        }
+        result: dict = {}
+        for key, value in obj.items():
+            decoded = _deserialize_dict_key(key)
+            if decoded in result:
+                raise SafeSerializationError(
+                    f"Duplicate dict key after decoding in serialized data: {key!r}",
+                )
+            result[decoded] = _convert_from_serializable(value)
+        return result
 
     return obj
 
@@ -430,8 +451,14 @@ def safe_loads(data: bytes) -> Any:
     try:
         parsed = json.loads(data.decode("utf-8"))
         return _convert_from_serializable(parsed)
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        raise SafeSerializationError(f"Deserialization failed: {e}") from e
+    except (
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as e:
+        raise SafeSerializationError(f"Deserialization failed: {e!r}") from e
     except RecursionError as e:
         raise SafeSerializationError(
             "Deserialization failed: input is too deeply nested "

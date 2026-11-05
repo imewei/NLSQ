@@ -136,17 +136,16 @@ class TestValidateCurveFitBasic(unittest.TestCase):
 
     def test_insufficient_points_for_parameters(self):
         """Test error when not enough points for number of parameters."""
-        # Linear function needs 2 params, but we have only 2 points (need > n_params)
-        xdata = np.array([1.0, 2.0])
-        ydata = np.array([2.0, 4.0])
+        # Linear function needs 2 params, but we have only 1 point (need >= n_params)
+        xdata = np.array([1.0])
+        ydata = np.array([2.0])
 
         errors, _warnings_list, _x_clean, _y_clean = (
             self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
-        # Should have error about needing more points than parameters
         self.assertTrue(
-            any("more data points" in e and "parameters" in e for e in errors)
+            any("as many data points" in e and "parameters" in e for e in errors)
         )
 
 
@@ -618,8 +617,8 @@ class TestValidateInputsDecorator(unittest.TestCase):
         def linear(x, a, b):
             return a * x + b
 
-        xdata = np.array([1.0, 2.0])  # Too few points
-        ydata = np.array([2.0, 4.0])
+        xdata = np.array([1.0])  # Too few points
+        ydata = np.array([2.0])
 
         with self.assertRaises(ValueError) as ctx:
             my_curve_fit(linear, xdata, ydata)

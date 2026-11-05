@@ -849,7 +849,8 @@ class TestFailedChunkHistory:
 
         fitter.curve_fit.curve_fit = flaky
         fitter._update_parameters_convergence = spy
-        res = fitter.fit(lin, x, y, p0=[0.0, 0.0])
+        with pytest.warns(UserWarning, match="dropped from the fit"):
+            res = fitter.fit(lin, x, y, p0=[0.0, 0.0])
 
         assert res.success
         assert history_lengths == [1, 2, 3]  # 3 successful chunks, no duplicate

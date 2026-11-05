@@ -470,10 +470,12 @@ class NumericalStabilityGuard:
             regularized = True
 
         # Check for near-zero singular values (use cached value)
-        if min_sv_cached is not None and min_sv_cached < self.eps * 10:
+        # Relative to max_sv: an absolute cutoff would regularise a perfectly
+        # conditioned small-scale Jacobian (e.g. 1e-16 * [1, x]).
+        if min_sv_cached is not None and min_sv_cached < self.eps * 10 * max_sv:
             # Efficient diagonal regularization
             J = J.at[diag_indices, diag_indices].add(
-                jnp.asarray(self.eps * 10, J.dtype)
+                jnp.asarray(self.eps * 10 * max_sv, J.dtype)
             )
             regularized = True
 
@@ -1110,6 +1112,7 @@ def apply_automatic_fixes(
     p0: np.ndarray | None = None,
     stability_report: dict | None = None,
     rescale_data: bool = True,
+    replace_nonfinite: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, dict]:
     """
     Automatically apply fixes for detected stability issues.
@@ -1134,6 +1137,10 @@ def apply_automatic_fixes(
         time in seconds, frequency in Hz). NaN/Inf handling
         and parameter normalization are still applied when stability='auto'.
         Default: True.
+    replace_nonfinite : bool, optional
+        If True (default), replace NaN/Inf in xdata/ydata with the mean of the
+        finite values. ``curve_fit`` passes False so ``nan_policy`` /
+        ``check_finite`` decide what happens to non-finite data.
 
     Returns
     -------
@@ -1212,7 +1219,7 @@ def apply_automatic_fixes(
             )
 
     # Fix 3: Replace NaN/Inf in data
-    if np.any(~np.isfinite(xdata)):
+    if replace_nonfinite and np.any(~np.isfinite(xdata)):
         # Use mean of finite values only (nanmean doesn't ignore inf)
         finite_mean = (
             np.mean(xdata[np.isfinite(xdata)]) if np.any(np.isfinite(xdata)) else 0.0
@@ -1220,7 +1227,7 @@ def apply_automatic_fixes(
         xdata = np.where(np.isfinite(xdata), xdata, finite_mean)
         applied_fixes.append("Replaced NaN/Inf in xdata with mean")
 
-    if np.any(~np.isfinite(ydata)):
+    if replace_nonfinite and np.any(~np.isfinite(ydata)):
         # Use mean of finite values only (nanmean doesn't ignore inf)
         finite_mean = (
             np.mean(ydata[np.isfinite(ydata)]) if np.any(np.isfinite(ydata)) else 0.0

@@ -13,6 +13,7 @@ from __future__ import annotations
 import gc
 import logging
 import time
+import warnings
 from collections import defaultdict
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -2280,7 +2281,9 @@ class LargeDatasetFitter:
             self.logger.info(f"Retrying chunk {chunk_idx} with current parameters")
             # Add small perturbation to avoid local minima
             perturbed_params = current_params * (
-                1 + 0.01 * np.random.randn(len(current_params))
+                1
+                + 0.01
+                * np.random.default_rng(chunk_idx).standard_normal(len(current_params))
             )
             popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                 f,
@@ -2402,6 +2405,15 @@ class LargeDatasetFitter:
             ]
 
         return failure_summary
+
+    @staticmethod
+    def _require_finite(kwargs: dict, xdata: np.ndarray, ydata: np.ndarray) -> None:
+        # Otherwise a bad chunk is dropped (while above min_success_rate) and
+        # the fit still reports success.
+        if kwargs.get("check_finite") and not (
+            np.isfinite(xdata).all() and np.isfinite(ydata).all()
+        ):
+            raise ValueError("x and y must be finite (found NaN or inf)")
 
     def _warn_if_bounded(self, bounds: tuple | None) -> bool:
         """Return True (and warn) when any bound is finite.
@@ -2564,6 +2576,18 @@ class LargeDatasetFitter:
 
         # Create failure summary for diagnostics
         failure_summary = self._create_failure_summary(chunk_results, chunk_times)
+        if failure_summary["total_failures"]:
+            n_dropped = sum(
+                r.get("n_points", 0) for r in chunk_results if not r.get("success")
+            )
+            warnings.warn(
+                f"{failure_summary['total_failures']} of {len(chunk_results)} "
+                f"chunks failed and were dropped from the fit "
+                f"({n_dropped} points; indices {failure_summary['failed_chunk_indices']}); "
+                "the result uses the remaining data only.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # Assemble result
         result = OptimizeResult(
@@ -2705,9 +2729,12 @@ class LargeDatasetFitter:
         # full_sigma are permuted together to stay aligned, so the sigma
         # re-slicing below can keep assuming contiguous chunk boundaries.
         n_points = len(xdata)
+        xdata = np.asarray(xdata)
+        ydata = np.asarray(ydata)
+        self._require_finite(kwargs, xdata, ydata)
         shuffle_idx = np.random.default_rng(0).permutation(n_points)
-        xdata = np.asarray(xdata)[shuffle_idx]
-        ydata = np.asarray(ydata)[shuffle_idx]
+        xdata = xdata[shuffle_idx]
+        ydata = ydata[shuffle_idx]
         if full_sigma is not None:
             full_sigma = full_sigma[shuffle_idx]
         self.logger.debug(

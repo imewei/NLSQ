@@ -147,9 +147,20 @@ class InputValidator:
             # the model uses *args.
             has_varargs = any(p.kind == p.VAR_POSITIONAL for p in sig_params)
             if has_varargs and p0 is not None:
-                n_params = len(p0)
+                n_params = len(np.atleast_1d(p0))
             elif sig_params:
-                n_params = len(sig_params) - 1  # exclude the independent variable
+                # Fit params are positional args (minus the independent
+                # variable); defaulted ones are optional, **kwargs never count.
+                positional = [
+                    p
+                    for p in sig_params
+                    if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                ]
+                n_max = max(len(positional) - 1, 0)
+                n_min = max(sum(p.default is p.empty for p in positional) - 1, 0)
+                n_params = n_min
+                if p0 is not None:
+                    n_params = min(max(len(np.atleast_1d(p0)), n_min), n_max)
         except Exception:
             if p0 is not None:
                 with suppress(Exception):
@@ -193,9 +204,9 @@ class InputValidator:
         if n_points < 2:
             errors.append("Need at least 2 data points for fitting")
 
-        if n_points <= n_params:
+        if n_points < n_params:
             errors.append(
-                f"Need more data points ({n_points}) than parameters ({n_params}) for fitting",
+                f"Need at least as many data points ({n_points}) as parameters ({n_params}) for fitting",
             )
 
         return errors, warnings_list

@@ -239,6 +239,15 @@ def _determine_parameter_count(
                 "Auto p0 estimation failed, using defaults",
                 error=str(e),
             )
+            if any(
+                a.kind in (a.VAR_POSITIONAL, a.VAR_KEYWORD)
+                for a in signature(f).parameters.values()
+            ):
+                raise ValueError(
+                    "p0='auto' failed and the number of parameters of a model "
+                    "with *args/**kwargs cannot be inferred; provide p0 explicitly."
+                ) from e
+            p0 = None  # drop the "auto" sentinel so bounds-derived defaults apply
 
     # Fall back: determine n from function signature, p0 stays None
     # (will be initialized to defaults in _prepare_bounds_and_initial_guess)
@@ -302,6 +311,11 @@ def _prepare_bounds_and_initial_guess(
         Initial parameter guess (clipped to bounds if necessary)
     """
     lb, ub = prepare_bounds(bounds, n)
+    if lb.shape != (n,) or ub.shape != (n,):
+        raise ValueError(
+            f"`bounds` must have length {n} (number of parameters); got lower "
+            f"{lb.shape}, upper {ub.shape}."
+        )
     if p0 is None:
         p0 = _initialize_feasible(lb, ub)
     else:

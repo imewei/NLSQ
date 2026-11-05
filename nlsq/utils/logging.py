@@ -180,7 +180,7 @@ class NLSQLogger:
         # Optional file handler for debug mode
         if debug_mode:
             log_dir = Path(os.getenv("NLSQ_LOG_DIR", "."))
-            log_dir.mkdir(exist_ok=True)
+            log_dir.mkdir(parents=True, exist_ok=True)
 
             # Use a more specific timestamp or process ID to avoid collisions
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

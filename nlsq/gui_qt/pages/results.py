@@ -7,6 +7,7 @@ and interactive visualizations of the fit quality.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -32,6 +33,8 @@ from nlsq.gui_qt.plots.residuals_plot import ResidualsPlotWidget
 from nlsq.gui_qt.session_state import n_points
 from nlsq.gui_qt.widgets.fit_statistics import FitStatisticsWidget
 from nlsq.gui_qt.widgets.param_results import ParamResultsWidget
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
@@ -198,6 +201,33 @@ class ResultsPage(QWidget):
             self._status_label.setStyleSheet("color: gray;")
             return
 
+        try:
+            self._update_results(result)
+        except Exception as e:
+            # Never leave stale stats/plots (or an enabled Export) behind
+            logger.exception("Failed to display fit results")
+            self._has_results = False
+            self._fit_statistics.clear()
+            self._fit_plot.clear()
+            self._residuals_plot.clear()
+            self._histogram_plot.clear()
+            self._export_btn.setEnabled(False)
+            self._status_label.setText(f"Could not display fit results: {e}")
+            self._status_label.setStyleSheet("color: #f44336;")
+
+    def _model_values(self, xdata: np.ndarray, popt: Any) -> np.ndarray | None:
+        """Model evaluated at the data, or None if it cannot be evaluated."""
+        model = self._app_state.state.model_func
+        if model is None:
+            return None
+        try:
+            return np.asarray(model(xdata, *popt))
+        except Exception:
+            logger.warning("Post-fit model evaluation failed", exc_info=True)
+            return None
+
+    def _update_results(self, result: Any) -> None:
+        """Populate all widgets from ``result`` (may raise; see update_results)."""
         self._has_results = True
         self._last_result = result
 
@@ -250,9 +280,14 @@ class ResultsPage(QWidget):
 
         # Compute fit statistics
         n_nonfinite_residuals = 0
+        model_failed = False
         if xdata is not None and ydata is not None and popt is not None:
-            self._update_statistics(xdata, ydata, popt, result)
-            n_nonfinite_residuals = self._update_plots(xdata, ydata, popt, result)
+            y_fit = self._model_values(xdata, popt)
+            model_failed = y_fit is None
+            self._update_statistics(ydata, popt, result, y_fit)
+            n_nonfinite_residuals = self._update_plots(
+                xdata, ydata, popt, result, y_fit
+            )
 
         # Update status
         converged = getattr(result, "success", True)
@@ -272,6 +307,16 @@ class ResultsPage(QWidget):
             status_text += (
                 f" — {n_nonfinite_residuals} non-finite residual(s) excluded from plots"
             )
+            status_color = "#FF9800"
+
+        if model_failed:
+            status_text += " — model could not be evaluated; statistics unavailable"
+            status_color = "#FF9800"
+
+        # Notes recorded by the fit adapter (settings that could not be honoured)
+        notes = getattr(result, "gui_notes", None)
+        if notes:
+            status_text += " — " + "; ".join(notes)
             status_color = "#FF9800"
 
         self._status_label.setText(status_text)
@@ -396,29 +441,32 @@ class ResultsPage(QWidget):
 
     def _update_statistics(
         self,
-        xdata: np.ndarray,
         ydata: np.ndarray,
         popt: np.ndarray,
         result: Any,
+        y_fit: np.ndarray | None,
     ) -> None:
         """Update fit statistics display.
 
         Args:
-            xdata: X data
             ydata: Y data
             popt: Fitted parameters
             result: Fit result object
+            y_fit: Model values at the data, or None if unavailable (all
+                quality statistics are then shown as NaN, never faked)
         """
-        state = self._app_state.state
-
-        # Compute fitted values
-        try:
-            if state.model_func is not None:
-                y_fit = state.model_func(xdata, *popt)
-            else:
-                y_fit = ydata  # Fallback
-        except Exception:
-            y_fit = ydata
+        if y_fit is None:
+            nan = float("nan")
+            self._fit_statistics.set_statistics(
+                r_squared=nan,
+                rmse=nan,
+                mae=nan,
+                aic=nan,
+                bic=nan,
+                n_iterations=getattr(result, "nfev", 0),
+                converged=getattr(result, "success", True),
+            )
+            return
 
         # Compute residuals
         residuals = ydata - y_fit
@@ -477,6 +525,7 @@ class ResultsPage(QWidget):
         ydata: np.ndarray,
         popt: np.ndarray,
         result: Any,
+        y_fit: np.ndarray | None,
     ) -> int:
         """Update all plots with fit results.
 
@@ -485,6 +534,7 @@ class ResultsPage(QWidget):
             ydata: Y data
             popt: Fitted parameters
             result: Fit result object
+            y_fit: Model values at the data, or None if unavailable
 
         Returns:
             Count of non-finite (NaN/Inf) residuals excluded from the
@@ -494,21 +544,31 @@ class ResultsPage(QWidget):
         """
         state = self._app_state.state
 
+        if y_fit is None:
+            # No valid model values: show the data only, no fake fit/residuals
+            self._fit_plot.set_data(
+                np.arange(len(ydata)) if xdata.ndim == 2 else xdata, ydata
+            )
+            self._residuals_plot.clear()
+            self._histogram_plot.clear()
+            return 0
+
+        if xdata.ndim == 2:
+            # Multi-dimensional (surface) data: no single x axis, so plot
+            # against the point index and skip dense curve / bands.
+            idx = np.arange(len(ydata), dtype=float)
+            self._fit_plot.set_data(idx, ydata)
+            self._fit_plot.set_fit(idx, y_fit)
+            residuals = ydata - y_fit
+            self._residuals_plot.set_residuals(idx, residuals, y_fit)
+            self._histogram_plot.set_data(residuals)
+            return int(np.count_nonzero(~np.isfinite(residuals)))
+
         # Compute fitted curve on dense grid
         x_min, x_max = np.min(xdata), np.max(xdata)
         x_range = x_max - x_min
         x_dense = np.linspace(x_min - 0.05 * x_range, x_max + 0.05 * x_range, 500)
-
-        try:
-            if state.model_func is not None:
-                y_dense = state.model_func(x_dense, *popt)
-                y_fit = state.model_func(xdata, *popt)
-            else:
-                y_dense = np.zeros_like(x_dense)
-                y_fit = ydata
-        except Exception:
-            y_dense = np.zeros_like(x_dense)
-            y_fit = ydata
+        y_dense = state.model_func(x_dense, *popt)
 
         # Compute residuals
         residuals = ydata - y_fit
@@ -530,9 +590,6 @@ class ResultsPage(QWidget):
                 )
             except Exception as e:
                 # Log error but don't crash UI
-                import logging
-
-                logger = logging.getLogger(__name__)
                 logger.error(f"Failed to compute confidence bands: {e}", exc_info=True)
                 conf_lower = None
                 conf_upper = None

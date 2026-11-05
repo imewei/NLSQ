@@ -421,6 +421,7 @@ class MemoryManager:
 
         # Try garbage collection
         gc.collect()
+        self._available_memory_cache = None  # TTL cache would hide freed memory
         available = self.get_available_memory()
 
         if available >= bytes_needed:
