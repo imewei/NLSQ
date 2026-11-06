@@ -819,6 +819,7 @@ class DataChunker:
         shuffle: bool = False,
         random_seed: int | None = None,
         buffer_pool: ChunkBufferPool | None = None,
+        indices: np.ndarray | None = None,
     ) -> Generator[tuple[np.ndarray, np.ndarray, int, int]]:
         """Create data chunks for processing.
 
@@ -838,6 +839,11 @@ class DataChunker:
             Pre-allocated buffer pool for chunk reuse (FR-006).
             If provided, chunks are written into pooled buffers to reduce
             allocation overhead.
+        indices : np.ndarray, optional
+            Row order to use instead of ``np.arange(n)``; chunk ``i`` is
+            ``xdata[indices[start:end]]``, gathered per chunk so no full-size
+            permuted copy is made. Mutually exclusive with ``shuffle``. Padding
+            rows of the last chunk gather ``xdata[0]`` and must not be read.
 
         Yields
         ------
@@ -852,7 +858,15 @@ class DataChunker:
         compiled kernels and avoiding recompilation overhead.
         """
         n_points = len(xdata)
-        indices = np.arange(n_points)
+        if indices is not None:
+            if shuffle:
+                raise ValueError("pass either `indices` or shuffle=True, not both")
+            if len(indices) != n_points:
+                raise ValueError(
+                    f"indices length ({len(indices)}) must equal len(xdata) ({n_points})"
+                )
+        else:
+            indices = np.arange(n_points)
 
         if shuffle:
             rng = np.random.default_rng(random_seed)
@@ -2733,19 +2747,15 @@ class LargeDatasetFitter:
         # Contiguous chunking biases fits on ordered/monotonic x (each chunk
         # covers only a narrow x-window, so per-chunk local optima can land
         # on different points of a degenerate manifold for weakly-identified
-        # models). Shuffle once (fixed seed for reproducibility) so every
-        # chunk is a representative sample of the full x-range; xdata/ydata/
-        # full_sigma are permuted together to stay aligned, so the sigma
-        # re-slicing below can keep assuming contiguous chunk boundaries.
+        # models). Permute once (fixed seed for reproducibility) so every
+        # chunk is a representative sample of the full x-range. The permutation
+        # is handed to create_chunks, which gathers each chunk (and its sigma,
+        # below) with the same index slice, so no shuffled full-size copies exist.
         n_points = len(xdata)
         xdata = np.asarray(xdata)
         ydata = np.asarray(ydata)
         self._require_finite(kwargs, xdata, ydata)
         shuffle_idx = np.random.default_rng(0).permutation(n_points)
-        xdata = xdata[shuffle_idx]
-        ydata = ydata[shuffle_idx]
-        if full_sigma is not None:
-            full_sigma = full_sigma[shuffle_idx]
         self.logger.debug(
             f"Shuffled {n_points} points before chunking (seed=0) to avoid "
             "biased per-chunk fits on ordered x",
@@ -2790,6 +2800,7 @@ class LargeDatasetFitter:
                 ydata,
                 stats.recommended_chunk_size,
                 buffer_pool=buffer_pool,
+                indices=shuffle_idx,
             ):
                 chunk_start_time = time.time()
                 chunk_kwargs = kwargs
@@ -2799,23 +2810,11 @@ class LargeDatasetFitter:
                     x_valid = x_chunk[:valid_length]
                     y_valid = y_chunk[:valid_length]
                     if full_sigma is not None:
-                        # Reconstructs the chunk boundary DataChunker.create_chunks
-                        # used, which is only valid because this call passes
-                        # shuffle=False (the default, above). If shuffle is ever
-                        # enabled here, x_valid stops matching this slice of
-                        # xdata and sigma would silently misalign with the data
-                        # it's meant to weight -- fail loudly instead.
+                        # Same shuffle_idx slice create_chunks used for x/y.
                         start_idx = chunk_bounds[chunk_idx][0]
-                        if not np.array_equal(
-                            x_valid,
-                            np.asarray(xdata)[start_idx : start_idx + valid_length],
-                        ):
-                            raise RuntimeError(
-                                "sigma chunk-slicing assumes "
-                                "DataChunker.create_chunks(shuffle=False); "
-                                "chunk boundary mismatch detected",
-                            )
-                        sigma_valid = full_sigma[start_idx : start_idx + valid_length]
+                        sigma_valid = full_sigma[
+                            shuffle_idx[start_idx : start_idx + valid_length]
+                        ]
                         chunk_kwargs = {**kwargs, "sigma": sigma_valid}
                     popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
                         f,
