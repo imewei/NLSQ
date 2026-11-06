@@ -59,7 +59,7 @@ def test_create_chunks_with_indices_equals_reference(
     assert seen == n
 
 
-def test_same_permutation_as_before():
+def test_same_permutation_as_before(monkeypatch):
     n = 6000
     captured = {}
     x = np.linspace(0, 1, n)
@@ -74,23 +74,20 @@ def test_same_permutation_as_before():
     stats = dataclasses.replace(
         fitter.estimate_requirements(n, 2), recommended_chunk_size=1000, n_chunks=6
     )
-    DataChunker.create_chunks = staticmethod(spy)
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            fitter._fit_chunked(
-                _lin,
-                x,
-                y,
-                np.array([1.0, 1.0]),
-                (-np.inf, np.inf),
-                "trf",
-                "auto",
-                False,
-                stats,
-            )
-    finally:
-        DataChunker.create_chunks = staticmethod(real)
+    monkeypatch.setattr(DataChunker, "create_chunks", staticmethod(spy))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fitter._fit_chunked(
+            _lin,
+            x,
+            y,
+            np.array([1.0, 1.0]),
+            (-np.inf, np.inf),
+            "trf",
+            "auto",
+            False,
+            stats,
+        )
     np.testing.assert_array_equal(
         captured["indices"], np.random.default_rng(0).permutation(n)
     )
@@ -133,7 +130,7 @@ def _run(fitter, stats, x, y, sigma):
         )
 
 
-def test_fit_chunked_sigma_follows_x():
+def test_fit_chunked_sigma_follows_x(monkeypatch):
     fitter, stats, x, y, sigma = _chunked_fixture()
     calls = []
     real = fitter.curve_fit.curve_fit
@@ -142,7 +139,7 @@ def test_fit_chunked_sigma_follows_x():
         calls.append((np.array(xc), np.array(yc), np.array(k["sigma"])))
         return real(f, xc, yc, *a, **k)
 
-    fitter.curve_fit.curve_fit = spy
+    monkeypatch.setattr(fitter.curve_fit, "curve_fit", spy)
     _run(fitter, stats, x, y, sigma)
     perm = np.random.default_rng(0).permutation(len(x))
     assert len(calls) == 6
@@ -151,6 +148,32 @@ def test_fit_chunked_sigma_follows_x():
         np.testing.assert_array_equal(xc, x[perm][s:e])
         np.testing.assert_array_equal(yc, y[perm][s:e])
         np.testing.assert_array_equal(sc, 0.1 + 0.5 * xc)  # sigma == g(x)
+
+
+_BAD_INDICES = {
+    "bool_mask": np.ones(100, dtype=bool),
+    "float": np.arange(100, dtype=np.float64),
+    "2d": np.arange(100).reshape(10, 10),
+    "wrong_length": np.arange(99),
+    "negative": np.r_[-1, np.arange(1, 100)],
+    "equals_n": np.r_[np.arange(99), 100],
+}
+
+
+@pytest.mark.parametrize("use_pool", [False, True], ids=["nopool", "pool"])
+@pytest.mark.parametrize("name", list(_BAD_INDICES))
+def test_invalid_indices_rejected_before_first_chunk(name, use_pool):
+    x, y = _make((), np.float64, 100)
+    pool = (
+        ChunkBufferPool(chunk_size=50, dtype=np.float64, x_feature_shape=())
+        if use_pool
+        else None
+    )
+    gen = DataChunker.create_chunks(
+        x, y, 50, buffer_pool=pool, indices=_BAD_INDICES[name]
+    )
+    with pytest.raises(ValueError):
+        next(gen)  # nothing is yielded before the error
 
 
 # Golden values recorded from BASE 409d44f4 (pre-B1, three shuffled full-size copies).

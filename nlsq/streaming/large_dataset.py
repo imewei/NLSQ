@@ -861,10 +861,18 @@ class DataChunker:
         if indices is not None:
             if shuffle:
                 raise ValueError("pass either `indices` or shuffle=True, not both")
+            indices = np.asarray(indices)
+            if indices.ndim != 1 or not np.issubdtype(indices.dtype, np.integer):
+                raise ValueError(
+                    "indices must be a 1-D integer array (got "
+                    f"ndim={indices.ndim}, dtype={indices.dtype})"
+                )
             if len(indices) != n_points:
                 raise ValueError(
                     f"indices length ({len(indices)}) must equal len(xdata) ({n_points})"
                 )
+            if n_points and (indices.min() < 0 or indices.max() >= n_points):
+                raise ValueError(f"indices must lie in [0, {n_points})")
         else:
             indices = np.arange(n_points)
 
@@ -2726,13 +2734,12 @@ class LargeDatasetFitter:
             if full_sigma.ndim != 1:
                 # A 2-D (m, m) covariance matrix happens to satisfy the
                 # length check below (len() on it equals m, same as
-                # len(xdata)), but the shuffle/per-chunk reslicing further
-                # down only handles 1-D sigma correctly: shuffling permutes
-                # rows only (corrupting row/column correspondence) and the
-                # per-chunk reslice produces a non-square (valid_length, m)
+                # len(xdata)), but the per-chunk gather further down
+                # (full_sigma[shuffle_idx[start:end]]) only handles 1-D sigma
+                # correctly: it selects rows only (corrupting row/column
+                # correspondence) and yields a non-square (valid_length, m)
                 # array. Reject explicitly here instead of failing later
-                # with a shape error that gives no hint the real cause is
-                # this chunked path's row-only shuffle.
+                # with a shape error that hides the real cause.
                 raise ValueError(
                     "2-D covariance sigma is not supported for chunked "
                     f"large-dataset fitting (got shape {full_sigma.shape}); "
@@ -2805,13 +2812,20 @@ class LargeDatasetFitter:
                 chunk_start_time = time.time()
                 chunk_kwargs = kwargs
                 sigma_valid = None
+                # Tripwire: sigma below is gathered by chunk_bounds, so the
+                # chunker must have yielded exactly the same chunk span.
+                start_idx, end_idx = chunk_bounds[chunk_idx]
+                if valid_length != end_idx - start_idx:
+                    raise RuntimeError(
+                        f"chunk {chunk_idx}: valid_length {valid_length} != "
+                        f"chunk_bounds span {end_idx - start_idx}"
+                    )
                 try:
                     # Use only valid data points (exclude zero-padding)
                     x_valid = x_chunk[:valid_length]
                     y_valid = y_chunk[:valid_length]
                     if full_sigma is not None:
                         # Same shuffle_idx slice create_chunks used for x/y.
-                        start_idx = chunk_bounds[chunk_idx][0]
                         sigma_valid = full_sigma[
                             shuffle_idx[start_idx : start_idx + valid_length]
                         ]
