@@ -390,14 +390,16 @@ class TestEndToEndIntegration:
             # Verify convergence
             assert np.allclose(popt, [a_true, b_true], rtol=0.2)
 
-        # Later fits should show some reuse benefit
-        # Relaxed threshold for CI variability
-        avg_early = np.mean(times[:3])
-        avg_late = np.mean(times[7:])
+        # Fits are ~15 ms, so a window mean is dominated by transient load on a
+        # shared runner (0.023 s vs 0.014 s failed CI with no code change). The
+        # fastest fit per window is robust to additive spikes; a real reuse
+        # regression (re-tracing or recompiling every call) costs >10x, far
+        # beyond the 2x margin.
+        best_early = min(times[:3])
+        best_late = min(times[7:])
 
-        # Just verify no regression (not slower)
-        assert avg_late <= avg_early * 1.2, (
-            f"Performance regression: {avg_late:.3f}s vs {avg_early:.3f}s"
+        assert best_late <= best_early * 2.0, (
+            f"Performance regression: {best_late:.3f}s vs {best_early:.3f}s"
         )
 
     def test_robustness_to_noise(self):
