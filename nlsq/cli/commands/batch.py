@@ -23,6 +23,7 @@ with ProcessPoolExecutor due to fork safety issues with GPU devices.
 
 import json
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -60,6 +61,20 @@ def _run_single_workflow(
             verbose=verbose,
             default_figure_prefix=Path(workflow_path).stem,
         )
+
+        # curve_fit warns (not raises) on non-convergence; honour result["success"].
+        if isinstance(result, dict) and result.get("success") is False:
+            return {
+                "status": "failed",
+                "workflow_path": workflow_path,
+                "result": result,
+                "error": {
+                    "type": "NotConverged",
+                    "message": f"Fit did not converge: {result.get('message')}",
+                    "context": {},
+                    "suggestion": "Improve p0/bounds or increase max_nfev",
+                },
+            }
 
         return {
             "status": "success",
@@ -206,6 +221,7 @@ def _collect_batch_results(
     workflow_paths: list[str],
     verbose: bool,
     logger: Any,
+    continue_on_error: bool = True,
 ) -> list[dict[str, Any]]:
     """Collect results from submitted workflow futures.
 
@@ -219,6 +235,8 @@ def _collect_batch_results(
         Enable verbose logging.
     logger : Logger
         Logger instance.
+    continue_on_error : bool
+        If False, skip not-yet-started workflows after the first failure.
 
     Returns
     -------
@@ -227,11 +245,19 @@ def _collect_batch_results(
     """
     results: list[dict[str, Any]] = []
 
-    # Submit all workflows
-    futures = {
-        executor.submit(_run_single_workflow, path, verbose): path
-        for path in workflow_paths
-    }
+    # A worker sets this on failure (when not continuing) so queued workflows
+    # are skipped without racing the main thread's future cancellation.
+    stop = threading.Event()
+
+    def _task(path: str) -> dict[str, Any] | None:
+        if stop.is_set():
+            return None
+        outcome = _run_single_workflow(path, verbose)
+        if outcome["status"] == "failed" and not continue_on_error:
+            stop.set()
+        return outcome
+
+    futures = {executor.submit(_task, path): path for path in workflow_paths}
 
     # Collect results as they complete
     for future in as_completed(futures):
@@ -239,6 +265,16 @@ def _collect_batch_results(
 
         try:
             result = future.result()
+            if result is None:  # not started: an earlier workflow failed
+                results.append(
+                    {
+                        "status": "skipped",
+                        "workflow_path": workflow_path,
+                        "result": None,
+                        "error": None,
+                    }
+                )
+                continue
             results.append(result)
 
             # Log status
@@ -300,11 +336,14 @@ def _build_batch_summary(
     duration = (end_time - start_time).total_seconds()
     succeeded = sum(1 for r in results if r["status"] == "success")
     failed = sum(1 for r in results if r["status"] == "failed")
+    skipped = [r["workflow_path"] for r in results if r["status"] == "skipped"]
 
     return {
         "total": n_workflows,
         "succeeded": succeeded,
         "failed": failed,
+        "skipped": len(skipped),
+        "skipped_workflows": skipped,
         "duration_seconds": duration,
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
@@ -373,6 +412,8 @@ def _print_batch_summary(
     print(f"  Total: {summary['total']}")
     print(f"  Succeeded: {summary['succeeded']}")
     print(f"  Failed: {summary['failed']}")
+    if summary["skipped"]:
+        print(f"  Skipped: {summary['skipped']}")
     print(f"  Duration: {summary['duration_seconds']:.2f}s")
 
     if summary["failed"] > 0:
@@ -427,6 +468,12 @@ def run_batch(
     # Step 1: Validate inputs
     _validate_batch_inputs(workflow_paths, continue_on_error)
 
+    if max_workers is not None and max_workers < 1:
+        raise CLIError(
+            f"workers must be at least 1, got {max_workers}",
+            suggestion="Use --workers 1 or omit it to auto-detect",
+        )
+
     # Step 2: Calculate optimal workers
     n_workflows = len(workflow_paths)
     num_workers = _calculate_optimal_workers(n_workflows, max_workers)
@@ -440,7 +487,9 @@ def run_batch(
     # Step 3: Execute workflows and collect results
     start_time = datetime.now()
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        results = _collect_batch_results(executor, workflow_paths, verbose, logger)
+        results = _collect_batch_results(
+            executor, workflow_paths, verbose, logger, continue_on_error
+        )
     end_time = datetime.now()
 
     # Step 4: Build summary

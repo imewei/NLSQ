@@ -23,7 +23,7 @@ Key Features
 Classes
 -------
 
-.. autoclass:: nlsq.utils.profiler.Profiler
+.. autoclass:: nlsq.utils.profiler.PerformanceProfiler
    :members:
    :noindex:
    :undoc-members:
@@ -34,15 +34,12 @@ Example Usage
 
 .. code-block:: python
 
-   from nlsq.utils.profiler import Profiler
-   from nlsq import curve_fit
    import jax.numpy as jnp
 
-   # Create profiler
-   profiler = Profiler(enable=True)
+   from nlsq import curve_fit
+   from nlsq.utils.profiler import PerformanceProfiler
 
 
-   # Profile curve fitting
    def model(x, a, b):
        return a * jnp.exp(-b * x)
 
@@ -50,29 +47,31 @@ Example Usage
    x = jnp.linspace(0, 10, 1000)
    y = 2.5 * jnp.exp(-0.5 * x)
 
+   profiler = PerformanceProfiler()
+
    with profiler.profile("curve_fit"):
        popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.1])
+       # Fill in run details that the profiler cannot observe itself
+       profiler.update_current(n_data_points=len(x), n_parameters=2, success=True)
 
-   # Get profiling results
-   results = profiler.get_results()
-   print(f"Total time: {results['curve_fit']['total_time']:.3f} s")
-   print(f"Call count: {results['curve_fit']['call_count']}")
+   summary = profiler.get_summary("curve_fit")
+   print(summary)
 
-Performance Analysis
---------------------
+Comparing Runs
+--------------
 
 .. code-block:: python
 
-   # Detailed profiling with memory tracking
-   profiler = Profiler(enable=True, track_memory=True)
+   for _ in range(3):
+       with profiler.profile("optimization"):
+           curve_fit(model, x, y, p0=[1.0, 0.1])
 
-   with profiler.profile("optimization"):
-       result = expensive_operation()
+   # One ``ProfileMetrics`` per run; ``to_dict()`` gives plain values
+   runs = profiler.get_metrics("optimization")
+   print(len(runs), runs[0].to_dict()["total_time"])
 
-   # Get detailed statistics
-   stats = profiler.get_detailed_stats()
-   print(f"Peak memory: {stats['peak_memory_mb']:.2f} MB")
-   print(f"Average time: {stats['avg_time']:.3f} s")
+   # Text report with per-run details
+   print(profiler.get_report("optimization", detailed=True))
 
 See Also
 --------

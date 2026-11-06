@@ -30,6 +30,51 @@ if TYPE_CHECKING:
 _logger = get_logger("warmup_phase")
 
 
+def _create_lbfgs_optimizer(
+    config: HybridStreamingConfig,
+    params: jnp.ndarray,
+    initial_step_size: float,
+) -> tuple[optax.GradientTransformationExtraArgs, optax.OptState]:
+    """Build the shared warmup optimizer and initialize its state."""
+    line_search_type = config.lbfgs_line_search
+    if line_search_type == "backtracking":
+        linesearch = optax.scale_by_backtracking_linesearch(
+            max_backtracking_steps=20,
+            slope_rtol=1e-4,
+            decrease_factor=0.8,
+            increase_factor=1.5,
+            max_learning_rate=initial_step_size,
+        )
+    else:
+        linesearch = optax.scale_by_zoom_linesearch(
+            max_linesearch_steps=20,
+            initial_guess_strategy="one",
+        )
+
+    optimizer = optax.lbfgs(
+        learning_rate=initial_step_size,
+        memory_size=config.lbfgs_history_size,
+        scale_init_precond=True,
+        linesearch=linesearch,
+    )
+
+    if config.gradient_clip_value is not None:
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(config.gradient_clip_value),
+            optimizer,
+        )
+
+    opt_state = optimizer.init(params)
+    return optimizer, opt_state
+
+
+def _clip_update_norm(updates: jnp.ndarray, max_norm: float) -> jnp.ndarray:
+    """Limit warmup updates with the shared JIT-compatible L2 constraint."""
+    update_norm = jnp.linalg.norm(updates)
+    scale = jnp.minimum(1.0, max_norm / (update_norm + 1e-10))
+    return updates * scale
+
+
 @dataclass(frozen=True, slots=True)
 class WarmupResult:
     """Result from L-BFGS warmup phase.
@@ -258,6 +303,9 @@ class WarmupPhase:
 
         # Warmup loop
         for iteration in range(self.config.max_warmup_iterations):
+            # loss_value is the loss AT the params fed to the step, not at the
+            # updated ones, so best_params must pair with these.
+            params_at_loss = current_params
             current_params, loss_value, grad_norm, opt_state, _line_search_failed = (
                 self._lbfgs_step(
                     params=current_params,
@@ -276,7 +324,7 @@ class WarmupPhase:
             # Track best parameters
             if loss_value < best_loss:
                 best_loss = loss_value
-                best_params = current_params
+                best_params = params_at_loss
 
             # =====================================================
             # LAYER 3: Cost-Increase Guard
@@ -390,6 +438,7 @@ class WarmupPhase:
             Loss function: loss_fn(params, x_batch, y_batch) -> scalar.
         """
         normalized_model = self.normalized_model
+        normalizer = getattr(normalized_model, "normalizer", None)
 
         enable_var_reg = (
             self.config.enable_group_variance_regularization
@@ -450,8 +499,11 @@ class WarmupPhase:
                 # include elements from the PREVIOUS group instead of raising.
                 # Pad params so every max_group_size window fits without ever
                 # needing to clamp; the mask below already ignores the padding.
+                physical_params = (
+                    params if normalizer is None else normalizer.denormalize(params)
+                )
                 padded_params = jnp.concatenate(
-                    [params, jnp.zeros(max_group_size, dtype=params.dtype)],
+                    [physical_params, jnp.zeros(max_group_size, dtype=params.dtype)],
                 )
 
                 def var_body(i, penalty):
@@ -550,36 +602,7 @@ class WarmupPhase:
         opt_state : optax.OptState
             Initial optimizer state.
         """
-        line_search_type = self.config.lbfgs_line_search
-        if line_search_type == "backtracking":
-            linesearch = optax.scale_by_backtracking_linesearch(
-                max_backtracking_steps=20,
-                slope_rtol=1e-4,
-                decrease_factor=0.8,
-                increase_factor=1.5,
-                max_learning_rate=initial_step_size,
-            )
-        else:
-            linesearch = optax.scale_by_zoom_linesearch(
-                max_linesearch_steps=20,
-                initial_guess_strategy="one",
-            )
-
-        optimizer = optax.lbfgs(
-            learning_rate=initial_step_size,
-            memory_size=self.config.lbfgs_history_size,
-            scale_init_precond=True,
-            linesearch=linesearch,
-        )
-
-        if self.config.gradient_clip_value is not None:
-            optimizer = optax.chain(
-                optax.clip_by_global_norm(self.config.gradient_clip_value),
-                optimizer,
-            )
-
-        opt_state = optimizer.init(params)
-        return optimizer, opt_state
+        return _create_lbfgs_optimizer(self.config, params, initial_step_size)
 
     def _lbfgs_step(
         self,
@@ -712,7 +735,7 @@ class WarmupPhase:
             ssr_equivalent = float(loss_value) * x_batch.shape[0]
             if ssr_equivalent < best_tracker.get("best_cost_global", float("inf")):
                 best_tracker["best_cost_global"] = ssr_equivalent
-                best_tracker["best_params_global"] = new_params
+                best_tracker["best_params_global"] = params
 
         # Record history buffer fill event
         if iteration == self.config.lbfgs_history_size:
@@ -743,9 +766,7 @@ class WarmupPhase:
         clipped_updates : array_like
             Updates with L2 norm <= max_norm.
         """
-        update_norm = jnp.linalg.norm(updates)
-        scale = jnp.minimum(1.0, max_norm / (update_norm + 1e-10))
-        return updates * scale
+        return _clip_update_norm(updates, max_norm)
 
     def _validate_numerics(
         self,
@@ -871,6 +892,8 @@ class WarmupPhase:
             Result dict if guard triggered, None otherwise.
         """
         assert self._initial_loss is not None
+        if self._initial_loss == 0:
+            return None
         cost_increase_ratio = loss_value / self._initial_loss
         cost_threshold = 1.0 + self.config.cost_increase_tolerance
 

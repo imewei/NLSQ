@@ -65,7 +65,7 @@ class TestLRUMemoryPoolBenchmark:
                 (100, 10),  # Most frequently used shape
             ]
             for shape in shapes:
-                manager.allocate_array(shape, dtype=np.float64)
+                manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
         with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             benchmark(allocate_arrays)
@@ -82,13 +82,15 @@ class TestLRUMemoryPoolBenchmark:
         def eviction_test():
             # Fill pool with various shapes
             for i in range(50):
-                manager.allocate_array((100 + i, 10), dtype=np.float64)
+                manager.free_array(
+                    manager.allocate_array((100 + i, 10), dtype=np.float64)
+                )
 
             # Access some shapes frequently (should stay in pool after eviction)
             hot_shapes = [(100, 10), (110, 10), (120, 10)]
             for _ in range(10):
                 for shape in hot_shapes:
-                    manager.allocate_array(shape, dtype=np.float64)
+                    manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Trigger eviction
             manager.optimize_memory_pool(max_arrays=20)
@@ -127,12 +129,12 @@ class TestMemoryPoolEfficiency:
             ]
 
             for shape in shapes:
-                key = (shape, np.float64)
+                key = (shape, np.dtype(np.float64))
                 if key in manager.memory_pool:
                     hits += 1
                 else:
                     misses += 1
-                manager.allocate_array(shape, dtype=np.float64)
+                manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Calculate hit rate
             total = hits + misses
@@ -239,12 +241,12 @@ class TestMemoryPoolEfficiency:
 
             for _ in range(10):
                 for shape in common_shapes:
-                    key = (shape, np.float64)
+                    key = (shape, np.dtype(np.float64))
                     if key in manager.memory_pool:
                         hits += 1
                     else:
                         new_allocations += 1
-                    manager.allocate_array(shape, dtype=np.float64)
+                    manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             total = hits + new_allocations
             efficiency = hits / total if total > 0 else 0
@@ -286,19 +288,19 @@ class TestLRUEvictionPatterns:
 
             # Add all arrays to pool
             for shape in hot_shapes + cold_shapes:
-                manager.allocate_array(shape, dtype=np.float64)
+                manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Access hot shapes multiple times (marks as recently used)
             for _ in range(5):
                 for shape in hot_shapes:
-                    manager.allocate_array(shape, dtype=np.float64)
+                    manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Evict to keep only 3 arrays
             manager.optimize_memory_pool(max_arrays=3)
 
             # Check that hot shapes are still in pool
             for shape in hot_shapes:
-                key = (shape, np.float64)
+                key = (shape, np.dtype(np.float64))
                 assert key in manager.memory_pool, (
                     f"Hot shape {shape} should be preserved after LRU eviction"
                 )
@@ -324,10 +326,10 @@ class TestLRUEvictionPatterns:
             # Add arrays in order
             shapes = [(100, 10), (200, 5), (300, 3)]
             for shape in shapes:
-                manager.allocate_array(shape, dtype=np.float64)
+                manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Access first shape again (should move to end)
-            manager.allocate_array((100, 10), dtype=np.float64)
+            manager.free_array(manager.allocate_array((100, 10), dtype=np.float64))
 
             # Get order of keys
             pool_order = list(manager.memory_pool.keys())
@@ -357,10 +359,14 @@ class TestPoolBenchmarkSuite:
 
         with patch("nlsq.caching.memory_manager.psutil", create_psutil_mock()):
             # Warm up - first allocation
-            manager.allocate_array(shape, dtype=np.float64)
+            manager.free_array(manager.allocate_array(shape, dtype=np.float64))
 
             # Benchmark cached allocation
-            benchmark(lambda: manager.allocate_array(shape, dtype=np.float64))
+            benchmark(
+                lambda: manager.free_array(
+                    manager.allocate_array(shape, dtype=np.float64)
+                )
+            )
 
     @pytest.mark.benchmark(group="pool_operations")
     def test_free_array_performance(self, benchmark):

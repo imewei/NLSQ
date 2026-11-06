@@ -508,11 +508,10 @@ class TestValidateLeastSquaresInputs(unittest.TestCase):
         """Test error when x0 is scalar."""
         x0 = 1.0
 
-        # Scalars cause TypeError during validation, not a validation error
-        with self.assertRaises(TypeError):
-            _errors, _warnings_list, _x0_clean = (
-                self.validator.validate_least_squares_inputs(self.residuals_func, x0)
-            )
+        errors, _, _ = self.validator.validate_least_squares_inputs(
+            self.residuals_func, x0
+        )
+        self.assertIn("x0 must be 1-dimensional", errors)
 
     def test_x0_with_nan_error(self):
         """Test error when x0 contains NaN."""

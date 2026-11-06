@@ -586,16 +586,23 @@ class DataLoadingPage(QWidget):
         self._ydata = state.ydata
         self._sigma = state.sigma
 
+        # 2-D xdata is stored (k, n); the preview table wants one column per x
+        x_cols = self._xdata.T if self._xdata.ndim == 2 else self._xdata
         if self._sigma is not None:
-            self._raw_data = np.column_stack([self._xdata, self._ydata, self._sigma])
+            self._raw_data = np.column_stack([x_cols, self._ydata, self._sigma])
             self._column_names = ["x", "y", "sigma"]
         else:
-            self._raw_data = np.column_stack([self._xdata, self._ydata])
+            self._raw_data = np.column_stack([x_cols, self._ydata])
             self._column_names = ["x", "y"]
 
         self._file_path_label.setText(state.data_file_name or "(Restored session)")
         self._file_path_label.setStyleSheet("color: green;")
         self._column_selector.set_columns(self._column_names)
+        # set_columns re-runs the default column selection, which would keep
+        # only column 0 of a 2-D x; show exactly what the session holds.
+        self._xdata = state.xdata
+        self._ydata = state.ydata
+        self._sigma = state.sigma
         self._update_preview()
         self._validate_and_update_stats()
 
@@ -658,15 +665,16 @@ class DataLoadingPage(QWidget):
             with open(config_path) as f:
                 config = yaml.safe_load(f)
 
-            # Check for data file path in config
-            if "data" in config and "file" in config["data"]:
-                data_file = Path(config["data"]["file"])
+            data_config = config.get("data", {})
+            input_file = data_config.get("input_file", data_config.get("file"))
+            if input_file:
+                data_file = Path(input_file)
                 if not data_file.is_absolute():
                     data_file = config_path.parent / data_file
 
                 # Set format if specified
-                if "format" in config["data"]:
-                    format_value = config["data"]["format"]
+                if "format" in data_config:
+                    format_value = data_config["format"]
                     for i in range(self._format_combo.count()):
                         if self._format_combo.itemData(i) == format_value:
                             self._format_combo.setCurrentIndex(i)
@@ -675,11 +683,17 @@ class DataLoadingPage(QWidget):
                 # Load the file
                 self._load_file(data_file)
 
-                # Set column assignments if specified
-                if "columns" in config["data"]:
-                    # Column selector will be updated when file loads
-                    # Additional column configuration can be applied here
-                    pass
+                columns = {
+                    "x": 0,
+                    "y": 1,
+                    "z": None,
+                    "sigma": None,
+                    **data_config.get("columns", {}),
+                }
+                self._column_selector.set_mode(
+                    "2d" if columns["z"] is not None else "1d"
+                )
+                self._column_selector.set_selection(columns)
 
         except Exception as e:
             self._show_error("YAML Config Error", f"Failed to load configuration: {e}")

@@ -518,7 +518,7 @@ addopts = [
     # across 900+ tests, even with periodic cache clearing (every 200 tests).
     # Using 2 workers: 2 × 4-6GB = 8-12GB max, leaving headroom for the OS and tools.
     "-n", "2",  # Fixed 2 workers to prevent memory exhaustion (was: 4)
-    "--dist", "loadscope",  # Group by test module/class for better isolation
+    "--dist", "loadgroup",  # Honor serial groups; conftest groups other tests by scope
     # Coverage disabled for faster CI (enable locally with pytest --cov)
     # Test suite: 4,426 tests collected (as of 2026-11-01)
     # Coverage: 82% when last measured (2026-03-12), target 80%; not re-measured since

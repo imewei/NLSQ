@@ -250,12 +250,25 @@ class GradientMonitor:
         delta2 = abs_gradient - self._param_means
         self._param_m2 += delta * delta2
 
-        # Track max imbalance ratio (with overflow guard)
+        # Track max imbalance ratio (with overflow guard). Skip converged
+        # iterations (norm below the vanishing threshold relative to the first
+        # gradient): their components are roundoff-level so the ratio is noise.
+        # Mirrors the relative threshold in _detect_vanishing_gradients.
         min_grad = (
             np.min(abs_gradient[abs_gradient > 0]) if np.any(abs_gradient > 0) else 1.0
         )
         max_grad = np.max(abs_gradient)
-        if min_grad > 0 and np.isfinite(max_grad) and np.isfinite(min_grad):
+        converged = (
+            self._initial_gradient_norm > 0
+            and gradient_norm
+            <= self.config.vanishing_threshold * self._initial_gradient_norm
+        )
+        if (
+            not converged
+            and min_grad > 0
+            and np.isfinite(max_grad)
+            and np.isfinite(min_grad)
+        ):
             imbalance = max_grad / min_grad
             if np.isfinite(imbalance):
                 self._max_imbalance_ratio = max(self._max_imbalance_ratio, imbalance)

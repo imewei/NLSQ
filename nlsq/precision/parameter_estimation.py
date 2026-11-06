@@ -174,12 +174,16 @@ def estimate_initial_parameters(
     # Get number of parameters from function signature
     try:
         sig = inspect.signature(f)
-        # Filter out VAR_POSITIONAL (*args) and VAR_KEYWORD (**kwargs)
+        # Count positional parameters only (SciPy semantics): *args, **kwargs
+        # and keyword-only parameters are not fit parameters.
         regular_params = [
             name
             for name, param in sig.parameters.items()
             if param.kind
-            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
         ]
         # First parameter is typically x, so n_params = total - 1
         n_params = len(regular_params) - 1

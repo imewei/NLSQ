@@ -834,8 +834,8 @@ class TestBugFixRegressions(unittest.TestCase):
         'auto_global'/'hpc') both used to call MemoryBudget.compute()/
         selector.select() with the default n_features=1 regardless of
         xdata's actual shape, silently underestimating data_gb for
-        multi-dimensional xdata (shape (n_points, n_features), per
-        InputValidator's own convention) -- e.g. a 2D surface fit's memory
+        multi-dimensional xdata (SciPy's (n_features, n_points) layout)
+        -- e.g. a 2D surface fit's memory
         estimate came out ~1/n_features too small, which could pick
         STANDARD/CHUNKED when the real data needs STREAMING. Verify the
         real n_features (2, here) now reaches MemoryBudget.compute() from
@@ -846,14 +846,14 @@ class TestBugFixRegressions(unittest.TestCase):
         from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
 
         def model(xy, a, b):
-            x, y = xy[:, 0], xy[:, 1]
+            x, y = xy
             return a * x + b * y
 
         n_points = 30
         xdata_2d = np.stack(
-            [np.linspace(0, 10, n_points), np.linspace(0, 5, n_points)], axis=1
+            [np.linspace(0, 10, n_points), np.linspace(0, 5, n_points)], axis=0
         )
-        ydata = 2.0 * xdata_2d[:, 0] + 1.0 * xdata_2d[:, 1]
+        ydata = 2.0 * xdata_2d[0] + 1.0 * xdata_2d[1]
 
         with (
             patch.object(

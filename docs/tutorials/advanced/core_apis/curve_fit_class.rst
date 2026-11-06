@@ -73,17 +73,22 @@ Full method signature:
 Advanced Options
 ----------------
 
+Multi-start, stability checks and fallback strategies are options of the
+module-level :func:`nlsq.curve_fit`, not of ``CurveFit.curve_fit``:
+
 **Multi-start optimization:**
 
 .. code-block:: python
 
-   popt, pcov = fitter.curve_fit(
+   import nlsq
+
+   popt, pcov = nlsq.curve_fit(
        model,
        x,
        y,
        p0=[...],
        multistart=True,
-       n_starts=20,
+       n_starts=20,  # includes p0 when one is given
        bounds=bounds,  # Required for multi-start
    )
 
@@ -91,25 +96,29 @@ Advanced Options
 
 .. code-block:: python
 
-   popt, pcov = fitter.curve_fit(
+   popt, pcov = nlsq.curve_fit(
        model,
        x,
        y,
        p0=[...],
-       stability="auto",  # 'auto', 'strict', 'none'
+       stability="auto",  # 'auto' or 'check': warn about issues, data is not modified
        fallback=True,  # Enable fallback strategies
-       rescale_data=True,  # Automatic data rescaling
    )
 
 **Full output:**
 
+``full_output=True`` returns the SciPy-style 5-tuple
+``(popt, pcov, infodict, mesg, ier)``:
+
 .. code-block:: python
 
-   popt, pcov, info = fitter.curve_fit(model, x, y, p0=[...], full_output=True)
+   popt, pcov, infodict, mesg, ier = fitter.curve_fit(
+       model, x, y, p0=[...], full_output=True
+   )
 
-   print(f"Iterations: {info.nfev}")
-   print(f"Final cost: {info.cost}")
-   print(f"Status: {info.message}")
+   print(f"Function evaluations: {infodict['nfev']}")
+   print(f"Residuals shape: {infodict['fvec'].shape}")
+   print(f"Message: {mesg}, ier: {ier}")
 
 Batch Processing Pattern
 ------------------------

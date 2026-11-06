@@ -32,6 +32,9 @@ logging.getLogger("sphinx.domains.python").setLevel(logging.ERROR)
 add_path = os.path.abspath("../..")
 sys.path.insert(0, os.path.abspath("../.."))
 sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")
+)  # notebook_utils
 
 # Module aliases for backward compatibility with documentation
 # The package was reorganized in v0.4.2 but docs still reference old paths

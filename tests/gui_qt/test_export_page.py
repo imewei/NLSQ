@@ -96,3 +96,182 @@ class TestGenerateJsonNonFiniteParameters:
         assert param["ci_lower"] is None
         assert param["ci_upper"] is None
         assert param["value"] == 2.0
+
+
+class TestGeneratedScriptMatchesGui:
+    """GUI2/GUI3: the exported script must reproduce the GUI fit."""
+
+    @staticmethod
+    def _page(app_state, qtbot, workflow, bounds=None):
+        from nlsq.gui_qt.adapters.fit_adapter import run_fit
+        from nlsq.gui_qt.adapters.model_adapter import get_model
+        from nlsq.gui_qt.pages.export import ExportPage
+
+        x = np.linspace(-2, 2, 15)
+        y = 3 * x**2 - x + 0.5 + 0.01 * np.sin(7 * x)
+        app_state.set_data(x, y)
+        app_state.set_model(
+            "polynomial", {"degree": 2}, get_model("polynomial", {"degree": 2})
+        )
+        s = app_state.state
+        s.workflow = workflow
+        s.n_starts = 5
+        if bounds:
+            s.p0 = [1.0, 1.0, 1.0]
+            s.bounds = bounds
+            s.auto_p0 = False
+        result = run_fit(s.snapshot_for_fit())
+        app_state.set_fit_result(result)
+        page = ExportPage(app_state)
+        qtbot.addWidget(page)
+        return page, result
+
+    def test_polynomial_script_matches_gui_coefficient_order(self, app_state, qtbot):
+        page, result = self._page(
+            app_state, qtbot, "auto", ([0.0, None, None], [None, None, None])
+        )
+        ns: dict = {}
+        exec(compile(page.generate_python_code(), "script", "exec"), ns)
+        np.testing.assert_allclose(ns["popt"], np.asarray(result.popt), rtol=1e-6)
+
+    def test_default_global_workflow_without_bounds_runs(self, app_state, qtbot):
+        page, result = self._page(app_state, qtbot, "auto_global")
+        code = page.generate_python_code()
+        assert 'workflow = "auto_global"' not in code
+        ns: dict = {}
+        exec(compile(code, "script", "exec"), ns)  # no 'requires bounds' ValueError
+        np.testing.assert_allclose(ns["popt"], np.asarray(result.popt), rtol=1e-6)
+
+
+class TestStandaloneScriptData:
+    """GUI-3: a saved/pasted script must not depend on a sibling data.csv."""
+
+    @staticmethod
+    def _page(app_state, qtbot, n):
+        from nlsq.gui_qt.adapters.model_adapter import get_model
+        from nlsq.gui_qt.pages.export import ExportPage
+
+        x = np.linspace(-2, 2, n)
+        y = 3 * x**2 - x + 0.5
+        app_state.set_data(x, y)
+        app_state.set_model(
+            "polynomial", {"degree": 2}, get_model("polynomial", {"degree": 2})
+        )
+        app_state.set_fit_result(FakeFitResult([3.0, -1.0, 0.5]))
+        page = ExportPage(app_state)
+        qtbot.addWidget(page)
+        return page
+
+    def test_modest_data_is_inlined_and_runs_without_file(
+        self, app_state, qtbot, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)  # empty dir: no data.csv anywhere
+        code = self._page(app_state, qtbot, 50).generate_python_code()
+        assert "data.csv" not in code
+        ns: dict = {}  # no __file__, like pasted code
+        exec(compile(code, "script", "exec"), ns)
+        np.testing.assert_allclose(ns["popt"], [3.0, -1.0, 0.5], rtol=1e-5)
+
+    def test_bundle_script_still_loads_data_csv(self, app_state, qtbot, tmp_path):
+        page = self._page(app_state, qtbot, 50)
+        bundle = tmp_path / "b.zip"
+        page.export_session_bundle(str(bundle))
+        import zipfile
+
+        with zipfile.ZipFile(bundle) as zf:
+            script = zf.read("fit_script.py").decode()
+            zf.extractall(tmp_path)
+        assert "data.csv" in script
+        ns: dict = {"__file__": str(tmp_path / "fit_script.py")}
+        exec(compile(script, "script", "exec"), ns)
+        np.testing.assert_allclose(ns["popt"], [3.0, -1.0, 0.5], rtol=1e-5)
+
+    def test_large_data_keeps_file_loading_with_clear_note(self, app_state, qtbot):
+        code = self._page(app_state, qtbot, 6000).generate_python_code()
+        assert "np.loadtxt" in code
+        assert "data.csv" in code.split("import numpy")[0]  # header note
+        assert "next to this script" in code
+
+    def test_export_data_default_name_matches_script(
+        self, app_state, qtbot, monkeypatch
+    ):
+        from PySide6.QtWidgets import QFileDialog
+
+        seen = []
+        monkeypatch.setattr(
+            QFileDialog,
+            "getSaveFileName",
+            staticmethod(lambda *a, **k: (seen.append(a[2]), ("", ""))[1]),
+        )
+        self._page(app_state, qtbot, 6000)._on_export_data_csv()
+        assert seen == ["data.csv"]
+
+
+class TestNonFiniteInlineValues:
+    """R5-GUI-1: nan/inf in inlined data or p0 must not be a NameError."""
+
+    @staticmethod
+    def _page(app_state, qtbot, x, y, sigma=None, p0=None):
+        from nlsq.gui_qt.pages.export import ExportPage
+
+        app_state.set_data(x, y, sigma)
+        app_state.set_model("custom", model_func=lambda x, a, b: a * x + b)
+        app_state.state.p0 = p0
+        app_state.set_fit_result(FakeFitResult([2.0, 1.0]))
+        page = ExportPage(app_state)
+        qtbot.addWidget(page)
+        return page
+
+    @staticmethod
+    def _run(code):
+        ns: dict = {}
+        with pytest.raises(ValueError):  # the fit itself rejects non-finite input
+            exec(compile(code, "script", "exec"), ns)
+        return ns  # reached fit(): data/p0 definitions did not NameError
+
+    @pytest.mark.parametrize("which", ["x", "y", "sigma"])
+    def test_nan_in_inline_data(self, app_state, qtbot, which, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        y = 2 * x + 1
+        sigma = np.full(30, 0.1)
+        {"x": x, "y": y, "sigma": sigma}[which][3] = np.nan
+        page = self._page(app_state, qtbot, x, y, sigma)
+        ns = self._run(page.generate_python_code())
+        assert np.isnan(ns[{"x": "xdata", "y": "ydata", "sigma": "sigma"}[which]]).any()
+
+    def test_inf_in_data_and_p0(self, app_state, qtbot, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        y = 2 * x + 1
+        y[5] = np.inf
+        page = self._page(app_state, qtbot, x, y, p0=[np.inf, 1.0])
+        ns = self._run(page.generate_python_code())
+        assert np.isinf(ns["ydata"]).any() and np.isinf(ns["p0"][0])
+
+    def test_inf_p0_with_finite_data(self, app_state, qtbot, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        page = self._page(app_state, qtbot, x, 2 * x + 1, p0=[-np.inf, 1.0])
+        ns = self._run(page.generate_python_code())
+        assert ns["p0"][0] == -np.inf
+
+    def test_infinite_bounds_run(self, app_state, qtbot, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        x = np.linspace(0, 1, 30)
+        page = self._page(app_state, qtbot, x, 2 * x + 1, p0=[1.0, 1.0])
+        app_state.state.bounds = ([None, 0.0], [10.0, None])
+        ns: dict = {}
+        exec(compile(page.generate_python_code(), "script", "exec"), ns)
+        np.testing.assert_allclose(ns["popt"], [2.0, 1.0], rtol=1e-5)
+
+    def test_data_csv_path_parses_nan(self, app_state, qtbot, tmp_path):
+        x = np.linspace(0, 1, 30)
+        y = 2 * x + 1
+        y[3] = np.nan
+        page = self._page(app_state, qtbot, x, y)
+        page.export_csv(str(tmp_path / "data.csv"), include_data=True)
+        ns: dict = {"__file__": str(tmp_path / "fit_script.py")}
+        with pytest.raises(ValueError):
+            exec(compile(page.generate_python_code(for_bundle=True), "s", "exec"), ns)
+        assert np.isnan(ns["ydata"]).any()

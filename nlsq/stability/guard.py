@@ -464,8 +464,9 @@ class NumericalStabilityGuard:
                 f"Ill-conditioned Jacobian (condition number: {condition_number:.2e})",
             )
             # Efficient diagonal regularization - 99% memory reduction vs jnp.eye(m, n)
+            # Relative to max_sv: cond is scale-invariant, so the shift must be too.
             J = J.at[diag_indices, diag_indices].add(
-                jnp.asarray(self.regularization_factor, J.dtype)
+                jnp.asarray(self.regularization_factor * max_sv, J.dtype)
             )
             regularized = True
 
@@ -850,7 +851,7 @@ def detect_parameter_scale_mismatch(
     >>> p0 = np.array([1e-3, 1e3, 1.0])
     >>> has_mismatch, ratio = detect_parameter_scale_mismatch(p0)
     >>> print(f"Mismatch: {has_mismatch}, Ratio: {ratio:.2e}")
-    Mismatch: True, Ratio: 1.00e+06
+    Mismatch: False, Ratio: 1.00e+06
     """
     p0 = np.asarray(p0)
 
@@ -899,7 +900,7 @@ def detect_collinearity(
     --------
     >>> x1 = np.linspace(0, 10, 100)
     >>> x2 = 2 * x1 + 0.01 * np.random.randn(100)  # Nearly collinear
-    >>> xdata = np.column_stack([x1, x2])
+    >>> xdata = np.vstack([x1, x2])  # (k, N) or (N, k): short axis = variables
     >>> has_coll, pairs = detect_collinearity(xdata)
     >>> print(f"Collinear: {has_coll}")
     Collinear: True
@@ -907,12 +908,14 @@ def detect_collinearity(
     xdata = np.asarray(xdata)
 
     # Only makes sense for multidimensional data
-    if xdata.ndim != 2 or xdata.shape[1] < 2:
+    # Layout may be (k, N) (curve_fit convention) or (N, k); variables are the
+    # short axis. A single variable (or single point) has nothing to correlate.
+    if xdata.ndim != 2 or min(xdata.shape) < 2:
         return False, []
 
     # Compute correlation matrix
     try:
-        corr_matrix = np.corrcoef(xdata, rowvar=False)
+        corr_matrix = np.corrcoef(xdata, rowvar=xdata.shape[0] <= xdata.shape[1])
     except (ValueError, np.linalg.LinAlgError) as e:
         warnings.warn(f"Could not compute correlation matrix: {e}")
         return False, []
@@ -1070,7 +1073,7 @@ def check_problem_stability(
     # Check 5: Collinearity (for multidimensional data)
     has_collinearity = False
     collinear_pairs: list[tuple[int, int, float]] = []
-    if xdata.ndim == 2 and xdata.shape[1] > 1:
+    if xdata.ndim == 2 and min(xdata.shape) > 1:
         has_collinearity, collinear_pairs = detect_collinearity(xdata)
         if has_collinearity:
             pair_info = ", ".join(

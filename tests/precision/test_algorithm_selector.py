@@ -19,6 +19,43 @@ from hypothesis import strategies as st
 from nlsq.precision.algorithm_selector import AlgorithmSelector, auto_select_algorithm
 
 
+class TestSNRIndependentOfXOrder(unittest.TestCase):
+    """SNR heuristic must not misclassify noise-free data with unsorted x."""
+
+    def test_shuffled_matches_sorted(self):
+        def f(x, a, b):
+            return a * jnp.sin(b * x)
+
+        rng = np.random.default_rng(0)
+        x = rng.uniform(0, 10, 500)
+        y = np.asarray(f(x, 2.0, 1.3))
+        order = np.argsort(x)
+        sel = AlgorithmSelector()
+        a_unsorted = sel._analyze_data(x, y)
+        a_sorted = sel._analyze_data(x[order], y[order])
+        self.assertFalse(a_unsorted["is_noisy"])
+        self.assertAlmostEqual(a_unsorted["snr_estimate"], a_sorted["snr_estimate"])
+        p0 = np.array([1.0, 1.0])
+        r_u = auto_select_algorithm(f, x, y, p0)
+        r_s = auto_select_algorithm(f, x[order], y[order], p0)
+        self.assertEqual((r_u["ftol"], r_u["xtol"]), (r_s["ftol"], r_s["xtol"]))
+
+
+class TestNPointsMultiDimX(unittest.TestCase):
+    """n_points counts observations, not variables, for (k, N) xdata."""
+
+    def test_k_by_n_xdata(self):
+        def f(x, a, b):
+            return a * x[0] + b * x[1]
+
+        n = 200000
+        X = np.random.default_rng(0).uniform(0, 1, (2, n))
+        y = X[0] + 2 * X[1]
+        analysis = AlgorithmSelector().analyze_problem(f, X, y, np.array([1.0, 1.0]))
+        self.assertEqual(analysis["n_points"], n)
+        self.assertEqual(analysis["size_class"], "large")
+
+
 class TestAlgorithmSelectorBasic(unittest.TestCase):
     """Basic tests for AlgorithmSelector class."""
 
@@ -66,13 +103,30 @@ class TestAlgorithmSelectorBasic(unittest.TestCase):
         n_params = self.selector._estimate_n_params(exponential, None)
         self.assertEqual(n_params, 3)
 
-    def test_estimate_n_params_fallback(self):
-        """Test parameter estimation fallback for unparsable functions."""
-        # Function with unparsable signature
+    def test_estimate_n_params_variadic_signature(self):
+        """A parsable variadic signature declares no positional fit values."""
         func = lambda x, *args: sum(args)
         n_params = self.selector._estimate_n_params(func, None)
-        # Lambda with *args counts as 1 parameter (args)
-        self.assertEqual(n_params, 1)
+        self.assertEqual(n_params, 0)
+        self.assertEqual(self.selector._estimate_n_params(func, np.ones(3)), 3)
+
+        def slope(x, a, *args, offset=0.0, **kwargs):
+            return a * x + offset
+
+        self.assertEqual(self.selector._estimate_n_params(slope, None), 1)
+
+    def test_variadic_model_requires_explicit_p0_for_fitting(self):
+        """The analyzer's unknown variadic arity agrees with the fit boundary."""
+        from nlsq import curve_fit
+
+        def slope(x, *params):
+            return params[0] * x
+
+        x = np.linspace(0.0, 1.0, 12)
+        with self.assertRaisesRegex(ValueError, "determine number of fit parameters"):
+            curve_fit(slope, x, 2 * x, stability=None)
+        result = curve_fit(slope, x, 2 * x, p0=[1.0], stability=None)
+        np.testing.assert_allclose(result.popt, [2.0], rtol=1e-6)
 
 
 class TestDataAnalysis(unittest.TestCase):

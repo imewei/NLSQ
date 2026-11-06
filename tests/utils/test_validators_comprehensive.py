@@ -90,8 +90,8 @@ class TestValidateCurveFitInputs:
             for err in errors
         )
 
-    def test_empty_data_raises(self):
-        """Test empty arrays raise ValueError."""
+    def test_empty_data_returns_errors(self):
+        """Empty arrays follow the validator's error-tuple contract."""
 
         def model(x, a, b):
             return a * x + b
@@ -99,15 +99,15 @@ class TestValidateCurveFitInputs:
         xdata = np.array([])
         ydata = np.array([])
 
-        with pytest.raises((ValueError, IndexError)):
-            self.validator.validate_curve_fit_inputs(
-                f=model,
-                xdata=xdata,
-                ydata=ydata,
-                p0=None,
-                sigma=None,
-                bounds=(-np.inf, np.inf),
-            )
+        errors, _, _, _ = self.validator.validate_curve_fit_inputs(
+            f=model,
+            xdata=xdata,
+            ydata=ydata,
+            p0=None,
+            sigma=None,
+            bounds=(-np.inf, np.inf),
+        )
+        assert any("data points" in error for error in errors)
 
     def test_sigma_shape_mismatch_raises(self):
         """Test sigma shape mismatch returns error."""

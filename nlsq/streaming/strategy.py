@@ -18,6 +18,7 @@ so ``mock.patch("nlsq.streaming.<module>.<Class>")`` still takes effect and
 from __future__ import annotations
 
 import dataclasses
+import functools
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
@@ -81,6 +82,25 @@ class _HybridStrategy:
         return x, native.get("pcov", np.full((len(x), len(x)), np.inf))
 
 
+def scipy_layout_to_points_first(f: Any, x: Any) -> tuple[Any, Any]:
+    """Adapt a scipy-layout ``(k, M)`` problem to the hybrid engine's contract.
+
+    The hybrid engine (and ``_HybridStrategy.fit``) takes multi-dimensional x
+    points-first, ``(M, k)``, and chunks along axis 0. Callers holding scipy's
+    ``(k, M)`` layout pass ``f, x`` through here: it returns the transposed x
+    and a model that gives the user's ``f`` its ``(k, chunk)`` layout back.
+    No-op for 1-D x.
+    """
+    if np.ndim(x) <= 1:
+        return f, x
+
+    @functools.wraps(f)
+    def f_points_first(xc: Any, *params: Any) -> Any:
+        return f(xc.T, *params)
+
+    return f_points_first, np.asarray(x).T
+
+
 class _ChunkedStrategy:
     def __init__(
         self, config: Any, *, show_progress: bool = False, **common: Any
@@ -97,6 +117,10 @@ class _ChunkedStrategy:
         return run(f, x, y, p0=p0, **common)
 
     def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
+        if not getattr(native, "success", True):
+            raise RuntimeError(
+                f"chunked fit failed: {getattr(native, 'message', None)}"
+            )
         if hasattr(native, "popt") and hasattr(native, "pcov"):
             return native.popt, native.pcov
         raise RuntimeError(
@@ -204,13 +228,13 @@ def build_large_strategy(
 
 
 def default_p0(f: Callable[..., Any]) -> np.ndarray:
-    """Ones for every parameter after ``x`` in ``f``'s signature (curve_fit's p0=None)."""
-    from inspect import signature
+    """Ones for positional fit parameters after ``x`` (curve_fit's p0=None)."""
+    from nlsq.core.problem import _n_params_from_signature
 
-    args = signature(f).parameters
-    if len(args) < 2:
+    n_params = _n_params_from_signature(f)
+    if n_params < 1:
         raise ValueError("Unable to determine number of fit parameters.")
-    return np.ones(len(args) - 1)
+    return np.ones(n_params)
 
 
 def normalize_p0_bounds(

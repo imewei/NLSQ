@@ -25,6 +25,9 @@ def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
     state.model_name = model.get("name", state.model_name)
     state.auto_p0 = model.get("auto_p0", state.auto_p0)
     state.auto_bounds = model.get("auto_bounds", state.auto_bounds)
+    state.polynomial_degree = model.get("degree", state.polynomial_degree)
+    state.custom_file_path = model.get("path", state.custom_file_path)
+    state.custom_function_name = model.get("function", state.custom_function_name)
 
     if "polynomial" in model:
         state.polynomial_degree = model["polynomial"].get(
@@ -53,27 +56,30 @@ def _parse_model_parameters(
     for param in parameters:
         if "initial" in param:
             p0_values.append(param["initial"])
-        if "bounds" in param:
-            bounds = param["bounds"]
-            if len(bounds) != 2:
-                import logging
+        bounds = param.get("bounds")
+        if bounds is None:
+            bounds = [None, None]
+        if len(bounds) != 2:
+            import logging
 
-                logging.getLogger(__name__).warning(
-                    "Parameter 'bounds' expected 2 elements [lower, upper], "
-                    "got %d: %r — malformed entries default to unbounded",
-                    len(bounds),
-                    bounds,
-                )
-            lower = bounds[0] if len(bounds) > 0 and bounds[0] is not None else None
-            upper = bounds[1] if len(bounds) > 1 and bounds[1] is not None else None
-            lower_bounds.append(float("-inf") if lower is None else lower)
-            upper_bounds.append(float("inf") if upper is None else upper)
+            logging.getLogger(__name__).warning(
+                "Parameter 'bounds' expected 2 elements [lower, upper], "
+                "got %d: %r — malformed entries default to unbounded",
+                len(bounds),
+                bounds,
+            )
+        lower = bounds[0] if len(bounds) > 0 and bounds[0] is not None else None
+        upper = bounds[1] if len(bounds) > 1 and bounds[1] is not None else None
+        lower_bounds.append(float("-inf") if lower is None else lower)
+        upper_bounds.append(float("inf") if upper is None else upper)
         if "transform" in param and "name" in param:
             transforms[param["name"]] = param["transform"]
 
     if p0_values:
+        if len(p0_values) != len(parameters):
+            raise ValueError("Provide an initial value for every model parameter")
         state.p0 = p0_values
-    if lower_bounds or upper_bounds:
+    if any("bounds" in param for param in parameters):
         state.bounds = (lower_bounds, upper_bounds)
     if transforms:
         state.transforms = transforms
@@ -86,6 +92,32 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
 
     fitting = config["fitting"]
     state.method = fitting.get("method", state.method)
+    state.workflow = fitting.get("workflow", state.workflow)
+    state.loss = fitting.get("loss", state.loss)
+    for name in ("gtol", "ftol", "xtol"):
+        if name in fitting:
+            setattr(state, name, float(fitting[name]))
+    state.max_function_evals = fitting.get("max_nfev", state.max_function_evals)
+    p0 = fitting.get("p0")
+    if isinstance(p0, (list, tuple)):
+        state.p0 = list(p0)
+        state.auto_p0 = False
+    bounds = fitting.get("bounds")
+    if isinstance(bounds, dict):
+        bounds = (bounds.get("lower", -np.inf), bounds.get("upper", np.inf))
+    if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+        lower, upper = np.broadcast_arrays(bounds[0], bounds[1])
+        if state.p0 is not None:
+            lower = np.broadcast_to(lower, (len(state.p0),))
+            upper = np.broadcast_to(upper, (len(state.p0),))
+        state.bounds = (np.atleast_1d(lower).tolist(), np.atleast_1d(upper).tolist())
+
+    if "global_optimization" in fitting:
+        go = fitting["global_optimization"]
+        state.n_starts = go.get("n_starts", state.n_starts)
+        state.sampler = go.get("sampler", state.sampler)
+        state.center_on_p0 = go.get("center_on_p0", state.center_on_p0)
+        state.scale_factor = go.get("scale_factor", state.scale_factor)
 
     if "objective" in fitting:
         state.loss = fitting["objective"].get("robust_loss", state.loss)

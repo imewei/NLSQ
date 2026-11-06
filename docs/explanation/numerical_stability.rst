@@ -7,12 +7,12 @@ effectively for challenging optimization problems.
 Overview
 --------
 
-NLSQ provides automatic numerical stability monitoring and correction to prevent
+NLSQ provides numerical stability monitoring to flag problems that can cause
 optimization divergence. The stability system handles:
 
-- **NaN/Inf detection** in Jacobian matrices
+- **NaN/Inf detection** in the data and Jacobian matrices
 - **Condition number monitoring** for ill-conditioned problems
-- **Data rescaling** to improve numerical conditioning
+- **Parameter and data scale warnings** (no data or ``p0`` is ever rescaled)
 - **SVD skip** for large Jacobians to avoid performance degradation
 
 Stability Modes
@@ -31,10 +31,10 @@ The ``stability`` parameter in ``curve_fit()`` controls behavior:
      - No stability checks (default)
      - Simple problems, maximum speed
    * - ``stability='check'``
-     - Warn about issues, don't fix
+     - Warn about issues
      - Debugging, identify problems
    * - ``stability='auto'``
-     - Auto-detect and fix issues
+     - Detect issues and warn; data and ``p0`` are never rescaled or modified
      - Production use, challenging problems
 
 Basic Usage
@@ -57,14 +57,16 @@ Enable stability mode with a single parameter:
    x = np.linspace(0, 1e6, 1000)  # Large x-range
    y = 2.5 * np.exp(-0.5 * x) + 1.0
 
-   # Enable automatic stability fixes
+   # Enable stability checks (issues are reported, data is not modified)
    popt, pcov = curve_fit(exponential, x, y, p0=[2.5, 0.5, 1.0], stability="auto")
 
 Physics Applications
 --------------------
 
-For physics applications (XPCS, scattering, spectroscopy) where data must
-maintain physical units, use ``rescale_data=False``:
+For physics applications (XPCS, scattering, spectroscopy) the data keep their
+physical units: ``stability='auto'`` never rescales ``xdata``, ``ydata`` or
+``p0``. ``rescale_data=False`` only silences the warning that the data would
+have qualified for rescaling:
 
 .. code-block:: python
 
@@ -81,22 +83,21 @@ maintain physical units, use ``rescale_data=False``:
    tau = np.logspace(-6, 1, 200)  # 1µs to 10s
    y = 1.0 + 0.3 * np.exp(-2 * 100 * tau) ** 2
 
-   # Preserve physical units
+   # Physical units are always preserved; rescale_data=False only
+   # suppresses the "Data rescaling was NOT applied" warning
    popt, pcov = curve_fit(
        g2_model,
        tau,
        y,
        p0=[1.0, 0.3, 100.0],
        stability="auto",
-       rescale_data=False,  # Don't normalize data
+       rescale_data=False,
    )
 
-**Why use rescale_data=False?**
-
-- Time delays in seconds have physical meaning
-- Scattering vectors (q) in nm^-1 should not be normalized
-- Decay rates (gamma) are in physical units (s^-1)
-- Normalizing would change the interpretation of fitted parameters
+The fitted parameters (for example the decay rate ``gamma`` in s^-1) are
+therefore always in the units of your model. If conditioning is a problem, pass
+``x_scale='jac'`` or rescale the data yourself and interpret the fitted
+parameters accordingly.
 
 Large Jacobian Optimization
 ---------------------------
@@ -147,10 +148,10 @@ Performance Impact
      - No stability checks
    * - ``stability='check'``
      - ~1ms for 1M points
-     - Only monitoring, no fixes
+     - Only monitoring, warnings only
    * - ``stability='auto'``
      - ~1-5ms
-     - Full detection and fixes
+     - Full detection and warnings; no data is modified
 
 **Per-iteration vs initialization-only:**
 
@@ -174,8 +175,8 @@ All stability-related parameters:
        p0=p0,
        # Stability mode
        stability="auto",  # 'auto', 'check', or False
-       # Data rescaling
-       rescale_data=True,  # Rescale data to [0,1] (default)
+       # Rescale warning (no data is ever rescaled)
+       rescale_data=True,  # Warn when data would have qualified (default)
        # SVD threshold
        max_jacobian_elements_for_svd=10_000_000,  # Skip SVD above this
    )
@@ -270,11 +271,12 @@ Ill-Conditioned Problems
       y_scaled = (y - y.mean()) / y.std()
       popt, pcov = curve_fit(model, x_scaled, y_scaled, p0=p0)
 
-2. Use automatic rescaling:
+2. Use Jacobian-based parameter scaling (``stability='auto'`` only warns, it
+   does not rescale):
 
    .. code-block:: python
 
-      popt, pcov = curve_fit(model, x, y, p0=p0, stability="auto", rescale_data=True)
+      popt, pcov = curve_fit(model, x, y, p0=p0, x_scale="jac")
 
 3. Add regularization via bounds:
 

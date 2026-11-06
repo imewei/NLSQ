@@ -1,252 +1,44 @@
-# ==============================================================================
-# 06_global_optimization.yaml - CMA-ES Global Optimization
-# ==============================================================================
-# Demonstrates CMA-ES (Covariance Matrix Adaptation Evolution Strategy) for
-# robust global optimization of challenging curve fitting problems.
-#
-# Usage:
+# Historical filename: this example performs a bounded local CLI fit.
+# Run from examples/scripts/10_cli-commands:
 #   nlsq fit workflows/06_global_optimization.yaml
 #
-# CMA-ES is automatically selected when:
-#   - Parameter bounds span > 3 orders of magnitude
-#   - Manual configuration via global_optimization.cmaes
-#
-# Key Features:
-#   - BIPOP restart strategy for escaping local minima
-#   - Automatic population size selection
-#   - Optional NLSQ refinement for maximum precision
-#   - Memory-efficient batching for large datasets
-#
-# Requires: pip install nlsq  (installs evosax)
-# ==============================================================================
-
+# The CLI runner calls curve_fit. Multi-start and CMA-ES require the Python API;
+# workflow/global_optimization YAML keys do not select global solvers here.
 metadata:
-  workflow_name: "cmaes_global_optimization"
-  description: "CMA-ES global optimization for damped oscillator fitting"
-  version: "2.0"
+  workflow_name: bounded_damped_oscillator
+  description: Bounded local fit with explicit initial guesses
 
-# ==============================================================================
-# WORKFLOW SELECTION
-# ==============================================================================
-# Use "auto_global" to enable global optimization (multi-start or CMA-ES)
-# Bounds are REQUIRED for global optimization workflows
-
-workflow: "auto_global"
-
-# Number of starting points for multi-start (fallback if evosax not installed)
-# CMA-ES uses population size instead when available
-n_starts: 15
-
-# Sampling method for multi-start fallback: "lhs", "sobol", "halton"
-sampler: "lhs"
-
-# ==============================================================================
-# DATA CONFIGURATION
-# ==============================================================================
 data:
-  input_file: "data/damped_oscillation.csv"
-  format: "csv"
-
-  columns:
-    x: 0
-    y: 1
-    sigma: 2
-
+  input_file: data/damped_oscillation.csv
+  format: csv
+  columns: {x: 0, y: 1, sigma: 2}
   csv:
     header: true
     delimiter: ","
     skip_header: 2
 
-# ==============================================================================
-# MODEL CONFIGURATION
-# ==============================================================================
 model:
-  type: "custom"
+  type: custom
+  path: models/physics_models.py
+  function: damped_oscillator
 
-  # Path to Python file containing model function
-  # (relative to the current working directory, not this file's location)
-  path: "models/physics_models.py"
-
-  # Function name to use from the file
-  function: "damped_oscillator"
-
-  # Disable auto estimation - we provide explicit bounds for CMA-ES
-  auto_p0: false
-  auto_bounds: false
-
-  # Parameter configuration with bounds (REQUIRED for auto_global workflow)
-  # CMA-ES explores the full bounded parameter space
-  parameters:
-    - name: "A0"
-      initial: 10.0          # Intentionally off from true value (~15.0)
-      bounds: [0.1, 50.0]    # Wide bounds for global search
-    - name: "gamma"
-      initial: 0.1           # Intentionally off from true value (~0.05)
-      bounds: [0.001, 1.0]   # 3 orders of magnitude - triggers CMA-ES
-    - name: "omega"
-      initial: 2.0           # Intentionally off from true value (~pi)
-      bounds: [0.1, 10.0]
-    - name: "phi"
-      initial: 0.5           # Intentionally off from true value (~0.0)
-      bounds: [-3.14159, 3.14159]
-
-# ==============================================================================
-# FITTING CONFIGURATION
-# ==============================================================================
 fitting:
-  termination:
-    ftol: 1.0e-10            # Tight tolerance for high precision
-    xtol: 1.0e-10
-    gtol: 1.0e-10
-    max_iterations: 300
+  p0: [10.0, 0.1, 3.0, 0.5]
+  bounds:
+    lower: [0.1, 0.001, 0.1, -3.14159]
+    upper: [50.0, 1.0, 10.0, 3.14159]
+  method: trf
+  ftol: 1.0e-10
+  xtol: 1.0e-10
+  gtol: 1.0e-10
+  max_nfev: 300
 
-# ==============================================================================
-# GLOBAL OPTIMIZATION - CMA-ES CONFIGURATION
-# ==============================================================================
-# CMA-ES is a state-of-the-art evolutionary algorithm for nonlinear optimization.
-# It automatically adapts its search distribution to the problem landscape.
-
-global_optimization:
-  # Multi-start fallback options (used if evosax not installed)
-  center_on_p0: true
-  scale_factor: 1.0
-
-  # CMA-ES configuration (requires evosax: pip install nlsq)
-  cmaes:
-    # Preset options: "cmaes-fast" (50 gens), "cmaes" (100 gens), "cmaes-global" (200 gens)
-    # Set to null to use custom settings below
-    preset: null
-
-    # Population size (null = automatic: 4 + 3*log(n_params) ~ 8 for 4 params)
-    # Larger population = more exploration, slower convergence
-    popsize: 16
-
-    # Maximum generations before stopping
-    max_generations: 150
-
-    # Initial step size (standard deviation in normalized space)
-    # 0.5 is good default; smaller = more local search, larger = more global
-    sigma: 0.5
-
-    # BIPOP restart strategy - key for escaping local minima
-    # "bipop": Bi-population with alternating large/small populations
-    # "none": No restarts (faster but may get stuck)
-    restart_strategy: "bipop"
-    max_restarts: 9
-
-    # Convergence tolerances
-    tol_fun: 1.0e-10         # Stop when function improvement < tol_fun
-    tol_x: 1.0e-10           # Stop when parameter change < tol_x
-
-    # Refine best CMA-ES solution with NLSQ TRF optimizer
-    # Highly recommended - provides ~2x precision improvement
-    refine_with_nlsq: true
-
-    # Random seed for reproducibility (null = random)
-    seed: 42
-
-# ==============================================================================
-# RUNTIME CONFIGURATION
-# ==============================================================================
-runtime:
-  device: "cpu"
-  precision: "float64"
-  random_seed: 42
-  verbosity: 2               # Show CMA-ES progress
-
-# ==============================================================================
-# EXPORT CONFIGURATION
-# ==============================================================================
 export:
-  results_file: "output/06_cmaes_optimization_results.json"
+  results_file: output/06_bounded_fit_results.json
 
-  include:
-    parameters: true
-    covariance: true
-    uncertainties: true
-    statistics: true
-    convergence_info: true
-
-# ==============================================================================
-# VISUALIZATION CONFIGURATION
-# ==============================================================================
 visualization:
   enabled: true
-  output_dir: "output/figures"
-  filename_prefix: "06_cmaes_opt"
-  formats: ["png", "pdf"]
-  dpi: 300
-  figure_size: [6.0, 4.5]
-  style: "publication"
-
-  font:
-    family: "serif"
-    size: 10
-    math_fontset: "cm"
-
-  main_plot:
-    title: null
-    x_label: "Time $t$ (s)"
-    y_label: "Displacement $x(t)$"
-    show_grid: true
-    grid_alpha: 0.3
-
-    data:
-      marker: "o"
-      size: 20
-      alpha: 0.7
-      label: "Data"
-      show_errorbars: true
-      capsize: 2
-
-    fit:
-      linewidth: 1.5
-      linestyle: "-"
-      label: "CMA-ES Global Optimum"
-      n_points: 1000
-
-    confidence_band:
-      enabled: true
-      level: 0.95
-      alpha: 0.2
-
-    legend:
-      enabled: true
-      location: "upper right"
-      frameon: true
-
-    annotation:
-      enabled: true
-      show_r_squared: true
-      show_rmse: true
-      show_chi_squared: true
-      location: "lower right"
-      fontsize: 9
-      box_alpha: 0.8
-
-  residuals_plot:
-    enabled: true
-    type: "scatter"
-    x_label: "Time $t$ (s)"
-    y_label: "Residual"
-    show_zero_line: true
-    marker: "o"
-    size: 15
-    alpha: 0.7
-
-    std_bands:
-      enabled: true
-      levels: [1, 2]
-      colors: ["#e8e8e8", "#d0d0d0"]
-      alpha: 0.6
-
-  histogram:
-    enabled: true
-    bins: "auto"
-    show_normal_fit: true
-    alpha: 0.7
-    edgecolor: "white"
-    title: "Residual Distribution"
-
-  # Grayscale palette for B&W printing compatibility
-  active_scheme: "grayscale"
+  output_dir: output/figures
+  filename_prefix: 06_bounded_fit
+  formats: [png, pdf]
+  style: publication

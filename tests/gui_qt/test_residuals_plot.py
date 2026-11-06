@@ -48,3 +48,15 @@ class TestGetStatisticsFiniteFiltering:
         widget = _make_widget_stub(np.array([np.nan, np.inf, -np.inf]))
 
         assert widget.get_statistics() == {}
+
+
+@pytest.mark.serial
+def test_standardized_residuals_ignore_nan(qtbot):
+    """SWM5: one NaN residual must not disable standardization."""
+    w = ResidualsPlotWidget()
+    qtbot.addWidget(w)
+    r = np.array([1.0, -2.0, 3.0, np.nan, 0.5])
+    w.set_residuals(np.arange(5.0), r)
+    finite = r[np.isfinite(r)]
+    np.testing.assert_allclose(w._std_residuals[[0, 1, 2, 4]], finite / finite.std())
+    assert np.isnan(w._std_residuals[3])

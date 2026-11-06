@@ -919,6 +919,20 @@ class DataLoader:
                 suggestion="Provide more data points or reduce validation.min_points.",
             )
 
+        if sigma is not None:
+            sigma_arr = np.asarray(sigma)
+            if sigma_arr.ndim == 1 and np.any(sigma_arr <= 0):
+                raise DataLoadError(
+                    f"sigma must be positive: {int(np.sum(sigma_arr <= 0))} "
+                    "value(s) are <= 0",
+                    file_path=file_path,
+                    context={
+                        "sigma_nonpositive": int(np.sum(sigma_arr <= 0)),
+                        "is_2d": is_2d,
+                    },
+                    suggestion="Provide strictly positive sigma (uncertainties) or remove the sigma column.",
+                )
+
         # Check for NaN/Inf values
         if require_finite:
             x_nan = np.sum(~np.isfinite(xdata))

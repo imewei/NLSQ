@@ -289,6 +289,7 @@ class MainWindow(QMainWindow):
     def _setup_connections(self) -> None:
         """Connect signals and slots."""
         # Navigation
+        self._reverting_nav = False
         self._nav_list.currentRowChanged.connect(self._on_nav_changed)
 
         # Theme toggle
@@ -352,7 +353,9 @@ class MainWindow(QMainWindow):
     def _on_open_file_shortcut(self) -> None:
         """Handle open file shortcut."""
         # Navigate to data loading page
-        self._nav_list.setCurrentRow(0)
+        self.navigate_to("data_loading")
+        if self._page_stack.currentIndex() != 0:
+            return  # navigation refused (e.g. a fit is running)
         # Trigger file dialog in data loading page
         data_page = self._pages.get("data_loading")
         if data_page is not None and hasattr(data_page, "_on_browse"):
@@ -372,7 +375,18 @@ class MainWindow(QMainWindow):
 
     def _on_nav_changed(self, row: int) -> None:
         """Handle navigation list selection change."""
+        if self._reverting_nav:
+            return
         if row >= 0:
+            page_state = PageState.from_session_state(self._app_state.state)
+            if not page_state.can_access(PAGE_CONFIG[row][0]):
+                # Shortcuts call setCurrentRow, which ignores the disabled flag.
+                self._reverting_nav = True
+                try:
+                    self._nav_list.setCurrentRow(self._page_stack.currentIndex())
+                finally:
+                    self._reverting_nav = False
+                return
             self._page_stack.setCurrentIndex(row)
             page_name = PAGE_CONFIG[row][1]
             self._status_label.setText(f"Page: {page_name}")
@@ -385,6 +399,15 @@ class MainWindow(QMainWindow):
 
     def _on_theme_changed(self, theme) -> None:
         """Handle theme change signal."""
+        # Keep the checkbox and app state in sync when the change came from
+        # elsewhere (Ctrl+T, restore); signals blocked so we don't re-enter.
+        is_dark = theme.name == "dark"
+        if self._theme_toggle.isChecked() != is_dark:
+            self._theme_toggle.blockSignals(True)
+            self._theme_toggle.setChecked(is_dark)
+            self._theme_toggle.blockSignals(False)
+        if self._app_state.theme != theme.name:
+            self._app_state.set_theme_name(theme.name)
         # Propagate theme to all pages
         for page in self._pages.values():
             if hasattr(page, "set_theme"):
@@ -422,6 +445,8 @@ class MainWindow(QMainWindow):
 
     def _on_fit_completed(self, result: object) -> None:
         """Handle fit completion."""
+        if result is None:  # fit_completed(None) means "result invalidated"
+            return
         self._status_label.setText("Fit completed successfully")
         # Navigate to results page
         self._nav_list.setCurrentRow(3)  # Results page

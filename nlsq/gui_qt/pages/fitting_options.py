@@ -10,7 +10,7 @@ from __future__ import annotations
 import contextlib
 from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, QSignalBlocker, QThread, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -274,6 +274,41 @@ class FittingOptionsPage(QWidget):
 
         # Connect to app state model changes
         self._app_state.model_changed.connect(self._on_model_changed)
+        self._app_state.session_restored.connect(self._restore_session_controls)
+        self._advanced_options.options_changed.connect(self._sync_options_to_state)
+        self._param_config.config_changed.connect(self._sync_parameters_to_state)
+
+    def _sync_parameters_to_state(self, p0: list, bounds: tuple) -> None:
+        """Persist committed parameter edits before the next fit."""
+        state = self._app_state.state
+        state.auto_p0 = self._param_config.is_auto_p0()
+        state.p0 = None if state.auto_p0 else p0
+        state.bounds = bounds
+
+    def _sync_options_to_state(self, options: dict[str, Any]) -> None:
+        """Keep edits available to autosave before the first fit runs."""
+        for name, value in options.items():
+            if hasattr(self._app_state.state, name):
+                setattr(self._app_state.state, name, value)
+
+    def _restore_session_controls(self) -> None:
+        """Show recovered settings before Run Fit reads the controls."""
+        from dataclasses import fields
+
+        state = self._app_state.state
+        with QSignalBlocker(self._preset_combo):
+            self._preset_combo.setCurrentText(state.preset)
+        mode_id = 1 if state.mode == "advanced" else 0
+        self._mode_button_group.button(mode_id).setChecked(True)
+        self._on_mode_changed(mode_id)
+        with QSignalBlocker(self._advanced_options):
+            self._advanced_options.set_options(
+                {field.name: getattr(state, field.name) for field in fields(state)}
+            )
+        with QSignalBlocker(self._param_config):
+            self._param_config._auto_p0_check.setChecked(state.auto_p0)
+            if state.p0 is not None or state.bounds is not None:
+                self._param_config.set_values(state.p0 or [], state.bounds)
 
     def _on_mode_changed(self, mode_id: int) -> None:
         """Handle mode change.
@@ -282,6 +317,7 @@ class FittingOptionsPage(QWidget):
             mode_id: Mode button ID (0=Guided, 1=Advanced)
         """
         is_advanced = mode_id == 1
+        self._app_state.state.mode = "advanced" if is_advanced else "guided"
         self._preset_group.setVisible(not is_advanced)
         self._advanced_group.setVisible(is_advanced)
 
@@ -292,6 +328,7 @@ class FittingOptionsPage(QWidget):
             preset_name: Selected preset name
         """
         if preset_name in PRESETS:
+            self._app_state.state.preset = preset_name
             preset = PRESETS[preset_name]
             self._advanced_options.set_options(preset)
 
@@ -303,7 +340,10 @@ class FittingOptionsPage(QWidget):
         if state.model_func is not None:
             info = get_model_info(state.model_func)
             param_names = info.get("param_names", [])
-            self._param_config.set_param_names(param_names)
+            with QSignalBlocker(self._param_config):
+                self._param_config.set_param_names(param_names)
+                if state.p0 is not None or state.bounds is not None:
+                    self._param_config.set_values(state.p0 or [], state.bounds)
 
     def run_fit(self) -> None:
         """Execute the curve fitting operation."""
@@ -334,26 +374,15 @@ class FittingOptionsPage(QWidget):
 
         # Update state with current options
         if self._guided_radio.isChecked():
-            preset = PRESETS.get(self._preset_combo.currentText(), {})
-            for key, value in preset.items():
-                if hasattr(state, key):
-                    setattr(state, key, value)
+            self._sync_options_to_state(
+                PRESETS.get(self._preset_combo.currentText(), {})
+            )
         else:
-            options = self._advanced_options.get_options()
-            for key, value in options.items():
-                if hasattr(state, key):
-                    setattr(state, key, value)
+            self._sync_options_to_state(self._advanced_options.get_options())
 
         # Update p0 and bounds from param config
-        if not self._param_config.is_auto_p0():
-            p0, bounds = self._param_config.get_values()
-            state.p0 = p0 or None
-            state.bounds = bounds
-            state.auto_p0 = False
-        else:
-            state.auto_p0 = True
-            state.p0 = None
-            state.bounds = None
+        self._sync_parameters_to_state(*self._param_config.get_values())
+        state.p0 = state.p0 or None  # zero manual rows -> None, not []
 
         # Clear previous results
         self._cost_plot.reset()

@@ -5,7 +5,7 @@ Result types for NLSQ optimization operations.
 
 This module provides consolidated result types that were previously scattered
 across the codebase. As of v0.4.3, ``OptimizeResult`` and ``OptimizeWarning``
-have been moved here from ``nlsq.core._optimize``.
+have been moved here from ``nlsq.core._optimize`` (removed in v0.6.0).
 
 .. automodule:: nlsq.result
    :members:
@@ -75,16 +75,16 @@ The OptimizeResult object contains:
 Migration Notes
 ---------------
 
-As of v0.4.3, ``OptimizeResult`` and ``OptimizeWarning`` have been moved from
-``nlsq.core._optimize`` to ``nlsq.result``. The old import paths continue to
-work with deprecation warnings during the 12-month transition period:
+As of v0.4.3, ``OptimizeResult`` and ``OptimizeWarning`` were moved from
+``nlsq.core._optimize`` to ``nlsq.result``. The old ``nlsq.core._optimize`` module
+was removed in v0.6.0 (see :doc:`../howto/migration`), so import from the new location:
 
 .. code-block:: python
 
-   # Old (deprecated)
-   from nlsq.core._optimize import OptimizeResult
+   # Removed in v0.6.0 (ModuleNotFoundError)
+   # from nlsq.core._optimize import OptimizeResult
 
-   # New (recommended)
+   # Current
    from nlsq.result import OptimizeResult
 
    # or

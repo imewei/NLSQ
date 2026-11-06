@@ -60,6 +60,7 @@ from typing import TYPE_CHECKING, Any
 import jax
 import numpy as np
 
+from nlsq.core.problem import finite_rows
 from nlsq.global_optimization.config import GlobalOptimizationConfig
 
 # Type-only import to avoid circular dependency
@@ -572,9 +573,12 @@ class MultiStartOrchestrator:
         """Run multi-start optimization and return best result.
 
         This is the main entry point for multi-start optimization. It:
+
         1. Infers bounds if not provided
         2. Estimates p0 if not provided and center_on_p0=True
-        3. Generates LHS starting points
+        3. Generates LHS starting points; a user-supplied ``p0`` (clipped to the
+           bounds) takes the first of the ``n_starts`` slots, so the result is never
+           worse than a single start from ``p0``
         4. Evaluates all starting points
         5. Returns the result with the minimum loss
 
@@ -609,6 +613,15 @@ class MultiStartOrchestrator:
         xdata = np.asarray(xdata)
         ydata = np.asarray(ydata)
 
+        # timeit/return_eval/full_output make curve_fit return a plain tuple, which
+        # carries neither cost nor diagnostics. Run the search with CurveFitResult
+        # objects and apply the mode only to the final refit of the winner.
+        tuple_modes = {
+            k: kwargs.pop(k)
+            for k in ("full_output", "return_eval", "timeit")
+            if kwargs.get(k)
+        }
+
         # Diagnostics tracking
         diagnostics: dict[str, Any] = {
             "n_starts_configured": self.config.n_starts,
@@ -634,20 +647,28 @@ class MultiStartOrchestrator:
                 p0=p0,
                 bounds=bounds or (-np.inf, np.inf),
                 **kwargs,
+                **tuple_modes,
             )
+            if isinstance(result, tuple):
+                return result  # type: ignore[return-value]
 
             # Add diagnostics to result
             result["multistart_diagnostics"] = diagnostics
             return result
 
+        # Rows with NaN/Inf (dropped later by nan_policy='omit') must not reach the
+        # p0 / bounds heuristics, which would return NaN for them.
+        x_fin, y_fin = finite_rows(xdata, ydata)
+
         # Determine number of parameters
+        user_p0_given = p0 is not None
         if p0 is not None:
             p0 = np.atleast_1d(p0)
             n_params = len(p0)
         else:
             # Try to estimate p0 for parameter count
             try:
-                p0_estimated = estimate_initial_parameters(f, xdata, ydata, p0="auto")
+                p0_estimated = estimate_initial_parameters(f, x_fin, y_fin, p0="auto")
                 p0 = np.atleast_1d(p0_estimated)
                 n_params = len(p0)
                 diagnostics["p0_estimated"] = True
@@ -657,11 +678,10 @@ class MultiStartOrchestrator:
                 )
             except Exception as e:
                 # Fall back to signature inspection
-                from inspect import signature
+                from nlsq.streaming.strategy import default_p0
 
-                sig = signature(f)
-                n_params = len(sig.parameters) - 1  # Exclude x
-                p0 = np.ones(n_params)
+                p0 = default_p0(f)
+                n_params = len(p0)
                 self.logger.debug(
                     f"Could not estimate p0, using defaults: {e}",
                     n_params=n_params,
@@ -672,7 +692,7 @@ class MultiStartOrchestrator:
         if bounds is None:
             # Infer bounds for multi-start
             self.logger.debug("Inferring bounds for multi-start sampling")
-            lb, ub = infer_bounds_for_multistart(xdata, ydata, p0)
+            lb, ub = infer_bounds_for_multistart(x_fin, y_fin, p0)
             # Inferred bounds only shape the sampling box; fits stay unbounded.
             fit_bounds = (-np.inf, np.inf)
             diagnostics["bounds_inferred"] = True
@@ -698,8 +718,8 @@ class MultiStartOrchestrator:
             if not np.all(np.isfinite(lb)) or not np.all(np.isfinite(ub)):
                 self.logger.debug("Some bounds are infinite, inferring finite bounds")
                 lb_inferred, ub_inferred = infer_bounds_for_multistart(
-                    xdata,
-                    ydata,
+                    x_fin,
+                    y_fin,
                     p0,
                     user_bounds=(lb, ub),
                 )
@@ -721,6 +741,14 @@ class MultiStartOrchestrator:
             ub=ub,
             p0=p0 if self.config.center_on_p0 else None,
         )
+
+        # The user's own p0 is always evaluated, so multi-start can never end worse
+        # than a single start. It takes one of the n_starts slots (the first, so it
+        # also wins ties); n_starts=1 therefore reduces to the single start.
+        diagnostics["p0_included"] = bool(user_p0_given and len(starting_points) > 0)
+        if diagnostics["p0_included"]:
+            p0_start = np.clip(np.asarray(p0, dtype=float), *fit_bounds)
+            starting_points = np.vstack([p0_start[None, :], starting_points[:-1]])
 
         diagnostics["n_starts_generated"] = len(starting_points)
 
@@ -796,5 +824,17 @@ class MultiStartOrchestrator:
         # Also add as attribute for convenience
         if not hasattr(result, "multistart_diagnostics"):
             result.multistart_diagnostics = diagnostics  # type: ignore[attr-defined]
+
+        if tuple_modes:
+            # Refit once from the winner (already converged) in the requested mode.
+            return self.curve_fit.curve_fit(  # type: ignore[return-value]
+                f,
+                xdata,
+                ydata,
+                p0=np.asarray(result.popt),
+                bounds=fit_bounds,
+                **kwargs,
+                **tuple_modes,
+            )
 
         return result

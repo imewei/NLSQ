@@ -54,26 +54,17 @@ model:
   # - amplitude: max(y) - min(y)
   # - mu: x at max(y)
   # - sigma: estimated from peak width
-  auto_p0: true
 
-  # Manual override for initial parameters (uncomment to use):
-  # parameters:
-  #   - name: "amplitude"
-  #     initial: 10.0
-  #   - name: "mu"
-  #     initial: 0.0
-  #   - name: "sigma"
-  #     initial: 1.0
+  # Manual initial guesses and bounds belong under fitting.p0/fitting.bounds.
 
 # ==============================================================================
 # FITTING CONFIGURATION
 # ==============================================================================
 fitting:
-  termination:
-    ftol: 1.0e-10
-    xtol: 1.0e-10
-    gtol: 1.0e-10
-    max_iterations: 200
+  ftol: 1.0e-10
+  xtol: 1.0e-10
+  gtol: 1.0e-10
+  max_nfev: 200
 
 # ==============================================================================
 # EXPORT CONFIGURATION

@@ -235,8 +235,8 @@ class TestMemoryPooling(unittest.TestCase):
 
     def test_array_pooling_different_shapes(self):
         """Test pooling with different shapes."""
-        self.manager.allocate_array((100, 10))
-        self.manager.allocate_array((50, 20))
+        self.manager.free_array(self.manager.allocate_array((100, 10)))
+        self.manager.free_array(self.manager.allocate_array((50, 20)))
 
         # Pool should contain both arrays
         self.assertEqual(len(self.manager.memory_pool), 2)
@@ -244,8 +244,8 @@ class TestMemoryPooling(unittest.TestCase):
     def test_clear_pool(self):
         """Test clearing memory pool."""
         # Allocate some arrays
-        self.manager.allocate_array((100, 10))
-        self.manager.allocate_array((50, 20))
+        self.manager.free_array(self.manager.allocate_array((100, 10)))
+        self.manager.free_array(self.manager.allocate_array((50, 20)))
 
         self.assertGreater(len(self.manager.memory_pool), 0)
 
@@ -272,7 +272,7 @@ class TestMemoryPooling(unittest.TestCase):
         # Allocate many arrays of different sizes
         for i in range(10):
             size = (i + 1) * 10
-            self.manager.allocate_array((size, size))
+            self.manager.free_array(self.manager.allocate_array((size, size)))
 
         # Pool should have 10 arrays
         self.assertEqual(len(self.manager.memory_pool), 10)
@@ -289,9 +289,9 @@ class TestMemoryPooling(unittest.TestCase):
         self.manager.clear_pool()
 
         # Allocate only 3 arrays with different shapes
-        self.manager.allocate_array((10, 10))
-        self.manager.allocate_array((20, 20))
-        self.manager.allocate_array((30, 30))
+        self.manager.free_array(self.manager.allocate_array((10, 10)))
+        self.manager.free_array(self.manager.allocate_array((20, 20)))
+        self.manager.free_array(self.manager.allocate_array((30, 30)))
 
         pool_size_before = len(self.manager.memory_pool)
 
@@ -464,8 +464,8 @@ class TestMemoryStats(unittest.TestCase):
     def test_get_memory_stats_pool_tracking(self):
         """Test that pool memory is tracked."""
         # Allocate arrays
-        self.manager.allocate_array((100, 100))
-        self.manager.allocate_array((50, 50))
+        self.manager.free_array(self.manager.allocate_array((100, 100)))
+        self.manager.free_array(self.manager.allocate_array((50, 50)))
 
         stats = self.manager.get_memory_stats()
 
@@ -559,7 +559,7 @@ class TestGlobalFunctions(unittest.TestCase):
         manager = get_memory_manager()
 
         # Allocate something
-        manager.allocate_array((100, 10))
+        manager.free_array(manager.allocate_array((100, 10)))
         self.assertGreater(len(manager.memory_pool), 0)
 
         # Clear via global function
@@ -757,3 +757,23 @@ class TestGlobalMemoryManagerIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPoolKeyNormalization(unittest.TestCase):
+    """allocate_array and free_array must agree on the pool key."""
+
+    def test_freed_array_is_reused(self):
+        mm = MemoryManager()
+        x = np.ones((7, 3))
+        mm.free_array(x)
+        y = mm.allocate_array((7, 3))
+        self.assertIs(y, x)
+        self.assertEqual(len(mm.memory_pool), 0)
+        mm.clear_pool()
+
+    def test_allocate_then_free_single_entry(self):
+        mm = MemoryManager()
+        a = mm.allocate_array((5, 2))
+        mm.free_array(a)
+        self.assertEqual(len(mm.memory_pool), 1)
+        mm.clear_pool()

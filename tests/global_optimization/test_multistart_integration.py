@@ -213,11 +213,11 @@ class TestIntegrationBetweenComponents:
 class TestEdgeCases:
     """Edge case tests for multi-start optimization."""
 
-    def test_n_starts_one_single_start_with_lhs_point(self):
-        """Edge case: n_starts=1 degenerates to single-start with LHS initial point.
+    def test_n_starts_one_is_single_start_from_p0(self):
+        """Edge case: n_starts=1 degenerates to a single start from the user's p0.
 
-        When n_starts=1, multi-start should behave like single-start but using
-        an LHS-sampled initial point instead of p0.
+        The user's p0 takes the first of the n_starts slots, so n_starts=1
+        evaluates exactly one start: p0 itself.
         """
         xdata, ydata, _true_params = generate_test_data(n_points=300)
 

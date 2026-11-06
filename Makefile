@@ -136,7 +136,7 @@ help:
 	@echo "  $(CYAN)test$(RESET)             Run all tests"
 	@echo "  $(CYAN)test-fast$(RESET)        Run tests excluding slow tests (-m 'not slow')"
 	@echo "  $(CYAN)test-slow$(RESET)        Run only slow optimization tests"
-	@echo "  $(CYAN)test-parallel$(RESET)    Run tests in parallel (-n 4)"
+	@echo "  $(CYAN)test-parallel$(RESET)    Run tests in parallel (-n 2)"
 	@echo "  $(CYAN)test-all-parallel$(RESET) Run all tests in parallel"
 	@echo "  $(CYAN)test-coverage$(RESET)    Run tests with coverage report"
 	@echo "  $(CYAN)test-cpu$(RESET)         Run tests with CPU backend"
@@ -157,7 +157,7 @@ help:
 	@echo "$(BOLD)$(GREEN)PRE-PUSH VERIFICATION$(RESET)"
 	@echo "  $(CYAN)verify$(RESET)           Run FULL local CI (lint + type + tests) - use before push"
 	@echo "  $(CYAN)verify-fast$(RESET)      Quick verification (lint + type + fast tests)"
-	@echo "  $(CYAN)install-hooks$(RESET)    Install pre-push hook to auto-run verify"
+	@echo "  $(CYAN)install-hooks$(RESET)    Install pre-commit hooks"
 	@echo ""
 	@echo "$(BOLD)$(GREEN)DOCUMENTATION$(RESET)"
 	@echo "  $(CYAN)docs$(RESET)             Build documentation with Sphinx"
@@ -573,14 +573,7 @@ test-slow:
 	@echo "$(BOLD)$(BLUE)Running slow optimization tests...$(RESET)"
 	$(RUN_CMD) $(PYTEST) -m "slow"
 
-test-parallel:
-	@echo "$(BOLD)$(BLUE)Running tests in parallel...$(RESET)"
-	$(RUN_CMD) $(PYTEST)
-
-test-all-parallel:
-	@echo "$(BOLD)$(BLUE)Running all tests in parallel...$(RESET)"
-	$(RUN_CMD) $(PYTEST)
-	@echo "$(BOLD)$(GREEN)✓ All tests passed!$(RESET)"
+test-parallel test-all-parallel: test
 
 test-all-parallell: test-all-parallel
 
@@ -717,99 +710,57 @@ benchmark-large:
 # ===================
 # Cleanup targets
 # ===================
+CLEAN_PROTECTED_PATHS := -not -path "./.venv/*" \
+    -not -path "./venv/*" \
+    -not -path "./.claude/*" \
+    -not -path "./.specify/*" \
+    -not -path "./agent-os/*"
+
 clean-build:
 	@echo "$(BOLD)$(BLUE)Removing build artifacts...$(RESET)"
 	find . -type d -name "build" \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "_build" \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "dist" \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".benchmarks" \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "nlsq_checkpoints" \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "test_checkpoints_fast_mode" \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 
 clean-pyc:
 	@echo "$(BOLD)$(BLUE)Removing Python file artifacts...$(RESET)"
 	find . -type d -name __pycache__ \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*~" \) \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-delete 2>/dev/null || true
 
 clean-test:
 	@echo "$(BOLD)$(BLUE)Removing test and coverage artifacts...$(RESET)"
 	find . -type d \( -name .pytest_cache -o -name .nlsq_cache -o -name .ruff_cache \
 		-o -name .mypy_cache -o -name htmlcov -o -name .hypothesis -o -name .coverage \) \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name figures \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	find . -type d \( -name checkpoints -o -name checkpoints_example -o -name checkpoints_diagnostics \
 		-o -name benchmark_results \) \
-		-not -path "./.venv/*" \
-		-not -path "./venv/*" \
-		-not -path "./.claude/*" \
-		-not -path "./.specify/*" \
-		-not -path "./agent-os/*" \
+		$(CLEAN_PROTECTED_PATHS) \
 		-exec rm -rf {} + 2>/dev/null || true
 	rm -rf coverage.xml coverage.json
 	find . -type f \( -name "nlsq_debug_*.log" -o -name "build*.log" -o -name "optimization.log" \) \

@@ -177,11 +177,72 @@ class TestRecoveryErrorPaths:
         result = {"success": True, "x": np.array([np.nan, 1.0]), "cost": np.nan}
         assert not self.recovery._check_recovery_success(result)
 
-    def test_check_recovery_success_true_with_huge_cost_is_rejected(self):
-        """An explicit success=True with a blown-up (but finite) cost must
-        also be rejected."""
+    def test_check_recovery_success_true_with_huge_finite_cost_is_accepted(self):
+        """A large but finite cost is legitimate for large-magnitude data."""
         result = {"success": True, "x": np.array([1.0, 2.0]), "cost": 1e12}
-        assert not self.recovery._check_recovery_success(result)
+        assert self.recovery._check_recovery_success(result)
 
 
 # Total: 11 comprehensive tests covering recovery error paths
+
+
+class TestRecoveryBoundsHandling:
+    """Bounds are user constraints: never relaxed, never violated."""
+
+    def setup_method(self):
+        self.recovery = OptimizationRecovery(max_retries=3)
+
+    @pytest.mark.parametrize("retry", [0, 1, 2])
+    def test_reformulate_does_not_widen_bounds(self, retry):
+        lb, ub = np.array([0.0, 0.0]), np.array([np.inf, 10.0])
+        state = {"x": np.array([1.0, 1.0]), "bounds": (lb, ub)}
+        out = self.recovery._reformulate_problem("convergence", state, retry=retry)
+        np.testing.assert_array_equal(out["bounds"][0], lb)
+        np.testing.assert_array_equal(out["bounds"][1], ub)
+
+    def test_recovery_rejects_out_of_bounds_solution(self):
+        bounds = (np.array([0.0, 0.0]), np.array([np.inf, 10.0]))
+        bad = {"success": True, "x": np.array([-0.05, 1.0]), "cost": 0.1}
+        good = {"success": True, "x": np.array([0.05, 1.0]), "cost": 0.1}
+        assert not self.recovery._check_recovery_success(bad, bounds)
+        assert self.recovery._check_recovery_success(good, bounds)
+
+    def test_recover_from_failure_never_accepts_out_of_bounds(self):
+        bounds = (np.array([0.0, 0.0]), np.array([np.inf, 10.0]))
+        state = {"p0": np.array([1.0, 1.0]), "bounds": bounds}
+
+        def opt(**kw):
+            return {"success": True, "x": np.array([-0.05, 1.0]), "cost": 0.1}
+
+        success, _ = self.recovery.recover_from_failure("convergence", state, opt)
+        assert not success
+
+    def test_multi_start_finite_for_half_infinite_bounds(self):
+        bounds = (np.array([0.0, 0.0]), np.array([np.inf, np.inf]))
+        state = {"p0": np.array([0.1, 0.1]), "bounds": bounds}
+        for retry in range(4):
+            p0 = np.asarray(
+                self.recovery._multi_start("convergence", state, retry)["p0"]
+            )
+            assert np.all(np.isfinite(p0))
+            assert np.all(p0 >= 0.0)
+
+
+class TestRecoveryCostCap:
+    def setup_method(self):
+        self.recovery = OptimizationRecovery(max_retries=1)
+
+    def test_large_finite_cost_accepted(self):
+        res = {"success": True, "x": np.array([1e6, 0.5]), "cost": 5e10}
+        assert self.recovery._check_recovery_success(res)
+
+    @pytest.mark.parametrize("cost", [np.nan, np.inf])
+    def test_nonfinite_cost_rejected(self, cost):
+        res = {"success": True, "x": np.array([1.0, 0.5]), "cost": cost}
+        assert not self.recovery._check_recovery_success(res)
+
+
+def test_numpy_false_success_flag_rejected():
+    rec = OptimizationRecovery(max_retries=1)
+    res = {"success": np.False_, "x": np.array([1.0, 2.0]), "cost": 0.1}
+    assert not rec._check_recovery_success(res)

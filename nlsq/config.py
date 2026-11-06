@@ -484,7 +484,7 @@ class JAXConfig:
         """
         instance = cls()
         with cls._lock:
-            instance._memory_config = config
+            instance._memory_config = copy.deepcopy(config)
 
         # Apply GPU memory settings immediately if possible
         try:
@@ -512,7 +512,7 @@ class JAXConfig:
         # Explicit validation after initialization (not assert - can be optimized away)
         if instance._large_dataset_config is None:
             raise RuntimeError("Large dataset config initialization failed")
-        return copy.copy(instance._large_dataset_config)
+        return copy.deepcopy(instance._large_dataset_config)
 
     @classmethod
     def set_large_dataset_config(cls, config: LargeDatasetConfig):
@@ -525,7 +525,7 @@ class JAXConfig:
         """
         instance = cls()
         with cls._lock:
-            instance._large_dataset_config = config
+            instance._large_dataset_config = copy.deepcopy(config)
 
     @classmethod
     @contextmanager
@@ -850,6 +850,8 @@ def get_jacobian_mode() -> tuple[str, str]:
         try:
             with open(config_path) as f:
                 config = json.load(f)
+                if not isinstance(config, dict):
+                    raise ValueError("Expected a JSON object at the config file root")
                 if "jacobian_mode" in config:
                     mode = config["jacobian_mode"]
                     if mode in ("auto", "fwd", "rev"):
@@ -858,7 +860,7 @@ def get_jacobian_mode() -> tuple[str, str]:
                         f"Invalid jacobian_mode in config file: {mode}. Must be 'auto', 'fwd', or 'rev'. Using auto-default.",
                         stacklevel=2,
                     )
-        except (OSError, json.JSONDecodeError) as e:
+        except (OSError, ValueError) as e:
             warnings.warn(
                 f"Failed to read Jacobian mode from config file: {e}. Using auto-default.",
                 stacklevel=2,

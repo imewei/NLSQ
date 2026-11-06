@@ -16,6 +16,7 @@ _jax_config = JAXConfig()
 import jax.numpy as jnp
 
 from nlsq.stability.guard import NumericalStabilityGuard
+from nlsq.utils.bounds_sampling import sample_in_bounds
 from nlsq.utils.diagnostics import OptimizationDiagnostics
 
 
@@ -118,7 +119,9 @@ class OptimizationRecovery:
                     result = optimization_func(**modified_state, **kwargs)
 
                     # Check if recovery succeeded
-                    if self._check_recovery_success(result):
+                    if self._check_recovery_success(
+                        result, optimization_state.get("bounds")
+                    ):
                         if self.enable_diagnostics and self.diagnostics is not None:
                             self.diagnostics.record_event(
                                 "recovery_success",
@@ -300,17 +303,9 @@ class OptimizationRecovery:
         # successful reformulated fit returned parameters in normalized space —
         # i.e. silently wrong results. Conditioning is handled correctly inside
         # the solver (ParameterNormalizer / NumericalStabilityGuard) instead.
-        # Bounds relaxation below is a valid, scale-preserving reformulation.
-
-        # Adjust bounds if present
-        if "bounds" in state and state["bounds"] is not None:
-            bounds = state["bounds"]
-            if isinstance(bounds, tuple) and len(bounds) == 2:
-                lower, upper = bounds
-                # Relax bounds slightly
-                bound_range = upper - lower
-                relaxation = 0.01 * (2**retry) * bound_range
-                modified_state["bounds"] = (lower - relaxation, upper + relaxation)
+        # Bounds are user constraints and are never relaxed here: widening them
+        # (or turning a one-sided bound into -inf) would silently drop e.g. a
+        # positivity constraint.
 
         return modified_state
 
@@ -347,10 +342,20 @@ class OptimizationRecovery:
                     # Create deterministic key based on retry count
                     key = jr.PRNGKey(42 + retry)
                     # Generate uniform random sample
-                    sample = jr.uniform(key, shape=(n_params,))
+                    sample = np.asarray(jr.uniform(key, shape=(n_params,)))
 
-                    # Scale to bounds
-                    new_p0 = lower + sample * (upper - lower)
+                    # Scale to bounds; half-infinite dims sample around p0 instead
+                    # of producing inf.
+                    center = np.asarray(
+                        state.get("p0", state.get("params")), dtype=np.float64
+                    )
+                    new_p0 = sample_in_bounds(
+                        sample,
+                        np.broadcast_to(lower, (n_params,)),
+                        np.broadcast_to(upper, (n_params,)),
+                        center,
+                        np.maximum(np.abs(center), 1.0),
+                    )
                     modified_state["p0"] = new_p0
         else:
             # Random initialization around current point
@@ -366,13 +371,16 @@ class OptimizationRecovery:
 
         return modified_state
 
-    def _check_recovery_success(self, result: dict) -> bool:
+    def _check_recovery_success(self, result: dict, bounds=None) -> bool:
         """Check if recovery was successful.
 
         Parameters
         ----------
         result : dict
             Optimization result (dict or object with attributes)
+        bounds : tuple, optional
+            Original ``(lower, upper)`` user bounds; a solution outside them is
+            rejected.
 
         Returns
         -------
@@ -388,7 +396,7 @@ class OptimizationRecovery:
 
         # An explicit False is unambiguous -- trust it immediately.
         success = _get_value(result, "success")
-        if success is False:
+        if success is not None and not bool(success):
             return False
 
         # Validate parameters/cost whenever available. Even an explicit
@@ -403,10 +411,16 @@ class OptimizationRecovery:
             if not np.all(np.isfinite(params)):
                 return False
 
+            if bounds is not None and not np.all(
+                (np.asarray(params) >= np.asarray(bounds[0]))
+                & (np.asarray(params) <= np.asarray(bounds[1]))
+            ):
+                return False
+
             # Check cost if available
             cost = _get_value(result, "cost")
             if cost is not None:
-                if not np.isfinite(cost) or cost > 1e10:
+                if not np.isfinite(cost):
                     return False
 
             return True

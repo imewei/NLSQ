@@ -628,17 +628,17 @@ class MemoryManager:
         Notes
         -----
         Task Group 7 (1.2a): Uses LRU tracking via OrderedDict.
-        When an array is reused from the pool, it is moved to the end
-        (most recently used) to enable proper LRU eviction.
+        Arrays are removed from the pool while checked out. Return them with
+        ``free_array`` to make them available for reuse and LRU eviction.
         """
-        key = (shape, dtype)
+        # Normalize so keys match free_array's (arr.shape, arr.dtype)
+        shape_t = (shape,) if isinstance(shape, int | np.integer) else tuple(shape)
+        key = (shape_t, np.dtype(dtype))
 
         # Check pool for existing array
         if key in self.memory_pool:
-            arr = self.memory_pool[key]
-            # Task Group 7 (1.2a): Move to end for LRU tracking
-            # This marks the array as recently used
-            self.memory_pool.move_to_end(key)
+            # Checked-out arrays must not remain available to another caller.
+            arr = self.memory_pool.pop(key)
             if zero:
                 arr.fill(0)
             return arr
@@ -653,8 +653,6 @@ class MemoryManager:
             else:
                 arr = np.empty(shape, dtype=dtype)
 
-            # Add to pool (at end, as most recently used)
-            self.memory_pool[key] = arr
             return arr
 
     def free_array(self, arr: np.ndarray):
@@ -668,16 +666,13 @@ class MemoryManager:
         Notes
         -----
         Task Group 7 (1.2a): Uses LRU tracking via OrderedDict.
-        The returned array is added/moved to the end of the pool,
-        marking it as recently used.
+        The array becomes the pooled buffer for its (shape, dtype), replacing
+        any earlier one, and is marked as most recently used.
         """
         key = (arr.shape, arr.dtype)
-        if key in self.memory_pool:
-            # Already in pool, just move to end (mark as recently used)
-            self.memory_pool.move_to_end(key)
-        else:
-            # Add new entry at end
-            self.memory_pool[key] = arr
+        # Keep the most recently returned buffer for each shape/dtype.
+        self.memory_pool[key] = arr
+        self.memory_pool.move_to_end(key)
 
     def clear_pool(self):
         """Clear memory pool and run garbage collection."""
@@ -797,6 +792,12 @@ class MemoryManager:
         -------
         strategy : dict
             Chunking strategy with chunk_size and n_chunks
+
+        Raises
+        ------
+        MemoryError
+            If ``n_points > 0`` and the memory budget cannot hold even one
+            data point.
         """
         if memory_limit_gb is None:
             memory_limit = self.get_available_memory() * 0.8  # Use 80% of available
@@ -808,6 +809,11 @@ class MemoryManager:
 
         # Calculate maximum points that fit in memory
         max_points = int(memory_limit / memory_per_point)
+        if n_points > 0 and max_points < 1:
+            raise MemoryError(
+                "Memory budget cannot hold even one data point "
+                f"(requires approximately {memory_per_point:g} bytes)."
+            )
 
         if max_points >= n_points:
             # No chunking needed

@@ -29,6 +29,7 @@ from typing import Any, ClassVar, Protocol
 
 import numpy as np
 
+from nlsq.precision.bound_inference import infer_bounds
 from nlsq.utils.logging import get_logger
 
 __all__ = [
@@ -246,17 +247,7 @@ class AddParameterBoundsStrategy(FallbackStrategy):
         if xdata is None or ydata is None:
             return modified  # Can't infer without data
 
-        # Heuristic bounds based on data range
-        y_range = np.ptp(ydata)
-        y_min, y_max = np.min(ydata), np.max(ydata)
-
-        # Conservative bounds: p0 ± 10x, but reasonable for data scale
-        lower = np.maximum(p0 / 10, y_min - y_range)
-        upper = np.minimum(p0 * 10, y_max + y_range)
-
-        # Ensure positive for amplitude-like parameters (heuristic)
-        if np.all(p0 > 0):
-            lower = np.maximum(lower, 0)
+        lower, upper = infer_bounds(xdata, ydata, p0)
 
         modified["bounds"] = (lower, upper)
 
@@ -301,6 +292,43 @@ def _rescale_sigma(sigma: Any, y_scale: float) -> np.ndarray:
     if sigma_arr.ndim == 2:
         return sigma_arr / (y_scale**2)
     return sigma_arr / y_scale
+
+
+def _fit_rescaled(curve_fit, f, xdata, ydata, kwargs, scale_info):
+    """Fit the rescaled problem, then refit the original from its solution.
+
+    Only popt is unit-invariant: every other field of the scaled fit (pcov,
+    residuals, xdata, ydata, model) is in scaled units. The refit starts at the
+    scaled solution, so it converges immediately and returns a result entirely
+    in the user's units. If the refit fails the exception propagates and the
+    caller moves on to the next strategy instead of returning scaled fields.
+    """
+    xs, ys = scale_info["_x_scale"], scale_info["_y_scale"]
+    xo, yo = scale_info["_x_offset"], scale_info["_y_offset"]
+
+    def scaled_f(x_scaled, *params):
+        return (f(x_scaled * xs + xo, *params) - yo) / ys
+
+    # The scaled stage needs a CurveFitResult (.x), so drop tuple-return modes;
+    # the final refit keeps the user's kwargs and so the user's return type.
+    scaled_kwargs = {
+        k: v
+        for k, v in kwargs.items()
+        if k not in ("full_output", "return_eval", "timeit")
+    }
+    jac = kwargs.get("jac")
+    if callable(jac):
+        # d/dp of (f(x_s*xs + xo, p) - yo) / ys
+        scaled_kwargs["jac"] = lambda x_scaled, *p: jac(x_scaled * xs + xo, *p) / ys
+    sigma = kwargs.get("sigma")
+    if sigma is not None:
+        scaled_kwargs["sigma"] = _rescale_sigma(sigma, ys)
+    elif kwargs.get("f_scale") is not None:
+        # Without sigma, residuals have y units. With sigma, scaling both
+        # data and weights leaves whitened residuals (and f_scale) unchanged.
+        scaled_kwargs["f_scale"] = kwargs["f_scale"] / ys
+    scaled = curve_fit(scaled_f, (xdata - xo) / xs, (ydata - yo) / ys, **scaled_kwargs)
+    return curve_fit(f, xdata, ydata, **{**kwargs, "p0": np.asarray(scaled.x)})
 
 
 class RescaleProblemStrategy(FallbackStrategy):
@@ -362,7 +390,25 @@ class FallbackResult:
 
     def __getattr__(self, name):
         """Delegate attribute access to underlying result."""
+        if name == "result":  # not yet set (e.g. during copy/unpickle): avoid recursion
+            raise AttributeError(name)
         return getattr(self.result, name)
+
+    # Dunder lookups bypass __getattr__, so delegate explicitly to let
+    # ``popt, pcov = curve_fit(..., fallback=True)`` work like a normal return.
+    def __iter__(self):
+        return iter(self.result)
+
+    def __getitem__(self, key):
+        return self.result[key]
+
+    def __len__(self):
+        return len(self.result)
+
+    def __contains__(self, key):
+        # Without this, ``in`` falls back to __iter__ and compares arrays (ValueError).
+        # Mirrors attribute delegation: ``"popt" in r`` iff ``r.popt`` resolves.
+        return key in self.result or (isinstance(key, str) and hasattr(self, key))
 
 
 class FallbackOrchestrator:
@@ -503,7 +549,13 @@ class FallbackOrchestrator:
             print(f"Attempt 1/{self.max_attempts}: Original parameters")
 
         try:
-            result = curve_fit(f, xdata, ydata, **kwargs)
+            # _xdata/_ydata are for strategies only; curve_fit would warn on them.
+            result = curve_fit(
+                f,
+                xdata,
+                ydata,
+                **{k: v for k, v in kwargs.items() if k not in ("_xdata", "_ydata")},
+            )
             if self.verbose:
                 print("Success with original parameters!")
             return FallbackResult(result, strategy_used=None, attempts=1)
@@ -537,38 +589,18 @@ class FallbackOrchestrator:
 
                 # RescaleProblemStrategy can't rewrite xdata/ydata/f itself
                 # (its apply() only sees kwargs), so it signals a rescaled
-                # fit via these internal keys instead. Build the actual
-                # rescaled data/model here so popt comes back in original
-                # units with no separate inverse-transform step.
-                x_scale = modified_kwargs.pop("_x_scale", None)
-                y_scale = modified_kwargs.pop("_y_scale", None)
-                x_offset = modified_kwargs.pop("_x_offset", None)
-                y_offset = modified_kwargs.pop("_y_offset", None)
-                is_scaled = modified_kwargs.pop("_scaled", False)
-
-                fit_f, fit_xdata, fit_ydata = f, xdata, ydata
-                if is_scaled:
-                    fit_xdata = (xdata - x_offset) / x_scale
-                    fit_ydata = (ydata - y_offset) / y_scale
-
-                    def fit_f(
-                        x_scaled,
-                        *params,
-                        _f=f,
-                        _xs=x_scale,
-                        _xo=x_offset,
-                        _yo=y_offset,
-                        _ys=y_scale,
-                    ):
-                        return (_f(x_scaled * _xs + _xo, *params) - _yo) / _ys
-
-                    if modified_kwargs.get("sigma") is not None:
-                        modified_kwargs["sigma"] = _rescale_sigma(
-                            modified_kwargs["sigma"], y_scale
-                        )
-
-                # Try fit with modified parameters
-                result = curve_fit(fit_f, fit_xdata, fit_ydata, **modified_kwargs)
+                # fit via internal keys; _fit_rescaled builds the scaled
+                # problem and returns a result in the user's original units.
+                scale_info = {
+                    k: modified_kwargs.pop(k, None)
+                    for k in ("_x_scale", "_y_scale", "_x_offset", "_y_offset")
+                }
+                if modified_kwargs.pop("_scaled", False):
+                    result = _fit_rescaled(
+                        curve_fit, f, xdata, ydata, modified_kwargs, scale_info
+                    )
+                else:
+                    result = curve_fit(f, xdata, ydata, **modified_kwargs)
 
                 # Success!
                 strategy.successes += 1

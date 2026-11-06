@@ -7,15 +7,17 @@ for curve fitting.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRegularExpression, Qt, Signal
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDoubleSpinBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -26,6 +28,58 @@ if TYPE_CHECKING:
     from nlsq.gui_qt.theme import ThemeConfig
 
 __all__ = ["ParamConfigWidget"]
+
+# Decimal or scientific notation, or +/-inf; no nan.
+_FLOAT_RE = QRegularExpression(
+    r"[+-]?(inf|(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?)",
+    QRegularExpression.PatternOption.CaseInsensitiveOption,
+)
+
+
+class _FloatEdit(QLineEdit):
+    """Line edit holding an exact float (repr round-trip, scientific, +/-inf).
+
+    Unlike QDoubleSpinBox it never rounds to a fixed number of decimals.
+    Values are clamped to [minimum, maximum].
+    """
+
+    valueChanged = Signal(float)
+
+    def __init__(
+        self, value: float, minimum: float = -math.inf, maximum: float = math.inf
+    ) -> None:
+        super().__init__()
+        self._lo, self._hi = minimum, maximum
+        self._value = value
+        self.setText(repr(value))
+        self.setValidator(QRegularExpressionValidator(_FLOAT_RE, self))
+        self.editingFinished.connect(self._commit)
+
+    def value(self) -> float:
+        """Current value; text that does not parse leaves the last good value."""
+        try:
+            v = float(self.text())
+        except ValueError:
+            return self._value
+        return self._value if math.isnan(v) else min(max(v, self._lo), self._hi)
+
+    def setValue(self, value: float) -> None:
+        value = float(value)
+        self.setText(repr(value))
+        self._commit()
+
+    def focusOutEvent(self, event) -> None:
+        # editingFinished is not emitted for half-typed ("1e") text, so commit
+        # here to keep the displayed text and value() in agreement.
+        super().focusOutEvent(event)
+        self._commit()
+
+    def _commit(self) -> None:
+        v = self.value()
+        self.setText(repr(v))
+        if v != self._value:
+            self._value = v
+            self.valueChanged.emit(v)
 
 
 class ParamConfigWidget(QWidget):
@@ -100,7 +154,10 @@ class ParamConfigWidget(QWidget):
         Args:
             checked: Whether auto-estimate is enabled
         """
-        self._table.setEnabled(not checked)
+        for row in range(self._table.rowCount()):
+            initial_value = self._table.cellWidget(row, 1)
+            if initial_value is not None:
+                initial_value.setEnabled(not checked)
         self._emit_config()
 
     def _emit_config(self) -> None:
@@ -124,33 +181,22 @@ class ParamConfigWidget(QWidget):
             self._table.setItem(row, 0, name_item)
 
             # Initial value spinbox
-            p0_spin = QDoubleSpinBox()
-            p0_spin.setRange(-1e10, 1e10)
-            p0_spin.setDecimals(6)
-            p0_spin.setValue(1.0)
+            p0_spin = _FloatEdit(1.0)
             p0_spin.valueChanged.connect(self._emit_config)
             self._table.setCellWidget(row, 1, p0_spin)
 
             # Lower bound spinbox
-            lower_spin = QDoubleSpinBox()
-            lower_spin.setRange(-1e10, 1e10)
-            lower_spin.setDecimals(6)
-            lower_spin.setValue(-1e10)
-            lower_spin.setSpecialValueText("-inf")
+            lower_spin = _FloatEdit(-math.inf)
             lower_spin.valueChanged.connect(self._emit_config)
             self._table.setCellWidget(row, 2, lower_spin)
 
             # Upper bound spinbox
-            upper_spin = QDoubleSpinBox()
-            upper_spin.setRange(-1e10, 1e10)
-            upper_spin.setDecimals(6)
-            upper_spin.setValue(1e10)
-            upper_spin.setSpecialValueText("+inf")
+            upper_spin = _FloatEdit(math.inf)
             upper_spin.valueChanged.connect(self._emit_config)
             self._table.setCellWidget(row, 3, upper_spin)
 
         self._info_label.setText(f"{len(names)} parameters")
-        self._emit_config()
+        self._on_auto_toggled(self.is_auto_p0())
 
     def set_values(
         self,
@@ -168,19 +214,22 @@ class ParamConfigWidget(QWidget):
                 break
 
             p0_spin = self._table.cellWidget(row, 1)
-            if isinstance(p0_spin, QDoubleSpinBox):
+            if isinstance(p0_spin, _FloatEdit):
                 p0_spin.setValue(val)
 
         if bounds is not None:
             lower, upper = bounds
-            for row in range(min(len(lower), self._table.rowCount())):
+            n_params = self._table.rowCount()
+            lower = lower * n_params if len(lower) == 1 else lower
+            upper = upper * n_params if len(upper) == 1 else upper
+            for row in range(min(len(lower), len(upper), n_params)):
                 lower_spin = self._table.cellWidget(row, 2)
-                if isinstance(lower_spin, QDoubleSpinBox):
-                    lower_spin.setValue(lower[row])
+                if isinstance(lower_spin, _FloatEdit):
+                    lower_spin.setValue(-math.inf if lower[row] is None else lower[row])
 
                 upper_spin = self._table.cellWidget(row, 3)
-                if isinstance(upper_spin, QDoubleSpinBox):
-                    upper_spin.setValue(upper[row])
+                if isinstance(upper_spin, _FloatEdit):
+                    upper_spin.setValue(math.inf if upper[row] is None else upper[row])
 
     def get_values(
         self,
@@ -189,11 +238,8 @@ class ParamConfigWidget(QWidget):
 
         Returns:
             Tuple of (p0, bounds) where bounds is (lower, upper) or None.
-            Bound values are None when at the sentinel threshold (unbounded).
+            Bound values are None when infinite (unbounded).
         """
-        if self._auto_p0_check.isChecked():
-            return [], None
-
         p0: list[float] = []
         lower: list[float | None] = []
         upper: list[float | None] = []
@@ -203,16 +249,18 @@ class ParamConfigWidget(QWidget):
             lower_spin = self._table.cellWidget(row, 2)
             upper_spin = self._table.cellWidget(row, 3)
 
-            if isinstance(p0_spin, QDoubleSpinBox):
+            if not self.is_auto_p0() and isinstance(p0_spin, _FloatEdit):
                 p0.append(p0_spin.value())
-            if isinstance(lower_spin, QDoubleSpinBox):
+            if isinstance(lower_spin, _FloatEdit):
                 lv = lower_spin.value()
-                lower.append(None if lv <= -1e10 else lv)
-            if isinstance(upper_spin, QDoubleSpinBox):
+                lower.append(None if lv == -math.inf else lv)
+            if isinstance(upper_spin, _FloatEdit):
                 uv = upper_spin.value()
-                upper.append(None if uv >= 1e10 else uv)
+                upper.append(None if uv == math.inf else uv)
 
         bounds = (lower, upper) if lower and upper else None
+        if self.is_auto_p0() and not any(v is not None for v in (*lower, *upper)):
+            bounds = None
         return p0, bounds
 
     def is_auto_p0(self) -> bool:

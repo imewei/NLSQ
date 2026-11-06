@@ -316,6 +316,29 @@ class TestSVDBounds:
 class TestConjugateGradientSolve:
     """Tests for conjugate gradient solver."""
 
+    @pytest.mark.parametrize("dtype", [jnp.float32, jnp.float64])
+    def test_zero_rhs_stops_without_iterations(self, trf_funcs, dtype):
+        """An already solved system must not enter a zero-over-zero CG step."""
+        p, residual_norm, n_iter = trf_funcs.conjugate_gradient_solve(
+            jnp.eye(2, dtype=dtype),
+            jnp.zeros(2, dtype=dtype),
+            jnp.ones(2, dtype=dtype),
+        )
+        np.testing.assert_array_equal(p, np.zeros(2))
+        assert float(residual_norm) == 0.0
+        assert int(n_iter) == 0
+
+    def test_float32_underflowed_curvature_solves_system(self, trf_funcs):
+        """Small RHS values must not underflow the CG curvature product."""
+        p, residual_norm, _ = trf_funcs.conjugate_gradient_solve(
+            jnp.array([[1e-10]], dtype=jnp.float32),
+            jnp.array([1e-5], dtype=jnp.float32),
+            jnp.ones(1, dtype=jnp.float32),
+        )
+        np.testing.assert_allclose(p, [-1e5], rtol=1e-5)
+        np.testing.assert_allclose(1e-10 * p + 1e-5, [0.0], atol=1e-11)
+        assert float(residual_norm) < 1e-20
+
     def test_simple_system(self, trf_funcs):
         """Test CG solver on a simple system."""
         # Create a well-conditioned positive definite system
@@ -387,6 +410,18 @@ class TestConjugateGradientSolve:
         )
 
         assert n_iter <= CG_MAX_ITERATIONS
+
+    @pytest.mark.parametrize("sc", [1e-3, 1e-6, 1e3])
+    def test_cg_scale_invariant(self, trf_funcs, random_key, sc):
+        """Scaling J and f by sc must not change the CG step or iteration count."""
+        key1, key2 = random.split(random_key)
+        J = random.normal(key1, (200, 6)) * jnp.array([1, 2, 5, 1, 0.5, 3.0])
+        f = random.normal(key2, (200,))
+        d = jnp.ones(6)
+        p0, _, it0 = trf_funcs.conjugate_gradient_solve(J, f, d, 0.0, 1e-8)
+        p1, _, it1 = trf_funcs.conjugate_gradient_solve(J * sc, f * sc, d, 0.0, 1e-8)
+        np.testing.assert_allclose(p1, p0, rtol=1e-8)
+        assert int(it1) == int(it0)
 
 
 class TestSolveTrSubproblemCG:

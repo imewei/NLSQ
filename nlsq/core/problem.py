@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from inspect import signature
-from typing import Any
+from typing import Any, overload
 
 import jax.numpy as jnp
 import numpy as np
@@ -179,6 +179,63 @@ def pad_fit_data(
     return xdata, ydata
 
 
+def _n_params_from_signature(f: Callable) -> int:
+    """Count positional fit parameters after the independent variable.
+
+    Variadics and keyword-only options are not fit parameters, as in SciPy.
+    """
+    return (
+        sum(
+            p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            for p in signature(f).parameters.values()
+        )
+        - 1
+    )
+
+
+_VALID_NAN_POLICIES = frozenset({"raise", "omit", "propagate"})
+
+
+@overload
+def finite_rows(
+    xdata: np.ndarray, ydata: np.ndarray, points_axis_last: bool = True
+) -> tuple[np.ndarray, np.ndarray]: ...
+
+
+@overload
+def finite_rows(
+    xdata: object, ydata: object, points_axis_last: bool = True
+) -> tuple[object, object]: ...
+
+
+def finite_rows(
+    xdata: object, ydata: object, points_axis_last: bool = True
+) -> tuple[object, object]:
+    """Return (xdata, ydata) restricted to rows where both are finite.
+
+    Only 1-D ``xdata``, or 2-D ``xdata`` with the points on the last axis
+    ``(k, m)`` (``points_axis_last=True``) or the first axis ``(m, k)``
+    (``points_axis_last=False``), of the same length as ``ydata`` is filtered;
+    anything else is returned unchanged.
+    """
+    try:
+        xa, ya = np.asarray(xdata, float), np.asarray(ydata, float)
+    except (TypeError, ValueError):
+        return xdata, ydata
+    pts_axis = -1 if (xa.ndim == 1 or points_axis_last) else 0
+    if ya.ndim != 1 or xa.ndim == 0 or xa.shape[pts_axis] != ya.shape[0]:
+        return xdata, ydata
+    valid = np.isfinite(ya) & _finite_points(xa, points_axis_last)
+    return np.compress(valid, xa, axis=pts_axis), ya[valid]
+
+
+def _finite_points(xdata: np.ndarray, points_axis_last: bool) -> np.ndarray:
+    """Per-point finiteness mask of ``xdata`` (1-D, or 2-D in either layout)."""
+    if xdata.ndim == 1:
+        return np.isfinite(xdata)
+    return np.all(np.isfinite(xdata), axis=0 if points_axis_last else 1)
+
+
 def _determine_parameter_count(
     f: Callable,
     p0: np.ndarray | str | None,
@@ -251,11 +308,9 @@ def _determine_parameter_count(
 
     # Fall back: determine n from function signature, p0 stays None
     # (will be initialized to defaults in _prepare_bounds_and_initial_guess)
-    sig = signature(f)
-    args = sig.parameters
-    if len(args) < 2:
+    n = _n_params_from_signature(f)
+    if n < 1:
         raise ValueError("Unable to determine number of fit parameters.")
-    n = len(args) - 1
 
     return n, p0  # type: ignore[return-value]  # p0 is only a str for the 'auto' sentinel, which is resolved above
 
@@ -392,6 +447,7 @@ def _validate_and_sanitize_inputs(
     p0: np.ndarray,
     bounds: tuple | None = None,
     check_finite: bool = True,
+    sigma: np.ndarray | None = None,
     *,
     ctx: PrepareContext,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -440,6 +496,18 @@ def _validate_and_sanitize_inputs(
     for warning in security_warnings:
         ctx.logger.warning("Input validation warning", warning=warning)
 
+    # Always-on sigma check, independent of enable_stability: a zero sigma gives
+    # an infinite weight (previously a misleading "Residuals are not finite").
+    # Negative sigma is accepted as in SciPy; strict sigma > 0 is part of the
+    # enable_stability validation below.
+    sigma_errors, _ = security_validator._validate_sigma(
+        sigma, ydata, check_finite, strict=False
+    )
+    if sigma_errors:
+        error_msg = f"Input validation failed: {'; '.join(sigma_errors)}"
+        ctx.logger.error("Input validation failed", error=error_msg)
+        raise ValueError(error_msg)
+
     if ctx.enable_stability:
         try:
             errors, warnings_list, xdata_clean, ydata_clean = (
@@ -449,6 +517,7 @@ def _validate_and_sanitize_inputs(
                     ydata,
                     p0,
                     bounds=bounds,
+                    sigma=sigma,
                     check_finite=check_finite,
                 )
             )
@@ -677,6 +746,7 @@ def _preprocess_input_data(
         p0,
         bounds=bounds,
         check_finite=effective_check_finite,
+        sigma=sigma,
         ctx=ctx,
     )
 
@@ -697,6 +767,7 @@ def _preprocess_input_data(
             ydata,
             sigma,
             xdims,
+            ctx.x_points_axis_last,
         )
 
     return xdata, ydata, m, xdims, sigma, omit_mask
@@ -707,6 +778,7 @@ def _omit_nonfinite_rows(
     ydata: np.ndarray,
     sigma: np.ndarray | None,
     xdims: int,
+    points_axis_last: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
     """Drop rows with non-finite x/y (or a non-finite 1D sigma entry).
 
@@ -720,6 +792,9 @@ def _omit_nonfinite_rows(
         sigma is row/column-extracted to match the same mask.
     xdims : int
         xdata.ndim, to select row-wise vs column-wise masking.
+    points_axis_last : bool
+        For multi-dimensional ``xdata``: points on the last axis ``(k, m)``
+        (standard path) or the first axis ``(m, k)`` (hybrid streaming).
 
     Returns
     -------
@@ -729,8 +804,7 @@ def _omit_nonfinite_rows(
         way to stay aligned.
     """
     y_valid = np.isfinite(ydata)
-    x_valid = np.isfinite(xdata) if xdims == 1 else np.all(np.isfinite(xdata), axis=0)
-    valid_mask = y_valid & x_valid
+    valid_mask = y_valid & _finite_points(xdata, points_axis_last)
 
     sigma_arr = np.asarray(sigma) if sigma is not None else None
     sigma_1d = sigma_arr is not None and sigma_arr.ndim == 1
@@ -743,7 +817,9 @@ def _omit_nonfinite_rows(
 
     omit_mask = valid_mask
     ydata = ydata[valid_mask]
-    xdata = xdata[valid_mask] if xdims == 1 else xdata[:, valid_mask]
+    xdata = (
+        xdata[:, valid_mask] if xdims > 1 and points_axis_last else xdata[valid_mask]
+    )
     if sigma_1d:
         sigma = sigma_arr[valid_mask]  # type: ignore[index]  # sigma_arr is not None whenever sigma_1d is True
     elif sigma_arr is not None and sigma_arr.ndim == 2:
@@ -840,10 +916,23 @@ def prepare_problem(
     """
     if kwargs is None:
         kwargs = {}
+    if nan_policy is None:  # scipy's default; behaves as 'raise'
+        nan_policy = "raise"
+    if nan_policy not in _VALID_NAN_POLICIES:
+        raise ValueError(
+            f"nan_policy must be one of {sorted(_VALID_NAN_POLICIES)}, "
+            f"got {nan_policy!r}"
+        )
     xdata, ydata = x, y
 
-    # Step 1: Determine parameter count and auto-estimate p0 if needed
-    n, p0 = _determine_parameter_count(f, p0, xdata, ydata, ctx=ctx)
+    # Step 1: Determine parameter count and auto-estimate p0 if needed. The
+    # estimate runs before NaN removal (steps 5-7), so with nan_policy='omit'
+    # it must see only the finite rows or it returns NaN.
+    if nan_policy == "omit" and _is_auto_p0(p0):
+        x_est, y_est = finite_rows(xdata, ydata, ctx.x_points_axis_last)
+    else:
+        x_est, y_est = xdata, ydata
+    n, p0 = _determine_parameter_count(f, p0, x_est, y_est, ctx=ctx)
 
     # Step 2: Validate solver configuration
     _validate_solver_config(solver, batch_size)

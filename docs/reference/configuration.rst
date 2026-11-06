@@ -79,7 +79,9 @@ Environment Variables
    * - ``NLSQ_SAVE_ITERATIONS``
      - Directory for saved optimization iteration history; setting it (any
        non-empty value) also records per-iteration metrics at the default
-       log level
+       log level. A flag value
+       (``1``/``true``/``yes``) saves into ``NLSQ_LOG_DIR`` (default: current
+       directory) instead of a directory of that name
      - unset
 
 **Example:**

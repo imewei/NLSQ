@@ -94,7 +94,8 @@ def test_hybrid_check_finite_false_behaviour_unchanged(reached):
 
     with pytest.raises(ValueError, match="array must not contain infs or NaNs"):
         _run(x, y_nan, p0=P0)
-    with pytest.raises(ValueError, match="array must not contain infs or NaNs"):
+    # An invalid nan_policy is now rejected up front (was silently accepted).
+    with pytest.raises(ValueError, match="nan_policy must be one of"):
         _run(x, y_nan, p0=P0, nan_policy="bogus")
 
     with pytest.raises(_Reached):
@@ -237,3 +238,73 @@ def test_prepare_problem_x_points_axis_last_flag():
         _model_2d, x, y, p0=[1.0, 1.0], ctx=PrepareContext(x_points_axis_last=False)
     )
     assert out.m_real == 200 and out.x.shape == (200, 2)
+
+
+# --- nan_policy='omit' with (n_points, n_features) x -------------------------
+
+
+def _points_first_ctx():
+    from nlsq.core.problem import PrepareContext
+
+    return PrepareContext(x_points_axis_last=False)
+
+
+@pytest.mark.parametrize("p0", [[1.0, 1.0], "auto"])
+@pytest.mark.parametrize("n", [200, 2])  # n == n_features is the ambiguous layout
+def test_omit_points_first_2d_x_drops_rows(p0, n):
+    from nlsq.core.problem import prepare_problem
+
+    rng = np.random.default_rng(1)
+    x = rng.uniform(0.5, 2.0, size=(n, 2))
+    y = 1.5 * x[:, 0] + 0.7 * x[:, 1]
+    y[0] = np.nan
+    if n > 2:
+        x[7, 1] = np.nan
+    out = prepare_problem(
+        _model_2d,
+        x,
+        y,
+        p0=p0,
+        nan_policy="omit",
+        method="hybrid_streaming",
+        ctx=_points_first_ctx(),
+    )
+    keep = n - (2 if n > 2 else 1)
+    assert out.x.shape == (keep, 2) and out.y.shape == (keep,)
+    assert np.all(np.isfinite(out.x)) and np.all(np.isfinite(out.y))
+    assert out.m_real == keep
+
+
+@pytest.mark.parametrize("sigma_kind", ["1d", "2d"])
+def test_omit_points_first_masks_sigma_consistently(sigma_kind):
+    from nlsq.core.problem import prepare_problem
+
+    rng = np.random.default_rng(2)
+    x = rng.uniform(0.5, 2.0, size=(50, 2))
+    y = 1.5 * x[:, 0] + 0.7 * x[:, 1]
+    y[5] = np.nan
+    x[7, 1] = np.nan
+    sigma = np.full(50, 0.1) if sigma_kind == "1d" else np.eye(50) * 0.01
+    out = prepare_problem(
+        _model_2d,
+        x,
+        y,
+        p0=[1.0, 1.0],
+        sigma=sigma,
+        nan_policy="omit",
+        method="hybrid_streaming",
+        ctx=_points_first_ctx(),
+    )
+    assert out.x.shape == (48, 2)
+    assert out.sigma.shape == ((48,) if sigma_kind == "1d" else (48, 48))
+
+
+def test_finite_rows_points_first():
+    from nlsq.core.problem import finite_rows
+
+    x = np.ones((4, 2))
+    x[1, 0] = np.nan
+    y = np.ones(4)
+    y[3] = np.inf
+    xf, yf = finite_rows(x, y, points_axis_last=False)
+    assert xf.shape == (2, 2) and yf.shape == (2,)

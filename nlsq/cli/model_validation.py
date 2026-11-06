@@ -11,6 +11,11 @@ that could lead to arbitrary code execution.
    untrusted sources; a model file is Python code executed with the
    privileges of the calling process.
 
+An opt-in **strict allowlist** mode (``validate_model(..., strict=True)``,
+``strict: true`` in the model config, or ``NLSQ_STRICT_MODELS=1``) adds a
+positive import/attribute allowlist on top of the denylist. It narrows the
+attack surface but is likewise not a sandbox.
+
 Security Features
 -----------------
 - AST-based pattern detection for dangerous operations
@@ -111,6 +116,65 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "write_array_header_2_0",
         "ctypeslib",
         "f2py",
+        # Deserialisation that executes code (PyYAML python tags, pickle)
+        "unsafe_load",
+        "unsafe_load_all",
+        "UnsafeLoader",
+        "load_extension",
+        "savemat",
+        "mmwrite",  # scipy.io.mmio file writers
+        "hb_write",
+        "save_npz",
+        "netcdf_file",
+        "FortranFile",
+        # String annotations are eval()'d by singledispatch.register,
+        # typing.get_type_hints and friends; the visitor also rejects any
+        # string constant in an annotation position.
+        "ForwardRef",
+        "get_type_hints",
+        "_eval_type",
+        "evaluate_forward_ref",
+        "get_annotations",
+        "__annotations__",
+        "__annotate__",
+        # Pickle-capable numpy readers (allow_pickle is positional: 2nd param
+        # of read_array, 3rd of NpzFile) and header readers
+        "read_array",
+        "NpzFile",
+        "read_array_header_1_0",
+        "read_array_header_2_0",
+        # Deserialisers of compiled/pickled artefacts and compiler-invoking gadgets
+        "deserialize",
+        "deserialize_and_load",
+        "serialize_executable",
+        "array_serialization",
+        "pytree_serialization",
+        "colocated_python",
+        "compilation_cache",
+        "extbuild",
+        "build_and_import_extension",
+        # Network / file side effects reachable from numeric packages
+        "DataSource",
+        "distributed",
+        "start_trace",
+        "start_server",
+        "save_device_memory_profile",
+        # Private implementation modules of numeric packages
+        "_src",
+        "_core",
+        # string.Formatter resolves dotted attribute chains from runtime strings
+        "get_field",
+        "vformat",
+        "Formatter",
+        "format_field",
+        "convert_field",
+        # closure / alias handles onto otherwise blocked objects
+        "cell_contents",
+        "bltns",  # enum's alias for the builtins module
+        # jax.profiler.trace(dir) writes trace files
+        "profiler",
+        "FullLoader",
+        "read_pickle",
         # Network access
         "socket",
         "urlopen",
@@ -228,6 +292,10 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "shelve",
         "dill",
         "cloudpickle",
+        # yaml.unsafe_load("!!python/object/apply:...") and
+        # pandas.read_pickle() execute arbitrary code on load
+        "yaml",
+        "pandas",
         # Introspection / sandbox-escape helpers
         "inspect",
         "dis",
@@ -250,6 +318,75 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "_posixsubprocess",
         "_io",
         "pty",
+        # Stdlib modules whose .run()/.runctx()/.run_docstring_examples()
+        # compile+exec a code string
+        "cProfile",
+        "profile",
+        "trace",
+        "bdb",
+        "pdb",
+        "doctest",
+        "unittest",  # unittest.mock.patch("pkg.attr") imports by dotted name
+        "compileall",
+        "py_compile",
+        "tkinter",  # Tcl interpreter: tk.eval()/tk.call("exec", ...)
+        "turtle",
+        "idlelib",
+        # Process/thread spawning, interpreter-state and timeout tampering
+        # (signal/resource can disarm the loader's own resource_limits)
+        "webbrowser",
+        "threading",
+        "_thread",
+        "sched",
+        "atexit",
+        "signal",
+        "resource",
+        "gc",
+        "fcntl",
+        "venv",
+        "ensurepip",
+        # Import-machinery / site hooks (.pth lines are exec'd)
+        "site",
+        "zipimport",
+        "zipapp",
+        "imp",
+        "setuptools",
+        "pkg_resources",
+        "distutils",
+        "pip",
+        # File creation / config-driven callables / native extension loading
+        "sqlite3",
+        "dbm",
+        "tempfile",
+        "zipfile",
+        "tarfile",
+        "fileinput",
+        "mmap",
+        "logging",
+        # Network (urllib/http/socket already blocked)
+        "ssl",
+        "selectors",
+        "socketserver",
+        "xmlrpc",
+        "wsgiref",
+        "imaplib",
+        "poplib",
+        "nntplib",
+        "requests",
+        "httpx",
+        "aiohttp",
+        "urllib3",
+        "websockets",
+        # Third-party: unsafe deserialisation, string evaluation, process pools
+        "joblib",
+        "sympy",  # sympify()/parse_expr() eval strings
+        "numexpr",
+        "h5py",
+        "torch",  # torch.load unpickles
+        "dask",
+        "ray",
+        "annotationlib",
+        "string",
     },
 )
 
@@ -267,7 +404,109 @@ _DANGEROUS_STRING_SUBSTRINGS: tuple[str, ...] = (
     "__code__",
     "__import__",
     "__loader__",
+    # PyYAML python tags (consumed by an unsafe loader)
+    "!!python/",
 )
+
+
+_NUMERIC_ROOTS: frozenset[str] = frozenset({"numpy", "scipy", "jax"})
+# Dunders that legitimate models read and that expose nothing dangerous.
+_VETTED_DUNDERS: frozenset[str] = frozenset({"__name__", "__doc__", "__version__"})
+_COLLIDING_SYMBOLS: frozenset[str] = frozenset(
+    {"signal", "trace", "profile", "gc", "resource", "logging"}
+)
+
+
+# --- Strict allowlist mode (opt-in; see AllowlistVisitor) -------------------
+# A module path is allowed iff it equals one of these entries or lies below
+# one (``numpy.linalg`` is below ``numpy``). Extend here to widen the mode.
+ALLOWLIST_MODULES: frozenset[str] = frozenset(
+    {
+        "__future__",
+        "math",
+        "cmath",
+        "functools",
+        "typing",
+        "collections.abc",
+        "dataclasses",
+        "numpy",
+        "jax",
+        "jax.numpy",
+        "jax.scipy",
+        "jax.lax",
+        "scipy.special",
+        "scipy.stats",
+        "scipy.constants",
+    }
+)
+
+# Dotted paths (and everything below them) that stay blocked even though their
+# root is allowlisted: file/pickle I/O, native-code loaders, runtime config and
+# profiler/debug/export hooks of numpy and jax.
+ALLOWLIST_BLOCKED_ATTRS: frozenset[str] = frozenset(
+    {
+        "numpy.ctypeslib",
+        "numpy.f2py",
+        "numpy.testing",
+        "numpy.distutils",
+        "numpy.lib.format",
+        "numpy.lib.npyio",
+        "numpy.lib.NpzFile",
+        "numpy.load",
+        "numpy.loadtxt",
+        "numpy.genfromtxt",
+        "numpy.fromregex",
+        "numpy.fromfile",
+        "numpy.save",
+        "numpy.savez",
+        "numpy.savez_compressed",
+        "numpy.savetxt",
+        "numpy.tofile",
+        "numpy.memmap",
+        "jax.numpy.load",
+        "jax.config",
+        "jax.experimental",
+        "jax.profiler",
+        "jax.export",
+        "jax.debug",
+        "jax.extend",
+        "jax.ffi",
+        "jax.lib",
+        "jax.interpreters",
+    }
+)
+
+# Names that may not appear as ANY Name reference in strict mode (not just as
+# call targets), so aliasing (`o = open`) and passing them around is rejected.
+ALLOWLIST_FORBIDDEN_NAMES: frozenset[str] = frozenset(
+    {
+        "open",
+        "eval",
+        "exec",
+        "compile",
+        "__import__",
+        "getattr",
+        "setattr",
+        "delattr",
+        "globals",
+        "locals",
+        "vars",
+        "input",
+        "breakpoint",
+    }
+)
+
+# Last component of each blocked path, denied on ANY base object. This catches
+# module objects that reached a local name by a route alias tracking misses
+# (`m = [jax][0]; m.config`). `lib` is too common (`np.lib.stride_tricks`).
+_ALLOWLIST_BLOCKED_TERMINALS: frozenset[str] = frozenset(
+    p.rsplit(".", 1)[-1] for p in ALLOWLIST_BLOCKED_ATTRS
+) - {"lib"}
+
+
+def _under(path: str, prefixes: frozenset[str]) -> bool:
+    """True if ``path`` equals or lies below any dotted prefix."""
+    return any(path == p or path.startswith(p + ".") for p in prefixes)
 
 
 @dataclass
@@ -303,6 +542,8 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         # ids of nodes used directly as a call target; an `open` reference
         # anywhere else (`o = open; o(p, "w")`) escapes the mode check
         self._callees: set[int] = set()
+        # local name -> dotted module path, from import statements seen so far
+        self._aliases: dict[str, str] = {}
 
     def visit_Name(self, node: ast.Name) -> Any:
         """Check for dangerous name references."""
@@ -310,14 +551,100 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             self.violations.append(f"Dangerous name reference: {node.id}")
         if node.id == "open" and id(node) not in self._callees:
             self.violations.append("Dangerous name reference: open (aliased)")
+        if (
+            node.id == "load"
+            and isinstance(node.ctx, ast.Load)
+            and id(node) not in self._callees
+        ):
+            self.violations.append("Dangerous name reference: load (aliased)")
+        self.generic_visit(node)
+
+    def _check_annotation(self, annotation: ast.expr | None) -> None:
+        """Reject string constants in annotations (they are eval()'d on demand)."""
+        if annotation is None:
+            return
+        for sub in ast.walk(annotation):
+            if (
+                isinstance(sub, ast.Constant)
+                and isinstance(sub.value, str)
+                and not self._is_plain_type_string(sub.value)
+            ):
+                self.violations.append(
+                    "Dangerous string annotation (evaluated by get_type_hints/register)"
+                )
+                return
+
+    @staticmethod
+    def _is_plain_type_string(text: str) -> bool:
+        """True for forward references made only of names/attributes/subscripts
+        ("jax.Array", "list[int] | None"): evaluating them cannot call anything."""
+        try:
+            tree = ast.parse(text.strip(), mode="eval")
+        except SyntaxError:
+            return False
+        allowed = (
+            ast.Expression, ast.Name, ast.Attribute, ast.Subscript, ast.Tuple,
+            ast.BitOr, ast.BinOp, ast.Load,
+        )  # fmt: skip
+        for sub in ast.walk(tree):
+            if isinstance(sub, ast.Constant) and (
+                sub.value is None or sub.value is Ellipsis
+            ):
+                continue
+            if not isinstance(sub, allowed):
+                return False
+            if isinstance(sub, ast.BinOp) and not isinstance(sub.op, ast.BitOr):
+                return False
+            if isinstance(sub, ast.Name) and sub.id in DANGEROUS_PATTERNS:
+                return False
+            if isinstance(sub, ast.Attribute) and (
+                sub.attr in DANGEROUS_PATTERNS or sub.attr.startswith("_")
+            ):
+                return False
+        return True
+
+    def visit_arg(self, node: ast.arg) -> Any:
+        """Check parameter annotations."""
+        self._check_annotation(node.annotation)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
+        """Check return annotations."""
+        self._check_annotation(node.returns)
+        self.generic_visit(node)
+
+    visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
+        """Check variable annotations."""
+        self._check_annotation(node.annotation)
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> Any:
         """Check for dangerous function calls."""
         self._callees.add(id(node.func))
+        if any(k.arg == "eval_str" for k in node.keywords):
+            self.violations.append("Dangerous keyword argument: eval_str")
         # numpy.load(..., allow_pickle=...) executes pickle payloads
         if any(k.arg == "allow_pickle" for k in node.keywords):
             self.violations.append("Dangerous keyword argument: allow_pickle")
+        # np.load's allow_pickle is its THIRD POSITIONAL parameter; fail closed
+        # on any call shape that can supply it (or hide arguments).
+        callee = (
+            node.func.id
+            if isinstance(node.func, ast.Name)
+            else node.func.attr
+            if isinstance(node.func, ast.Attribute)
+            else None
+        )
+        if callee == "load" and (
+            len(node.args) >= 3
+            or any(isinstance(a, ast.Starred) for a in node.args)
+            or any(k.arg is None for k in node.keywords)
+        ):
+            self.violations.append(
+                "Dangerous call: load() with allow_pickle-capable arguments"
+            )
         # Check direct function calls
         if isinstance(node.func, ast.Name):
             if node.func.id in DANGEROUS_PATTERNS:
@@ -398,15 +725,100 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """
         if node.attr in DANGEROUS_PATTERNS:
             self.violations.append(f"Dangerous attribute access: .{node.attr}")
+        else:
+            reason = self._attr_violation(node.attr)
+            if reason:
+                self.violations.append(
+                    f"Dangerous attribute access: .{node.attr} ({reason})"
+                )
+        if node.attr == "io":
+            root: ast.expr = node
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if (
+                isinstance(root, ast.Name)
+                and self._aliases.get(root.id, root.id).split(".")[0] == "scipy"
+            ):
+                self.violations.append(
+                    "Dangerous attribute access: scipy.io (file writers)"
+                )
         if node.attr == "open" and id(node) not in self._callees:
             self.violations.append("Dangerous attribute access: .open (aliased)")
+        if node.attr == "load" and id(node) not in self._callees:
+            self.violations.append("Dangerous attribute access: .load (aliased)")
         self.generic_visit(node)
+
+    @staticmethod
+    def _attr_violation(attr: str) -> str | None:
+        """Reason an attribute NAME is unsafe regardless of its base, else None.
+
+        Reachability rule: public chains such as ``typing.sys`` or
+        ``jax.version.subprocess`` hand out blocked modules, and private or
+        dunder attributes (``len.__self__``, ``f.__closure__``) reach arbitrary
+        objects. Names that merely collide with a blocked module but are public
+        numeric APIs (jnp.trace, scipy.signal) are exempt.
+        """
+        if attr.startswith("_") and attr not in _VETTED_DUNDERS:
+            return "private attribute"
+        if attr in DANGEROUS_PATTERNS:
+            return "dangerous name"
+        if attr in DANGEROUS_MODULES and attr not in _COLLIDING_SYMBOLS:
+            return "reaches a blocked module"
+        return None
+
+    def visit_MatchClass(self, node: ast.MatchClass) -> Any:
+        """``case object(__self__=m)``: kwd_attrs are plain strings, not Attribute nodes."""
+        for attr in node.kwd_attrs:
+            reason = self._attr_violation(attr)
+            if reason:
+                self.violations.append(
+                    f"Dangerous match class attribute: {attr} ({reason})"
+                )
+        self.generic_visit(node)
+
+    def _check_capture(self, name: str | None) -> None:
+        if name and (name in DANGEROUS_PATTERNS or name in DANGEROUS_MODULES):
+            self.violations.append(f"Dangerous match capture name: {name}")
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> Any:
+        """Check capture names."""
+        self._check_capture(node.name)
+        self.generic_visit(node)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> Any:
+        """Check capture names."""
+        self._check_capture(node.name)
+        self.generic_visit(node)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> Any:
+        """Check the ``**rest`` capture name."""
+        self._check_capture(node.rest)
+        self.generic_visit(node)
+
+    @staticmethod
+    def _bad_module_path(dotted: str) -> bool:
+        """True for a dangerous submodule (jax.experimental.serialize_executable)
+        or a private module of a numeric package (jax._src.*, numpy.lib._npyio_impl)."""
+        parts = dotted.split(".")
+        if parts[:2] == ["scipy", "io"]:  # wavfile.write, savemat, netcdf, ...
+            return True
+        if any(p in DANGEROUS_PATTERNS for p in parts[1:]):
+            return True
+        return parts[0] in _NUMERIC_ROOTS and any(p.startswith("_") for p in parts[1:])
 
     def visit_Import(self, node: ast.Import) -> Any:
         """Check for dangerous module imports."""
         for alias in node.names:
             module_root = alias.name.split(".")[0]
-            if module_root in DANGEROUS_MODULES or module_root in DANGEROUS_PATTERNS:
+            if alias.asname:
+                self._aliases[alias.asname] = alias.name
+            else:
+                self._aliases[module_root] = module_root
+            if (
+                module_root in DANGEROUS_MODULES
+                or module_root in DANGEROUS_PATTERNS
+                or self._bad_module_path(alias.name)
+            ):
                 self.violations.append(f"Dangerous import: import {alias.name}")
         self.generic_visit(node)
 
@@ -426,16 +838,197 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             self.violations.append(
                 f"Dangerous import: from {node.module} import ...",
             )
+        # Numeric-library symbols that merely share a name with a blocked
+        # module (scipy.signal, jnp.trace, ...). Private submodules
+        # (jax._src.config.logging) and non-numeric roots stay blocked.
+        exempt_root = module_root in _NUMERIC_ROOTS and not any(
+            part.startswith("_") for part in (node.module or "").split(".")
+        )
+        if node.module and self._bad_module_path(node.module):
+            self.violations.append(
+                f"Dangerous import: from {node.module} import ...",
+            )
         for alias in node.names:
-            if alias.name in DANGEROUS_PATTERNS or alias.name in DANGEROUS_MODULES:
+            self._aliases[alias.asname or alias.name] = (
+                f"{node.module}.{alias.name}" if node.module else alias.name
+            )
+            if node.module == "scipy" and alias.name == "io":
+                self.violations.append("Dangerous import: from scipy import io")
+            if module_root in _NUMERIC_ROOTS and alias.name.startswith("_"):
+                self.violations.append(
+                    f"Dangerous import: from {node.module} import {alias.name} (private)",
+                )
+            if alias.name == "load" and alias.asname not in (None, "load"):
+                self.violations.append(
+                    f"Dangerous import: from {node.module} import load as {alias.asname}",
+                )
+            if alias.name in DANGEROUS_PATTERNS or (
+                alias.name in DANGEROUS_MODULES
+                and not (exempt_root and alias.name in _COLLIDING_SYMBOLS)
+            ):
                 self.violations.append(
                     f"Dangerous import: from {node.module} import {alias.name}",
                 )
         self.generic_visit(node)
 
 
+class AllowlistVisitor(DangerousPatternVisitor):
+    """Opt-in strict mode: the denylist checks plus a positive allowlist.
+
+    Every ``DangerousPatternVisitor`` check still runs (each override calls
+    ``super()``). On top of that:
+
+    * imports must fall under ``ALLOWLIST_MODULES`` (relative and wildcard
+      imports are rejected);
+    * every attribute chain rooted at an import alias is resolved to its full
+      dotted path and must fall under the allowlist and outside
+      ``ALLOWLIST_BLOCKED_ATTRS`` (so ``import jax; jax.config`` and
+      ``from scipy import special`` + ``special.x`` are judged on the real path);
+    * aliases are followed through simple assignment; a target bound to a
+      blocked callable or non-allowlisted path is tainted and any use of it is
+      a violation;
+    * ``ALLOWLIST_FORBIDDEN_NAMES`` are rejected as any Name reference;
+    * a module object used as a bare value (``f(np)``, ``x = jax``) is rejected
+      because it can hand an unchecked module to code the visitor cannot follow.
+
+    This narrows the attack surface; like the denylist it is NOT a sandbox.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._tainted: set[str] = set()
+        # ids of Name/Attribute nodes that are the base of a longer chain
+        self._inner: set[int] = set()
+
+    def _flag(self, msg: str) -> None:
+        self.violations.append(f"strict allowlist: {msg}")
+
+    @staticmethod
+    def _path_problem(path: str) -> str | None:
+        if _under(path, ALLOWLIST_BLOCKED_ATTRS):
+            return "blocked path"
+        if not _under(path, ALLOWLIST_MODULES):
+            return "not an allowlisted module"
+        return None
+
+    @staticmethod
+    def _is_module_path(path: str) -> bool:
+        """An allowlisted module itself, or a package that only contains one."""
+        return path in ALLOWLIST_MODULES or any(
+            m.startswith(path + ".") for m in ALLOWLIST_MODULES
+        )
+
+    def _resolve(self, node: ast.expr) -> str | None:
+        """Dotted path of a Name/Attribute chain rooted at an import alias."""
+        if isinstance(node, ast.Name):
+            return self._aliases.get(node.id)
+        if isinstance(node, ast.Attribute):
+            base = self._resolve(node.value)
+            return f"{base}.{node.attr}" if base else None
+        return None
+
+    def _check_import_path(self, dotted: str) -> None:
+        problem = self._path_problem(dotted)
+        if problem:
+            self._flag(f"import of '{dotted}' ({problem})")
+
+    def visit_Import(self, node: ast.Import) -> Any:
+        super().visit_Import(node)
+        for alias in node.names:
+            self._check_import_path(alias.name)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+        super().visit_ImportFrom(node)
+        if node.level:
+            self._flag("relative import")
+            return
+        for alias in node.names:
+            if alias.name == "*":
+                self._flag("wildcard import")
+            else:
+                self._check_import_path(f"{node.module}.{alias.name}")
+
+    def visit_Name(self, node: ast.Name) -> Any:
+        super().visit_Name(node)
+        if node.id in ALLOWLIST_FORBIDDEN_NAMES:
+            self._flag(f"forbidden name '{node.id}'")
+        if isinstance(node.ctx, ast.Load):
+            if node.id in self._tainted:
+                self._flag(f"use of tainted alias '{node.id}'")
+            if id(node) not in self._inner:
+                path = self._aliases.get(node.id)
+                if path and self._is_module_path(path):
+                    self._flag(f"module '{path}' used as a value")
+
+    def visit_Attribute(self, node: ast.Attribute) -> Any:
+        if node.attr in _ALLOWLIST_BLOCKED_TERMINALS:
+            self._flag(f"blocked attribute '.{node.attr}'")
+        if id(node) not in self._inner:
+            # outermost node of a chain: mark the rest so each chain is judged once
+            inner: ast.expr = node.value
+            while True:
+                self._inner.add(id(inner))
+                if not isinstance(inner, ast.Attribute):
+                    break
+                inner = inner.value
+            path = self._resolve(node)
+            if path:
+                problem = self._path_problem(path)
+                if problem:
+                    self._flag(f"attribute chain '{path}' ({problem})")
+                elif self._is_module_path(path):
+                    self._flag(f"module '{path}' used as a value")
+        super().visit_Attribute(node)
+
+    def visit_MatchClass(self, node: ast.MatchClass) -> Any:
+        for attr in node.kwd_attrs:
+            if attr in _ALLOWLIST_BLOCKED_TERMINALS:
+                self._flag(f"blocked match attribute '{attr}'")
+        super().visit_MatchClass(node)
+
+    def _bind(self, target: ast.expr, value: ast.expr | None) -> None:
+        """Follow ``target = value`` for alias resolution and tainting."""
+        if isinstance(target, (ast.Tuple, ast.List)):
+            if isinstance(value, (ast.Tuple, ast.List)) and len(value.elts) == len(
+                target.elts
+            ):
+                for t, v in zip(target.elts, value.elts, strict=True):
+                    self._bind(t, v)
+            return
+        if not isinstance(target, ast.Name) or value is None:
+            return
+        if isinstance(value, ast.Name) and (
+            value.id in self._tainted or value.id in ALLOWLIST_FORBIDDEN_NAMES
+        ):
+            self._tainted.add(target.id)
+            return
+        path = self._resolve(value)
+        if path is None:
+            return
+        if self._path_problem(path):
+            self._tainted.add(target.id)
+        else:
+            self._aliases[target.id] = path
+
+    def visit_Assign(self, node: ast.Assign) -> Any:
+        for target in node.targets:
+            self._bind(target, node.value)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
+        self._bind(node.target, node.value)
+        super().visit_AnnAssign(node)
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> Any:
+        self._bind(node.target, node.value)
+        self.generic_visit(node)
+
+
 def validate_model(
-    path: Path, trusted: bool = False, source: bytes | None = None
+    path: Path,
+    trusted: bool = False,
+    source: bytes | None = None,
+    strict: bool = False,
 ) -> ModelValidationResult:
     """Validate a model file for security.
 
@@ -452,6 +1045,10 @@ def validate_model(
         Raw file bytes to validate instead of reading ``path``. Callers that
         go on to execute the file pass the same bytes to the executor so the
         validated and executed code are identical.
+    strict : bool, default=False
+        If True, additionally enforce the opt-in strict allowlist
+        (:class:`AllowlistVisitor`). The default denylist behaviour is
+        unchanged when False.
 
     Returns
     -------
@@ -495,7 +1092,7 @@ def validate_model(
         )
 
     # Visit all nodes to find violations
-    visitor = DangerousPatternVisitor()
+    visitor = AllowlistVisitor() if strict else DangerousPatternVisitor()
     visitor.visit(tree)
     violations.extend(visitor.violations)
 

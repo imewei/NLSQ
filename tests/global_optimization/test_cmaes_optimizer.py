@@ -733,22 +733,139 @@ class TestCMAESBugFixRegressions:
         assert popt.shape == (2,)
         np.testing.assert_allclose(popt, [2.0, 0.5], atol=0.5)
 
+    @pytest.mark.parametrize("signature_error", [TypeError, ValueError])
     def test_scalar_bounds_without_p0_or_introspectable_signature_raises(
-        self, simple_model
+        self, simple_model, signature_error
     ) -> None:
         """When p0 is None, bounds are scalar, and f's signature genuinely
         can't be inspected, raise a clear ValueError instead of the old
         opaque 'len() of unsized object' TypeError."""
-        from unittest.mock import patch
-
         from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        class UninspectableModel:
+            @property
+            def __signature__(self):
+                raise signature_error("not introspectable")
+
+            def __call__(self, x, a, b):
+                return simple_model(x, a, b)
 
         x = np.linspace(0, 5, 30)
         y = np.asarray(2.0 * jnp.exp(-0.5 * x))
 
         optimizer = CMAESOptimizer()
-        with (
-            patch("inspect.signature", side_effect=TypeError("not introspectable")),
-            pytest.raises(ValueError, match="number of parameters"),
-        ):
-            optimizer.fit(simple_model, x, y, bounds=(0, 10))
+        with pytest.raises(ValueError, match="number of parameters"):
+            optimizer.fit(UninspectableModel(), x, y, bounds=(0, 10))
+
+
+class TestBIPOPRunCount:
+    """BIPOP must perform 1 + max_restarts runs (max_restarts=0 -> one run)."""
+
+    @pytest.mark.parametrize("max_restarts", [0, 1, 2])
+    def test_bipop_run_count(self, simple_model, max_restarts):
+        from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+        x = np.linspace(0, 4, 30)
+        y = 2.5 * np.exp(-1.3 * x)
+        cfg = CMAESConfig(
+            restart_strategy="bipop",
+            max_restarts=max_restarts,
+            max_generations=3,  # too few to hit the xtol early-stop
+            seed=1,
+            refine_with_nlsq=False,
+        )
+        r = CMAESOptimizer(cfg).fit(
+            simple_model, x, y, bounds=([0.1, 0.01], [10.0, 5.0])
+        )
+        d = r["cmaes_diagnostics"]
+        assert len(d["restart_history"]) == 1 + max_restarts
+        assert d["total_restarts"] == max_restarts
+        assert d["total_generations"] > 0
+        assert np.isfinite(d["best_fitness"])
+
+
+def _old_streaming_fitness(model, x, y, sigma, lb, ub, chunk):
+    """Oracle: the pre-scan implementation (Python loop over chunks)."""
+    from nlsq.global_optimization.cmaes_optimizer import transform_to_bounds
+
+    n = x.shape[0]
+    n_chunks = -(-n // chunk)
+    pad = n_chunks * chunk - n
+    xp = jnp.pad(x, (0, pad), constant_values=0.0).reshape(n_chunks, chunk)
+    yp = jnp.pad(y, (0, pad), constant_values=0.0).reshape(n_chunks, chunk)
+    sp = (
+        None
+        if sigma is None
+        else jnp.pad(sigma, (0, pad), constant_values=1.0).reshape(n_chunks, chunk)
+    )
+
+    def single(p):
+        pb = transform_to_bounds(p, lb, ub)
+        total = jnp.array(0.0)
+        for i in range(n_chunks):
+            mask = jnp.ones(chunk, dtype=bool)
+            if i == n_chunks - 1 and pad > 0:
+                mask = jnp.arange(chunk) < (chunk - pad)
+            r = yp[i] - model(xp[i], *pb)
+            if sp is not None:
+                r = r / sp[i]
+            total = total + jnp.sum(jnp.where(mask, r**2, 0.0))
+        return jnp.where(jnp.isfinite(total), total, jnp.inf)
+
+    return jax.jit(jax.vmap(single))
+
+
+def _count_eqns(jaxpr) -> int:
+    n = 0
+    for eqn in jaxpr.eqns:
+        n += 1
+        for v in eqn.params.values():
+            for sub in v if isinstance(v, (list, tuple)) else [v]:
+                inner = getattr(sub, "jaxpr", sub)
+                if hasattr(inner, "eqns"):
+                    n += _count_eqns(inner)
+    return n
+
+
+class TestStreamingFitnessScan:
+    """Streaming fitness uses lax.scan: exact vs. loop, graph size O(1) in chunks."""
+
+    @staticmethod
+    def _model(x, a, b):
+        return a * jnp.exp(-b * x)
+
+    @pytest.mark.parametrize(
+        "n_data,use_sigma", [(1000, False), (1037, True), (96, True)]
+    )
+    def test_matches_loop_oracle(self, n_data, use_sigma):
+        from nlsq.global_optimization.cmaes_optimizer import _create_fitness_function
+
+        rng = np.random.default_rng(0)
+        x = jnp.asarray(np.linspace(0, 4, n_data))
+        y = jnp.asarray(
+            2.5 * np.exp(-1.3 * np.asarray(x)) + 0.05 * rng.normal(size=n_data)
+        )
+        sigma = jnp.asarray(rng.uniform(0.5, 2.0, n_data)) if use_sigma else None
+        lb, ub = jnp.array([0.1, 0.01]), jnp.array([10.0, 5.0])
+        pop = jnp.asarray(rng.normal(size=(8, 2)))
+
+        new = _create_fitness_function(
+            self._model, x, y, lb, ub, sigma=sigma, data_chunk_size=64
+        )(pop)
+        old = _old_streaming_fitness(self._model, x, y, sigma, lb, ub, 64)(pop)
+        np.testing.assert_allclose(np.asarray(new), np.asarray(old), rtol=1e-12)
+
+    def test_graph_size_independent_of_chunk_count(self):
+        from nlsq.global_optimization.cmaes_optimizer import _create_fitness_function
+
+        lb, ub = jnp.array([0.1, 0.01]), jnp.array([10.0, 5.0])
+        pop = jnp.zeros((4, 2))
+        counts = []
+        for n_chunks in (10, 400):
+            n = 64 * n_chunks
+            x = jnp.linspace(0, 4, n)
+            f = _create_fitness_function(
+                self._model, x, 2.5 * jnp.exp(-1.3 * x), lb, ub, data_chunk_size=64
+            )
+            counts.append(_count_eqns(jax.make_jaxpr(f)(pop).jaxpr))
+        assert counts[0] == counts[1]

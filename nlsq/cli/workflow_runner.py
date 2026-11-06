@@ -19,6 +19,7 @@ Example Usage
 >>> print(result["popt"])
 """
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -27,6 +28,8 @@ from nlsq.cli.data_loaders import DataLoader
 from nlsq.cli.errors import CLIError, ConfigError, DataLoadError, FitError, ModelError
 from nlsq.cli.model_registry import ModelRegistry
 from nlsq.cli.result_exporter import ResultExporter
+
+logger = logging.getLogger("nlsq.cli.workflow_runner")
 
 
 class WorkflowRunner:
@@ -270,8 +273,16 @@ class WorkflowRunner:
             if hasattr(model, "estimate_p0"):
                 try:
                     p0 = model.estimate_p0(xdata, ydata)
-                    p0 = np.asarray(p0)
-                except Exception:
+                    if p0 is not None:
+                        p0 = np.asarray(p0)
+                except Exception as e:
+                    logger.warning(
+                        "estimate_p0() of model '%s' failed (%s: %s); "
+                        "using the default initial guess",
+                        getattr(model, "__name__", "?"),
+                        type(e).__name__,
+                        e,
+                    )
                     p0 = None
         elif isinstance(p0, (list, tuple)):
             p0 = np.asarray(p0)
@@ -299,8 +310,16 @@ class WorkflowRunner:
                 model_bounds = model.bounds()
                 if model_bounds:
                     bounds = (np.asarray(model_bounds[0]), np.asarray(model_bounds[1]))
-            except Exception:
-                pass
+            except Exception as e:
+                # A user-defined bounds() that fails is a user error; silently
+                # dropping it would run an unconstrained fit.
+                raise ModelError(
+                    f"bounds() of model '{getattr(model, '__name__', '?')}' failed: "
+                    f"{type(e).__name__}: {e}",
+                    model_name=getattr(model, "__name__", None),
+                    model_type="custom",
+                    suggestion="Fix bounds() or remove it, or set fitting.bounds explicitly",
+                ) from e
 
         # Extract additional fit kwargs
         fit_kwargs: dict[str, Any] = {}

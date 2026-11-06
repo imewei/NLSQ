@@ -493,7 +493,16 @@ def fit(
         - 'large': Auto-detect dataset size and use appropriate strategy
 
         If None, defaults to 'fast' for small datasets or 'large' for datasets
-        exceeding size_threshold.
+        exceeding size_threshold. Names are case-insensitive; an unknown name
+        raises ValueError. With 'streaming', only ``gtol`` and ``max_nfev`` are
+        mapped (to ``gauss_newton_tol`` / ``gauss_newton_max_iterations``),
+        any other solver option emits a UserWarning, and ``full_output=True`` /
+        ``return_eval=True`` raise ValueError.
+    goal : {'fast', 'robust', 'global', 'memory_efficient', 'quality'}, optional
+        Optimization goal (case-insensitive, or an ``OptimizationGoal``). It sets
+        the ``gtol``/``ftol``/``xtol`` defaults from the number of points;
+        tolerances passed explicitly in ``**kwargs`` take precedence. Unknown
+        names raise ValueError.
     multistart : bool, optional
         Override preset's multi-start setting.
     n_starts : int, optional
@@ -513,7 +522,9 @@ def fit(
     chunk_size : int, optional
         Override automatic chunk size calculation.
     **kwargs
-        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss).
+        Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
+        forwarded to the selected backend. With ``preset='streaming'`` only
+        ``gtol`` and ``max_nfev`` are used (see ``preset``).
 
     Returns
     -------
@@ -596,6 +607,20 @@ def fit(
     # scipy convention: 2-D xdata is (k, M), point count is the last axis
     n_points = xdata.shape[-1] if xdata.ndim > 1 else len(xdata)
 
+    # goal: validated and applied here exactly as minpack.fit does for
+    # workflow=..., instead of leaking into curve_fit's ignored **kwargs.
+    goal = kwargs.pop("goal", None)
+    goal_derived: set[str] = set()
+    if goal is not None:
+        from nlsq.core.minpack import _parse_goal_parameter
+        from nlsq.core.workflow import calculate_adaptive_tolerances
+
+        goal_tols = calculate_adaptive_tolerances(n_points, _parse_goal_parameter(goal))
+        for tol_key in ("gtol", "ftol", "xtol"):
+            if tol_key not in kwargs:
+                kwargs[tol_key] = goal_tols[tol_key]
+                goal_derived.add(tol_key)
+
     # Auto-select preset if not provided
     if preset is None:
         if n_points >= size_threshold:
@@ -603,8 +628,13 @@ def fit(
         else:
             preset = "fast"
 
-    # Get preset configuration
-    preset_config = _FIT_PRESETS.get(preset, _FIT_PRESETS["fast"])
+    # Get preset configuration (names are case-insensitive, like workflow names)
+    preset = preset.lower() if isinstance(preset, str) else preset  # type: ignore[assignment]
+    if preset not in _FIT_PRESETS:
+        raise ValueError(
+            f"Unknown preset {preset!r}. Must be one of: {sorted(_FIT_PRESETS)}"
+        )
+    preset_config = _FIT_PRESETS[preset]
 
     # Apply preset defaults, allowing overrides
     effective_multistart: bool = (
@@ -620,19 +650,19 @@ def fit(
     # Determine which backend to use
     if use_streaming or preset == "streaming":
         # Use AdaptiveHybridStreaming for streaming preset
+        from nlsq.core.minpack import _check_finite_for_streaming
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
-        from nlsq.streaming.strategy import build_large_strategy
+        from nlsq.streaming.strategy import (
+            build_large_strategy,
+            default_p0,
+            scipy_layout_to_points_first,
+        )
+
+        _check_finite_for_streaming(xdata, ydata, check_finite)
 
         # Prepare p0
         if p0 is None:
-            from inspect import signature
-
-            sig = signature(f)
-            args = sig.parameters
-            if len(args) < 2:
-                raise ValueError("Unable to determine number of fit parameters.")
-            n_params = len(args) - 1
-            p0 = np.ones(n_params)
+            p0 = default_p0(f)
         p0 = np.atleast_1d(p0)
 
         # Prepare bounds
@@ -647,24 +677,58 @@ def fit(
 
         # Create config with multi-start settings
         # Use the correct parameter names from HybridStreamingConfig
+        # Map the solver options that have a hybrid equivalent; refuse or warn
+        # about the rest instead of dropping them silently.
+        stream_kwargs = dict(kwargs)
+        for tol_key in goal_derived & {"ftol", "xtol"}:
+            stream_kwargs.pop(tol_key)  # goal-derived, not user-specified
+        for unsupported in ("full_output", "return_eval"):
+            if stream_kwargs.pop(unsupported, False):
+                raise ValueError(
+                    f"{unsupported}=True is not supported by preset='streaming' "
+                    "(it returns a result object)"
+                )
+        config_overrides: dict[str, Any] = {}
+        if (gtol := stream_kwargs.pop("gtol", None)) is not None:
+            config_overrides["gauss_newton_tol"] = gtol
+        if (max_nfev := stream_kwargs.pop("max_nfev", None)) is not None:
+            config_overrides["gauss_newton_max_iterations"] = int(max_nfev)
+        stream_callback = stream_kwargs.pop("callback", None)
+        stream_verbose = stream_kwargs.pop("verbose", 1)
+        if stream_kwargs:
+            import warnings
+
+            warnings.warn(
+                f"preset='streaming' ignores {sorted(stream_kwargs)} (the hybrid "
+                "streaming optimizer has no equivalent; only gtol and max_nfev "
+                "are mapped, to gauss_newton_tol / gauss_newton_max_iterations)",
+                UserWarning,
+                stacklevel=2,
+            )
+
         config = HybridStreamingConfig(
             enable_multistart=effective_multistart and effective_n_starts > 0,
             n_starts=effective_n_starts if effective_multistart else 10,
             multistart_sampler=sampler,
+            center_on_p0=center_on_p0,
+            scale_factor=scale_factor,
+            **config_overrides,
         )
 
         large_strategy = build_large_strategy("hybrid", config)
 
+        # The hybrid engine chunks along axis 0; fit() takes scipy's (k, M) layout.
+        f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
         result_dict = large_strategy.fit(
-            f,
-            xdata,
+            f_engine,
+            x_engine,
             ydata,
             p0,
             bounds=bounds_tuple,
             sigma=sigma,
             absolute_sigma=absolute_sigma,
-            callback=kwargs.get("callback"),
-            verbose=kwargs.get("verbose", 1),
+            callback=stream_callback,
+            verbose=stream_verbose,
         )
 
         # Convert to standard result format

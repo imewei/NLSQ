@@ -173,6 +173,13 @@ class GaussNewtonPhase:
         """Set pre-compiled cost function."""
         self._cost_fn_compiled = fn
 
+    @staticmethod
+    def _track_best(best_tracker: dict[str, Any], params: Any, cost: float) -> None:
+        """Keep the shared best point paired with its objective value."""
+        if cost < best_tracker.get("best_cost_global", float("inf")):
+            best_tracker["best_cost_global"] = cost
+            best_tracker["best_params_global"] = params
+
     def run(
         self,
         data_source: tuple[jnp.ndarray, jnp.ndarray],
@@ -285,6 +292,11 @@ class GaussNewtonPhase:
         initial_cost = (
             new_cost  # true pre-loop SSR, for the rejected-first-step fallback below
         )
+        # Seed best from the starting point (same cost as the trial costs,
+        # incl. any group-variance term) so an all-rejected run returns it
+        # rather than a rejected trial.
+        best_cost = self._compute_cost(current_params, x_data, y_data)
+        self._track_best(best_tracker, current_params, best_cost)
 
         # Gauss-Newton loop
         for iteration in range(self.config.gauss_newton_max_iterations):
@@ -320,9 +332,7 @@ class GaussNewtonPhase:
                 best_params = new_params
 
             # Track global best
-            if new_cost < best_tracker.get("best_cost_global", float("inf")):
-                best_tracker["best_cost_global"] = new_cost
-                best_tracker["best_params_global"] = new_params
+            self._track_best(best_tracker, new_params, new_cost)
 
             # Accept step if cost decreased. On the first iteration
             # (prev_cost still inf), a rejected step must fall back to the
@@ -552,20 +562,30 @@ class GaussNewtonPhase:
             and self.config.group_variance_indices
         ):
             var_lambda = self.config.group_variance_lambda
+            # Variance is over PHYSICAL params p = D q + o (D = diag(scales));
+            # chain rule: grad_q = D grad_p, H_q = D H_p D.
+            normalizer = self.normalized_model.normalizer
+            physical = normalizer.denormalize(current_params)
+            scales = normalizer.scales
             for start, end in self.config.group_variance_indices:
-                group_params = current_params[start:end]
+                group_params = physical[start:end]
+                d = scales[start:end]
                 n_group = end - start
                 group_mean = jnp.mean(group_params)
 
-                grad_var = (2.0 / n_group) * (group_params - group_mean)
-                JTr = JTr.at[start:end].add(-var_lambda * grad_var)
+                grad_var = d * (2.0 / n_group) * (group_params - group_mean)
+                # The cost is SSR + var_lambda*var*n_points, so J^T r (the
+                # negative gradient of cost/2) carries n_points/2 of it.
+                JTr = JTr.at[start:end].add(-0.5 * var_lambda * grad_var * n_points)
 
                 diag_term = (2.0 / n_group) * jnp.eye(n_group)
                 off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
                     (n_group, n_group),
                 )
-                H_var = diag_term - off_diag_term
-                JTJ = JTJ.at[start:end, start:end].add(var_lambda * H_var)
+                H_var = d[:, None] * (diag_term - off_diag_term) * d[None, :]
+                JTJ = JTJ.at[start:end, start:end].add(
+                    0.5 * var_lambda * H_var * n_points
+                )
 
                 group_var = jnp.var(group_params)
                 total_cost += var_lambda * float(group_var) * n_points
@@ -820,9 +840,9 @@ class GaussNewtonPhase:
             and self.config.group_variance_indices
         ):
             var_lambda = self.config.group_variance_lambda
+            physical = self.normalized_model.normalizer.denormalize(params)
             for start, end in self.config.group_variance_indices:
-                group_params = params[start:end]
-                group_var = jnp.var(group_params)
+                group_var = jnp.var(physical[start:end])
                 total_cost += var_lambda * float(group_var) * n_points
 
         return total_cost

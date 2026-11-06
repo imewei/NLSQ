@@ -32,11 +32,16 @@ from PySide6.QtWidgets import (
 )
 from scipy import stats
 
+from nlsq.gui_qt.adapters.fit_adapter import _resolve_workflow
 from nlsq.gui_qt.session_state import n_points
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
     from nlsq.gui_qt.theme import ThemeConfig
+
+# Largest dataset embedded literally in a standalone script (no truncation:
+# above this the script loads data.csv instead).
+_INLINE_MAX_POINTS = 5000
 
 __all__ = ["ExportPage"]
 
@@ -309,7 +314,7 @@ class ExportPage(QWidget):
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Data with Fit",
-            "fit_data.csv",
+            "data.csv",
             "CSV Files (*.csv)",
         )
         if path:
@@ -410,7 +415,7 @@ class ExportPage(QWidget):
             zf.writestr("results.json", self._generate_json())
 
             # Export Python code
-            zf.writestr("fit_script.py", self.generate_python_code())
+            zf.writestr("fit_script.py", self.generate_python_code(for_bundle=True))
 
             # Export config as YAML
             config_yaml = self._generate_config_yaml()
@@ -504,15 +509,23 @@ class ExportPage(QWidget):
         )
         return lines
 
-    def _script_data_lines(self) -> list[str]:
-        """Data section of the reproducibility script."""
+    def _inline_data(self, for_bundle: bool) -> bool:
+        """Whether the script embeds the data literally instead of loading it."""
+        n = n_points(self._app_state.state.xdata)
+        return n <= 20 or (not for_bundle and n <= _INLINE_MAX_POINTS)
+
+    def _script_data_lines(self, for_bundle: bool = False) -> list[str]:
+        """Data section of the reproducibility script.
+
+        Standalone scripts embed up to ``_INLINE_MAX_POINTS`` points; larger
+        data (and the ZIP bundle, which ships data.csv) is loaded from file.
+        """
         state = self._app_state.state
         lines: list[str] = []
         has_sigma = state.sigma is not None
         if state.xdata is not None and state.ydata is not None:
             # Use repr for small arrays, file reference for large
-            n = n_points(state.xdata)
-            if n <= 20:
+            if self._inline_data(for_bundle):
                 # repr(tolist()) keeps full float64 precision, unlike array2string
                 x_str = repr(np.asarray(state.xdata).tolist())
                 y_str = repr(np.asarray(state.ydata).tolist())
@@ -534,23 +547,18 @@ class ExportPage(QWidget):
                 x_t = "" if k == 1 else ".T"
                 lines.extend(
                     [
-                        "# Data (load from file)",
-                        f"# xdata = np.loadtxt('data.csv', delimiter=',', skiprows=1, usecols={x_cols}){x_t}",
-                        f"# ydata = np.loadtxt('data.csv', delimiter=',', skiprows=1, usecols={k})",
+                        "# Data (load from file): data.csv must sit next to this script",
+                        "# (use 'Export Data...' in the GUI, which defaults to that name)",
+                        "from pathlib import Path",
+                        "data_file = Path(__file__).with_name('data.csv')",
+                        f"xdata = np.loadtxt(data_file, delimiter=',', skiprows=1, usecols={x_cols}){x_t}",
+                        f"ydata = np.loadtxt(data_file, delimiter=',', skiprows=1, usecols={k})",
                     ],
                 )
                 if has_sigma:
                     lines.append(
-                        f"# sigma = np.loadtxt('data.csv', delimiter=',', skiprows=1, usecols={k + 3})"
+                        f"sigma = np.loadtxt(data_file, delimiter=',', skiprows=1, usecols={k + 3})"
                     )
-                lines.extend(
-                    [
-                        f"xdata = np.linspace(0, 10, {n})  # Replace with your data",
-                        f"ydata = np.zeros({n})  # Replace with your data",
-                    ],
-                )
-                if has_sigma:
-                    lines.append(f"sigma = np.ones({n})  # Replace with your sigma")
                 lines.append("")
         return lines
 
@@ -580,24 +588,47 @@ class ExportPage(QWidget):
             extra.insert(0, "    sigma=sigma,")
         return extra
 
-    def generate_python_code(self) -> str:
+    def generate_python_code(self, for_bundle: bool = False) -> str:
         """Generate Python code for reproducibility.
 
         Uses the fit() function with workflow presets for consistency
         with NLSQ's recommended approach.
+
+        Args:
+            for_bundle: True when the script ships next to data.csv in the
+                ZIP bundle, so data is read from that file instead of inlined.
 
         Returns:
             Python code string
         """
         state = self._app_state.state
 
+        # repr() of nan/inf is a bare name: the script must define it
+        nonfinite = any(
+            a is not None and not np.all(np.isfinite(np.asarray(a, dtype=float)))
+            for a in (state.xdata, state.ydata, state.sigma, state.p0)
+        )
+        needs_file = state.xdata is not None and not self._inline_data(for_bundle)
         lines = [
             '"""',
             "NLSQ Curve Fitting Script",
             "Generated by NLSQ Qt GUI",
+            *(
+                [
+                    "",
+                    "Requires data.csv next to this script ('Export Data...' in the GUI).",
+                ]
+                if needs_file
+                else []
+            ),
             '"""',
             "",
             "import numpy as np",
+            *(
+                ["from numpy import inf, nan  # inlined non-finite values"]
+                if nonfinite
+                else []
+            ),
             "from nlsq import fit",
             "",
         ]
@@ -620,11 +651,11 @@ class ExportPage(QWidget):
                 lines.extend(
                     [
                         f"# Polynomial model of degree {degree}",
+                        "import jax.numpy as jnp",
+                        "",
                         "def polynomial(x, *coeffs):",
-                        "    result = 0.0",
-                        "    for i, c in enumerate(coeffs):",
-                        "        result += c * x**i",
-                        "    return result",
+                        "    # descending powers, same as the GUI model (c0*x^n + ... + cn)",
+                        "    return jnp.polyval(jnp.array(coeffs), x)",
                         "",
                         f"# degree = {degree}",
                         "model = polynomial",
@@ -649,10 +680,18 @@ class ExportPage(QWidget):
                 ],
             )
 
-        lines.extend(self._script_data_lines())
+        lines.extend(self._script_data_lines(for_bundle))
 
         # Determine workflow (3-workflow system v0.6.3)
-        workflow = getattr(state, "workflow", "auto") or "auto"
+        # Export the workflow that actually ran (auto_global degrades to auto
+        # without finite bounds), not the one merely selected in state.
+        bounds_arr = None
+        if state.bounds:
+            bounds_arr = tuple(
+                np.array([fill if v is None else float(v) for v in b])
+                for b, fill in zip(state.bounds, (-np.inf, np.inf), strict=True)
+            )
+        workflow = _resolve_workflow(getattr(state, "workflow", "auto"), bounds_arr, [])
 
         # Add fitting options
         lines.extend(

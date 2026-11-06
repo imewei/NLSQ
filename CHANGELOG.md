@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Opt-in strict allowlist mode for CLI custom models (`strict: true` in the model
+  config, or `NLSQ_STRICT_MODELS=1`; `validate_model(..., strict=True)`): an
+  `AllowlistVisitor` that subclasses the existing denylist visitor and also requires
+  imports and full attribute chains to fall under a short numeric-module allowlist
+  (`ALLOWLIST_MODULES`, `ALLOWLIST_BLOCKED_ATTRS`). The default denylist behaviour is
+  unchanged; strict mode is planned to become the default after one release.
 - `curve_fit_large(..., method="exact_streaming")` (opt-in; the default path is
   unchanged): an exact full-data Levenberg-Marquardt fit (`nlsq/streaming/exact_lm.py`)
   that accumulates `J^T J`, `J^T r` and the cost over chunks in float64, so the result
@@ -143,6 +149,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus the warning) instead of silently; entries below ~1e-308 after scaling still
   underflow to zero, as before.
 
+### Changed (behavior, whole-codebase review rounds 3-4)
+- **Group-variance regularization** (`enable_group_variance_regularization=True`, hybrid
+  streaming and the `phases/` Gauss-Newton path) now penalizes the variance of the
+  *physical* (denormalized) parameters with the exact chain rule (`grad_q = D grad_p`,
+  `H_q = D H_p D`) and the `n_points/2` scaling used by the data term. Fits that enable it
+  return different `popt`/`pcov` than before (the previous value penalized normalized
+  parameters). The hybrid `callback` now receives physical parameters.
+- `curve_fit` input validation: a zero `sigma` raises `ValueError` even with
+  `enable_stability=False` (was an unclear "Residuals are not finite" error). Negative
+  1-D `sigma` is still accepted, as in SciPy. An invalid `nan_policy` raises
+  `ValueError`; `nan_policy=None` behaves as SciPy's default (`'raise'`).
+- The number of fit parameters is read from the model's positional signature, as SciPy
+  does: keyword-only arguments are not counted, and `f(x, *p)` with `p0=None` raises
+  `ValueError("Unable to determine number of fit parameters.")` instead of silently
+  fitting one parameter.
+- `fallback=True` results support `popt, pcov = ...` unpacking and indexing;
+  `AddParameterBoundsStrategy` derives its bounds from `infer_bounds()`; the recovery
+  `_multi_start` samples half-infinite bounds with a finite window (shared helper
+  `nlsq.utils.bounds_sampling.sample_in_bounds`, also used by hybrid multistart).
+- A callback raising `StopOptimization` ends the fit with `status=-2` (SciPy's code);
+  `success` stays `True` and the best-so-far parameters are returned.
+- Custom CLI models: the validator also rejects `yaml.unsafe_load`/`pandas.read_pickle`
+  style deserialization; `batch --no-continue-on-error` now lists skipped workflows.
+
+### Changed (behavior, whole-codebase review rounds 5-8)
+- Custom CLI model validator (still a denylist, not a sandbox; `trusted: true` is the escape
+  hatch): attribute access is now checked like imports. Attributes named like blocked modules
+  and any `_`-prefixed attribute (except `__name__`/`__doc__`/`__version__`) are rejected, so a
+  model using `self._x` needs `trusted: true`. `match`/`case` keyword attributes, the `string`
+  module, `scipy.io` and `profiler` are blocked; string annotations are rejected.
+- `curve_fit(auto_bounds=True)`: if the result sits on an inferred bound, it is refit once with
+  that bound relaxed and the better fit is returned with an `OptimizeWarning`; now applies on
+  every route (full_output/return_eval/timeit, multistart, fallback). `auto_bounds` with
+  `method="cmaes"` infers bounds first; `method="lm"` + `auto_bounds` raises a clear error.
+- `method="cmaes"` honours `full_output`, `return_eval` and `timeit` (same tuple shapes as TRF).
+- Unknown keyword arguments to `curve_fit` now emit an `OptimizeWarning` ("Ignoring unknown
+  keyword argument(s)") instead of being silently dropped (SciPy raises `TypeError`).
+- `multistart=True`: the user's `p0` is the first start and takes one of the `n_starts` slots;
+  tuple output modes work; `nan_policy="omit"` + `p0=None` works.
+- `nlsq.fit(goal=...)` is validated and applied when `workflow=None` (unknown goal raises);
+  legacy `preset=` names are case-insensitive, unknown presets raise, `preset="streaming"` maps
+  `gtol`/`max_nfev` to the hybrid optimizer, rejects `full_output`/`return_eval`, and warns about
+  ignored options. 2-D `(k, M)` `x` is handled on all `fit()` hybrid routes.
+- Hybrid streaming honours `absolute_sigma=True`; max-iterations `OptimizeWarning` is attributed
+  to the caller. Chunked `curve_fit_large` with 2-D `(k, M)` `x` now counts M points.
+- `nan_policy="omit"` drops the right rows for points-first `x`; negative `sigma` is accepted as
+  in SciPy (only zero is rejected on the always-on path).
+
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
   preparation with curve_fit, and nan_policy is read once in the shared step.
@@ -158,7 +212,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on GPU); results agree to rounding (about 1e-16 relative), and `exact_lm` keeps
   re-exporting the moved helpers.
 
+### Fixed (whole-codebase audit loop, 2026-11-05)
+- `least_squares(..., data_mask=)` is now applied on the direct-residual and user-`jac` paths
+  (it was ignored there); a mask that is not 1-D or does not match the residual shape raises
+  `ValueError`. (01)
+- `fit(workflow=...)` counts features on the SciPy `(k, M)` axis for memory selection, so a
+  `(k, M)` input no longer counts samples as features. (02)
+- `fit(workflow=..., p0="auto")` resolves the guess before dispatch (it used to become a
+  0-D string array). (03)
+- `fit(workflow=...)` with an explicit `LDMemoryConfig` no longer forwards the routing-only
+  `memory_limit_gb` to the chunk solver. (04)
+- **Behavior change:** CMA-ES results (`method="cmaes"` and the `workflow` CMA-ES routes) keep
+  `success`, `status` and `message` from the optimizer or its NLSQ refinement instead of always
+  reporting success, and `full_output=True` returns `ier=5` (not `1`) for an unsuccessful run.
+  (05, 06)
+- A CMA-ES refinement no longer receives `full_output`/`return_eval`/`timeit`, which made it
+  discard its successful result. (12)
+- Fallback rescaling with `sigma` no longer rescales `f_scale` (whitened residuals are
+  unchanged by the rescale). (07)
+- The `exact_streaming` factory probe keeps at least two points for singleton chunks, and chunk
+  buffers promote the x and y dtypes together (integer `x` with fractional `y` is accepted). (08, 09)
+- **Behavior change:** standalone warmup group-variance regularization now penalizes the
+  physical parameters instead of the normalized ones, so results of fits that use it can change
+  (see the group-variance regularization entry under "Changed (behavior)"). (10)
+- Gauss-Newton best-point tracking includes the initial point, so a rejected trial cannot win;
+  the standalone warmup cost guard no longer divides by an exact-zero initial loss. (11, 14)
+- Hybrid multi-start with `multistart_sampler="sobol"` or `"halton"` works (it raised
+  `TypeError`). (13)
+- `fit(preset="streaming")` forwards `center_on_p0` and `scale_factor`. (15)
+- **Behavior change:** `fit(preset="streaming")` now enforces `check_finite=True`, so
+  non-finite data raises instead of reaching the streaming engine. (27)
+- CLI: an `estimate_p0()` that returns `None` is preserved instead of becoming an object
+  array. (16)
+- GUI: scalar YAML bounds load without crashing the fit snapshot; crash recovery restores
+  workflow settings and pre-fit edits (recovered custom model code still needs an explicit
+  Apply); automatic initial guesses no longer erase explicit bounds. (17, 18, 29)
+- **Behavior change:** `MemoryManager.allocate_array` removes a pooled buffer while it is
+  checked out and `free_array` returns it, so outstanding allocations no longer alias each
+  other; an array is not pooled until `free_array` is called. (19)
+- `safe_serialize` encodes and decodes complex values. (20)
+- A scalar `x0` no longer crashes `InputValidator` error collection. (21)
+- `MemoryManager.estimate_chunking_strategy` raises `MemoryError` when the budget cannot hold
+  one data point (it produced zero-sized chunks and a division by zero). (22)
+- `JAXConfig` memory and large-dataset config getters/setters deep-copy their values. (23)
+- `OptimizationDiagnostics` resets convergence histories and peak memory between fits. (24)
+- `get_jacobian_mode()` falls back with a warning when the config file is valid JSON but not
+  an object. (25)
+- `InputValidator` rejects non-numeric `xdata`/`ydata`/`x0` dtypes and non-1-D `ydata`, reports
+  shape errors before dependent checks, and rejects NaN `ftol`/`xtol`/`gtol`. (28, 31)
+- Post-review fixes: `FallbackResult` supports the `in` operator; a failed CMA-ES NLSQ
+  refinement now reports `success=False`; `fit(workflow=HybridStreamingConfig(...))` raises
+  for a non-linear `loss` and warns about ignored options.
+
 ### Fixed
+- **Silent wrong answer in plain `curve_fit` for small-scale data:** the iterative
+  (CG/`lsmr`) trust-region kernel used absolute tolerances and guards, so fits with
+  `|y| ~ 1e-5` could stop far from the optimum (parameter error 0.216 vs 2.8e-7 now,
+  matching SciPy). The kernel now uses a relative tolerance and tiny guards. An explicit
+  user `tr_solver` is respected.
+- Chunked/streaming fits with 2-D `xdata` of shape `(k, M)` are now chunked along the
+  points axis (previously the whole dataset ran as one in-memory chunk, ignoring
+  `chunk_size`/`memory_limit_gb`).
+- `nlsq.fit(..., workflow=HybridStreamingConfig(...))` and `preset="streaming"` with 2-D
+  `xdata` of scipy layout `(k, M)` now fit correctly (the hybrid engine saw `k` "points",
+  returning `success=False` and an infinite covariance). `curve_fit(method="hybrid_streaming")`
+  keeps its documented points-first `(n_points, n_features)` layout. `nan_policy="omit"`
+  now masks the right axis for that layout; `SparseJacobianComputer` handles `(k, N)` arrays;
+  the rescale fallback returns results in the original units; recovery no longer rejects
+  fits with cost above 1e10; custom-model validation blocks more code-execution modules
+  (`cProfile`, `profile`, `trace`, `bdb`, `pdb`, ...) and a failing user `bounds()` is now an
+  error instead of a silently unconstrained fit.
+- Differential testing against SciPy (round 7): `multistart=True` with `full_output`,
+  `return_eval` or `timeit` returns the tuple instead of raising `TypeError`; multistart
+  now evaluates the user's `p0` as its first start (so it is never worse than a single
+  start, and `n_starts` is the total number of starts including `p0`; with a given `p0`,
+  `n_starts=N` samples `N-1` further points); hybrid streaming honors
+  `absolute_sigma=True` (previously `pcov` was always scaled by the residual variance);
+  `auto_bounds=True` refits without an inferred bound when the solution sits on it (with
+  an `OptimizeWarning`) and `method="lm"` with `auto_bounds` names `auto_bounds` in its
+  error; `nan_policy="omit"` with NaN in `y` works with `auto_bounds`/`multistart` and
+  `p0=None`; a NumPy (non-JAX) `jac=` callable raises a clear `TypeError`; the hybrid
+  max-iterations `OptimizeWarning` is attributed to the caller. Custom-model validation
+  also rejects string annotations that are evaluated at import time, pickle-capable
+  readers (`numpy.lib.format.read_array`, `NpzFile`) and serialized-executable loaders.
+- `detect_collinearity`/`check_problem_stability` no longer build an `N x N` matrix for
+  `(N, k)` data; `AlgorithmSelector` counts points from `ydata` for 2-D `xdata`.
+- Whole-codebase review rounds 3-4: ~60 further fixes across core, streaming, stability,
+  CLI, GUI and utils.
 - `curve_fit_large(..., auto_size_detection=False)` no longer raises
   `ValueError: min_chunk_size (1000) cannot be larger than max_chunk_size` for inputs under
   10,000 points or an explicit `chunk_size` below 1000. The minimum chunk size is now

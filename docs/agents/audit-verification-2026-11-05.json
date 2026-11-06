@@ -1,0 +1,14 @@
+{
+  "current_collected": 4999,
+  "covered_first_segment": 4384,
+  "executed_final_segment": 615,
+  "outcomes": {
+    "passed": 4998,
+    "skipped": 1
+  },
+  "uncovered": [],
+  "failures": {},
+  "skipped": [
+    "tests/streaming/test_exact_lm_sources.py::test_zarr_matches_in_memory"
+  ]
+}

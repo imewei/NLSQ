@@ -157,6 +157,18 @@ class TestEstimateInitialParameters(unittest.TestCase):
         self.assertIn("at least one parameter", str(context.exception))
 
 
+class TestKeywordOnlyParams(unittest.TestCase):
+    """Keyword-only model parameters are not fit parameters (SciPy semantics)."""
+
+    def test_keyword_only_not_counted(self):
+        def f(x, a, b, *, c=0.0):
+            return a * x + b + c
+
+        x = np.linspace(0, 1, 50)
+        p0 = estimate_initial_parameters(f, x, 2 * x + 1)
+        self.assertEqual(len(p0), 2)
+
+
 class TestDetectFunctionPattern(unittest.TestCase):
     """Test function pattern detection from data."""
 

@@ -44,6 +44,10 @@ Features
 - **Autosave**: Automatic crash recovery
 - **Export options**: ZIP, JSON, CSV, Python code
 
+Crash recovery restores the saved data, model selection, parameter settings,
+and fitting options. Recovered custom model source is displayed without running
+it; review the code and click **Apply** on the Model page before fitting.
+
 Screenshot Overview
 -------------------
 

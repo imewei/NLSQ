@@ -141,6 +141,7 @@ model:
   # path: "models.py"
   # function: "my_model"
   # trusted: false  # set true only for files you trust (skips AST safety scan)
+  # strict: false   # true = opt-in strict module allowlist (or env NLSQ_STRICT_MODELS=1)
 
   # --- Polynomial model (when type: "polynomial") — flat key, not nested ---
   # degree: 3
