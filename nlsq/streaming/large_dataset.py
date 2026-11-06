@@ -717,20 +717,33 @@ def _rss_bytes() -> int:
 # other than "raise" drops/imputes rows, a non-linear ``loss`` reweights them
 # (``f_scale`` only acts with such a loss), and the output flags
 # (``return_eval``/``full_output``/``timeit``) return something other than a
-# ``CurveFitResult``. ``sigma`` is fine: ``_fit_chunked`` slices it per chunk and
+# ``CurveFitResult``. Verified NOT to change ``res.cost``: bounds, x_scale, jac,
+# solver, batch_size, max_nfev, ftol/xtol/gtol, tr_solver, callback, diagnostics*,
+# absolute_sigma, check_finite, p0, f_scale under a linear loss. ``sigma`` is fine: ``_fit_chunked`` slices it per chunk and
 # ``res.cost`` is then 0.5 * sum(((y - f) / sigma) ** 2), as ``_chunk_ssr`` computes.
 _SSR_REUSE_BLOCKERS = ("data_mask", "return_eval", "full_output", "timeit")
 
 
-def _collect_if_rss_grew(last_rss: int, growth_bytes: float) -> int:
+def _safe_rss() -> int | None:
+    """RSS in bytes, or None when it cannot be read (psutil may raise)."""
+    try:
+        return _rss_bytes()
+    except Exception:
+        return None
+
+
+def _collect_if_rss_grew(last_rss: int | None, growth_bytes: float) -> int | None:
     """gc.collect() if RSS grew by more than ``growth_bytes`` since ``last_rss``.
 
     Returns the RSS baseline for the next check (re-read after a collection).
+    If RSS is unreadable (now or at the baseline) this collects unconditionally,
+    the pre-gating behaviour, so a psutil failure never aborts or skips cleanup.
     """
-    if _rss_bytes() - last_rss <= growth_bytes:
+    now = _safe_rss()
+    if last_rss is not None and now is not None and now - last_rss <= growth_bytes:
         return last_rss
     gc.collect()
-    return _rss_bytes()
+    return _safe_rss()
 
 
 def _ssr_reuse_eligible(kwargs: dict) -> bool:
@@ -2846,11 +2859,9 @@ class LargeDatasetFitter:
         # B4: collect only when RSS grew by > 10% of the memory limit since the
         # last collection (an unconditional collect is ~5% of a 100M-point fit).
         gc_growth_bytes = 0.1 * self.config.memory_limit_gb * 1024**3
-        gc_last_rss = _rss_bytes()
-        # B3 applies only to the plain-least-squares trf/dogbox/lm chunk fit.
-        reuse_ssr = method in (None, "trf", "dogbox", "lm") and _ssr_reuse_eligible(
-            kwargs
-        )
+        gc_last_rss = _safe_rss()
+        # B3 applies only to the plain-least-squares trf/lm chunk fit.
+        reuse_ssr = method in (None, "trf", "lm") and _ssr_reuse_eligible(kwargs)
 
         # FR-006: Initialize buffer pool for chunk reuse
         xdata_arr = np.asarray(xdata)

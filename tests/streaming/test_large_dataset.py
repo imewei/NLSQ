@@ -1015,8 +1015,9 @@ def _run_chunked(sigma_on, n_chunks=6, chunk=1000, **fitter_kw):
 def test_chunked_covariance_unchanged(sigma_on):
     res = _run_chunked(sigma_on)
     popt, pcov = _GOLD_COV[sigma_on]
-    np.testing.assert_allclose(res.x, popt, rtol=1e-10, atol=1e-10)
-    np.testing.assert_allclose(res["pcov"], pcov, rtol=1e-10, atol=1e-10)
+    assert res.success
+    np.testing.assert_allclose(res.x, popt, rtol=1e-10, atol=1e-14)
+    np.testing.assert_allclose(res["pcov"], pcov, rtol=1e-10, atol=1e-14)
 
 
 def test_gc_not_called_without_memory_growth(monkeypatch):
@@ -1051,4 +1052,20 @@ def test_fit_chunked_reuses_result_cost(monkeypatch):
 
     monkeypatch.setattr(LargeDatasetFitter, "_chunk_ssr", staticmethod(boom))
     res = _run_chunked(True)  # sigma path included; would fall to the retry if boom ran
-    np.testing.assert_allclose(res.x, _GOLD_COV[True][0], rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(res.x, _GOLD_COV[True][0], rtol=1e-10, atol=1e-14)
+
+
+def test_gc_collects_at_periodic_points_when_rss_unreadable(monkeypatch):
+    import gc
+
+    from nlsq.streaming import large_dataset
+
+    def boom():
+        raise PermissionError("psutil AccessDenied")
+
+    monkeypatch.setattr(large_dataset, "_rss_bytes", boom)
+    calls = []
+    monkeypatch.setattr(gc, "collect", lambda *a: calls.append(a) or 0)
+    res = _run_chunked(False, n_chunks=5, chunk=200)
+    assert res.success
+    assert len(calls) >= 1  # old behaviour: collect at every periodic point
