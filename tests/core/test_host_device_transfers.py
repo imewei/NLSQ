@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
+from nlsq.common_jax import solve_lsq_trust_region_jax
 from nlsq.core.least_squares import LeastSquares
 from nlsq.utils.profiling import (
     PerformanceMetrics,
@@ -322,24 +323,59 @@ _CONVERSION_METHODS = ("__bool__", "__int__", "__float__", "__index__", "item")
 
 @contextlib.contextmanager
 def count_materializations():
-    """Count host materializations of device arrays (``ArrayImpl._value`` reads).
+    """Count host materializations of device arrays.
 
-    ``np.asarray`` and ``.item()`` bypass ``_value`` in the installed JAX, so the
-    explicit-conversion dunders are counted separately (``counter["explicit"]``).
-    Skips the test when the host-materialization property does not exist.
+    Counts ``ArrayImpl._value`` reads (``counter["value"]``), ``__array__`` calls,
+    which is how ``np.asarray(device_array)`` and ``jax.device_get`` reach the host
+    (``counter["array"]``), and the explicit conversion dunders / ``.item()``
+    (``counter["explicit"]``). ``np.asarray``/``np.array`` calls on a device array
+    outside the authorized path are tallied in ``counter["np_outside"]`` (CPU arrays
+    convert zero-copy and bypass both hooks above). ``counter["in_helper"]`` is set by the caller around
+    the one authorized conversion (``_read_attempt_scalars``); ``__array__`` calls
+    outside it are tallied in ``counter["array_outside"]``.
+    Skips the test when ``_value`` or ``__array__`` cannot be instrumented.
     """
     cls = type(jnp.zeros(1))
     orig_value = getattr(cls, "_value", None)
-    if not isinstance(orig_value, property):
-        pytest.skip("array class has no `_value` property in this JAX version")
-    counter = {"value": 0, "explicit": 0}
+    orig_array = getattr(cls, "__array__", None)
+    if not isinstance(orig_value, property) or orig_array is None:
+        pytest.skip("array class lacks instrumentable `_value`/`__array__`")
+    counter = {
+        "value": 0,
+        "explicit": 0,
+        "array": 0,
+        "array_outside": 0,
+        "np_outside": 0,
+        "in_helper": False,
+    }
+
+    def np_wrapper(orig):
+        def wrapped(a, *args, **kwargs):
+            # CPU arrays convert zero-copy through the buffer protocol, which
+            # bypasses `__array__`/`_value`, so also count the call itself.
+            if isinstance(a, jax.Array) and not counter["in_helper"]:
+                counter["np_outside"] += 1
+            return orig(a, *args, **kwargs)
+
+        return wrapped
+
+    orig_np = {n: getattr(np, n) for n in ("asarray", "array")}
 
     def getter(self):
         counter["value"] += 1
         return orig_value.fget(self)
 
+    def array_wrapper(self, *a, **k):
+        counter["array"] += 1
+        if not counter["in_helper"]:
+            counter["array_outside"] += 1
+        return orig_array(self, *a, **k)
+
     saved = {}
     cls._value = property(getter)
+    cls.__array__ = array_wrapper
+    for n, o in orig_np.items():
+        setattr(np, n, np_wrapper(o))
     try:
         for name in _CONVERSION_METHODS:
             orig = getattr(cls, name, None)
@@ -356,7 +392,10 @@ def count_materializations():
     finally:
         for name, orig in saved.items():
             setattr(cls, name, orig)
+        cls.__array__ = orig_array
         cls._value = orig_value
+        for n, o in orig_np.items():
+            setattr(np, n, o)
 
 
 # Materializations of the sequential (legacy) path, measured on base commit
@@ -375,7 +414,7 @@ _FIXTURE_ATTEMPTS = {
 }
 
 
-def _acceptance_fixture(trials, loss="none"):
+def _acceptance_fixture(trials, loss="none", Delta=1.0):
     """Direct `_evaluate_step_acceptance` kwargs with a scripted stub `fun`."""
     from nlsq.core.loss_functions import LossFunctionsJIT
 
@@ -426,7 +465,7 @@ def _acceptance_fixture(trials, loss="none"):
         cost=cost,
         d=d,
         d_jnp=d_jnp,
-        Delta=1.0,
+        Delta=Delta,
         alpha=0.0,
         step_h=None,
         s=sv,
@@ -512,24 +551,61 @@ _GOLDEN = {
 }
 
 
-def _run(trials, fuse, loss="none"):
+def _run(trials, fuse, loss="none", Delta=1.0, inject=None):
+    """Run one acceptance call; ``inject`` ("inside"/"before") adds a stray read."""
     from nlsq.core import trf as trf_mod
 
-    kwargs, calls = _acceptance_fixture(trials, loss)
+    kwargs, calls = _acceptance_fixture(trials, loss, Delta)
     tr = trf_mod.TrustRegionReflective()
     reads = {"n": 0}
     real_read = trf_mod._read_attempt_scalars
+    real_acc = trf_mod.accept_step_scalars
+    box = {}
+
+    real_get = jax.device_get
+
+    def counting_get(x):
+        # the one authorized conversion path; a stray np.asarray on the same array
+        # would be cached and make this call free, so attribute by call site.
+        box["counter"]["in_helper"] = True
+        try:
+            return real_get(x)
+        finally:
+            box["counter"]["in_helper"] = False
 
     def counting_read(vec):
         reads["n"] += 1
+        if inject == "inside":
+            np.asarray(vec)  # stray extra transfer inside the helper
         return real_read(vec)
+
+    def acc(*a, **k):
+        out = real_acc(*a, **k)
+        if inject == "before":
+            np.asarray(out)  # stray transfer outside the helper
+        return out
 
     with (
         mock.patch.object(trf_mod, "_read_attempt_scalars", counting_read),
+        mock.patch.object(trf_mod, "accept_step_scalars", acc),
+        mock.patch.object(jax, "device_get", counting_get),
         count_materializations() as counter,
     ):
+        box["counter"] = counter
         result = tr._evaluate_step_acceptance(fuse_scalars=fuse, **kwargs)
     return result, calls["n"], dict(counter), reads["n"]
+
+
+def _within_budget(counter, reads, attempts):
+    """The A2 budget: exactly one transfer per attempt and nothing else."""
+    return (
+        reads == attempts
+        and counter["value"] == attempts
+        and counter["array"] == attempts
+        and counter["array_outside"] == 0
+        and counter["np_outside"] == 0
+        and counter["explicit"] == 0
+    )
 
 
 def _outcome(result):
@@ -572,13 +648,54 @@ class TestFusedStepAcceptance:
         assert reads == attempts
         assert counter["value"] == attempts
         assert counter["explicit"] == 0
+        assert counter["array"] == attempts  # the one device_get per attempt
+        assert counter["array_outside"] == 0
+        assert counter["np_outside"] == 0
+        assert _within_budget(counter, reads, attempts)
         assert result["accepted"] is True
         _assert_outcome(_outcome(result), _GOLDEN[name])
+
+    @pytest.mark.parametrize("inject", ["inside", "before"])
+    def test_budget_detects_hidden_np_asarray(self, inject):
+        # A stray np.asarray bypasses `_value` accounting (zero-copy on CPU); the
+        # `__array__`/`np.asarray` instrumentation must still push the budget over.
+        attempts = 2
+        _, n_calls, counter, reads = _run(
+            _TRIALS["worse_then_better"], fuse=True, inject=inject
+        )
+        assert n_calls == attempts
+        assert not _within_budget(counter, reads, attempts)
 
     @pytest.mark.parametrize("name", list(_TRIALS))
     def test_legacy_outcome_matches_golden(self, name):
         result, *_ = _run(_TRIALS[name], fuse=False)
         _assert_outcome(_outcome(result), _GOLDEN[name])
+
+    @pytest.mark.parametrize("sign", [-1, 1], ids=["accepted", "rejected"])
+    def test_termination_branch_matches_legacy(self, sign):
+        # Tiny radius and a ~1e-13 relative cost change: xtol fires (status 3),
+        # before any Delta/alpha update, for an improving and a worsening trial.
+        trials = [jnp.asarray(_F * (1 + sign * 1e-13))]
+        fused, _, counter, reads = _run(trials, fuse=True, Delta=1e-12)
+        legacy, *_ = _run(trials, fuse=False, Delta=1e-12)
+        assert reads == 1 and counter["value"] == 1
+        assert fused["termination_status"] == 3
+        assert fused["Delta"] == 1e-12
+        assert fused["accepted"] is (sign < 0)
+        # alpha is the solver's value, not touched by the update
+        kw, _ = _acceptance_fixture(trials, Delta=1e-12)
+        _, solver_alpha, _ = solve_lsq_trust_region_jax(
+            2, 3, kw["uf"], kw["s"], kw["V"], 1e-12, initial_alpha=0.0
+        )
+        assert float(fused["alpha"]) == pytest.approx(float(solver_alpha), rel=1e-12)
+        assert fused.keys() == legacy.keys()
+        for k, v in legacy.items():
+            if v is None or isinstance(v, bool | int):
+                assert fused[k] == v, k
+            else:
+                np.testing.assert_allclose(
+                    np.asarray(fused[k]), np.asarray(v), rtol=1e-12, atol=0, err_msg=k
+                )
 
     def test_callable_loss_never_sees_nonfinite_residuals(self):
         # fuse_scalars=False is what LeastSquares sets for a callable loss; the
