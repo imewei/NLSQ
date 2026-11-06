@@ -188,3 +188,20 @@ def test_fit_chunked_result_unchanged():
     res = _run(*_chunked_fixture())
     np.testing.assert_allclose(res.x, _GOLD_POPT, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(res["pcov"], _GOLD_PCOV, rtol=1e-12, atol=1e-12)
+
+
+def test_fit_chunked_span_tripwire_returns_failed_result(monkeypatch):
+    """A chunker/chunk_bounds disagreement is a RuntimeError caught by the outer
+    handler of ``_fit_chunked``: the fit returns an unsuccessful result."""
+    fitter, stats, x, y, sigma = _chunked_fixture()
+    real = DataChunker.create_chunks
+
+    def short(*a, **k):
+        for xc, yc, i, valid in real(*a, **k):
+            yield xc, yc, i, valid - 1
+
+    monkeypatch.setattr(DataChunker, "create_chunks", staticmethod(short))
+    res = _run(fitter, stats, x, y, sigma)
+    assert res.success is False
+    assert "chunk_bounds span" in res.message
+    assert np.all(np.isinf(res["pcov"]))

@@ -22,6 +22,7 @@ final ``cost`` within rtol 1e-6. Any violation returns exit code 1.
 import argparse
 import itertools
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -77,6 +78,8 @@ def check_correctness(
             bad.append(f"{case}: status {b['status']!r} in both arms, nothing to time")
         elif b["cost"] is None or c["cost"] is None:
             bad.append(f"{case}: missing cost on an ok record")
+        elif not (math.isfinite(b["cost"]) and math.isfinite(c["cost"])):
+            bad.append(f"{case}: non-finite cost base={b['cost']!r} cand={c['cost']!r}")
         elif abs(c["cost"] - b["cost"]) > COST_RTOL * max(abs(b["cost"]), 1e-300):
             bad.append(f"{case}: cost base={b['cost']!r} cand={c['cost']!r}")
     return bad
@@ -104,6 +107,27 @@ def _check_import(checkout: Path) -> None:
     ).stdout.strip()
     if not Path(out).resolve().is_relative_to(checkout.resolve()):
         raise SystemExit(f"nlsq imported from {out}, outside checkout {checkout}")
+
+
+def backend_matches(platform: str, backend: str) -> bool:
+    """``--platform gpu`` needs a GPU backend; cpu is forced via ``JAX_PLATFORMS``."""
+    return platform != "gpu" or backend in ("gpu", "cuda")
+
+
+def _check_backend(checkout: Path, platform: str) -> None:
+    """Abort unless JAX under the harness env really uses the requested platform."""
+    if platform != "gpu":
+        return
+    out = subprocess.run(
+        [sys.executable, "-c", "import jax; print(jax.default_backend())"],
+        cwd=checkout,
+        env=_env(checkout, platform),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if not backend_matches(platform, out):
+        raise SystemExit(f"--platform gpu requested but JAX backend is {out!r}")
 
 
 def _run_harness(checkout: Path, out_dir: Path, args: argparse.Namespace) -> Path:
@@ -134,6 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     arms = {"base": args.base.resolve(), "cand": args.cand.resolve()}
     for checkout in arms.values():
         _check_import(checkout)
+        _check_backend(checkout, args.platform)
 
     root = args.out_root or Path(tempfile.mkdtemp(prefix="ab_nlsq_"))
     paths: dict[str, list[Path]] = {"base": [], "cand": []}

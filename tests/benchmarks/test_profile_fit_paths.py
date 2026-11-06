@@ -103,3 +103,25 @@ def test_ab_correctness_gate(monkeypatch, tmp_path, capsys):
 
     # within tolerance still passes
     assert _run_main(monkeypatch, tmp_path, base, [_rec(cost=1.0 + 1e-8)]) == 0
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("arm", ["base", "cand"])
+def test_ab_gate_rejects_non_finite_cost(monkeypatch, tmp_path, arm, bad):
+    good = [_rec(cost=1.0)]
+    broken = [_rec(cost=bad)]
+    b, c = (broken, good) if arm == "base" else (good, broken)
+    assert _run_main(monkeypatch, tmp_path, b, c) != 0
+
+
+def test_ab_gate_rejects_non_finite_cost_in_both_arms(monkeypatch, tmp_path):
+    nan = [_rec(cost=float("nan"))]
+    assert _run_main(monkeypatch, tmp_path, nan, nan) != 0
+
+
+def test_require_gpu_backend_decision():
+    assert ab_nlsq.backend_matches("gpu", "gpu")
+    assert ab_nlsq.backend_matches("gpu", "cuda")
+    assert not ab_nlsq.backend_matches("gpu", "cpu")
+    assert ab_nlsq.backend_matches("cpu", "cpu")
+    assert ab_nlsq.backend_matches("cpu", "gpu")  # cpu is forced via env, not checked

@@ -310,9 +310,10 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         Whether to compute and save detailed diagnostic statistics (default: False)
         When False, skips statistical computations for successful chunks (5-10% faster)
     gc_chunk_interval : int
-        Chunks between gc.collect() calls (default: 10, FR-007)
-        Controls how often garbage collection runs during chunked processing.
-        Higher values reduce GC overhead but may increase memory usage.
+        Chunks between memory checks (default: 10, FR-007)
+        Sets how often resident memory is sampled during chunked processing;
+        ``gc.collect()`` runs only when RSS has grown by more than 10% of
+        ``memory_limit_gb`` since the last collection.
     """
 
     memory_limit_gb: float = 8.0

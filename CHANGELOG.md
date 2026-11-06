@@ -347,7 +347,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reads its scalar results back from the device in one transfer instead of several.
   Interleaved A/B against `main` at n=1000 on an RTX 4090 laptop: warm time 0.83-0.85x
   (exp_decay 20.4 to 17.2 ms, gaussian 28.5 to 24.3 ms, two_exp 47.3 to 39.4 ms); the
-  higher-power repeat runs gave 0.70-0.87. Fits on CPU and the bounded path are unchanged
+  higher-power repeat runs gave 0.70-0.87 (kept by owner ruling; the plan's strict A/B rule
+  held in 6 of 9 case-runs). Fits on CPU and the bounded path are unchanged
   within noise.
 - Lower peak memory in chunked `curve_fit_large` fits: chunks are gathered from the shuffle
   permutation instead of first copying the shuffled `xdata`/`ydata`/`sigma`. Peak resident

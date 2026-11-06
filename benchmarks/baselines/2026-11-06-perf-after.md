@@ -8,7 +8,7 @@ Branch `perf/curve-fit-small-and-large` (HEAD `24f73ba8`) against `main` at `87d
 
 Landed (code on the branch):
 
-- **A2** (commits `824a21ec`, `409d44f4`): the per-attempt scalar host syncs of TRF step acceptance are fused into one transfer (unbounded path, `fuse_scalars`).
+- **A2** (commits `824a21ec`, `409d44f4`): the per-attempt scalar host syncs of TRF step acceptance are fused into one transfer (unbounded path, `fuse_scalars`). Kept by owner/controller ruling (Ruling 10), not by passing its gate: the plan's strict A/B rule (ratio <= 0.9 and outside the in-session spread) held in 6 of 9 higher-power GPU 1k case-runs (per-case medians 0.870 / 0.806 / 0.700); no CPU speedup is claimed.
 - **B1** (`3c935ca2`, `4fcb809f`): `_fit_chunked` gathers each chunk from the permutation instead of copying shuffled arrays (memory change; chunk-span tripwire and upfront index validation).
 - **B3 / B4** (`172a2ea1`, `24f73ba8`): the chunk SSR is reused from `2 * res.cost`; `gc.collect()` runs only on RSS growth (failure-safe RSS read).
 
@@ -105,7 +105,7 @@ Ratio below 1 means the branch is faster. The 2026-11-06 baseline doc gives main
 
 Reading the ratios: a ratio only counts as a speedup when it is below `1 - max(spread)` (the plan's rule). That holds clearly only in some cells with small spreads
 (GPU 10M/100M two_exp and others, CPU 10M). At 1k (CPU spread 12-147%, GPU 6-19%) and at 1M the ratios are point estimates inside noise; the repeated higher-power GPU 1k
-A/B from Task 4 (`2026-11-06-perf-phase0.md`, addendum 2) is the stronger evidence for A2 (medians 0.87 / 0.81 / 0.70).
+A/B from Task 4 (`2026-11-06-perf-phase0.md`, addendum 2) is the stronger evidence for A2 (medians 0.87 / 0.81 / 0.70; the strict rule held in 6 of 9 case-runs, and A2 is kept by owner/controller ruling, Ruling 10, not by a gate pass).
 
 ### CPU 100M: two cells need a note
 
