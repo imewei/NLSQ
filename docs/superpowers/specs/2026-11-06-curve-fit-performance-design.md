@@ -25,13 +25,14 @@ Why now: the 2026-11-06 rerun showed fixed per-call and per-chunk overhead, not 
 
 Targets (my proposal, derived from the measurements below; the owner may change them). Harness numbers, warm median:
 
-| Case | Today | Target |
-|---|---|---|
-| `curve_fit` 1k unbounded, GPU | 23-51 ms | <= 12 ms |
-| `curve_fit` 1k unbounded, CPU | 4-8 ms | <= 3.5 ms |
-| `curve_fit` 1k bounded, GPU / CPU | 170 / 47 ms | measure first, then set |
-| `curve_fit_large` 10M exp_decay, GPU | 1.5 s | <= 1.0 s |
-| `curve_fit_large` 100M exp_decay, GPU | 14-20 s | <= 12 s |
+| Case | Today | Target | Phase 0 note (2026-11-06) |
+|---|---|---|---|
+| `curve_fit` 1k unbounded, GPU | 23-51 ms | <= 12 ms | **Implausible without A5.** Re-measured 23.7-25.5 ms. Measured removable time: A2 at most 5/6 x 0.59 ms x 4 acceptance calls, about 2 ms; A1 at most 0.92 ms (gate failed); A3 about 0.6 ms x 5 SVDs, about 3 ms (gate failed). All three together reach about 19-20 ms |
+| `curve_fit` 1k unbounded, CPU | 4-8 ms | <= 3.5 ms | **Implausible from A1+A2.** Re-measured 4.7-6.4 ms. Removable: A1 <= 0.52 ms (gate failed), A2 about 0.13 ms; together at most 11-14%, a 3.5 ms target needs about 26% or more |
+| `curve_fit` 1k bounded (`bounded_exp`), GPU / CPU | 170 / 47 ms | <= 125 ms / <= 38 ms (aim) | Re-measured 148 / 43 ms. `select_step` is 16% / 13% of the wall and its conversions 7-8% / 1.5%, so A4 as scoped cannot give more than about 15%; larger gains need the per-iteration eager dispatch and syncs of `trf_bounds` |
+| `curve_fit` 100k bounded (`bounded_exp`), GPU / CPU | not stated | <= 200 ms / <= 200 ms (aim, only if Task 8 is retargeted) | Measured 387 / 324 ms; `select_step` shows 50% / 60% of the wall, mostly the first-sync wait on model and Jacobian compute and the host `np.dot` in `build_quadratic_1d` |
+| `curve_fit_large` 10M exp_decay, GPU | 1.5 s | <= 1.0 s | Re-measured 1.28 s. Tight: B1 saves about 0.07 s, `pcov_from_jacobian` is 0.18 s of it |
+| `curve_fit_large` 100M exp_decay, GPU | 14-20 s | <= 12 s | Re-measured 12.5-13.0 s this session, so the target is only about 7% below today and inside session drift; judge by interleaved A/B only. B1 saves about 0.45 s, `gc.collect` 0.62 s (4.8%), `pcov_from_jacobian` 1.76 s |
 
 ## Non-goals
 
@@ -137,7 +138,8 @@ chunked GLS from 1M. Improvements to the TRF loop (workstream A) therefore also 
   `J_h` and `f` go to the host, `U.T @ f` is computed there, and `s`, `V`, `uf` go back to the original device (committed
   arrays on two devices cannot meet in a jitted call). The covariance SVD becomes a Python dispatch around its jitted
   kernel. Same math (LAPACK instead of cuSOLVER); no conditioning change. The threshold is set by measurement including
-  transfer cost (GPU SVD is 2.1 ms at 100k x 3; the CPU time there is not yet measured). No effect when the backend is
+  transfer cost: Phase 0 gives `HOST_SVD_MAX_ELEMENTS` = 30,000 (n x p; host incl. transfer faster at every measured point
+  up to there except one tie, mixed to 54,000, slower from 60,000), but the 5x gate at 1k failed (2.1-2.6x), so A3 is dropped unless revived. No effect when the backend is
   already CPU. Singular vectors of degenerate subspaces are not unique, so verification compares reconstruction,
   projectors and covariance, never signs.
 - **A4. Bounded path.** Profile `bounded_exp` at 1k and 100k first (47 ms CPU / 170 ms GPU are outliers vs 4-8 / 23-51
