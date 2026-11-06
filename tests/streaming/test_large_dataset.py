@@ -1069,3 +1069,84 @@ def test_gc_collects_at_periodic_points_when_rss_unreadable(monkeypatch):
     res = _run_chunked(False, n_chunks=5, chunk=200)
     assert res.success
     assert len(calls) >= 1  # old behaviour: collect at every periodic point
+
+
+def _run_gc_gate(monkeypatch, memory_limit_gb, retain_bytes_per_chunk):
+    """Real chunk loop, real ``_safe_rss``; returns (kept, gate_collect_calls).
+
+    ``retain_bytes_per_chunk`` bytes of touched pages (np.ones) are retained
+    per per-chunk fit, so process RSS genuinely grows. Only ``gc.collect``
+    calls made from ``_collect_if_rss_grew`` (the gate) are counted; the real
+    ``gc.collect`` still runs.
+    """
+    import dataclasses
+    import gc
+    import sys
+    import warnings
+
+    n_chunks, chunk = 6, 1000
+    n = n_chunks * chunk
+    rng = np.random.default_rng(7)
+    x = np.linspace(0, 1, n)
+    y = 2 * x + 1 + 0.1 * rng.standard_normal(n)
+    cfg = LDMemoryConfig(memory_limit_gb=memory_limit_gb, gc_chunk_interval=1)
+    fitter = LargeDatasetFitter(config=cfg)
+    stats = dataclasses.replace(
+        fitter.estimate_requirements(n, 2),
+        recommended_chunk_size=chunk,
+        n_chunks=n_chunks,
+    )
+
+    kept = []
+    inner = fitter.curve_fit.curve_fit
+
+    def retaining_fit(*a, **k):
+        if retain_bytes_per_chunk:
+            kept.append(np.ones(retain_bytes_per_chunk, dtype=np.uint8))
+        return inner(*a, **k)
+
+    fitter.curve_fit = MagicMock(wraps=fitter.curve_fit)
+    fitter.curve_fit.curve_fit = retaining_fit
+
+    gate_calls = []
+    real_collect = gc.collect
+
+    def spy(*a):
+        if sys._getframe(1).f_code.co_name == "_collect_if_rss_grew":
+            gate_calls.append(a)
+        return real_collect(*a)
+
+    monkeypatch.setattr(gc, "collect", spy)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = fitter._fit_chunked(
+            _lin_model,
+            x,
+            y,
+            np.array([1.0, 1.0]),
+            (-np.inf, np.inf),
+            "trf",
+            "auto",
+            False,
+            stats,
+        )
+    assert res.success
+    return kept, gate_calls
+
+
+@pytest.mark.serial
+def test_gc_gate_fires_on_real_rss_growth(monkeypatch):
+    # memory_limit_gb=0.05 -> threshold 5.4 MB; 16 MB of touched pages is
+    # retained per chunk (3x the threshold), so growth must trip the gate.
+    kept, gate_calls = _run_gc_gate(monkeypatch, 0.05, 16 * 1024**2)
+    assert sum(a.nbytes for a in kept) >= 6 * 16 * 1024**2
+    assert len(gate_calls) >= 1
+
+
+@pytest.mark.serial
+def test_gc_gate_quiet_without_growth_real_rss(monkeypatch):
+    # memory_limit_gb=1.0 -> threshold 107 MB, far above allocator jitter of a
+    # tiny fit. A warm-up run first absorbs the one-off JIT-compile RSS jump.
+    _run_gc_gate(monkeypatch, 1.0, 0)
+    _, gate_calls = _run_gc_gate(monkeypatch, 1.0, 0)
+    assert gate_calls == []
