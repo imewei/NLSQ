@@ -706,6 +706,60 @@ class MemoryEstimator:
         return chunk_size, stats
 
 
+def _rss_bytes() -> int:
+    """Resident set size of this process in bytes (monkeypatchable in tests)."""
+    return psutil.Process().memory_info().rss
+
+
+# Options of ``CurveFit.curve_fit`` (minpack.py) that drop, reweight or change
+# the shape of the residuals, so ``res.cost`` would no longer equal half of the
+# plain sigma-weighted SSR of the chunk: ``data_mask`` drops rows, ``nan_policy``
+# other than "raise" drops/imputes rows, a non-linear ``loss`` reweights them
+# (``f_scale`` only acts with such a loss), and the output flags
+# (``return_eval``/``full_output``/``timeit``) return something other than a
+# ``CurveFitResult``. ``sigma`` is fine: ``_fit_chunked`` slices it per chunk and
+# ``res.cost`` is then 0.5 * sum(((y - f) / sigma) ** 2), as ``_chunk_ssr`` computes.
+_SSR_REUSE_BLOCKERS = ("data_mask", "return_eval", "full_output", "timeit")
+
+
+def _collect_if_rss_grew(last_rss: int, growth_bytes: float) -> int:
+    """gc.collect() if RSS grew by more than ``growth_bytes`` since ``last_rss``.
+
+    Returns the RSS baseline for the next check (re-read after a collection).
+    """
+    if _rss_bytes() - last_rss <= growth_bytes:
+        return last_rss
+    gc.collect()
+    return _rss_bytes()
+
+
+def _ssr_reuse_eligible(kwargs: dict) -> bool:
+    """True when ``res.cost`` of a chunk fit equals half the chunk SSR.
+
+    Checked options: ``loss`` (must be absent or "linear"), ``nan_policy``
+    (absent or "raise"), and ``data_mask`` / ``return_eval`` / ``full_output`` /
+    ``timeit`` (any set to a value other than None/False makes it ineligible).
+    """
+    if kwargs.get("loss", "linear") != "linear":
+        return False
+    if kwargs.get("nan_policy", "raise") != "raise":
+        return False
+    return not any(
+        kwargs.get(k) is not None and kwargs[k] is not False
+        for k in _SSR_REUSE_BLOCKERS
+    )
+
+
+def _chunk_ssr_from_result(res, n_valid: int) -> float | None:
+    """``2 * res.cost`` when no rows were dropped and the cost is finite, else None."""
+    cost = getattr(res, "cost", None)
+    ydata = getattr(res, "ydata", None)
+    if cost is None or ydata is None or len(ydata) != n_valid:
+        return None
+    ssr = 2.0 * float(cost)
+    return ssr if np.isfinite(ssr) else None
+
+
 def cleanup_memory() -> None:
     """Perform memory cleanup between workflow phases.
 
@@ -2789,6 +2843,14 @@ class LargeDatasetFitter:
 
         # Get gc_chunk_interval from config (FR-007)
         gc_chunk_interval = self.config.gc_chunk_interval
+        # B4: collect only when RSS grew by > 10% of the memory limit since the
+        # last collection (an unconditional collect is ~5% of a 100M-point fit).
+        gc_growth_bytes = 0.1 * self.config.memory_limit_gb * 1024**3
+        gc_last_rss = _rss_bytes()
+        # B3 applies only to the plain-least-squares trf/dogbox/lm chunk fit.
+        reuse_ssr = method in (None, "trf", "dogbox", "lm") and _ssr_reuse_eligible(
+            kwargs
+        )
 
         # FR-006: Initialize buffer pool for chunk reuse
         xdata_arr = np.asarray(xdata)
@@ -2830,7 +2892,7 @@ class LargeDatasetFitter:
                             shuffle_idx[start_idx : start_idx + valid_length]
                         ]
                         chunk_kwargs = {**kwargs, "sigma": sigma_valid}
-                    popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
+                    chunk_res = self.curve_fit.curve_fit(
                         f,
                         _scipy_x(x_valid),
                         y_valid,
@@ -2840,6 +2902,18 @@ class LargeDatasetFitter:
                         solver=solver,
                         **chunk_kwargs,
                     )
+                    popt_chunk, pcov_chunk = chunk_res
+                    # B3: res.cost is already 0.5 * SSR at popt; re-evaluating
+                    # the model on the chunk is the fallback.
+                    chunk_ssr = (
+                        _chunk_ssr_from_result(chunk_res, valid_length)
+                        if reuse_ssr
+                        else None
+                    )
+                    if chunk_ssr is None:
+                        chunk_ssr = self._chunk_ssr(
+                            f, x_valid, y_valid, popt_chunk, sigma_valid
+                        )
 
                     # Accumulate this chunk's information into the full-dataset
                     # precision-weighted estimate and check convergence.
@@ -2856,9 +2930,7 @@ class LargeDatasetFitter:
                         convergence_metric,
                         chunk_idx,
                         stats.n_chunks,
-                        chunk_ssr=self._chunk_ssr(
-                            f, x_valid, y_valid, popt_chunk, sigma_valid
-                        ),
+                        chunk_ssr=chunk_ssr,
                         chunk_n=valid_length,
                     )
 
@@ -2929,7 +3001,7 @@ class LargeDatasetFitter:
 
                 # Memory cleanup - conditional based on gc_chunk_interval (FR-007)
                 if chunk_idx % gc_chunk_interval == 0:
-                    gc.collect()
+                    gc_last_rss = _collect_if_rss_grew(gc_last_rss, gc_growth_bytes)
 
             if current_params is not None and bounds_active:
                 current_params = np.clip(
