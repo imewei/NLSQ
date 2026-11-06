@@ -18,6 +18,7 @@ import jax.numpy as jnp
 from jax import jit, lax
 from jax.scipy.linalg import svd as jax_svd
 
+from nlsq.common_jax import check_termination_jax, update_tr_radius_jax
 from nlsq.stability.svd_fallback import compute_svd_with_fallback, is_gpu_error
 
 __all__ = ["TrustRegionJITFunctions"]
@@ -293,6 +294,72 @@ def _calculate_cost(rho: jnp.ndarray, data_mask: jnp.ndarray) -> jnp.ndarray:
 def _check_isfinite(f_new: jnp.ndarray) -> jnp.ndarray:
     """Check if all residuals are finite."""
     return jnp.all(jnp.isfinite(f_new))
+
+
+# Fused step-acceptance scalars (A2). Positions in the vector returned by
+# `accept_step_scalars`; the host reads it with a single device-to-host transfer.
+ACC_FINITE = 0
+ACC_REDUCTION = 1
+ACC_TERM = 2
+ACC_DELTA = 3
+ACC_ALPHA = 4
+ACC_STEP_H_NORM = 5
+ACC_STEP_NORM = 6
+TR_BOUNDARY_THRESHOLD = 0.95  # step counts as "on the boundary" above this fraction
+
+
+@jit
+def accept_step_scalars(
+    f_new: jnp.ndarray,
+    cost_new: jnp.ndarray,
+    cost: jnp.ndarray,
+    Delta: jnp.ndarray,
+    alpha: jnp.ndarray,
+    predicted_reduction: jnp.ndarray,
+    step_h: jnp.ndarray,
+    step: jnp.ndarray,
+    x: jnp.ndarray,
+    ftol: float,
+    xtol: float,
+) -> jnp.ndarray:
+    """All scalar math of one trust-region attempt, as one float64 vector.
+
+    Same formulas as the sequential path (``update_tr_radius_jax``,
+    ``check_termination_jax``, alpha rescaling). ``cost_new`` is ignored by the
+    host when the residuals are not finite (entry ``ACC_FINITE`` is 0), so the
+    loss may be evaluated before the finiteness check.
+    """
+    finite = jnp.all(jnp.isfinite(f_new))
+    actual_reduction = cost - cost_new
+    step_h_norm = jnp.linalg.norm(step_h)
+    step_norm = jnp.linalg.norm(step)
+    Delta_new, ratio = update_tr_radius_jax(
+        Delta,
+        actual_reduction,
+        predicted_reduction,
+        step_h_norm,
+        step_h_norm > TR_BOUNDARY_THRESHOLD * Delta,
+    )
+    term = check_termination_jax(
+        actual_reduction, cost, step_norm, jnp.linalg.norm(x), ratio, ftol, xtol
+    )
+    raw_alpha = alpha * Delta / Delta_new
+    alpha_new = jnp.where(
+        Delta_new > 0,
+        jnp.minimum(jnp.where(jnp.isfinite(raw_alpha), raw_alpha, 1e30), 1e30),
+        alpha,
+    )
+    return jnp.stack(
+        [
+            finite,
+            actual_reduction,
+            term,
+            Delta_new,
+            alpha_new,
+            step_h_norm,
+            step_norm,
+        ]
+    ).astype(jnp.float64)
 
 
 # ---------------------------------------------------------------------------
