@@ -1425,6 +1425,8 @@ class LeastSquares:
                 solver=tr_solver or "exact",
                 diagnostics=self.diagnostics if self.enable_diagnostics else None,
                 callback=callback,
+                # Built-in losses are NaN-safe jitted kernels; a callable is not.
+                fuse_scalars=isinstance(loss, str),
                 **timeout_kwargs,
             )
 

@@ -878,3 +878,275 @@ class TestPooledVarianceDegreesOfFreedom:
         fitter = self._fitter(absolute_sigma=True, n=2)
         pcov = fitter._compute_covariance_from_history([], np.zeros(2))
         np.testing.assert_allclose(pcov, np.eye(2))
+
+
+# --- B3 (SSR reuse) and B4 (gc gating) -------------------------------------
+
+
+def _lin_model(x, a, b):
+    return a * x + b
+
+
+def _chunk_data(n=2000, seed=3, sigma_on=False):
+    rng = np.random.default_rng(seed)
+    x = np.linspace(0, 1, n)
+    y = 2 * x + 1 + 0.1 * rng.standard_normal(n)
+    return x, y, ((0.1 + 0.5 * x) if sigma_on else None)
+
+
+@pytest.mark.parametrize("sigma_on", [False, True], ids=["no_sigma", "sigma_1d"])
+def test_ssr_from_result_matches_chunk_ssr(sigma_on):
+    from nlsq import CurveFit
+    from nlsq.streaming.large_dataset import _chunk_ssr_from_result
+
+    x, y, sigma = _chunk_data(sigma_on=sigma_on)
+    kw = {"sigma": sigma, "absolute_sigma": True} if sigma_on else {}
+    res = CurveFit().curve_fit(
+        _lin_model, x, y, p0=np.array([1.0, 1.0]), method="trf", **kw
+    )
+    popt, _ = res
+    expected = LargeDatasetFitter._chunk_ssr(_lin_model, x, y, popt, sigma)
+    got = _chunk_ssr_from_result(res, len(y))
+    assert got is not None
+    assert abs(got - expected) <= 1e-10 * abs(expected)
+
+
+def test_ssr_from_result_none_when_rows_dropped():
+    from types import SimpleNamespace
+
+    from nlsq.streaming.large_dataset import _chunk_ssr_from_result
+
+    res = SimpleNamespace(cost=1.5, ydata=np.zeros(9))
+    assert _chunk_ssr_from_result(res, 10) is None
+    assert (
+        _chunk_ssr_from_result(SimpleNamespace(cost=1.5, ydata=np.zeros(10)), 10) == 3.0
+    )
+    assert (
+        _chunk_ssr_from_result(SimpleNamespace(cost=np.nan, ydata=np.zeros(10)), 10)
+        is None
+    )
+    assert _chunk_ssr_from_result((np.ones(2), np.eye(2)), 10) is None  # no cost
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"loss": "soft_l1"},
+        {"loss": "huber"},
+        {"nan_policy": "omit"},
+        {"nan_policy": "impute"},
+        {"data_mask": np.ones(3, dtype=bool)},
+        {"return_eval": True},
+        {"full_output": True},
+        {"timeit": True},
+    ],
+    ids=lambda k: next(iter(k)) + "=" + str(next(iter(k.values())))[:8],
+)
+def test_ssr_eligibility_false_for_robust_loss_and_omit(kwargs):
+    from nlsq.streaming.large_dataset import _ssr_reuse_eligible
+
+    assert not _ssr_reuse_eligible(kwargs)
+
+
+def test_ssr_eligibility_true_for_plain_options():
+    from nlsq.streaming.large_dataset import _ssr_reuse_eligible
+
+    assert _ssr_reuse_eligible({})
+    assert _ssr_reuse_eligible(
+        {"data_mask": None, "return_eval": False, "full_output": False, "timeit": False}
+    )
+    assert _ssr_reuse_eligible(
+        {"loss": "linear", "nan_policy": "raise", "absolute_sigma": True, "ftol": 1e-8}
+    )
+
+
+# Golden values recorded from BASE 4fcb809f (pre-B3, SSR re-evaluated from the model).
+# absolute_sigma left False so the pooled covariance depends on the chunk SSRs.
+_GOLD_COV = {
+    False: (
+        [2.0068764722838903, 0.9951400358401942],
+        [
+            [1.982063826277395e-05, -9.910319131386973e-06],
+            [-9.910319131386973e-06, 6.607430085987236e-06],
+        ],
+    ),
+    True: (
+        [2.0182364544948803, 0.9903950513712338],
+        [
+            [2.853367541657192e-05, -6.560404040730801e-06],
+            [-6.560404040730801e-06, 3.080195539858448e-06],
+        ],
+    ),
+}
+
+
+def _run_chunked(sigma_on, n_chunks=6, chunk=1000, **fitter_kw):
+    import dataclasses
+    import warnings
+
+    n = n_chunks * chunk
+    rng = np.random.default_rng(7)
+    x = np.linspace(0, 1, n)
+    y = 2 * x + 1 + 0.1 * rng.standard_normal(n)
+    sigma = (0.1 + 0.5 * x) if sigma_on else None
+    fitter = LargeDatasetFitter(memory_limit_gb=1.0, **fitter_kw)
+    stats = dataclasses.replace(
+        fitter.estimate_requirements(n, 2),
+        recommended_chunk_size=chunk,
+        n_chunks=n_chunks,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return fitter._fit_chunked(
+            _lin_model,
+            x,
+            y,
+            np.array([1.0, 1.0]),
+            (-np.inf, np.inf),
+            "trf",
+            "auto",
+            False,
+            stats,
+            sigma=sigma,
+        )
+
+
+@pytest.mark.parametrize("sigma_on", [False, True], ids=["no_sigma", "sigma_1d"])
+def test_chunked_covariance_unchanged(sigma_on):
+    res = _run_chunked(sigma_on)
+    popt, pcov = _GOLD_COV[sigma_on]
+    assert res.success
+    np.testing.assert_allclose(res.x, popt, rtol=1e-10, atol=1e-14)
+    np.testing.assert_allclose(res["pcov"], pcov, rtol=1e-10, atol=1e-14)
+
+
+def test_gc_not_called_without_memory_growth(monkeypatch):
+    import gc
+
+    from nlsq.streaming import large_dataset
+
+    monkeypatch.setattr(large_dataset, "_rss_bytes", lambda: 1_000_000_000)
+    calls = []
+    monkeypatch.setattr(gc, "collect", lambda *a: calls.append(a) or 0)
+    _run_chunked(False, n_chunks=5, chunk=200)
+    assert calls == []
+
+
+def test_gc_called_when_rss_grows_past_threshold(monkeypatch):
+    import gc
+
+    from nlsq.streaming import large_dataset
+
+    # memory_limit_gb=1.0 -> threshold ~107 MB; RSS jumps 1 GB per reading.
+    rss = iter(range(0, 10**12, 10**9))
+    monkeypatch.setattr(large_dataset, "_rss_bytes", lambda: next(rss))
+    calls = []
+    monkeypatch.setattr(gc, "collect", lambda *a: calls.append(a) or 0)
+    _run_chunked(False, n_chunks=5, chunk=200)
+    assert len(calls) >= 1
+
+
+def test_fit_chunked_reuses_result_cost(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("model re-evaluated for the chunk SSR")
+
+    monkeypatch.setattr(LargeDatasetFitter, "_chunk_ssr", staticmethod(boom))
+    res = _run_chunked(True)  # sigma path included; would fall to the retry if boom ran
+    np.testing.assert_allclose(res.x, _GOLD_COV[True][0], rtol=1e-10, atol=1e-14)
+
+
+def test_gc_collects_at_periodic_points_when_rss_unreadable(monkeypatch):
+    import gc
+
+    from nlsq.streaming import large_dataset
+
+    def boom():
+        raise PermissionError("psutil AccessDenied")
+
+    monkeypatch.setattr(large_dataset, "_rss_bytes", boom)
+    calls = []
+    monkeypatch.setattr(gc, "collect", lambda *a: calls.append(a) or 0)
+    res = _run_chunked(False, n_chunks=5, chunk=200)
+    assert res.success
+    assert len(calls) >= 1  # old behaviour: collect at every periodic point
+
+
+def _run_gc_gate(monkeypatch, memory_limit_gb, retain_bytes_per_chunk):
+    """Real chunk loop, real ``_safe_rss``; returns (kept, gate_collect_calls).
+
+    ``retain_bytes_per_chunk`` bytes of touched pages (np.ones) are retained
+    per per-chunk fit, so process RSS genuinely grows. Only ``gc.collect``
+    calls made from ``_collect_if_rss_grew`` (the gate) are counted; the real
+    ``gc.collect`` still runs.
+    """
+    import dataclasses
+    import gc
+    import sys
+    import warnings
+
+    n_chunks, chunk = 6, 1000
+    n = n_chunks * chunk
+    rng = np.random.default_rng(7)
+    x = np.linspace(0, 1, n)
+    y = 2 * x + 1 + 0.1 * rng.standard_normal(n)
+    cfg = LDMemoryConfig(memory_limit_gb=memory_limit_gb, gc_chunk_interval=1)
+    fitter = LargeDatasetFitter(config=cfg)
+    stats = dataclasses.replace(
+        fitter.estimate_requirements(n, 2),
+        recommended_chunk_size=chunk,
+        n_chunks=n_chunks,
+    )
+
+    kept = []
+    inner = fitter.curve_fit.curve_fit
+
+    def retaining_fit(*a, **k):
+        if retain_bytes_per_chunk:
+            kept.append(np.ones(retain_bytes_per_chunk, dtype=np.uint8))
+        return inner(*a, **k)
+
+    fitter.curve_fit = MagicMock(wraps=fitter.curve_fit)
+    fitter.curve_fit.curve_fit = retaining_fit
+
+    gate_calls = []
+    real_collect = gc.collect
+
+    def spy(*a):
+        if sys._getframe(1).f_code.co_name == "_collect_if_rss_grew":
+            gate_calls.append(a)
+        return real_collect(*a)
+
+    monkeypatch.setattr(gc, "collect", spy)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = fitter._fit_chunked(
+            _lin_model,
+            x,
+            y,
+            np.array([1.0, 1.0]),
+            (-np.inf, np.inf),
+            "trf",
+            "auto",
+            False,
+            stats,
+        )
+    assert res.success
+    return kept, gate_calls
+
+
+@pytest.mark.serial
+def test_gc_gate_fires_on_real_rss_growth(monkeypatch):
+    # memory_limit_gb=0.05 -> threshold 5.4 MB; 16 MB of touched pages is
+    # retained per chunk (3x the threshold), so growth must trip the gate.
+    kept, gate_calls = _run_gc_gate(monkeypatch, 0.05, 16 * 1024**2)
+    assert sum(a.nbytes for a in kept) >= 6 * 16 * 1024**2
+    assert len(gate_calls) >= 1
+
+
+@pytest.mark.serial
+def test_gc_gate_quiet_without_growth_real_rss(monkeypatch):
+    # memory_limit_gb=1.0 -> threshold 107 MB, far above allocator jitter of a
+    # tiny fit. A warm-up run first absorbs the one-off JIT-compile RSS jump.
+    _run_gc_gate(monkeypatch, 1.0, 0)
+    _, gate_calls = _run_gc_gate(monkeypatch, 1.0, 0)
+    assert gate_calls == []

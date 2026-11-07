@@ -310,9 +310,10 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         Whether to compute and save detailed diagnostic statistics (default: False)
         When False, skips statistical computations for successful chunks (5-10% faster)
     gc_chunk_interval : int
-        Chunks between gc.collect() calls (default: 10, FR-007)
-        Controls how often garbage collection runs during chunked processing.
-        Higher values reduce GC overhead but may increase memory usage.
+        Chunks between memory checks (default: 10, FR-007)
+        Sets how often resident memory is sampled during chunked processing;
+        ``gc.collect()`` runs only when RSS has grown by more than 10% of
+        ``memory_limit_gb`` since the last collection.
     """
 
     memory_limit_gb: float = 8.0
@@ -706,6 +707,73 @@ class MemoryEstimator:
         return chunk_size, stats
 
 
+def _rss_bytes() -> int:
+    """Resident set size of this process in bytes (monkeypatchable in tests)."""
+    return psutil.Process().memory_info().rss
+
+
+# Options of ``CurveFit.curve_fit`` (minpack.py) that drop, reweight or change
+# the shape of the residuals, so ``res.cost`` would no longer equal half of the
+# plain sigma-weighted SSR of the chunk: ``data_mask`` drops rows, ``nan_policy``
+# other than "raise" drops/imputes rows, a non-linear ``loss`` reweights them
+# (``f_scale`` only acts with such a loss), and the output flags
+# (``return_eval``/``full_output``/``timeit``) return something other than a
+# ``CurveFitResult``. Verified NOT to change ``res.cost``: bounds, x_scale, jac,
+# solver, batch_size, max_nfev, ftol/xtol/gtol, tr_solver, callback, diagnostics*,
+# absolute_sigma, check_finite, p0, f_scale under a linear loss. ``sigma`` is fine: ``_fit_chunked`` slices it per chunk and
+# ``res.cost`` is then 0.5 * sum(((y - f) / sigma) ** 2), as ``_chunk_ssr`` computes.
+_SSR_REUSE_BLOCKERS = ("data_mask", "return_eval", "full_output", "timeit")
+
+
+def _safe_rss() -> int | None:
+    """RSS in bytes, or None when it cannot be read (psutil may raise)."""
+    try:
+        return _rss_bytes()
+    except Exception:
+        return None
+
+
+def _collect_if_rss_grew(last_rss: int | None, growth_bytes: float) -> int | None:
+    """gc.collect() if RSS grew by more than ``growth_bytes`` since ``last_rss``.
+
+    Returns the RSS baseline for the next check (re-read after a collection).
+    If RSS is unreadable (now or at the baseline) this collects unconditionally,
+    the pre-gating behaviour, so a psutil failure never aborts or skips cleanup.
+    """
+    now = _safe_rss()
+    if last_rss is not None and now is not None and now - last_rss <= growth_bytes:
+        return last_rss
+    gc.collect()
+    return _safe_rss()
+
+
+def _ssr_reuse_eligible(kwargs: dict) -> bool:
+    """True when ``res.cost`` of a chunk fit equals half the chunk SSR.
+
+    Checked options: ``loss`` (must be absent or "linear"), ``nan_policy``
+    (absent or "raise"), and ``data_mask`` / ``return_eval`` / ``full_output`` /
+    ``timeit`` (any set to a value other than None/False makes it ineligible).
+    """
+    if kwargs.get("loss", "linear") != "linear":
+        return False
+    if kwargs.get("nan_policy", "raise") != "raise":
+        return False
+    return not any(
+        kwargs.get(k) is not None and kwargs[k] is not False
+        for k in _SSR_REUSE_BLOCKERS
+    )
+
+
+def _chunk_ssr_from_result(res, n_valid: int) -> float | None:
+    """``2 * res.cost`` when no rows were dropped and the cost is finite, else None."""
+    cost = getattr(res, "cost", None)
+    ydata = getattr(res, "ydata", None)
+    if cost is None or ydata is None or len(ydata) != n_valid:
+        return None
+    ssr = 2.0 * float(cost)
+    return ssr if np.isfinite(ssr) else None
+
+
 def cleanup_memory() -> None:
     """Perform memory cleanup between workflow phases.
 
@@ -819,6 +887,7 @@ class DataChunker:
         shuffle: bool = False,
         random_seed: int | None = None,
         buffer_pool: ChunkBufferPool | None = None,
+        indices: np.ndarray | None = None,
     ) -> Generator[tuple[np.ndarray, np.ndarray, int, int]]:
         """Create data chunks for processing.
 
@@ -838,6 +907,11 @@ class DataChunker:
             Pre-allocated buffer pool for chunk reuse (FR-006).
             If provided, chunks are written into pooled buffers to reduce
             allocation overhead.
+        indices : np.ndarray, optional
+            Row order to use instead of ``np.arange(n)``; chunk ``i`` is
+            ``xdata[indices[start:end]]``, gathered per chunk so no full-size
+            permuted copy is made. Mutually exclusive with ``shuffle``. Padding
+            rows of the last chunk gather ``xdata[0]`` and must not be read.
 
         Yields
         ------
@@ -852,7 +926,23 @@ class DataChunker:
         compiled kernels and avoiding recompilation overhead.
         """
         n_points = len(xdata)
-        indices = np.arange(n_points)
+        if indices is not None:
+            if shuffle:
+                raise ValueError("pass either `indices` or shuffle=True, not both")
+            indices = np.asarray(indices)
+            if indices.ndim != 1 or not np.issubdtype(indices.dtype, np.integer):
+                raise ValueError(
+                    "indices must be a 1-D integer array (got "
+                    f"ndim={indices.ndim}, dtype={indices.dtype})"
+                )
+            if len(indices) != n_points:
+                raise ValueError(
+                    f"indices length ({len(indices)}) must equal len(xdata) ({n_points})"
+                )
+            if n_points and (indices.min() < 0 or indices.max() >= n_points):
+                raise ValueError(f"indices must lie in [0, {n_points})")
+        else:
+            indices = np.arange(n_points)
 
         if shuffle:
             rng = np.random.default_rng(random_seed)
@@ -2712,13 +2802,12 @@ class LargeDatasetFitter:
             if full_sigma.ndim != 1:
                 # A 2-D (m, m) covariance matrix happens to satisfy the
                 # length check below (len() on it equals m, same as
-                # len(xdata)), but the shuffle/per-chunk reslicing further
-                # down only handles 1-D sigma correctly: shuffling permutes
-                # rows only (corrupting row/column correspondence) and the
-                # per-chunk reslice produces a non-square (valid_length, m)
+                # len(xdata)), but the per-chunk gather further down
+                # (full_sigma[shuffle_idx[start:end]]) only handles 1-D sigma
+                # correctly: it selects rows only (corrupting row/column
+                # correspondence) and yields a non-square (valid_length, m)
                 # array. Reject explicitly here instead of failing later
-                # with a shape error that gives no hint the real cause is
-                # this chunked path's row-only shuffle.
+                # with a shape error that hides the real cause.
                 raise ValueError(
                     "2-D covariance sigma is not supported for chunked "
                     f"large-dataset fitting (got shape {full_sigma.shape}); "
@@ -2733,19 +2822,15 @@ class LargeDatasetFitter:
         # Contiguous chunking biases fits on ordered/monotonic x (each chunk
         # covers only a narrow x-window, so per-chunk local optima can land
         # on different points of a degenerate manifold for weakly-identified
-        # models). Shuffle once (fixed seed for reproducibility) so every
-        # chunk is a representative sample of the full x-range; xdata/ydata/
-        # full_sigma are permuted together to stay aligned, so the sigma
-        # re-slicing below can keep assuming contiguous chunk boundaries.
+        # models). Permute once (fixed seed for reproducibility) so every
+        # chunk is a representative sample of the full x-range. The permutation
+        # is handed to create_chunks, which gathers each chunk (and its sigma,
+        # below) with the same index slice, so no shuffled full-size copies exist.
         n_points = len(xdata)
         xdata = np.asarray(xdata)
         ydata = np.asarray(ydata)
         self._require_finite(kwargs, xdata, ydata)
         shuffle_idx = np.random.default_rng(0).permutation(n_points)
-        xdata = xdata[shuffle_idx]
-        ydata = ydata[shuffle_idx]
-        if full_sigma is not None:
-            full_sigma = full_sigma[shuffle_idx]
         self.logger.debug(
             f"Shuffled {n_points} points before chunking (seed=0) to avoid "
             "biased per-chunk fits on ordered x",
@@ -2772,6 +2857,12 @@ class LargeDatasetFitter:
 
         # Get gc_chunk_interval from config (FR-007)
         gc_chunk_interval = self.config.gc_chunk_interval
+        # B4: collect only when RSS grew by > 10% of the memory limit since the
+        # last collection (an unconditional collect is ~5% of a 100M-point fit).
+        gc_growth_bytes = 0.1 * self.config.memory_limit_gb * 1024**3
+        gc_last_rss = _safe_rss()
+        # B3 applies only to the plain-least-squares trf/lm chunk fit.
+        reuse_ssr = method in (None, "trf", "lm") and _ssr_reuse_eligible(kwargs)
 
         # FR-006: Initialize buffer pool for chunk reuse
         xdata_arr = np.asarray(xdata)
@@ -2790,34 +2881,30 @@ class LargeDatasetFitter:
                 ydata,
                 stats.recommended_chunk_size,
                 buffer_pool=buffer_pool,
+                indices=shuffle_idx,
             ):
                 chunk_start_time = time.time()
                 chunk_kwargs = kwargs
                 sigma_valid = None
+                # Tripwire: sigma below is gathered by chunk_bounds, so the
+                # chunker must have yielded exactly the same chunk span.
+                start_idx, end_idx = chunk_bounds[chunk_idx]
+                if valid_length != end_idx - start_idx:
+                    raise RuntimeError(
+                        f"chunk {chunk_idx}: valid_length {valid_length} != "
+                        f"chunk_bounds span {end_idx - start_idx}"
+                    )
                 try:
                     # Use only valid data points (exclude zero-padding)
                     x_valid = x_chunk[:valid_length]
                     y_valid = y_chunk[:valid_length]
                     if full_sigma is not None:
-                        # Reconstructs the chunk boundary DataChunker.create_chunks
-                        # used, which is only valid because this call passes
-                        # shuffle=False (the default, above). If shuffle is ever
-                        # enabled here, x_valid stops matching this slice of
-                        # xdata and sigma would silently misalign with the data
-                        # it's meant to weight -- fail loudly instead.
-                        start_idx = chunk_bounds[chunk_idx][0]
-                        if not np.array_equal(
-                            x_valid,
-                            np.asarray(xdata)[start_idx : start_idx + valid_length],
-                        ):
-                            raise RuntimeError(
-                                "sigma chunk-slicing assumes "
-                                "DataChunker.create_chunks(shuffle=False); "
-                                "chunk boundary mismatch detected",
-                            )
-                        sigma_valid = full_sigma[start_idx : start_idx + valid_length]
+                        # Same shuffle_idx slice create_chunks used for x/y.
+                        sigma_valid = full_sigma[
+                            shuffle_idx[start_idx : start_idx + valid_length]
+                        ]
                         chunk_kwargs = {**kwargs, "sigma": sigma_valid}
-                    popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
+                    chunk_res = self.curve_fit.curve_fit(
                         f,
                         _scipy_x(x_valid),
                         y_valid,
@@ -2827,6 +2914,18 @@ class LargeDatasetFitter:
                         solver=solver,
                         **chunk_kwargs,
                     )
+                    popt_chunk, pcov_chunk = chunk_res
+                    # B3: res.cost is already 0.5 * SSR at popt; re-evaluating
+                    # the model on the chunk is the fallback.
+                    chunk_ssr = (
+                        _chunk_ssr_from_result(chunk_res, valid_length)
+                        if reuse_ssr
+                        else None
+                    )
+                    if chunk_ssr is None:
+                        chunk_ssr = self._chunk_ssr(
+                            f, x_valid, y_valid, popt_chunk, sigma_valid
+                        )
 
                     # Accumulate this chunk's information into the full-dataset
                     # precision-weighted estimate and check convergence.
@@ -2843,9 +2942,7 @@ class LargeDatasetFitter:
                         convergence_metric,
                         chunk_idx,
                         stats.n_chunks,
-                        chunk_ssr=self._chunk_ssr(
-                            f, x_valid, y_valid, popt_chunk, sigma_valid
-                        ),
+                        chunk_ssr=chunk_ssr,
                         chunk_n=valid_length,
                     )
 
@@ -2916,7 +3013,7 @@ class LargeDatasetFitter:
 
                 # Memory cleanup - conditional based on gc_chunk_interval (FR-007)
                 if chunk_idx % gc_chunk_interval == 0:
-                    gc.collect()
+                    gc_last_rss = _collect_if_rss_grew(gc_last_rss, gc_growth_bytes)
 
             if current_params is not None and bounds_active:
                 current_params = np.clip(

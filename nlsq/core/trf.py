@@ -113,6 +113,7 @@ import numpy as np
 from nlsq.config import JAXConfig
 
 __jax_config = JAXConfig()
+import jax
 import jax.numpy as jnp
 from jax import debug
 from jax.numpy.linalg import norm as jnorm
@@ -165,7 +166,18 @@ from nlsq.constants import (
 from nlsq.core.profiler import NullProfiler, TRFProfiler
 
 # JIT-compiled helper functions (extracted for modularity)
-from nlsq.core.trf_jit import TrustRegionJITFunctions
+from nlsq.core.trf_jit import (
+    ACC_ALPHA,
+    ACC_DELTA,
+    ACC_FINITE,
+    ACC_REDUCTION,
+    ACC_STEP_H_NORM,
+    ACC_STEP_NORM,
+    ACC_TERM,
+    TR_BOUNDARY_THRESHOLD,
+    TrustRegionJITFunctions,
+    accept_step_scalars,
+)
 from nlsq.result import OptimizeResult
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.utils.diagnostics import OptimizationDiagnostics
@@ -366,8 +378,16 @@ class BoundsContext:
 # Algorithm constants
 # Trust region parameters
 TR_REDUCTION_FACTOR = 0.25  # Factor to reduce trust region when numerical issues occur
-TR_BOUNDARY_THRESHOLD = 0.95  # Threshold for checking if step is close to boundary
 SQRT_EXPONENT = 0.5  # Exponent for square root in scaling (v**0.5)
+
+
+def _read_attempt_scalars(vec: jnp.ndarray) -> np.ndarray:
+    """Read the fused per-attempt scalar vector: the one device-to-host transfer.
+
+    ``jax.device_get`` is deliberate: tests count calls of this function so a
+    stray ``float()``/``np.asarray`` in the inner loop cannot hide.
+    """
+    return np.asarray(jax.device_get(vec))
 
 
 class TrustRegionReflective(TrustRegionJITFunctions):
@@ -481,6 +501,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         solver: str = "exact",
         diagnostics: OptimizationDiagnostics | None = None,
         callback: Callable[..., Any] | None = None,
+        fuse_scalars: bool = False,
         **kwargs: Any,
     ) -> OptimizeResult:
         """Minimize a scalar function of one or more variables using the
@@ -582,6 +603,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     solver,
                     callback,
                     diagnostics=diagnostics,
+                    fuse_scalars=fuse_scalars,
                     **kwargs,
                 )
             return self.trf_no_bounds(
@@ -609,6 +631,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 callback,
                 profiler=TRFProfiler(),
                 diagnostics=diagnostics,
+                fuse_scalars=fuse_scalars,
             )
         return self.trf_bounds(
             fun,
@@ -930,6 +953,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         max_nfev: int,
         nfev: int,
         gtol: float = 1e-8,
+        fuse_scalars: bool = False,
     ) -> dict[str, Any]:
         """Evaluate step acceptance through inner trust region loop.
 
@@ -997,6 +1021,13 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Maximum function evaluations
         nfev : int
             Current function evaluation count
+        fuse_scalars : bool, optional
+            Read the per-attempt scalars (finiteness, reduction, termination
+            code, radius, alpha, norms) with one fused device-to-host transfer
+            instead of one per scalar. Only valid for ``loss_function`` None or
+            a built-in loss (their kernels are NaN-safe), because the cost is
+            evaluated before the finiteness check. Default False keeps the
+            sequential path (required for user-callable losses).
 
         Returns
         -------
@@ -1072,6 +1103,44 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             x_new = x + step  # Keep step for later use in convergence check
             f_new = fun(x_new, xdata, ydata, data_mask, transform)
             nfev += 1
+
+            if fuse_scalars:
+                # One device-to-host transfer per attempt. The cost is computed
+                # before the finiteness check (NaN-safe built-in kernels only).
+                if loss_function is not None:
+                    cost_new = loss_function(f_new, f_scale, data_mask, cost_only=True)
+                else:
+                    cost_new = self.default_loss_func(f_new)
+                sc = _read_attempt_scalars(
+                    accept_step_scalars(
+                        f_new,
+                        cost_new,
+                        cost,
+                        Delta,
+                        alpha,
+                        predicted_reduction,
+                        step_h,
+                        step,
+                        x,
+                        ftol,
+                        xtol,
+                    )
+                ).tolist()
+                if not sc[ACC_FINITE]:
+                    Delta = TR_REDUCTION_FACTOR * sc[ACC_STEP_H_NORM]
+                    continue
+                actual_reduction = sc[ACC_REDUCTION]
+                step_norm = sc[ACC_STEP_NORM]
+                term_code_int = int(sc[ACC_TERM])
+                if term_code_int != 0:
+                    termination_status = term_code_int
+                    break
+                alpha = sc[ACC_ALPHA]
+                Delta = sc[ACC_DELTA]
+                if actual_reduction > 0:
+                    break
+                continue
+
             step_h_norm = jnorm(step_h)
 
             # Check for numerical issues
@@ -1773,6 +1842,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         callback: Callable[..., Any] | None = None,
         profiler: TRFProfiler | NullProfiler | None = None,
         diagnostics: OptimizationDiagnostics | None = None,
+        fuse_scalars: bool = False,
         **kwargs: Any,
     ) -> OptimizeResult:
         """Unbounded version of the trust-region reflective algorithm.
@@ -2003,6 +2073,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     gtol=gtol,
                     max_nfev=max_nfev,
                     nfev=nfev,
+                    fuse_scalars=fuse_scalars,
                 )
 
                 # Update state from acceptance result using helper

@@ -9,6 +9,7 @@ This test suite validates the implementation of:
 All tests ensure GPU-CPU transfers are minimized during optimization.
 """
 
+import contextlib
 import os
 from unittest import mock
 
@@ -18,6 +19,7 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit
+from nlsq.common_jax import solve_lsq_trust_region_jax
 from nlsq.core.least_squares import LeastSquares
 from nlsq.utils.profiling import (
     PerformanceMetrics,
@@ -310,6 +312,497 @@ def new_fit(x, y):
         assert comparison["reduction_count"] == 2
         assert comparison["reduction_percent"] == 100.0
         assert comparison["module"] == "fit_module"
+
+
+# ---------------------------------------------------------------------------
+# A2: fused per-attempt scalar reads in TRF step acceptance
+# ---------------------------------------------------------------------------
+
+_CONVERSION_METHODS = ("__bool__", "__int__", "__float__", "__index__", "item")
+
+
+@contextlib.contextmanager
+def count_materializations():
+    """Count host materializations of device arrays.
+
+    Counts ``ArrayImpl._value`` reads (``counter["value"]``), ``__array__`` calls,
+    which is how ``np.asarray(device_array)`` and ``jax.device_get`` reach the host
+    (``counter["array"]``), and the explicit conversion dunders / ``.item()``
+    (``counter["explicit"]``). ``np.asarray``/``np.array`` calls on a device array
+    outside the authorized path are tallied in ``counter["np_outside"]`` (CPU arrays
+    convert zero-copy and bypass both hooks above). ``counter["in_helper"]`` is set by the caller around
+    the one authorized conversion (``_read_attempt_scalars``); ``__array__`` calls
+    outside it are tallied in ``counter["array_outside"]``.
+    Skips the test when ``_value`` or ``__array__`` cannot be instrumented.
+    """
+    cls = type(jnp.zeros(1))
+    orig_value = getattr(cls, "_value", None)
+    orig_array = getattr(cls, "__array__", None)
+    if not isinstance(orig_value, property) or orig_array is None:
+        pytest.skip("array class lacks instrumentable `_value`/`__array__`")
+    counter = {
+        "value": 0,
+        "explicit": 0,
+        "array": 0,
+        "array_outside": 0,
+        "np_outside": 0,
+        "in_helper": False,
+    }
+
+    def np_wrapper(orig):
+        def wrapped(a, *args, **kwargs):
+            # CPU arrays convert zero-copy through the buffer protocol, which
+            # bypasses `__array__`/`_value`, so also count the call itself.
+            if isinstance(a, jax.Array) and not counter["in_helper"]:
+                counter["np_outside"] += 1
+            return orig(a, *args, **kwargs)
+
+        return wrapped
+
+    orig_np = {n: getattr(np, n) for n in ("asarray", "array")}
+
+    def getter(self):
+        counter["value"] += 1
+        return orig_value.fget(self)
+
+    def array_wrapper(self, *a, **k):
+        counter["array"] += 1
+        if not counter["in_helper"]:
+            counter["array_outside"] += 1
+        return orig_array(self, *a, **k)
+
+    saved = {}
+    cls._value = property(getter)
+    cls.__array__ = array_wrapper
+    for n, o in orig_np.items():
+        setattr(np, n, np_wrapper(o))
+    try:
+        for name in _CONVERSION_METHODS:
+            orig = getattr(cls, name, None)
+            if orig is None:
+                continue
+            saved[name] = orig
+
+            def wrapper(self, *a, _orig=orig, **k):
+                counter["explicit"] += 1
+                return _orig(self, *a, **k)
+
+            setattr(cls, name, wrapper)
+        yield counter
+    finally:
+        for name, orig in saved.items():
+            setattr(cls, name, orig)
+        cls.__array__ = orig_array
+        cls._value = orig_value
+        for n, o in orig_np.items():
+            setattr(np, n, o)
+
+
+# Materializations of the sequential (legacy) path, measured on base commit
+# 72b5067d: 6 per finite attempt that does not terminate (3 bool, 1 int, 2 float),
+# 1 per non-finite attempt. Used as lower bounds so JAX-internal changes cannot
+# make the check flaky.
+_BASELINE_MATERIALIZATIONS = {
+    "worse_then_better": 12,
+    "nonfinite_then_better": 7,
+    "accepted_first": 6,
+}
+_FIXTURE_ATTEMPTS = {
+    "worse_then_better": (2, 2),  # (attempts, finite attempts)
+    "nonfinite_then_better": (2, 1),
+    "accepted_first": (1, 1),
+}
+
+
+def _acceptance_fixture(trials, loss="none", Delta=1.0):
+    """Direct `_evaluate_step_acceptance` kwargs with a scripted stub `fun`."""
+    from nlsq.core.loss_functions import LossFunctionsJIT
+
+    J = jnp.array([[1.0, 0.2], [0.3, 1.0], [0.5, 0.5]])
+    f = jnp.array([1.0, -0.5, 0.25])
+    d = np.ones(2)
+    d_jnp = jnp.ones(2)
+    g = f.dot(J)
+    U, sv, VT = jnp.linalg.svd(J, full_matrices=False)
+    data_mask = jnp.ones(3)
+    calls = {"n": 0}
+    script = list(trials)
+
+    def fun(_x, _xdata, _ydata, _mask, _transform):
+        out = script[min(calls["n"], len(script) - 1)]
+        calls["n"] += 1
+        return out
+
+    def jac(_x, _xdata, _ydata, _mask, _transform):
+        return J
+
+    if loss == "callable":
+
+        def loss_function(r, f_scale, data_mask=None, cost_only=False):
+            assert np.all(np.isfinite(np.asarray(r))), (
+                "loss called on non-finite residuals"
+            )
+            if cost_only:
+                return 0.5 * jnp.sum(r**2)
+            return jnp.stack([r**2, jnp.ones_like(r), jnp.zeros_like(r)])
+
+        cost = loss_function(f, 1.0, data_mask, cost_only=True)
+    elif loss == "soft_l1":
+        loss_function = LossFunctionsJIT().get_loss_function("soft_l1")
+        cost = loss_function(f, 1.0, data_mask, cost_only=True)
+    else:
+        loss_function = None
+        cost = 0.5 * jnp.dot(f, f)
+
+    kwargs = dict(  # noqa: C408
+        fun=fun,
+        jac=jac,
+        x=np.array([1.0, 1.0]),
+        f=f,
+        J=J,
+        J_h=J,
+        g_h_jnp=g,
+        cost=cost,
+        d=d,
+        d_jnp=d_jnp,
+        Delta=Delta,
+        alpha=0.0,
+        step_h=None,
+        s=sv,
+        V=VT.T,
+        uf=U.T @ f,
+        xdata=np.zeros(3),
+        ydata=np.zeros(3),
+        data_mask=data_mask,
+        transform=None,
+        loss_function=loss_function,
+        f_scale=1.0,
+        scale_inv=np.ones(2),
+        jac_scale=False,
+        solver="exact",
+        ftol=1e-8,
+        xtol=1e-8,
+        max_nfev=50,
+        nfev=0,
+    )
+    return kwargs, calls
+
+
+_F = np.array([1.0, -0.5, 0.25])
+_TRIALS = {
+    "worse_then_better": [jnp.asarray(3 * _F), jnp.asarray(0.5 * _F)],
+    "nonfinite_then_better": [jnp.array([jnp.nan, 0.0, 0.0]), jnp.asarray(0.5 * _F)],
+    "accepted_first": [jnp.asarray(0.5 * _F)],
+}
+
+# Outcomes of the sequential path recorded by running base commit 72b5067d
+# (before this change) on the same fixtures.
+_GOLDEN = {
+    "worse_then_better": {
+        "accepted": True,
+        "nfev": 2,
+        "Delta": 0.4999999999999999,
+        "alpha": 1.521141276871864,
+        "actual_reduction": 0.4921875,
+        "step_norm": 0.24999999999999997,
+        "termination_status": None,
+        "x_new0": 0.763595721621678,
+    },
+    "nonfinite_then_better": {
+        "accepted": True,
+        "nfev": 2,
+        "Delta": 0.4999999999999999,
+        "alpha": 1.5211371620317047,
+        "actual_reduction": 0.4921875,
+        "step_norm": 0.24999999999999992,
+        "termination_status": None,
+        "x_new0": 0.76359574366002,
+    },
+    "accepted_first": {
+        "accepted": True,
+        "nfev": 1,
+        "Delta": 2.0,
+        "alpha": 0.1325397997053954,
+        "actual_reduction": 0.4921875,
+        "step_norm": 0.9999999999999998,
+        "termination_status": None,
+        "x_new0": 0.14795453800297786,
+    },
+    "callable_nonfinite": {
+        "accepted": True,
+        "nfev": 2,
+        "Delta": 0.4999999999999999,
+        "alpha": 1.5211371620317047,
+        "actual_reduction": 0.4921875,
+        "step_norm": 0.24999999999999992,
+        "termination_status": None,
+        "x_new0": 0.76359574366002,
+    },
+    "soft_l1_nonfinite": {
+        "accepted": True,
+        "nfev": 2,
+        "Delta": 0.4999999999999999,
+        "alpha": 1.5211371620317047,
+        "actual_reduction": 0.4064313438357765,
+        "step_norm": 0.24999999999999992,
+        "termination_status": None,
+        "x_new0": 0.76359574366002,
+    },
+}
+
+
+def _run(trials, fuse, loss="none", Delta=1.0, inject=None):
+    """Run one acceptance call; ``inject`` ("inside"/"before") adds a stray read."""
+    from nlsq.core import trf as trf_mod
+
+    kwargs, calls = _acceptance_fixture(trials, loss, Delta)
+    tr = trf_mod.TrustRegionReflective()
+    reads = {"n": 0}
+    real_read = trf_mod._read_attempt_scalars
+    real_acc = trf_mod.accept_step_scalars
+    box = {}
+
+    real_get = jax.device_get
+
+    def counting_get(x):
+        # the one authorized conversion path; a stray np.asarray on the same array
+        # would be cached and make this call free, so attribute by call site.
+        box["counter"]["in_helper"] = True
+        try:
+            return real_get(x)
+        finally:
+            box["counter"]["in_helper"] = False
+
+    def counting_read(vec):
+        reads["n"] += 1
+        if inject == "inside":
+            np.asarray(vec)  # stray extra transfer inside the helper
+        return real_read(vec)
+
+    def acc(*a, **k):
+        out = real_acc(*a, **k)
+        if inject == "before":
+            np.asarray(out)  # stray transfer outside the helper
+        return out
+
+    with (
+        mock.patch.object(trf_mod, "_read_attempt_scalars", counting_read),
+        mock.patch.object(trf_mod, "accept_step_scalars", acc),
+        mock.patch.object(jax, "device_get", counting_get),
+        count_materializations() as counter,
+    ):
+        box["counter"] = counter
+        result = tr._evaluate_step_acceptance(fuse_scalars=fuse, **kwargs)
+    return result, calls["n"], dict(counter), reads["n"]
+
+
+def _within_budget(counter, reads, attempts):
+    """The A2 budget: exactly one transfer per attempt and nothing else."""
+    return (
+        reads == attempts
+        and counter["value"] == attempts
+        and counter["array"] == attempts
+        and counter["array_outside"] == 0
+        and counter["np_outside"] == 0
+        and counter["explicit"] == 0
+    )
+
+
+def _outcome(result):
+    keys = ("Delta", "alpha", "actual_reduction", "step_norm")
+    out = {k: float(result[k]) for k in keys}
+    out["accepted"] = bool(result["accepted"])
+    out["nfev"] = int(result["nfev"])
+    out["termination_status"] = result["termination_status"]
+    if result["accepted"]:
+        out["x_new0"] = float(result["x_new"][0])
+    return out
+
+
+def _assert_outcome(actual, golden):
+    for k in ("accepted", "nfev", "termination_status"):
+        assert actual[k] == golden[k], k
+    for k, v in golden.items():
+        if k not in ("accepted", "nfev", "termination_status"):
+            assert actual[k] == pytest.approx(v, rel=1e-10, abs=1e-14), k
+
+
+class TestFusedStepAcceptance:
+    """A2: one device-to-host transfer per inner attempt (unbounded TRF)."""
+
+    @pytest.mark.parametrize("name", list(_TRIALS))
+    def test_legacy_baseline_is_expensive(self, name):
+        attempts, finite = _FIXTURE_ATTEMPTS[name]
+        _, n_calls, counter, reads = _run(_TRIALS[name], fuse=False)
+        assert n_calls == attempts
+        assert reads == 0
+        assert _BASELINE_MATERIALIZATIONS[name] > 0
+        assert counter["value"] >= _BASELINE_MATERIALIZATIONS[name]
+        assert counter["value"] >= 3 * finite
+
+    @pytest.mark.parametrize("name", list(_TRIALS))
+    def test_fused_one_transfer_per_attempt(self, name):
+        attempts, _ = _FIXTURE_ATTEMPTS[name]
+        result, n_calls, counter, reads = _run(_TRIALS[name], fuse=True)
+        assert n_calls == attempts
+        assert reads == attempts
+        assert counter["value"] == attempts
+        assert counter["explicit"] == 0
+        assert counter["array"] == attempts  # the one device_get per attempt
+        assert counter["array_outside"] == 0
+        assert counter["np_outside"] == 0
+        assert _within_budget(counter, reads, attempts)
+        assert result["accepted"] is True
+        _assert_outcome(_outcome(result), _GOLDEN[name])
+
+    @pytest.mark.parametrize("inject", ["inside", "before"])
+    def test_budget_detects_hidden_np_asarray(self, inject):
+        # A stray np.asarray bypasses `_value` accounting (zero-copy on CPU); the
+        # `__array__`/`np.asarray` instrumentation must still push the budget over.
+        attempts = 2
+        _, n_calls, counter, reads = _run(
+            _TRIALS["worse_then_better"], fuse=True, inject=inject
+        )
+        assert n_calls == attempts
+        assert not _within_budget(counter, reads, attempts)
+
+    @pytest.mark.parametrize("name", list(_TRIALS))
+    def test_legacy_outcome_matches_golden(self, name):
+        result, *_ = _run(_TRIALS[name], fuse=False)
+        _assert_outcome(_outcome(result), _GOLDEN[name])
+
+    @pytest.mark.parametrize("sign", [-1, 1], ids=["accepted", "rejected"])
+    def test_termination_branch_matches_legacy(self, sign):
+        # Tiny radius and a ~1e-13 relative cost change: xtol fires (status 3),
+        # before any Delta/alpha update, for an improving and a worsening trial.
+        trials = [jnp.asarray(_F * (1 + sign * 1e-13))]
+        fused, _, counter, reads = _run(trials, fuse=True, Delta=1e-12)
+        legacy, *_ = _run(trials, fuse=False, Delta=1e-12)
+        assert reads == 1 and counter["value"] == 1
+        assert fused["termination_status"] == 3
+        assert fused["Delta"] == 1e-12
+        assert fused["accepted"] is (sign < 0)
+        # alpha is the solver's value, not touched by the update
+        kw, _ = _acceptance_fixture(trials, Delta=1e-12)
+        _, solver_alpha, _ = solve_lsq_trust_region_jax(
+            2, 3, kw["uf"], kw["s"], kw["V"], 1e-12, initial_alpha=0.0
+        )
+        assert float(fused["alpha"]) == pytest.approx(float(solver_alpha), rel=1e-12)
+        assert fused.keys() == legacy.keys()
+        for k, v in legacy.items():
+            if v is None or isinstance(v, bool | int):
+                assert fused[k] == v, k
+            else:
+                np.testing.assert_allclose(
+                    np.asarray(fused[k]), np.asarray(v), rtol=1e-12, atol=0, err_msg=k
+                )
+
+    def test_callable_loss_never_sees_nonfinite_residuals(self):
+        # fuse_scalars=False is what LeastSquares sets for a callable loss; the
+        # callable asserts finiteness of its input, so it must not be called on NaN.
+        trials = _TRIALS["nonfinite_then_better"]
+        result, n_calls, _, reads = _run(trials, fuse=False, loss="callable")
+        assert n_calls == 2
+        assert reads == 0
+        _assert_outcome(_outcome(result), _GOLDEN["callable_nonfinite"])
+
+    def test_builtin_robust_loss_nonfinite_first_trial(self):
+        trials = _TRIALS["nonfinite_then_better"]
+        result, n_calls, counter, reads = _run(trials, fuse=True, loss="soft_l1")
+        assert n_calls == 2
+        assert reads == 2
+        assert counter["value"] == 2
+        _assert_outcome(_outcome(result), _GOLDEN["soft_l1_nonfinite"])
+        legacy, *_ = _run(trials, fuse=False, loss="soft_l1")
+        _assert_outcome(_outcome(legacy), _GOLDEN["soft_l1_nonfinite"])
+
+
+def _spy_trf_kwargs(monkeypatch):
+    from nlsq.core.trf import TrustRegionReflective
+
+    seen = []
+    real = TrustRegionReflective.trf
+
+    def spy(self, *args, **kwargs):
+        seen.append(kwargs.get("fuse_scalars"))
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(TrustRegionReflective, "trf", spy)
+    return seen
+
+
+def _decay(x, a, b):
+    return a * jnp.exp(-b * x)
+
+
+class TestFuseScalarsWiring:
+    """`LeastSquares` decides `fuse_scalars` from the loss argument."""
+
+    def _data(self):
+        x = np.linspace(0, 3, 40)
+        return x, 2.0 * np.exp(-1.3 * x)
+
+    def test_builtin_loss_unbounded_enables_fusion(self, monkeypatch):
+        seen = _spy_trf_kwargs(monkeypatch)
+        x, y = self._data()
+        popt, _ = curve_fit(_decay, x, y, p0=[1.0, 1.0])
+        assert seen == [True]
+        np.testing.assert_allclose(popt, [2.0, 1.3], rtol=1e-6)
+
+    def test_callable_loss_keeps_sequential_path(self, monkeypatch):
+        from nlsq import LeastSquares
+
+        seen = _spy_trf_kwargs(monkeypatch)
+        x, y = self._data()
+        res = LeastSquares().least_squares(
+            lambda p: p[0] * jnp.exp(-p[1] * x) - y,
+            [1.0, 1.0],
+            loss=lambda z: jnp.stack([z, jnp.ones_like(z), jnp.zeros_like(z)]),
+        )
+        assert seen == [False]
+        np.testing.assert_allclose(res.x, [2.0, 1.3], rtol=1e-5)
+
+    def test_builtin_robust_loss_enables_fusion(self, monkeypatch):
+        from nlsq import LeastSquares
+
+        seen = _spy_trf_kwargs(monkeypatch)
+        x, y = self._data()
+        LeastSquares().least_squares(
+            lambda p: p[0] * jnp.exp(-p[1] * x) - y, [1.0, 1.0], loss="soft_l1"
+        )
+        assert seen == [True]
+
+
+class TestFusedAcceptanceJitCache:
+    """Python-float Delta/alpha must not cause recompilation across fits."""
+
+    def test_second_fit_does_not_grow_jit_caches(self):
+        from nlsq import common_jax as cj
+        from nlsq.core import trf_jit as tj
+
+        fns = [
+            tj.accept_step_scalars,
+            cj.update_tr_radius_jax,
+            cj.check_termination_jax,
+            cj._solve_lsq_trust_region_jax_jit,
+            cj._evaluate_quadratic1,
+            cj._evaluate_quadratic_diagonal1,
+            cj._evaluate_quadratic2,
+            cj._evaluate_quadratic_diagonal2,
+        ]
+        if not all(hasattr(f, "_cache_size") for f in fns):
+            pytest.skip("jit `_cache_size` (private API) not available")
+
+        def fit(seed):
+            x = np.linspace(0, 4, 200)
+            noise = 0.01 * np.random.default_rng(seed).standard_normal(200)
+            y = (2.5 + 0.1 * seed) * np.exp(-1.3 * x) + 0.5 + noise
+            curve_fit(lambda x, a, b, c: a * jnp.exp(-b * x) + c, x, y, p0=[1, 1, 0])
+
+        fit(0)
+        warm = [f._cache_size() for f in fns]
+        fit(1)
+        assert [f._cache_size() for f in fns] == warm
 
 
 if __name__ == "__main__":

@@ -343,6 +343,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NLSQ_DEBUG=1`); `NLSQ_SAVE_ITERATIONS` still records iteration history.
 
 ### Performance
+- Faster small unbounded `curve_fit` fits on GPU: the trust-region step acceptance now
+  reads its scalar results back from the device in one transfer instead of several.
+  Interleaved A/B against `main` at n=1000 on an RTX 4090 laptop: warm time 0.83-0.85x
+  (exp_decay 20.4 to 17.2 ms, gaussian 28.5 to 24.3 ms, two_exp 47.3 to 39.4 ms); the
+  higher-power repeat runs gave 0.70-0.87 (kept by owner ruling; the plan's strict A/B rule
+  held in 6 of 9 case-runs). Fits on CPU and the bounded path are unchanged
+  within noise.
+- Lower peak memory in chunked `curve_fit_large` fits: chunks are gathered from the shuffle
+  permutation instead of first copying the shuffled `xdata`/`ydata`/`sigma`. Peak resident
+  memory of a 100M-point GPU fit fell from 6.08 GB to 4.51 GB (`/usr/bin/time -v`, whole
+  harness process). Results are unchanged (final cost equal within 1e-11 relative).
+- Fewer garbage-collection pauses in chunked fits: `gc.collect()` now runs only when resident
+  memory has grown, and each chunk's sum of squares is taken from the fit's own cost instead
+  of being recomputed. Warm `curve_fit_large` times at 10M and 100M points were 0.83-0.97x of
+  `main` on GPU (interleaved A/B); on CPU the 100M cells were too noisy (spreads up to 74%) to
+  show a difference.
 - Warm small fits no longer re-compile. `curve_fit()` builds a new
   `CurveFit`/`LeastSquares` per call, and their JIT kernels were per-instance
   `@jit` closures, so every warm call re-traced and re-compiled 4 XLA
