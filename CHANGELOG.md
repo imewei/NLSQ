@@ -197,14 +197,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nan_policy="omit"` drops the right rows for points-first `x`; negative `sigma` is accepted as
   in SciPy (only zero is rejected on the always-on path).
 
-### Performance
-- Under a GPU JAX backend, exact trust-region SVDs of small Jacobians (at most 30,000
-  elements, e.g. 1k points x 3 parameters) and the covariance SVD now run on the CPU
-  device, with the results returned to the original device (`nlsq/core/device_policy.py`);
-  CPU backends and larger problems are unchanged. In interleaved GPU A/B at 1k points,
-  warm `curve_fit` time is 0.76-0.87x of the previous commit; 100k points are unchanged.
-  Costs one temporary n x p host copy of the Jacobian.
-
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
   preparation with curve_fit, and nan_policy is read once in the shared step.
@@ -358,6 +350,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   higher-power repeat runs gave 0.70-0.87 (kept by owner ruling; the plan's strict A/B rule
   held in 6 of 9 case-runs). Fits on CPU and the bounded path are unchanged
   within noise.
+- Under a GPU JAX backend, unbounded exact trust-region SVDs of small Jacobians (at most
+  30,000 elements, e.g. 1k points x 3 parameters) and the covariance SVD now run on the CPU
+  device (`nlsq/core/device_policy.py`). `s`, `V` and `uf` are returned to the original
+  device; `U` stays on the host (nothing reads it). CPU backends, bounded fits and larger
+  problems are unchanged. In interleaved GPU A/B at 1k points, warm `curve_fit` time is
+  0.76-0.87x of the previous commit (pooled medians over six sessions; individual session
+  medians 0.689-0.945); 100k points are unchanged. Costs two temporary n x p host arrays
+  (`J_h`, `U`).
 - Lower peak memory in chunked `curve_fit_large` fits: chunks are gathered from the shuffle
   permutation instead of first copying the shuffled `xdata`/`ydata`/`sigma`. Peak resident
   memory of a 100M-point GPU fit fell from 6.08 GB to 4.51 GB (`/usr/bin/time -v`, whole

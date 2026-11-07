@@ -163,8 +163,8 @@ A5 (compiled TRF loop) was not started, per D2; it waits for the owner's decisio
 A3 was dropped by its Task 2 gate (host SVD incl. transfers 2.1-2.6x vs the 5x gate), then revived at the owner's request and kept by controller ruling
 (Ruling 13): gaussian 1k pooled 0.872 exceeds the plan's 0.85 bound and the per-session `1 - max(spread)` rule is met in only a few cells, but all
 three 1k problems are below 1 in 87-98% of 45 paired rounds (same evidence class as A2). `HOST_SVD_MAX_ELEMENTS = 30,000` (phase0 item (c));
-100k (n x p = 300,000) never takes the host path, so its ratios are noise around 1. Added temporary memory: one n x p host copy of `J_h` plus `U`
-(<= 240 KB each). GPU, `ab_nlsq`, interleaved, ratio = candidate / base `571d4597`; sessions 2 and 5 swapped the arm order (ratios inverted here).
+100k (n x p = 300,000) never takes the host path, so its ratios are noise around 1. Added temporary memory: two n x p host arrays (`J_h`, `U`;
+<= 240 KB each); `s`, `V`, `uf` are returned to the original device, `U` stays on the host. The 0.76-0.87 range quoted in the CHANGELOG is the pooled medians; individual session medians span 0.689-0.945. GPU, `ab_nlsq`, interleaved, ratio = candidate / base `571d4597`; sessions 2 and 5 swapped the arm order (ratios inverted here).
 s1: 5 rounds x 7 repeats; s2, s3: 8 x 9; s4-s6 (1k only): 8 x 31.
 
 | case | s1 | s2 | s3 | s4 | s5 | s6 | pooled paired-round median | rounds < 1 |

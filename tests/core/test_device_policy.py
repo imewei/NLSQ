@@ -121,6 +121,21 @@ def test_returned_placement(force_host):
         assert a.devices() == {dev}
 
 
+def test_tracers_keep_the_jitted_path(force_host):
+    """Under jax.jit the SVD wrappers must not take the (concrete-only) host path."""
+    J, f, d = _problem(False)
+    out = jax.jit(_svd_no_bounds)(J, d, f)
+    ref = _svd_no_bounds_jit_ref(J, d, f)
+    np.testing.assert_allclose(np.asarray(out[2]), ref, rtol=1e-12)
+    s, _ = jax.jit(_covariance_svd)(J)
+    np.testing.assert_allclose(np.asarray(s), ref, rtol=1e-12)
+    assert not force_host  # host_device() was never consulted
+
+
+def _svd_no_bounds_jit_ref(J, d, f):
+    return np.linalg.svd(np.asarray(J * d), compute_uv=False)
+
+
 def test_cpu_backend_does_not_call_device_put(monkeypatch):
     if jax.default_backend() != "cpu":
         pytest.skip("CPU default backend only")
@@ -162,9 +177,20 @@ _EMULATION_SCRIPT = textwrap.dedent(
     for i in (0, 2, 3, 4):  # J_h, s, V, uf (U stays on the host device)
         np.testing.assert_allclose(np.asarray(out[i]), ref[i], rtol=1e-10, atol=1e-12)
         assert out[i].devices() == {devs[0]}, out[i].devices()
+    calls.clear()
     got = curve_fit(model, x, y, p0=[1.5, 1.0])
+    assert calls  # the fit itself (TRF SVD / covariance) took the host path
     np.testing.assert_allclose(got[0], pref[0], rtol=1e-10)
     np.testing.assert_allclose(got[1], pref[1], rtol=1e-8)
+    # NaN Jacobian: all-inf pcov plus the warning, same as the device path.
+    import warnings
+    from nlsq.core.minpack import _covariance_svd
+    from nlsq.core.covariance import pcov_from_jacobian
+    Jn = jnp.asarray(np.where(np.eye(20, 2) > 0, np.nan, 1.0))
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        pc, warned = pcov_from_jacobian(Jn, 0.5, 20, 2, False, _covariance_svd)
+    assert warned and np.all(np.isposinf(pc)) and len(w) == 1
     print("OK")
     """
 )
@@ -189,17 +215,29 @@ def test_cross_device_placement_emulated():
 
 
 @pytest.mark.gpu
-def test_host_svd_matches_device_svd_on_real_gpu(monkeypatch):
+@pytest.mark.parametrize("rank_deficient", [False, True])
+def test_host_svd_matches_device_svd_on_real_gpu(monkeypatch, rank_deficient):
     if jax.default_backend() not in ("gpu", "cuda", "rocm"):
         pytest.skip("needs a GPU backend")
-    J, f, d = _problem(False)
+    J, f, d = _problem(rank_deficient)
+    n, p = J.shape
     monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: False)
-    _, _, sr, _, ufr = (np.asarray(a) for a in _svd_no_bounds(J, d, f))
+    _, _, sr, Vr, ufr = (np.asarray(a) for a in _svd_no_bounds(J, d, f))
+    pref, _ = pcov_from_jacobian(J, 0.5, n, p, False, _covariance_svd)
     monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: True)
     _, _, s, V, uf = _svd_no_bounds(J, d, f)
     dev = next(iter(J.devices()))
     assert s.devices() == V.devices() == uf.devices() == {dev}
-    np.testing.assert_allclose(np.asarray(s), sr, rtol=1e-10)
+    s, V, uf = np.asarray(s), np.asarray(V), np.asarray(uf)
+    cut = EPS * max(n, p) * sr[0]
+    keep = sr > cut
+    k = int(keep.sum())
+    np.testing.assert_allclose(s[keep], sr[keep], rtol=1e-10)
+    np.testing.assert_allclose(s[~keep], sr[~keep], rtol=0, atol=cut)
     np.testing.assert_allclose(
-        np.abs(np.asarray(uf)), np.abs(ufr), rtol=1e-8, atol=1e-10
+        V[:, :k] @ V[:, :k].T, Vr[:, :k] @ Vr[:, :k].T, atol=1e-9
     )
+    # uf = U.T @ f: retained components agree up to the singular-vector sign
+    np.testing.assert_allclose(np.abs(uf[:k]), np.abs(ufr[:k]), rtol=1e-8, atol=1e-10)
+    pcov, _ = pcov_from_jacobian(J, 0.5, n, p, False, _covariance_svd)
+    np.testing.assert_allclose(pcov, pref, rtol=1e-8, atol=0)

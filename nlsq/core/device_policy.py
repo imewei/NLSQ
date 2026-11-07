@@ -40,3 +40,16 @@ def use_host_for_small_svd(shape: tuple[int, ...], backend: str) -> bool:
 def host_device() -> jax.Device:
     """The CPU device used for host-side SVDs."""
     return jax.devices("cpu")[0]
+
+
+def use_host_svd_for(J: object) -> bool:
+    """Policy for a concrete array ``J``: small, one accelerator device, never a tracer.
+
+    Tracers (``J`` inside ``jax.jit``) and non-JAX arrays keep the plain jitted path.
+    """
+    return (
+        isinstance(J, jax.Array)
+        and not isinstance(J, jax.core.Tracer)
+        and len(J.devices()) == 1
+        and use_host_for_small_svd(J.shape, jax.default_backend())
+    )

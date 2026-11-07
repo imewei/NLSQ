@@ -378,14 +378,6 @@ def accept_step_scalars(
 # ---------------------------------------------------------------------------
 
 
-def _svd_on_host(J: jnp.ndarray) -> bool:
-    """A3 policy for ``J``: small, on a single accelerator device, CPU device present."""
-    return (
-        device_policy.use_host_for_small_svd(J.shape, jax.default_backend())
-        and len(getattr(J, "devices", tuple)()) == 1
-    )
-
-
 def _svd_no_bounds_on_host(
     J: jnp.ndarray,
     d: jnp.ndarray,
@@ -412,7 +404,11 @@ def _svd_no_bounds(
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Compute SVD of J in hat space (unbounded variant) with GPU fallback."""
     try:
-        result = _svd_no_bounds_on_host(J, d, f) if _svd_on_host(J) else None
+        result = (
+            _svd_no_bounds_on_host(J, d, f)
+            if device_policy.use_host_svd_for(J)
+            else None
+        )
         if result is None:
             result = _svd_no_bounds_jit(J, d, f)
         # Force materialization so an async GPU/cuSolver failure is raised HERE,

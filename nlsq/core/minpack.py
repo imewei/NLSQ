@@ -3333,7 +3333,7 @@ def _covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
 
     Results stay where they were computed: ``pcov_from_jacobian`` converts to NumPy.
     """
-    if device_policy.use_host_for_small_svd(jac.shape, jax.default_backend()):
+    if device_policy.use_host_svd_for(jac):
         jac = jax.device_put(jac, device_policy.host_device())
     return _covariance_svd_jit(jac)
 
