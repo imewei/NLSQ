@@ -158,6 +158,27 @@ about 10-30% on GPU 1k (this session: 0.845 / 0.853 / 0.832), which is not enoug
 
 A5 (compiled TRF loop) was not started, per D2; it waits for the owner's decision.
 
+## A3: small exact SVD on the host device under a GPU backend (kept by ruling)
+
+A3 was dropped by its Task 2 gate (host SVD incl. transfers 2.1-2.6x vs the 5x gate), then revived at the owner's request and kept by controller ruling
+(Ruling 13): gaussian 1k pooled 0.872 exceeds the plan's 0.85 bound and the per-session `1 - max(spread)` rule is met in only a few cells, but all
+three 1k problems are below 1 in 87-98% of 45 paired rounds (same evidence class as A2). `HOST_SVD_MAX_ELEMENTS = 30,000` (phase0 item (c));
+100k (n x p = 300,000) never takes the host path, so its ratios are noise around 1. Added temporary memory: two n x p host arrays (`J_h`, `U`;
+<= 240 KB each); `s`, `V`, `uf` are returned to the original device, `U` stays on the host. The 0.76-0.87 range quoted in the CHANGELOG is the pooled medians; individual session medians span 0.689-0.945. GPU, `ab_nlsq`, interleaved, ratio = candidate / base `571d4597`; sessions 2 and 5 swapped the arm order (ratios inverted here).
+s1: 5 rounds x 7 repeats; s2, s3: 8 x 9; s4-s6 (1k only): 8 x 31.
+
+| case | s1 | s2 | s3 | s4 | s5 | s6 | pooled paired-round median | rounds < 1 |
+|---|---|---|---|---|---|---|---|---|
+| exp_decay 1k | 0.770 | 0.713 | 0.783 | 0.770 | 0.752 | 0.764 | 0.765 (n=45) | 93% |
+| gaussian 1k | 0.945 | 0.831 | 0.846 | 0.911 | 0.917 | 0.857 | 0.872 (n=45) | 87% |
+| two_exp 1k | 0.689 | 0.711 | 0.767 | 0.762 | 0.772 | 0.790 | 0.758 (n=45) | 98% |
+| exp_decay 100k | 1.527 | 0.956 | 0.949 | - | - | - | 0.986 (n=21) | 62% |
+| gaussian 100k | 0.938 | 0.918 | 1.008 | - | - | - | 0.969 (n=21) | 67% |
+| two_exp 100k | 0.894 | 0.943 | 0.980 | - | - | - | 0.980 (n=21) | 57% |
+
+Session spreads (range/median over rounds) are 5-200%; only in-session ratios are meaningful (powersave governor). The 1k gain is about 4-8 ms of a
+17-45 ms fit and does not close the 12 ms GPU target.
+
 ## Caveats
 
 - CPU 100M cells carry spreads of up to 74% with 2 rounds; see the note above. GPU 100M spreads are 1-12%.

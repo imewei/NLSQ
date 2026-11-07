@@ -249,7 +249,9 @@ class TestSVDNoBounds:
 
         # Reconstruct: U @ diag(s) @ V.T = J_h
         # The SVD function returns V (not Vt), so we need V.T for reconstruction
-        reconstructed = U @ jnp.diag(s) @ V.T
+        reconstructed = (
+            np.array(U) @ np.diag(np.array(s)) @ np.array(V).T
+        )  # U may be on the host device
         np.testing.assert_allclose(
             np.array(reconstructed), np.array(J_h), rtol=1e-4, atol=1e-8
         )
@@ -264,7 +266,7 @@ class TestSVDNoBounds:
         _J_h, U, _s, _V, uf = trf_funcs.svd_no_bounds(J, d, f)
 
         # Verify uf = U.T @ f
-        expected_uf = U.T @ f
+        expected_uf = np.array(U).T @ np.array(f)  # U may be on the host device
         np.testing.assert_allclose(np.array(uf), np.array(expected_uf), rtol=1e-6)
 
     def test_scaling_applied(self, trf_funcs, simple_jacobian, simple_residuals):
