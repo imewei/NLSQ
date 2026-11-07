@@ -197,6 +197,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nan_policy="omit"` drops the right rows for points-first `x`; negative `sigma` is accepted as
   in SciPy (only zero is rejected on the always-on path).
 
+### Performance
+- Under a GPU JAX backend, exact trust-region SVDs of small Jacobians (at most 30,000
+  elements, e.g. 1k points x 3 parameters) and the covariance SVD now run on the CPU
+  device, with the results returned to the original device (`nlsq/core/device_policy.py`);
+  CPU backends and larger problems are unchanged. In interleaved GPU A/B at 1k points,
+  warm `curve_fit` time is 0.76-0.87x of the previous commit; 100k points are unchanged.
+  Costs one temporary n x p host copy of the Jacobian.
+
 ### Changed (internal)
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
   preparation with curve_fit, and nan_policy is read once in the shared step.

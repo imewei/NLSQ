@@ -19,6 +19,7 @@ from jax import jit, lax
 from jax.scipy.linalg import svd as jax_svd
 
 from nlsq.common_jax import check_termination_jax, update_tr_radius_jax
+from nlsq.core import device_policy
 from nlsq.stability.svd_fallback import compute_svd_with_fallback, is_gpu_error
 
 __all__ = ["TrustRegionJITFunctions"]
@@ -66,6 +67,16 @@ def _svd_no_bounds_jit(
     U, s, Vt = jax_svd(J_h, full_matrices=False)
     uf = U.T.dot(f)
     return J_h, U, s, Vt.T, uf
+
+
+@jit
+def _svd_hat_jit(
+    J_h: jnp.ndarray,
+    f: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """SVD of an already-scaled ``J_h`` (the host-device half of A3)."""
+    U, s, Vt = jax_svd(J_h, full_matrices=False)
+    return U, s, Vt.T, U.T.dot(f)
 
 
 @jit
@@ -367,6 +378,33 @@ def accept_step_scalars(
 # ---------------------------------------------------------------------------
 
 
+def _svd_on_host(J: jnp.ndarray) -> bool:
+    """A3 policy for ``J``: small, on a single accelerator device, CPU device present."""
+    return (
+        device_policy.use_host_for_small_svd(J.shape, jax.default_backend())
+        and len(getattr(J, "devices", tuple)()) == 1
+    )
+
+
+def _svd_no_bounds_on_host(
+    J: jnp.ndarray,
+    d: jnp.ndarray,
+    f: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """``_svd_no_bounds_jit`` with the SVD on the CPU device (A3).
+
+    ``J_h`` stays on ``J``'s device; ``s``, ``V``, ``uf`` are returned there (they feed
+    jitted solves, and committed arrays on two devices cannot mix). ``U`` stays on the
+    host: no caller reads it.
+    """
+    (dev,) = J.devices()
+    J_h = J * d
+    host = device_policy.host_device()
+    U, s, V, uf = _svd_hat_jit(jax.device_put(J_h, host), jax.device_put(f, host))
+    s, V, uf = jax.device_put((s, V, uf), dev)
+    return J_h, U, s, V, uf
+
+
 def _svd_no_bounds(
     J: jnp.ndarray,
     d: jnp.ndarray,
@@ -374,7 +412,9 @@ def _svd_no_bounds(
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Compute SVD of J in hat space (unbounded variant) with GPU fallback."""
     try:
-        result = _svd_no_bounds_jit(J, d, f)
+        result = _svd_no_bounds_on_host(J, d, f) if _svd_on_host(J) else None
+        if result is None:
+            result = _svd_no_bounds_jit(J, d, f)
         # Force materialization so an async GPU/cuSolver failure is raised HERE,
         # inside this try, rather than later at a downstream blocking op where it
         # would bypass the CPU fallback below.

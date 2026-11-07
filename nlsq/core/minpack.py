@@ -67,6 +67,7 @@ from nlsq.config import JAXConfig
 
 _jax_config = JAXConfig()
 
+import jax
 import jax.numpy as jnp
 from jax import jit
 from jax.errors import TracerArrayConversionError
@@ -76,6 +77,7 @@ from jax.scipy.linalg import svd as jax_svd
 from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
+from nlsq.core import device_policy
 from nlsq.core.covariance import pcov_from_jacobian
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
 from nlsq.core.problem import (
@@ -3321,9 +3323,19 @@ def _sigma_transform2d(
 
 
 @jit
-def _covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
+def _covariance_svd_jit(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
     _, s, VT = jax_svd(jac, full_matrices=False)
     return s, VT
+
+
+def _covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """``(s, VT)`` of ``jac``, on the CPU device when the A3 policy says so.
+
+    Results stay where they were computed: ``pcov_from_jacobian`` converts to NumPy.
+    """
+    if device_policy.use_host_for_small_svd(jac.shape, jax.default_backend()):
+        jac = jax.device_put(jac, device_policy.host_device())
+    return _covariance_svd_jit(jac)
 
 
 class CurveFit:

@@ -722,3 +722,33 @@ def test_package_import_enables_float64():
     """The goldens above assume float64 (importing nlsq enables x64)."""
     assert nlsq is not None
     assert jnp.asarray(1.0).dtype == jnp.float64
+
+
+# --- A3: host-device SVD dispatch keeps the contract ------------------------------------
+@pytest.fixture
+def host_svd_forced(monkeypatch):
+    from nlsq.core import device_policy
+
+    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda shape, b: True)
+
+
+def test_nan_jacobian_gives_inf_pcov_on_host_path(host_svd_forced, j_wc):
+    jac = np.where(np.eye(N, 2) > 0, np.nan, j_wc)
+    (pcov, warn_cov), caught = _record(_std_cov, jac, COST_WC, N, P_WC, False)
+    assert warn_cov is True
+    _assert_single(caught, OptimizeWarning)
+    _assert_all_inf(pcov, 2)
+
+
+def test_rank_deficient_pcov_unchanged(host_svd_forced, j_dup):
+    (pcov, warn_cov), caught = _record(_std_cov, j_dup, COST_DUP, N, P_DUP, False)
+    assert warn_cov is False
+    _assert_no_warnings(caught)
+    _assert_rank_deficient_pinv(pcov)
+    _assert_golden(pcov, STD_DUP)
+    (pcov0, warn0), caught = _record(
+        _std_cov, np.zeros((N, 3)), COST_DUP, N, P_DUP, False
+    )
+    assert warn0 is True
+    _assert_single(caught, OptimizeWarning)
+    _assert_all_inf(pcov0, 3)
