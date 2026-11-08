@@ -29,11 +29,12 @@ import psutil
 # Initialize JAX configuration through central config
 from nlsq.caching._closure_serial import closure_serial
 from nlsq.config import JAXConfig
+from nlsq.core.covariance import _NLSQ_DIR
 
 _jax_config = JAXConfig()
 
 
-from nlsq.result import OptimizeResult
+from nlsq.result import OptimizeResult, OptimizeWarning
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.streaming.strategy import build_large_strategy
 from nlsq.utils.logging import get_logger
@@ -332,6 +333,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         # Local import: nlsq.streaming.validators has no heavy deps, but keeps
         # this module's import graph unchanged.
         from nlsq.streaming.validators import (
+            coerce_integral_fields,
             validate_positive,
             validate_positive_int,
             validate_range,
@@ -343,12 +345,19 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         validate_positive_int(self.min_chunk_size, "min_chunk_size")
         validate_positive_int(self.max_chunk_size, "max_chunk_size")
         validate_positive_int(self.streaming_batch_size, "streaming_batch_size")
+        validate_positive_int(self.streaming_max_epochs, "streaming_max_epochs")
+        validate_positive_int(self.gc_chunk_interval, "gc_chunk_interval")
         validate_range(self.min_success_rate, 0.0, 1.0, "min_success_rate")
-        if self.gc_chunk_interval < 1:
-            raise ValueError(
-                f"gc_chunk_interval must be >= 1, got {self.gc_chunk_interval} "
-                "(it is used as a modulo divisor during chunked fitting)",
-            )
+        coerce_integral_fields(
+            self,
+            (
+                "min_chunk_size",
+                "max_chunk_size",
+                "streaming_batch_size",
+                "streaming_max_epochs",
+                "gc_chunk_interval",
+            ),
+        )
 
 
 @dataclass(slots=True)
@@ -1204,6 +1213,7 @@ class LargeDatasetFitter:
         self._accum_n = 0
         self._accum_information: np.ndarray | None = None
         self._accum_info_vector: np.ndarray | None = None
+        self._n_unusable_cov_chunks = 0  # chunks left out of the GLS combination
         # Neutral outside a fit (unscaled covariance); each run sets the caller's choice.
         self._absolute_sigma = True
 
@@ -2062,9 +2072,8 @@ class LargeDatasetFitter:
     ) -> np.ndarray | None:
         """Compute a usable precision (inverse-covariance) matrix for a chunk.
 
-        Returns None when the chunk covariance is missing, wrong-shaped, or not
-        invertible to a finite positive contribution. Falls back to a diagonal
-        precision when the full matrix is singular but its diagonal is usable.
+        Returns None when the chunk covariance is missing, wrong-shaped,
+        non-finite, or not numerically positive definite (singular/indefinite).
 
         Args:
             pcov_chunk: Per-chunk parameter covariance from curve_fit, or None.
@@ -2079,21 +2088,23 @@ class LargeDatasetFitter:
         if pcov.shape != (n_params, n_params):
             return None
 
-        if np.all(np.isfinite(pcov)):
-            try:
-                prec = np.linalg.inv(pcov)
-            except np.linalg.LinAlgError:
-                prec = None
-            if prec is not None:
-                prec = 0.5 * (prec + prec.T)  # symmetrize
-                if np.all(np.isfinite(prec)):
-                    return prec
-
-        # Fall back to a diagonal precision from finite, positive variances.
-        diag = np.diag(pcov)
-        if np.all(np.isfinite(diag)) and np.all(diag > 0):
-            return np.diag(1.0 / diag)
-        return None
+        if not np.all(np.isfinite(pcov)):
+            return None
+        pcov = 0.5 * (pcov + pcov.T)
+        # np.linalg.inv of a singular PSD matrix does not raise: it returns a
+        # finite indefinite ~1e16+ matrix. Require numerical positive
+        # definiteness so such chunks are counted and warned about instead.
+        # Test the correlation-scaled matrix so the verdict does not depend on
+        # the parameter units (diag(pcov) can legitimately span 1e16).
+        d = np.sqrt(np.diag(pcov)) if np.all(np.diag(pcov) > 0) else None
+        if d is None:
+            return None
+        w = np.linalg.eigvalsh(pcov / np.outer(d, d))
+        if w[0] <= n_params * np.finfo(float).eps * w[-1]:
+            return None
+        prec = np.linalg.inv(pcov)
+        prec = 0.5 * (prec + prec.T)
+        return prec if np.all(np.isfinite(prec)) else None
 
     def _update_parameters_convergence(
         self,
@@ -2148,7 +2159,9 @@ class LargeDatasetFitter:
 
         # Accumulate this chunk's information (inverse covariance).
         prec = self._chunk_precision(pcov_chunk, n_params)
-        if prec is not None:
+        if prec is None:
+            self._n_unusable_cov_chunks += 1
+        else:
             contrib_vec = prec @ popt_chunk
             if self._accum_information is None:
                 self._accum_information = prec.copy()
@@ -2509,6 +2522,17 @@ class LargeDatasetFitter:
         return failure_summary
 
     @staticmethod
+    def _require_valid_sigma(kwargs: dict, sigma: np.ndarray) -> None:
+        # Otherwise only the chunk holding the bad entry fails (and is dropped
+        # while above min_success_rate), silently discarding its data.
+        if sigma.ndim != 1:
+            return  # 2-D covariance sigma gets its own, clearer error below
+        if np.any(sigma == 0):
+            raise ValueError("sigma values must be non-zero")
+        if kwargs.get("check_finite") is not False and not np.isfinite(sigma).all():
+            raise ValueError("sigma must be finite (found NaN or inf)")
+
+    @staticmethod
     def _require_finite(kwargs: dict, xdata: np.ndarray, ydata: np.ndarray) -> None:
         # Otherwise a bad chunk is dropped (while above min_success_rate) and
         # the fit still reports success.
@@ -2687,9 +2711,25 @@ class LargeDatasetFitter:
                 f"chunks failed and were dropped from the fit "
                 f"({n_dropped} points; indices {failure_summary['failed_chunk_indices']}); "
                 "the result uses the remaining data only.",
-                UserWarning,
-                stacklevel=2,
+                OptimizeWarning,
+                skip_file_prefixes=_NLSQ_DIR,
             )
+
+        n_unusable = self._n_unusable_cov_chunks
+        if n_unusable:
+            msg = (
+                f"{n_unusable} of {stats.n_chunks} chunks had unusable covariance "
+                "(not numerically positive definite (singular, indefinite or "
+                "non-finite), e.g. an unidentifiable parameter) and were excluded "
+                "from the precision-weighted combination."
+            )
+            if self._accum_information is None:
+                msg += (
+                    " No chunk contributed, so the result is the LAST chunk's fit "
+                    "alone and pcov is a parameter-history proxy, not an estimator "
+                    "covariance."
+                )
+            warnings.warn(msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
 
         # Assemble result
         result = OptimizeResult(
@@ -2799,6 +2839,7 @@ class LargeDatasetFitter:
         self._accum_n = 0
         if full_sigma is not None:
             full_sigma = np.asarray(full_sigma)
+            self._require_valid_sigma(kwargs, full_sigma)
             if full_sigma.ndim != 1:
                 # A 2-D (m, m) covariance matrix happens to satisfy the
                 # length check below (len() on it equals m, same as
@@ -2854,6 +2895,7 @@ class LargeDatasetFitter:
         # estimate combines ALL chunks rather than keeping the last chunk's fit.
         self._accum_information = None  # Sum_k C_k^{-1}  (n_params x n_params)
         self._accum_info_vector = None  # Sum_k C_k^{-1} theta_k  (n_params,)
+        self._n_unusable_cov_chunks = 0
 
         # Get gc_chunk_interval from config (FR-007)
         gc_chunk_interval = self.config.gc_chunk_interval

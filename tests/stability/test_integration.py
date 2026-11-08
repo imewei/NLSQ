@@ -735,17 +735,14 @@ class TestEdgeCases:
         assert result.x is not None
 
     def test_invalid_stability_value(self):
-        """Test that invalid stability values are handled."""
+        """Invalid stability values are rejected, not silently treated as False."""
         x = np.linspace(0, 10, 100)
         y = 2.0 * x + 1.0
 
-        # Invalid value should be treated as False (no checks)
-        # This should just work without error
-        result = curve_fit(
-            lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="invalid"
-        )
-
-        assert result.x is not None
+        with pytest.raises(ValueError, match="stability"):
+            curve_fit(
+                lambda x, a, b: a * x + b, x, y, p0=[2.0, 1.0], stability="invalid"
+            )
 
 
 if __name__ == "__main__":

@@ -162,7 +162,9 @@ fitting:
   p0: "auto"
 
   # Bounds: either {lower: [...], upper: [...]} or [[lower...], [upper...]].
-  # If omitted, falls back to the model's bounds() method if it defines one.
+  # If omitted, falls back to the model's bounds() method if it defines one
+  # (logged at INFO). The fallback is NOT applied when `method: lm`, which
+  # does not support bounds. Pass [-.inf, .inf] to disable it for other methods.
   # bounds:
   #   lower: [0.0, 0.001, -1.0]
   #   upper: [10.0, 1.0, 1.0]

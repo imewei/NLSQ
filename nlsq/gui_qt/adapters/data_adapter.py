@@ -277,6 +277,40 @@ def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[flo
     return rows
 
 
+def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
+    """Parse delimited numeric text, sniffing an optional header row.
+
+    Shared by file loading and clipboard paste so they cannot drift. Strips a
+    leading UTF-8 BOM (otherwise the first cell is non-numeric and the first
+    data row would be mistaken for a header), ``#`` comments and blank lines.
+
+    Returns
+    -------
+    rows, header
+        ``header`` is the first line's cells if it is non-numeric, else None.
+
+    Raises
+    ------
+    ValueError
+        If a non-header line is not numeric.
+    """
+    lines = [ln.split("#")[0] for ln in text.lstrip("﻿").splitlines()]
+    lines = [ln for ln in lines if ln.strip()]
+    if not lines:
+        return [], None
+    delimiter = detect_delimiter("\n".join(lines))
+    header = None
+    try:
+        parse_numeric_rows(lines[:1], delimiter)
+    except ValueError:
+        header = [
+            h.strip()
+            for h in (lines[0].split(delimiter) if delimiter else lines[0].split())
+        ]
+        lines = lines[1:]
+    return parse_numeric_rows(lines, delimiter), header
+
+
 def detect_delimiter(text: str) -> str | None:
     """Auto-detect delimiter in tabular text.
 
@@ -299,10 +333,16 @@ def detect_delimiter(text: str) -> str | None:
 
     tab_count = 0
     comma_count = 0
+    semicolon_count = 0
 
     for line in lines:
         tab_count += line.count("\t")
         comma_count += line.count(",")
+        semicolon_count += line.count(";")
+
+    # Semicolon CSV (European Excel exports); decimal commas make comma unreliable
+    if semicolon_count > 0 and semicolon_count >= max(tab_count, comma_count):
+        return ";"
 
     # If tabs are present and more common than commas, use tab
     if tab_count > 0 and tab_count >= comma_count:
@@ -496,6 +536,15 @@ def validate_data(
         return ValidationResult(
             is_valid=False,
             message=f"Data contains non-finite values: {', '.join(details)}",
+            nan_count=total_nan,
+            inf_count=total_inf,
+            point_count=n_points,
+        )
+
+    if sigma is not None and bool(np.any(np.asarray(sigma, dtype=float) <= 0)):
+        return ValidationResult(
+            is_valid=False,
+            message="sigma must be strictly positive (found zero or negative values)",
             nan_count=total_nan,
             inf_count=total_inf,
             point_count=n_points,

@@ -29,6 +29,20 @@ if TYPE_CHECKING:
 __all__ = ["ResidualsPlotWidget"]
 
 
+def _sorted_band(
+    x: NDArray, ci: NDArray, threshold: int
+) -> tuple[NDArray, NDArray, NDArray]:
+    """Return ``(x, -ci, +ci)`` ordered by ascending x and downsampled.
+
+    FillBetweenItem joins samples in array order, so unsorted x would draw a
+    zig-zag polygon.
+    """
+    x = np.asarray(x)
+    order = np.argsort(x, kind="stable")
+    xs, upper = _downsample(x[order], np.asarray(ci)[order], threshold, log=False)
+    return xs, -upper, upper
+
+
 class ResidualsPlotWidget(QWidget):
     """Widget for displaying residuals analysis plots.
 
@@ -174,21 +188,13 @@ class ResidualsPlotWidget(QWidget):
 
         # Draw confidence bands (only for Residuals vs X)
         if plot_type == 0 and self._confidence_interval is not None:
-            # We assume confidence interval is symmetric around zero for residuals
-            band_upper = self._confidence_interval
-            band_lower = -self._confidence_interval
+            # Symmetric about zero; built on sorted x so the polygon is simple
+            band_x, band_lower_ds, band_upper_ds = _sorted_band(
+                self._x, self._confidence_interval, self.DOWNSAMPLE_THRESHOLD
+            )
 
-            # Downsample bands to match x
-            # Note: We reuse plot_x from above which is downsampled self._x
-            # So we must downsample the CI array using the same logic/slice
-            # But self._downsample calculates stride internally.
-            # To be safe and consistent, we should downsample CI using the same internal logic
-            # OR pass them together. Simpler to just re-downsample here.
-            _, band_upper_ds = self._downsample(self._x, band_upper)
-            _, band_lower_ds = self._downsample(self._x, band_lower)
-
-            curve_lower = pg.PlotDataItem(plot_x, band_lower_ds, pen=pg.mkPen(None))
-            curve_upper = pg.PlotDataItem(plot_x, band_upper_ds, pen=pg.mkPen(None))
+            curve_lower = pg.PlotDataItem(band_x, band_lower_ds, pen=pg.mkPen(None))
+            curve_upper = pg.PlotDataItem(band_x, band_upper_ds, pen=pg.mkPen(None))
 
             # Confidence band fill — use fit_line color at very low alpha
             band_color = pg.mkColor(self._theme.fit_line)

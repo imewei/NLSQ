@@ -39,7 +39,11 @@ from pathlib import Path
 from typing import Any
 
 from nlsq.cli.model_registry import ModelRegistry
-from nlsq.cli.model_validation import DangerousPatternVisitor
+from nlsq.cli.model_validation import (
+    AllowlistVisitor,
+    DangerousPatternVisitor,
+    strict_models_enabled,
+)
 
 # Global registry instance for caching
 _registry: ModelRegistry | None = None
@@ -617,6 +621,15 @@ def parse_custom_model_string(
     # Security validation - block dangerous operations
     validator = _SafeASTValidator()
     validator.validate(code)
+
+    # NLSQ_STRICT_MODELS applies here exactly as in the CLI: allowlist on top.
+    if strict_models_enabled():
+        strict = AllowlistVisitor()
+        strict.visit(ast.parse(code))
+        if strict.violations:
+            raise SecurityError(
+                f"Unsafe code detected (strict mode): {'; '.join(strict.violations)}"
+            )
 
     # Execute the code in a namespace
     namespace: dict[str, Any] = {}

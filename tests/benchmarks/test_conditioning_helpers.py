@@ -7,7 +7,12 @@ import numpy as np
 import pytest
 from scipy.optimize import least_squares
 
-mpmath = pytest.importorskip("mpmath")
+try:
+    import mpmath
+except ImportError:  # only the three mp_* tests need it
+    mpmath = None
+
+requires_mpmath = pytest.mark.skipif(mpmath is None, reason="mpmath not installed")
 
 from benchmarks.studies.conditioning_helpers import (
     eigh_rank,
@@ -47,6 +52,7 @@ def _normal_equations(x, y, theta):
     return J, r
 
 
+@requires_mpmath
 def test_mp_reference_matches_scipy_on_well_conditioned_problem():
     x, y = _data()
     theta, cost, cov, rank = mp_reference(
@@ -174,6 +180,7 @@ def test_svd_covariance_and_eigh_rank():
     assert eigh_rank(Jc.T @ Jc) == 2
 
 
+@requires_mpmath
 def test_mp_reference_analytic_jacobian_hook():
     x, y = _data(n=50)
 
@@ -192,6 +199,7 @@ def test_mp_reference_analytic_jacobian_hook():
     assert out_jac[3] == out_diff[3] == 2
 
 
+@requires_mpmath
 def test_mp_gn_step_matches_float64_gauss_newton_step():
     x, y = _data(n=60)
     theta = np.array([2.3, 1.2])

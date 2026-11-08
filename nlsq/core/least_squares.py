@@ -52,6 +52,12 @@ from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import get_global_cache
 from nlsq.common_scipy import EPS, in_bounds, make_strictly_feasible
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
+from nlsq.core._option_checks import (
+    validate_f_scale,
+    validate_max_nfev,
+    validate_tolerance,
+    validate_tr_solver,
+)
 from nlsq.core.loss_functions import LossFunctionsJIT
 from nlsq.core.trf import TrustRegionReflective
 from nlsq.stability.guard import NumericalStabilityGuard
@@ -214,20 +220,9 @@ def check_tolerance(
         The prepared tolerance values.
     """
 
-    def check(tol: float, name: str) -> float:
-        if tol is None:
-            tol = 0
-        elif tol < EPS:
-            warn(
-                f"Setting `{name}` below the machine epsilon ({EPS:.2e}) effectively "
-                "disables the corresponding termination condition.",
-                stacklevel=2,
-            )
-        return tol
-
-    ftol = check(ftol, "ftol")
-    xtol = check(xtol, "xtol")
-    gtol = check(gtol, "gtol")
+    ftol = validate_tolerance("ftol", ftol)
+    xtol = validate_tolerance("xtol", xtol)
+    gtol = validate_tolerance("gtol", gtol)
 
     if ftol < EPS and xtol < EPS and gtol < EPS:
         raise ValueError(
@@ -903,6 +898,8 @@ class LeastSquares:
         gtol: float,
         x_scale,
         prepared_bounds: tuple[np.ndarray, np.ndarray] | None = None,
+        tr_solver: str | None = None,
+        f_scale: float = 1.0,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, np.ndarray]:
         """Validate and prepare least squares inputs.
 
@@ -956,9 +953,8 @@ class LeastSquares:
         if len(bounds) != 2:
             raise ValueError("`bounds` must contain 2 elements.")
 
-        # Validate max_nfev
-        if max_nfev is not None and max_nfev <= 0:
-            raise ValueError("`max_nfev` must be None or positive integer.")
+        validate_tr_solver(tr_solver)
+        validate_f_scale(f_scale)
 
         # Validate x0
         if np.iscomplexobj(x0):
@@ -1618,6 +1614,8 @@ class LeastSquares:
             if data_mask.ndim != 1:
                 raise ValueError("Data mask must be one-dimensional.")
 
+        max_nfev = validate_max_nfev(max_nfev, allow_fractional=True)
+
         # Step 2: Validate inputs (pass prepared_bounds if available)
         x0, lb, ub, ftol, xtol, gtol, x_scale = self._validate_least_squares_inputs(
             x0,
@@ -1632,6 +1630,8 @@ class LeastSquares:
             gtol,
             x_scale,
             prepared_bounds=prepared_bounds,
+            tr_solver=tr_solver,
+            f_scale=f_scale,
         )
 
         self.n = len(x0)

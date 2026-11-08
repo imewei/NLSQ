@@ -38,11 +38,15 @@ Custom configuration:
 """
 
 import math
+import warnings
 from dataclasses import dataclass, field, fields
 from typing import Any, Literal
 
+import numpy as np
+
 # Import CMA-ES presets to include in global PRESETS
 from nlsq.global_optimization.cmaes_config import CMAES_PRESETS
+from nlsq.result import OptimizeWarning
 
 # Preset configurations for common use cases
 # Multi-start presets (standard optimization)
@@ -109,6 +113,10 @@ def _require_int(name: str, value: Any) -> None:
     """
     if not isinstance(value, int) or isinstance(value, bool):
         raise TypeError(f"{name} must be an int, got {type(value)}")
+
+
+class _NonIntegralValueError(ValueError, TypeError):
+    """Bad count value; also a TypeError so pre-existing ``except TypeError`` callers keep working."""
 
 
 @dataclass(slots=True)
@@ -197,9 +205,17 @@ class GlobalOptimizationConfig:
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Validate n_starts
-        _require_int("n_starts", self.n_starts)
-        if self.n_starts < 0:
-            raise ValueError(f"n_starts must be non-negative, got {self.n_starts}")
+        # Same rule as Multistart/curve_fit: non-negative integral, coerced to int.
+        n_starts = self.n_starts
+        if isinstance(n_starts, (bool, np.bool_)) or not isinstance(
+            n_starts, (int, float, np.integer, np.floating)
+        ):
+            raise TypeError(f"n_starts must be an int, got {type(n_starts)}")
+        if not math.isfinite(n_starts) or n_starts != int(n_starts) or n_starts < 0:
+            raise _NonIntegralValueError(
+                f"n_starts must be a non-negative integer, got {n_starts!r}"
+            )
+        object.__setattr__(self, "n_starts", int(n_starts))
 
         # Validate sampler
         valid_samplers = ("lhs", "sobol", "halton")
@@ -339,6 +355,12 @@ class GlobalOptimizationConfig:
         GlobalOptimizationConfig
             Configuration instance.
 
+        Warns
+        -----
+        OptimizeWarning
+            If ``d`` contains keys that are not config fields; they are dropped
+            so dicts saved by older versions still load.
+
         Examples
         --------
         >>> d = {'n_starts': 20, 'sampler': 'sobol'}
@@ -346,10 +368,17 @@ class GlobalOptimizationConfig:
         >>> config.n_starts
         20
         """
-        # Filter to known fields
         known_fields = {f.name for f in fields(GlobalOptimizationConfig)}
-        filtered = {k: v for k, v in d.items() if k in known_fields}
-        return cls(**filtered)
+        unknown = sorted(set(d) - known_fields)
+        if unknown:
+            warnings.warn(
+                f"Ignoring unknown GlobalOptimizationConfig field(s): {unknown}; "
+                f"valid fields: {sorted(known_fields)}",
+                OptimizeWarning,
+                stacklevel=2,
+            )
+            d = {k: v for k, v in d.items() if k in known_fields}
+        return cls(**d)
 
     def with_overrides(self, **kwargs: Any) -> "GlobalOptimizationConfig":
         """Create a new config with specified overrides.
@@ -371,6 +400,13 @@ class GlobalOptimizationConfig:
         >>> config2.n_starts
         10
         """
+        known_fields = {f.name for f in fields(GlobalOptimizationConfig)}
+        unknown = sorted(set(kwargs) - known_fields)
+        if unknown:
+            raise TypeError(
+                f"unknown GlobalOptimizationConfig field(s): {unknown}; "
+                f"valid fields: {sorted(known_fields)}"
+            )
         d = self.to_dict()
         d.update(kwargs)
         # Clear preset if we're overriding values

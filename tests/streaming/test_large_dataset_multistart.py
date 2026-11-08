@@ -16,6 +16,8 @@ from nlsq.streaming.large_dataset import (
     fit_large_dataset,
 )
 
+pytestmark = pytest.mark.serial  # 100K-300K-point fits through curve_fit_large
+
 
 class TestLargeDatasetMultiStart:
     """Test LargeDatasetFitter multi-start integration."""

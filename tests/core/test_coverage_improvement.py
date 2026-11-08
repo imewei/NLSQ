@@ -176,26 +176,14 @@ class TestLossFunctionsCoverage(unittest.TestCase):
 
         # Test huber loss evaluation
         z = jnp.array([0.5, 1.0, 2.0])
-        if hasattr(loss_jit, "huber"):
-            try:
-                rho, drho, d2rho = loss_jit.huber(z, 1.0)
-                self.assertEqual(rho.shape, z.shape)
-                self.assertEqual(drho.shape, z.shape)
-                self.assertEqual(d2rho.shape, z.shape)
-            except:
-                pass
+        rho, drho, d2rho = loss_jit.huber(z, 1.0)
+        self.assertEqual(rho.shape, z.shape)
+        self.assertEqual(drho.shape, z.shape)
+        self.assertEqual(d2rho.shape, z.shape)
 
     def test_linear_loss(self):
-        """Test linear loss function."""
-        loss_jit = LossFunctionsJIT()
-        z = jnp.array([0.5, 1.0, 2.0])
-
-        if hasattr(loss_jit, "linear"):
-            try:
-                rho = loss_jit.linear(z)
-                self.assertEqual(rho.shape, z.shape)
-            except:
-                pass
+        """Linear loss is handled by the solver, not a LossFunctionsJIT method."""
+        self.assertFalse(hasattr(LossFunctionsJIT(), "linear"))
 
 
 class TestSVDFallbackCoverage(unittest.TestCase):
@@ -218,15 +206,11 @@ class TestSVDFallbackCoverage(unittest.TestCase):
         # Create ill-conditioned matrix
         A = jnp.array([[1e-10, 0], [0, 1e10]])
 
-        try:
-            U, s, V = compute_svd_with_fallback(A)
-            # Should handle gracefully
-            self.assertTrue(jnp.all(jnp.isfinite(U)))
-            self.assertTrue(jnp.all(jnp.isfinite(s)))
-            self.assertTrue(jnp.all(jnp.isfinite(V)))
-        except Exception:
-            # May fail but should not crash
-            pass
+        U, s, V = compute_svd_with_fallback(A)
+        self.assertTrue(jnp.all(jnp.isfinite(U)))
+        self.assertTrue(jnp.all(jnp.isfinite(s)))
+        self.assertTrue(jnp.all(jnp.isfinite(V)))
+        np.testing.assert_allclose(np.asarray(s), [1e10, 1e-10], rtol=1e-6)
 
 
 if __name__ == "__main__":

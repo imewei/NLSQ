@@ -153,7 +153,7 @@ class CurveFitResult(OptimizeResult):
 
     def __getitem__(self, key):
         """SciPy idiom ``curve_fit(...)[0]`` indexes (popt, pcov); str keys stay dict."""
-        if isinstance(key, (int, slice)):
+        if isinstance(key, (int, np.integer, slice)):
             return (self.popt, self.pcov)[key]
         return super().__getitem__(key)
 

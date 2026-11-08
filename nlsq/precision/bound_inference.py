@@ -70,7 +70,7 @@ class BoundsInference:
     >>> inference = BoundsInference(x, y, p0)
     >>> bounds = inference.infer()
     >>> print(bounds)
-    ([0.0, 0.0, 0.0], [25.0, 5.0, 10.0])
+    (array([0.  , 0.01, 0.  ]), array([20.,  5., 10.]))
     """
 
     def __init__(

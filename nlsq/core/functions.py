@@ -36,6 +36,7 @@ import warnings
 from collections.abc import Callable
 from typing import Any, Protocol, Union, runtime_checkable
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -633,7 +634,8 @@ def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayRetur
     >>> popt, pcov = curve_fit(sigmoid, x, y, p0='auto')
     >>> print(f"EC50 (midpoint): {popt[1]:.2f}")
     """
-    return L / (1 + jnp.exp(-k * (x - x0))) + b
+    # jax.nn.sigmoid: same value, but no inf/inf NaN in the Jacobian when exp saturates
+    return L * jax.nn.sigmoid(k * (x - x0)) + b
 
 
 def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:

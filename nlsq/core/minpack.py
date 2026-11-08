@@ -18,7 +18,7 @@ Algorithms:
     - 'lm': accepted alias for unbounded problems; currently runs the same
       trust-region solver as 'trf' (no separate Levenberg-Marquardt/MINPACK path)
     - 'trf': Trust Region Reflective (bounded problems, recommended)
-    - 'dogbox': Dogleg with rectangular trust regions
+    - 'dogbox': not implemented (rejected as an unknown method)
 
 Example:
     >>> from nlsq import CurveFit
@@ -78,7 +78,14 @@ from nlsq.caching.memory_manager import get_memory_manager
 from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
 from nlsq.core import device_policy
-from nlsq.core.covariance import pcov_from_jacobian
+from nlsq.core._option_checks import (
+    check_not_nan,
+    coerce_absolute_sigma,
+    validate_f_scale,
+    validate_max_nfev,
+    validate_tr_solver,
+)
+from nlsq.core.covariance import _NLSQ_DIR, pcov_from_jacobian
 from nlsq.core.least_squares import LeastSquares, prepare_bounds
 from nlsq.core.problem import (
     PrepareContext,
@@ -98,6 +105,9 @@ from nlsq.utils.logging import get_logger
 from nlsq.utils.validators import InputValidator
 
 __all__ = ["CurveFit", "curve_fit", "fit"]
+
+# enable_overflow_check clips |f| to this bound; values inside it are untouched.
+_OVERFLOW_CLIP_BOUND = 1e10
 
 # Logger for workflow selection messages
 _logger = get_logger(__name__)
@@ -1409,6 +1419,7 @@ def _fit_with_auto_global(
             strategy=strategy,
             memory_config=memory_config,
             cmaes_config=cmaes_config,
+            check_finite=check_finite,
             **kwargs,
         )
     # Multi-start path
@@ -1553,6 +1564,7 @@ def _fit_global_cmaes(
     strategy: str,
     cmaes_config: Any | None,
     memory_config: HybridStreamingConfig | LDMemoryConfig | None = None,
+    check_finite: bool = True,
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run CMA-ES global optimization with memory-aware strategy.
@@ -1639,6 +1651,10 @@ def _fit_global_cmaes(
                 cmaes_config,
                 data_chunk_size=chunk_size,
             )
+
+    xdata, ydata, sigma = _preprocess_nonfinite_for_cmaes(
+        xdata, ydata, sigma, kwargs.get("nan_policy"), check_finite
+    )
 
     optimizer = CMAESOptimizer(config=cmaes_config)
 
@@ -2056,7 +2072,7 @@ def _apply_auto_bounds(
     if method == "lm":
         raise ValueError(
             "auto_bounds=True infers parameter bounds, which method='lm' does "
-            "not support; use method='trf' or 'dogbox', or set auto_bounds=False."
+            "not support; use method='trf', or set auto_bounds=False."
         )
 
     # nan_policy='omit' drops non-finite rows later; inference must not see them.
@@ -2365,6 +2381,106 @@ def _cmaes_termination_fields(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_CURVE_FIT_METHODS = (
+    "auto",
+    "cmaes",
+    "multi-start",
+    "trf",
+    "lm",
+    "hybrid_streaming",
+)
+
+
+def _check_method(method: Any, valid: tuple[str, ...]) -> None:
+    if method is not None and method not in valid:
+        import difflib
+
+        hint = difflib.get_close_matches(str(method), valid, n=1)
+        raise ValueError(
+            f"Unknown method {method!r}; valid methods are {valid}."
+            + (f" Did you mean {hint[0]!r}?" if hint else "")
+        )
+
+
+def _check_optimizer_kwargs(kwargs: dict[str, Any]) -> None:
+    """Cheap least_squares kwarg checks, so the CMA-ES path raises them too.
+
+    The CMA-ES refinement swallows exceptions, which would turn these input
+    errors into ``success=False`` results. Messages match ``least_squares``.
+    """
+    for name in ("ftol", "xtol", "gtol"):
+        if kwargs.get(name) is not None:
+            check_not_nan(name, kwargs[name])
+    if "max_nfev" in kwargs:
+        kwargs["max_nfev"] = validate_max_nfev(
+            kwargs["max_nfev"], allow_fractional=True
+        )
+    validate_tr_solver(kwargs.get("tr_solver"))
+    f_scale = kwargs.get("f_scale", 1.0)
+    if isinstance(f_scale, (int, float, np.number)):
+        validate_f_scale(f_scale)
+
+
+def _validate_wrapper_options(
+    method: Any,
+    stability: Any,
+    absolute_sigma: Any,
+    kwargs: dict[str, Any] | None = None,
+) -> None:
+    """Reject option values the pipeline would otherwise silently ignore."""
+    _check_method(method, _CURVE_FIT_METHODS)
+    _check_optimizer_kwargs(kwargs or {})
+    if stability not in (False, None, "auto", "check"):
+        raise ValueError(
+            f"stability must be False, 'auto' or 'check', got {stability!r}"
+        )
+    coerced = coerce_absolute_sigma(absolute_sigma)
+    if kwargs is not None and "absolute_sigma" in kwargs:
+        kwargs["absolute_sigma"] = coerced
+
+
+def _preprocess_nonfinite_for_cmaes(
+    xdata: Any,
+    ydata: Any,
+    sigma: Any,
+    nan_policy: str | None,
+    check_finite: bool,
+) -> tuple[Any, Any, Any]:
+    """Apply the TRF path's nan_policy/check_finite handling before CMA-ES.
+
+    CMA-ES evaluates fitness on the raw arrays, so a single NaN makes every
+    candidate infinite. 'raise' (with check_finite) raises, 'omit' drops
+    non-finite rows of x/y/sigma consistently, 'propagate' leaves data as is.
+    """
+    from nlsq.core.problem import _VALID_NAN_POLICIES, _omit_nonfinite_rows
+
+    policy = nan_policy or "raise"
+    if policy not in _VALID_NAN_POLICIES:
+        raise ValueError(
+            f"nan_policy must be one of {sorted(_VALID_NAN_POLICIES)}, got {policy!r}"
+        )
+    if policy == "propagate":
+        return xdata, ydata, sigma
+    try:
+        x = np.asarray(xdata, float)
+        y = np.asarray(ydata, float)
+    except (TypeError, ValueError):
+        return xdata, ydata, sigma
+    if policy == "raise":
+        if check_finite:
+            np.asarray_chkfinite(y)
+            np.asarray_chkfinite(x)
+        return xdata, ydata, sigma
+    if y.ndim != 1 or x.ndim == 0 or x.shape[-1] != y.shape[0]:
+        # Skipping would leave the NaNs in the data the user asked to drop.
+        raise ValueError(
+            "nan_policy='omit' needs xdata with shape (n,) or (k, n) matching "
+            f"ydata of shape (n,); got xdata {x.shape} and ydata {y.shape}"
+        )
+    x, y, sigma, _, _ = _omit_nonfinite_rows(x, y, sigma, x.ndim, True)
+    return x, y, sigma
+
+
 def _run_cmaes_optimization(
     f: ModelFunction,
     xdata: ArrayLike,
@@ -2478,6 +2594,13 @@ def _run_cmaes_optimization(
     # Extract sigma and absolute_sigma from kwargs if provided
     sigma = kwargs.get("sigma")
     absolute_sigma = kwargs.get("absolute_sigma", False)
+    xdata, ydata, sigma = _preprocess_nonfinite_for_cmaes(
+        xdata,
+        ydata,
+        sigma,
+        kwargs.get("nan_policy"),
+        kwargs.get("check_finite", True),
+    )
     # Forward remaining optimizer kwargs (ftol, xtol, gtol, max_nfev, ...) to
     # the NLSQ refinement step -- mirrors _fit_global_cmaes, whose **kwargs
     # flow through to the same CMAESOptimizer.fit() call. Without this, this
@@ -2982,6 +3105,18 @@ def curve_fit(
         Dictionary with multi-start exploration details including n_starts,
         best_loss, all_losses, exploration time, etc.
 
+    Raises
+    ------
+    ValueError
+        For an unknown ``method``, ``stability`` other than
+        ``False``/``None``/``'auto'``/``'check'``, an unknown ``tr_solver``,
+        a non-positive or non-finite ``f_scale``, a NaN ``ftol``/``xtol``/
+        ``gtol``, a boolean ``max_nfev``, a negative ``n_starts`` with
+        multi-start, an invalid ``nan_policy``, or invalid data, bounds or
+        ``p0``.
+    TypeError
+        If ``absolute_sigma`` is not a bool.
+
     Notes
     -----
     This function creates a CurveFit instance internally and calls its curve_fit method.
@@ -3108,6 +3243,19 @@ def curve_fit(
     for _name, _value in zip(_positional_names, args, strict=False):
         kwargs.setdefault(_name, _value)
     args = ()
+
+    _validate_wrapper_options(
+        method if method is not None else kwargs.get("method"),
+        stability,
+        kwargs.get("absolute_sigma", False),
+        kwargs,
+    )
+    if (
+        (multistart or method == "multi-start")
+        and n_starts is not None
+        and n_starts < 0
+    ):
+        raise ValueError(f"n_starts must be >= 0, got {n_starts}")
 
     # Inferred bounds: delegate to a driver that re-invokes this function with
     # auto_bounds off, so the clipping guard covers every route.
@@ -3398,8 +3546,12 @@ class CurveFit:
             Enable automatic recovery from optimization failures.
 
         enable_overflow_check : bool, default False
-            Enable overflow/underflow checking in function evaluations. This adds
-            ~30% overhead so it's separate from other stability features.
+            Clip the model output to ``[-1e10, 1e10]`` whenever ``max|f|``
+            exceeds ``1e10`` during the fit. This changes the objective (and can
+            zero the Jacobian when data are larger than ``1e10``); an
+            ``OptimizeWarning`` is emitted if ``max|f|`` at the solution exceeds
+            ``1e10``. Adds ~30% overhead, so it is separate from other stability
+            features.
 
         cache_config : dict, optional
             Configuration for the unified JIT compilation cache.
@@ -3668,8 +3820,7 @@ class CurveFit:
         warn_cov : bool
             Whether to warn about covariance estimation
         """
-        # Called directly from here: pcov_from_jacobian attributes its warning
-        # (stacklevel=3) to this method's caller.
+        # pcov_from_jacobian's warnings are attributed to the first frame outside nlsq/.
         return pcov_from_jacobian(
             res.jac,
             res.cost,  # half sum of squares; the helper applies the factor 2
@@ -4149,6 +4300,22 @@ class CurveFit:
             **kwargs,
         )
 
+    def _warn_if_overflow_clipped(self, f: Callable, jnp_xdata, popt) -> None:
+        """Make enable_overflow_check's silent clipping visible (see stable_f)."""
+        if not self.enable_overflow_check:
+            return
+        # Evaluate once at popt (outside JIT).
+        fmax = float(jnp.max(jnp.abs(f(jnp_xdata, *popt))))
+        if fmax > _OVERFLOW_CLIP_BOUND:
+            msg = (
+                f"enable_overflow_check clipped the model output "
+                f"(max|f| = {fmax:.3g} > {_OVERFLOW_CLIP_BOUND:.0e}); the "
+                "fit objective was modified and the result may be unreliable. "
+                "Rescale ydata or disable enable_overflow_check."
+            )
+            self.logger.warning(msg)
+            warnings.warn(msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
+
     def _run_optimization(
         self,
         f: Callable,
@@ -4251,8 +4418,8 @@ class CurveFit:
                     result = original_f(x, *params)
                     max_val = jnp.max(jnp.abs(result))
                     result = jnp.where(
-                        max_val > 1e8,
-                        jnp.clip(result, -1e10, 1e10),
+                        max_val > _OVERFLOW_CLIP_BOUND,
+                        jnp.clip(result, -_OVERFLOW_CLIP_BOUND, _OVERFLOW_CLIP_BOUND),
                         result,
                     )
                     return result
@@ -4439,6 +4606,8 @@ class CurveFit:
 
             If None, auto-selects 'trf'.
         """
+        absolute_sigma = coerce_absolute_sigma(absolute_sigma)
+
         # Check for hybrid_streaming method early and delegate
         if method == "hybrid_streaming":
             return self._curve_fit_hybrid_streaming(
@@ -4557,7 +4726,7 @@ class CurveFit:
             Batch size for minibatch solver. Only used when solver='minibatch'.
             If None and minibatch solver is selected, a reasonable default based
             on data size will be chosen.
-        jac : callable, string or None, optional
+        jac : callable or None, optional
             Function with signature ``jac(x, ...)`` which computes the Jacobian
             matrix of the model function with respect to parameters as a dense
             array_like structure. It will be scaled according to provided `sigma`.
@@ -4737,6 +4906,7 @@ class CurveFit:
             res["gradient_health_report"] = _gradient_monitor.get_report()
 
         popt = res.x
+        self._warn_if_overflow_clipped(f, jnp_xdata, popt)
         self.logger.debug(
             "Optimization succeeded",
             final_cost=res.cost,
@@ -4771,9 +4941,9 @@ class CurveFit:
             feval = f(jnp_xdata, *popt)
             feval = np.array(feval)
             if none_mask:
-                return popt, _pcov, feval[data_mask]
+                return np.asarray(popt), _pcov, feval[data_mask]
             # A user data_mask leaves padding rows (flength) in feval; strip them.
-            return popt, _pcov, feval[:m]
+            return np.asarray(popt), _pcov, feval[:m]
 
         xdata, ydata = self._drop_unobserved_rows(res, xdata, ydata, data_mask)
 
@@ -4787,12 +4957,12 @@ class CurveFit:
             mesg = res.message if hasattr(res, "message") else ""
             # SciPy ier convention: 1-4 = converged, 5 = max iterations
             ier = 1 if (res.success and res.status > 0) else 5
-            return popt, _pcov, infodict, mesg, ier
+            return np.asarray(popt), _pcov, infodict, mesg, ier
         if timeit:
             # lower GPU memory usage before returning raw res
             res.pop("jac", None)
             res.pop("fun", None)
-            return popt, _pcov, res, post_time, ctime
+            return np.asarray(popt), _pcov, res, post_time, ctime
         # Create enhanced result object that supports tuple unpacking
         # for backward compatibility: popt, pcov = curve_fit(...)
         # Keep 'fun' (residuals) and 'jac' for statistical computations

@@ -101,19 +101,11 @@ class TestFailureDiagnostics(unittest.TestCase):
         )
         fitter = LargeDatasetFitter(config=config)
 
-        try:
-            result = fitter.fit(selective_fail_model, xdata, ydata, p0=[2.0, 1.0])
-
-            if hasattr(result, "failure_summary"):
-                failed_indices = result.failure_summary["failed_chunk_indices"]
-
-                # Should have failures in later chunks
-                if len(failed_indices) > 0:
-                    # Later chunks (index > 2) should fail
-                    self.assertTrue(any(idx > 2 for idx in failed_indices))
-        except Exception:
-            # Expected - some chunk failures may cause total failure
-            pass
+        # The model raises while being traced, so every chunk fails and the
+        # success-rate floor turns that into an unsuccessful result (no raise).
+        result = fitter.fit(selective_fail_model, xdata, ydata, p0=[2.0, 1.0])
+        self.assertFalse(result.success)
+        self.assertIn("failed", result.message)
 
     def test_common_errors_aggregation(self):
         """Test that common errors are aggregated correctly."""

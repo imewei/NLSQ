@@ -480,6 +480,7 @@ class TestEdgeCases:
         """Set up test fixtures."""
         self.validator = InputValidator()
 
+    @pytest.mark.serial  # >100K-element arrays
     def test_very_large_arrays(self):
         """Test with large arrays."""
         xdata = np.linspace(0, 1, 100000)

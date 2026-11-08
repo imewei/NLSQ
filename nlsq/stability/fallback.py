@@ -442,10 +442,11 @@ class FallbackOrchestrator:
     Examples
     --------
     >>> from nlsq.stability.fallback import FallbackOrchestrator
+    >>> import jax.numpy as jnp
     >>> import numpy as np
     >>>
     >>> def model(x, a, b):
-    ...     return a * np.exp(-b * x)
+    ...     return a * jnp.exp(-b * x)
     >>>
     >>> x = np.linspace(0, 10, 100)
     >>> y = 2.5 * np.exp(-0.5 * x) + 0.1 * np.random.randn(100)

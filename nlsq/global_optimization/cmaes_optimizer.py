@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.linalg import cholesky, solve_triangular
 
 from nlsq.global_optimization.bounds_transform import (
     compute_default_popsize,
@@ -78,6 +79,60 @@ def _reject_stale_checkpoint(
         )
 
 
+def _split_covariance_sigma(
+    sigma: jax.Array | None, n_data: int
+) -> tuple[jax.Array | None, jax.Array | None]:
+    """Return ``(cholesky_factor, 1-D sigma)``; exactly one is non-None for sigma.
+
+    A 2-D sigma is a covariance matrix: it is whitened with its Cholesky
+    factor, as ``curve_fit`` does (``residuals / sigma`` would broadcast
+    (N,)/(N,N) to inf).
+    """
+    if sigma is None or sigma.ndim != 2:
+        return None, sigma
+    if sigma.shape != (n_data, n_data):
+        raise ValueError(
+            f"2-D sigma must be a ({n_data}, {n_data}) covariance matrix, "
+            f"got shape {sigma.shape}",
+        )
+    chol = cholesky(sigma, lower=True)
+    if not bool(jnp.all(jnp.isfinite(chol))):
+        raise ValueError("2-D sigma must be a positive-definite covariance matrix")
+    return chol, None
+
+
+def _streaming_axis(
+    xdata: jax.Array, n_data: int, data_chunk_size: int | None
+) -> int | None:
+    """Sample axis of ``xdata`` to chunk along, or None if not streaming.
+
+    Axis 0 for (N, ...) input, the last axis for the SciPy multi-x (k, N)
+    layout. Streaming is skipped (with a warning) if no axis matches ydata.
+    """
+    if data_chunk_size is None or n_data <= data_chunk_size:
+        return None
+    if xdata.shape[0] == n_data:
+        return 0
+    if xdata.shape[-1] == n_data:
+        return xdata.ndim - 1
+    logger.warning(
+        f"data_chunk_size ignored: no axis of xdata {xdata.shape} has length "
+        f"len(ydata)={n_data}",
+    )
+    return None
+
+
+def _chunk_samples(a: jax.Array, axis: int, fill: float, chunk: int) -> jax.Array:
+    """Reshape ``a`` to ``(n_chunks, chunk, ...)`` along sample ``axis``.
+
+    The tail is padded with ``fill``; callers mask the padded entries out.
+    """
+    a = jnp.moveaxis(a, axis, 0)
+    pad = [(0, -a.shape[0] % chunk)] + [(0, 0)] * (a.ndim - 1)
+    a = jnp.pad(a, pad, constant_values=fill)
+    return a.reshape((a.shape[0] // chunk, chunk, *a.shape[1:]))
+
+
 def _create_fitness_function(
     model_func: Callable,
     xdata: jax.Array,
@@ -118,43 +173,25 @@ def _create_fitness_function(
     Callable[[jax.Array], jax.Array]
         Fitness function that takes unbounded parameters and returns fitness.
     """
-    n_data = xdata.shape[0]
+    n_data = ydata.shape[0]
 
-    # Determine if we need data streaming
-    use_data_streaming = data_chunk_size is not None and n_data > data_chunk_size
+    chol, sigma = _split_covariance_sigma(sigma, n_data)
+    sample_axis = _streaming_axis(xdata, n_data, data_chunk_size)
 
-    if use_data_streaming:
+    if sample_axis is not None:
         # Mypy doesn't infer not-None from the boolean flag
         assert data_chunk_size is not None
 
-        # Calculate number of full chunks and remainder
-        n_full_chunks = n_data // data_chunk_size
-        remainder = n_data % data_chunk_size
+        # Pad the sample axis to an exact multiple of chunk_size; padded
+        # entries are masked out of the SSR below.
+        n_chunks = -(-n_data // data_chunk_size)
 
-        # Pad data to exact multiple of chunk_size for efficient slicing
-        if remainder > 0:
-            pad_size = data_chunk_size - remainder
-            xdata_padded = jnp.pad(xdata, (0, pad_size), constant_values=0.0)
-            ydata_padded = jnp.pad(ydata, (0, pad_size), constant_values=0.0)
-            if sigma is not None:
-                # Pad sigma with 1.0 to avoid division issues (residual will be 0)
-                sigma_padded = jnp.pad(sigma, (0, pad_size), constant_values=1.0)
-            else:
-                sigma_padded = None
-            n_chunks = n_full_chunks + 1
-        else:
-            xdata_padded = xdata
-            ydata_padded = ydata
-            sigma_padded = sigma
-            n_chunks = n_full_chunks
-
-        # Reshape data into chunks for efficient access
-        xdata_chunked = xdata_padded.reshape(n_chunks, data_chunk_size)
-        ydata_chunked = ydata_padded.reshape(n_chunks, data_chunk_size)
-        if sigma_padded is not None:
-            sigma_chunked = sigma_padded.reshape(n_chunks, data_chunk_size)
-        else:
-            sigma_chunked = None
+        xdata_chunked = _chunk_samples(xdata, sample_axis, 0.0, data_chunk_size)
+        ydata_chunked = _chunk_samples(ydata, 0, 0.0, data_chunk_size)
+        # Pad sigma with 1.0 to avoid division issues (residual will be 0)
+        sigma_chunked = (
+            None if sigma is None else _chunk_samples(sigma, 0, 1.0, data_chunk_size)
+        )
 
         # Validity mask per chunk (False on the zero-padded tail)
         valid_chunked = (
@@ -177,18 +214,27 @@ def _create_fitness_function(
 
             def body(ssr_total, chunk):
                 x_chunk, y_chunk, sigma_chunk, valid_mask = chunk
+                x_chunk = jnp.moveaxis(x_chunk, 0, sample_axis)
                 predictions = model_func(x_chunk, *params_bounded)
                 residuals = y_chunk - predictions
+                if chol is not None:
+                    # Whitening needs every residual: collect, solve after scan
+                    return ssr_total, residuals
                 if sigma_chunk is not None:
                     residuals = residuals / sigma_chunk
                 residuals_sq = jnp.where(valid_mask, residuals**2, 0.0)
                 return ssr_total + jnp.sum(residuals_sq).astype(ssr_total.dtype), None
 
-            ssr_total, _ = jax.lax.scan(
+            ssr_total, stacked = jax.lax.scan(
                 body,
                 jnp.array(0.0),
                 (xdata_chunked, ydata_chunked, sigma_chunked, valid_chunked),
             )
+            if chol is not None:
+                whitened = solve_triangular(
+                    chol, stacked.reshape(-1)[:n_data], lower=True
+                )
+                ssr_total = jnp.sum(whitened**2)
 
             return jnp.where(jnp.isfinite(ssr_total), ssr_total, jnp.inf)
 
@@ -216,7 +262,9 @@ def _create_fitness_function(
             residuals = ydata - predictions
 
             # Weight by sigma if provided
-            if sigma is not None:
+            if chol is not None:
+                residuals = solve_triangular(chol, residuals, lower=True)
+            elif sigma is not None:
                 residuals = residuals / sigma
 
             # Sum of squared residuals
@@ -544,6 +592,10 @@ class CMAESOptimizer:
         # Determine initial solution
         if p0 is not None:
             p0_jax = jnp.asarray(p0)
+            # A p0 exactly on a bound maps to logit(1e-8) ~ -18, where the sigmoid
+            # is flat and the search cannot leave the bound (restart_strategy="none").
+            margin = 1e-2 * (upper_bounds - lower_bounds)
+            p0_jax = jnp.clip(p0_jax, lower_bounds + margin, upper_bounds - margin)
             # Transform to unbounded space
             initial_solution = transform_from_bounds(p0_jax, lower_bounds, upper_bounds)
             logger.debug(f"CMA-ES starting from p0={np.asarray(p0_jax)}")
@@ -1128,7 +1180,20 @@ class CMAESOptimizer:
 
                 # Check for stagnation.
                 fitness_spread = _finite_fitness_spread(fitness)
-                if restarter.check_stagnation(fitness_spread):
+                # tol_fun is relative to the current best finite fitness (robust to a
+                # wild first-generation candidate; data-scale invariant). shortcut:
+                # a noise-free fit with SSR -> 0 never stagnates and runs to
+                # max_generations; lower max_generations if that matters.
+                finite_mask = jnp.isfinite(fitness)
+                fitness_scale = (
+                    max(
+                        float(jnp.min(fitness[finite_mask])),
+                        float(np.finfo(float).tiny),
+                    )
+                    if bool(jnp.any(finite_mask))
+                    else None
+                )
+                if restarter.check_stagnation(fitness_spread / (fitness_scale or 1.0)):
                     stagnation_counter += 1
                 else:
                     stagnation_counter = 0

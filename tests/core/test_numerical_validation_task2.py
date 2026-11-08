@@ -106,6 +106,7 @@ class TestNumericalEquivalence:
         # Validate parameters
         np.testing.assert_allclose(result.x, true_params, rtol=0.1, atol=0.3)
 
+    @pytest.mark.serial  # >100K-element arrays
     def test_large_problem_accuracy(self):
         """Test numerical accuracy on large problem (100K points).
 

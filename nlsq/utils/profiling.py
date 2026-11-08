@@ -6,13 +6,14 @@ performance and validating improvements without heavy dependencies.
 Examples
 --------
 >>> from nlsq.utils.profiling import profile_optimization
->>> from nlsq import least_squares
+>>> from nlsq import curve_fit
 >>> import jax.numpy as jnp
 >>>
 >>> with profile_optimization() as metrics:
-...     result = least_squares(lambda x: x**2, x0=jnp.array([1.0]), max_nfev=100)
+...     x = jnp.linspace(0, 10, 100)
+...     y = 2.0 * jnp.exp(-0.5 * x)
+...     popt, pcov = curve_fit(lambda x, a, b: a * jnp.exp(-b * x), x, y)
 >>>
->>> print(f"Average iteration: {metrics.avg_iteration_time_ms:.2f}ms")
 >>> print(f"Total time: {metrics.total_time_sec:.3f}s")
 """
 
@@ -257,8 +258,8 @@ def profile_transfers_runtime(
     *args
         Positional arguments to pass to func
     trace_dir : str or None, optional
-        Directory to store profiler trace. If None, uses system temp directory
-        with "jax-profiling" subdirectory.
+        Directory to store profiler trace. If None, a private temporary
+        directory named ``jax-profiling-*`` is created.
     **kwargs
         Keyword arguments to pass to func
 
@@ -294,11 +295,8 @@ def profile_transfers_runtime(
             f"trace_dir must be a string or None, got {type(trace_dir).__name__}",
         )
 
+    import shutil
     import tempfile
-
-    # Use system temp directory if not specified
-    if trace_dir is None:
-        trace_dir = str(Path(tempfile.gettempdir()) / "jax-profiling")
 
     try:
         import jax.profiler
@@ -311,6 +309,12 @@ def profile_transfers_runtime(
             "profiler_available": False,
             "message": "JAX profiler not available",
         }
+
+    # Created only now so the profiler-unavailable path leaves nothing behind;
+    # mkdtemp: private (0700) and unpredictable, unlike a fixed shared-/tmp name
+    created_default = trace_dir is None
+    if trace_dir is None:
+        trace_dir = tempfile.mkdtemp(prefix="jax-profiling-")
 
     # Create trace directory if it doesn't exist
     trace_path = Path(trace_dir)
@@ -339,6 +343,8 @@ def profile_transfers_runtime(
         return result, transfer_stats
 
     except Exception as e:
+        if created_default:  # no trace is returned on any failure path
+            shutil.rmtree(trace_path, ignore_errors=True)
         if started and not finished:
             raise  # the user's function raised; never run it a second time
         # Profiler start/stop failed: don't re-run a function that already ran

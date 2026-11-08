@@ -312,9 +312,8 @@ class DataLoadingPage(QWidget):
         """
         from nlsq.cli.data_loaders import DataLoader
         from nlsq.gui_qt.adapters.data_adapter import (
-            detect_delimiter,
             load_from_file,
-            parse_numeric_rows,
+            parse_table_text,
         )
 
         format_value = self._format_combo.currentData()
@@ -328,24 +327,9 @@ class DataLoadingPage(QWidget):
             if file_format in ("ascii", "csv"):
                 # Load the whole numeric table so the ColumnSelector can pick
                 # sigma / z columns (same parsing as the clipboard path).
-                lines = [
-                    ln.split("#")[0]
-                    for ln in file_path.read_text(encoding="utf-8").splitlines()
-                ]
-                lines = [ln for ln in lines if ln.strip()]
-                delimiter = detect_delimiter("\n".join(lines))
-                header = None
-                try:
-                    parse_numeric_rows(lines[:1], delimiter)
-                except ValueError:
-                    header = [
-                        h.strip()
-                        for h in (
-                            lines[0].split(delimiter) if delimiter else lines[0].split()
-                        )
-                    ]
-                    lines = lines[1:]
-                rows = parse_numeric_rows(lines, delimiter)
+                rows, header = parse_table_text(
+                    file_path.read_text(encoding="utf-8-sig")
+                )
                 if not rows:
                     raise ValueError("No valid numeric data found.")
                 self._raw_data = np.array(rows, dtype=np.float64)
@@ -376,10 +360,7 @@ class DataLoadingPage(QWidget):
 
     def _on_parse_clipboard(self) -> None:
         """Handle parse clipboard button click."""
-        from nlsq.gui_qt.adapters.data_adapter import (
-            detect_delimiter,
-            parse_numeric_rows,
-        )
+        from nlsq.gui_qt.adapters.data_adapter import parse_table_text
 
         raw_text = self._clipboard_text.toPlainText()
         text = raw_text.strip()
@@ -388,9 +369,7 @@ class DataLoadingPage(QWidget):
             return
 
         try:
-            # Detect delimiter and parse
-            delimiter = detect_delimiter(text)
-            rows = parse_numeric_rows(raw_text.split("\n"), delimiter)
+            rows, header = parse_table_text(raw_text)
 
             if not rows:
                 self._show_error("Parse Error", "No valid numeric data found.")
@@ -399,7 +378,11 @@ class DataLoadingPage(QWidget):
             # Convert to numpy array
             self._raw_data = np.array(rows, dtype=np.float64)
             n_cols = self._raw_data.shape[1]
-            self._column_names = [f"Column {i}" for i in range(n_cols)]
+            self._column_names = (
+                header
+                if header and len(header) == n_cols
+                else [f"Column {i}" for i in range(n_cols)]
+            )
 
             # Update UI
             self._file_path_label.setText("(Clipboard data)")

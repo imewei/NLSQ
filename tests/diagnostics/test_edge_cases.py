@@ -152,11 +152,7 @@ class TestSingularJacobian:
         # Correlation matrix should be None (can't compute from singular FIM)
         # or have undefined correlations
         # Either None or diagonal zeros indicates inability to compute correlations
-        if report.correlation_matrix is not None:
-            # If computed, diagonal should be zero (no variance)
-            assert np.all(np.diag(report.correlation_matrix) <= 0) or np.all(
-                np.isnan(report.correlation_matrix)
-            )
+        assert report.correlation_matrix is None
 
 
 # =============================================================================

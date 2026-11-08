@@ -25,6 +25,7 @@ Examples
 
 """
 
+import contextlib
 import faulthandler
 import inspect
 import os
@@ -34,7 +35,10 @@ import threading
 # Enable faulthandler FIRST so any SIGBUS/SIGSEGV during import prints a
 # traceback to stderr instead of dying silently.  This is deliberately before
 # the environment lock and all library imports below.
-faulthandler.enable()
+# sys.stderr may be None (pythonw, embedded hosts) or lack a usable fileno
+# (captured streams); a missing crash dump must not break import.
+with contextlib.suppress(AttributeError, ValueError, RuntimeError, OSError):
+    faulthandler.enable()
 
 _NLSQ_DEBUG = bool(os.environ.get("NLSQ_DEBUG"))
 
@@ -68,12 +72,11 @@ if sys.platform == "darwin":
     # macOS-specific: Prevent SIGBUS from Metal/OpenGL/XLA conflicts
     if "XLA_FLAGS" not in os.environ:
         os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["MPLBACKEND"] = "Agg"
-    if "QT_MAC_WANTS_LAYER" not in os.environ:
-        os.environ["QT_MAC_WANTS_LAYER"] = "1"
-    os.environ["QT_API"] = "pyside6"
-    os.environ["PYQTGRAPH_QT_LIB"] = "PySide6"
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    os.environ.setdefault("QT_MAC_WANTS_LAYER", "1")
+    os.environ.setdefault("QT_API", "pyside6")
+    os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
     # Force software OpenGL — prevents Metal/OpenGL context conflicts that
     # cause SIGBUS on macOS 26+ Apple Silicon with PySide6 / Qt 6.10.
     os.environ.setdefault("QT_OPENGL", "software")
@@ -1158,6 +1161,10 @@ def curve_fit_large(
                 f"curve_fit_large() got an unexpected keyword argument '{param}'. "
                 "This parameter was removed in v0.2.0. Use streaming instead.",
             )
+
+    from nlsq.core.minpack import _CURVE_FIT_METHODS, _check_method
+
+    _check_method(method, (*_CURVE_FIT_METHODS, "exact_streaming"))
 
     legacy = {
         "method": method,

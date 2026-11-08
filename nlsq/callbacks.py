@@ -163,6 +163,7 @@ class ProgressBar(CallbackBase):
         if self._pbar is not None:
             self._pbar.close()
             self._pbar = None
+        self._last_nfev = 0
 
     def __del__(self):
         """Ensure progress bar is closed on deletion."""
@@ -277,6 +278,7 @@ class IterationLogger(CallbackBase):
             if not self._file_provided:
                 self._file.close()
             self._file = None
+        self._start_time = None
 
     def __del__(self):
         """Ensure file is closed on deletion."""

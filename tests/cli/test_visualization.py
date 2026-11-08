@@ -646,9 +646,8 @@ class TestFitStatisticsAnnotation:
 
         # Check that some annotation text exists
         main_ax = fig.axes[0]
-        assert (
-            len(main_ax.texts) > 0 or len(main_ax.get_legend().get_texts()) > 0 or True
-        )
+        legend = main_ax.get_legend()
+        assert main_ax.texts or (legend is not None and legend.get_texts())
         plt.close(fig)
 
 

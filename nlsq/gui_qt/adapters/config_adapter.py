@@ -12,7 +12,11 @@ from typing import Any, TextIO
 import numpy as np
 import yaml
 
-from nlsq.gui_qt.session_state import SessionState, initialize_state
+from nlsq.gui_qt.session_state import (
+    VALID_WORKFLOWS,
+    SessionState,
+    initialize_state,
+)
 
 
 def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
@@ -36,8 +40,25 @@ def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
         )
 
     if "custom" in model:
-        state.custom_file_path = model["custom"].get("file", None)
-        state.custom_function_name = model["custom"].get("function", "")
+        custom = model["custom"]
+        state.custom_file_path = custom.get("file") or None  # "" means unset
+        state.custom_function_name = custom.get("function", "")
+        state.custom_code = custom.get("code") or state.custom_code
+
+    # The model page reads model_config, not the dedicated fields: rebuild it.
+    if state.model_type == "polynomial":
+        state.model_config = {"degree": state.polynomial_degree}
+    elif state.model_type == "custom":
+        state.model_config = {
+            k: v
+            for k, v in (
+                ("code", state.custom_code),
+                ("function", state.custom_function_name),
+            )
+            if v
+        }
+    elif "name" in model:
+        state.model_config = {"name": state.model_name}
 
     if "parameters" in model:
         _parse_model_parameters(model["parameters"], state)
@@ -93,6 +114,11 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
     fitting = config["fitting"]
     state.method = fitting.get("method", state.method)
     state.workflow = fitting.get("workflow", state.workflow)
+    if state.workflow not in VALID_WORKFLOWS:
+        raise ValueError(
+            f"Unknown fitting.workflow {state.workflow!r}; "
+            f"expected one of {sorted(VALID_WORKFLOWS)}"
+        )
     state.loss = fitting.get("loss", state.loss)
     for name in ("gtol", "ftol", "xtol"):
         if name in fitting:
@@ -123,15 +149,19 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.loss = fitting["objective"].get("robust_loss", state.loss)
 
     if "termination" in fitting:
-        term = fitting["termination"]
-        state.gtol = term.get("gtol", state.gtol)
-        state.ftol = term.get("ftol", state.ftol)
-        state.xtol = term.get("xtol", state.xtol)
-        state.max_iterations = term.get("max_iterations", state.max_iterations)
-        state.max_function_evals = term.get(
-            "max_function_evals",
-            state.max_function_evals,
-        )
+        term = fitting["termination"] or {}
+
+        # Coerce like the flat gtol/ftol/xtol branch: YAML reads `1e-10` as str.
+        def _term(key: str, default: Any) -> Any:
+            v = term.get(key)  # a bare `key:` (None) means "use default", as in the CLI
+            return default if v is None else v
+
+        state.gtol = float(_term("gtol", state.gtol))
+        state.ftol = float(_term("ftol", state.ftol))
+        state.xtol = float(_term("xtol", state.xtol))
+        state.max_iterations = int(_term("max_iterations", state.max_iterations))
+        mfe = term.get("max_function_evals", state.max_function_evals)
+        state.max_function_evals = None if mfe is None else int(mfe)
 
     if "multistart" in fitting:
         ms = fitting["multistart"]
@@ -323,8 +353,7 @@ def export_yaml_config(state: SessionState) -> str:
 
     config = get_current_config(state)
 
-    # Use yaml.dump with flow style for compact output
-    yaml_str = yaml.dump(
+    yaml_str = yaml.safe_dump(
         config,
         default_flow_style=False,
         sort_keys=False,

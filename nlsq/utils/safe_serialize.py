@@ -356,6 +356,10 @@ def _convert_from_serializable(obj: Any) -> Any:
             type_name = obj["__nlsq_type__"]
 
             if type_name == "tuple":
+                if not isinstance(obj.get("value"), list):
+                    raise SafeSerializationError(
+                        "Malformed tuple marker: 'value' must be a list"
+                    )
                 return tuple(_convert_from_serializable(item) for item in obj["value"])
 
             if type_name == "float":

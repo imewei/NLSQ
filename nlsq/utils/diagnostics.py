@@ -58,7 +58,7 @@ class ConvergenceMonitor:
         self.step_size_history: deque[float] = deque(maxlen=window_size)
 
         # Pattern detection thresholds
-        self.oscillation_threshold = 0.7 * sensitivity
+        self.oscillation_threshold = min(1.0, 0.7 / sensitivity)
         self.stagnation_threshold = 1e-10 * sensitivity
         self.divergence_threshold = 1.5 / sensitivity
 

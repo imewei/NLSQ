@@ -14,6 +14,7 @@ Or programmatically:
 
 from __future__ import annotations
 
+import contextlib
 import faulthandler
 import os
 import sys
@@ -21,6 +22,8 @@ import traceback
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from PySide6.QtWidgets import QApplication
 
 __all__ = ["GUI_INSTALL_HINT", "run_desktop"]
@@ -39,7 +42,8 @@ GUI_INSTALL_HINT = 'The NLSQ desktop app needs the GUI extra: pip install "nlsq[
 
 # Enable faulthandler early so any SIGBUS/SIGSEGV prints a traceback
 # to stderr instead of dying silently.
-faulthandler.enable()
+with contextlib.suppress(AttributeError, ValueError, RuntimeError, OSError):
+    faulthandler.enable()  # may lack a usable stderr fileno; see nlsq/__init__.py
 
 if sys.platform == "darwin":
     # Force matplotlib to non-interactive backend before anything imports it.
@@ -119,6 +123,29 @@ def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) ->
                 msg.exec()
     except Exception:
         pass
+
+
+_ENV_DUMP_PREFIXES = (
+    "QT_", "XDG_", "LC_", "DYLD_", "JAX_", "XLA_", "OMP_", "NLSQ_", "PYTHON",
+)  # fmt: skip
+_ENV_DUMP_EXACT = frozenset(
+    {
+        "DISPLAY", "WAYLAND_DISPLAY", "LANG", "LANGUAGE", "PATH", "LD_LIBRARY_PATH",
+        "VIRTUAL_ENV", "MALLOCNANOZONE", "XDG_SESSION_TYPE",
+    }
+)  # fmt: skip
+_ENV_SECRET_MARKERS = ("KEY", "TOKEN", "SECRET", "PASS", "CRED")
+
+
+def _env_dump_items(environ: Mapping[str, str]) -> list[tuple[str, str]]:
+    """Diagnostic subset of ``environ``: allowlisted names, secrets redacted."""
+    items = []
+    for k in sorted(environ):
+        ku = k.upper()
+        if ku in _ENV_DUMP_EXACT or ku.startswith(_ENV_DUMP_PREFIXES):
+            redact = any(m in ku for m in _ENV_SECRET_MARKERS)
+            items.append((k, "<redacted>" if redact else environ[k]))
+    return items
 
 
 def run_desktop() -> int:
@@ -210,30 +237,8 @@ def run_desktop() -> int:
     # diagnosing crashes that reproduce only interactively.
     if os.environ.get("NLSQ_DUMP_ENV"):
         _stage("=== ENVIRONMENT DUMP ===")
-        for k in sorted(os.environ):
-            if any(
-                p in k.upper()
-                for p in (
-                    "QT",
-                    "DISPLAY",
-                    "XDG",
-                    "LANG",
-                    "LC_",
-                    "DYLD",
-                    "MallocNanoZone",
-                    "METAL",
-                    "GPU",
-                    "GL",
-                    "JAX",
-                    "XLA",
-                    "OMP",
-                    "NLSQ",
-                    "PYTHON",
-                    "VIRTUAL",
-                    "PATH",
-                )
-            ):
-                _stage(f"  {k}={os.environ[k]}")
+        for k, v in _env_dump_items(os.environ):
+            _stage(f"  {k}={v}")
         _stage("=== END DUMP ===")
 
     return app.exec()

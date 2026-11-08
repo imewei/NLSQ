@@ -26,6 +26,7 @@ from benchmarks.studies.exact_1b_run import (
 from nlsq.streaming.exact_lm import exact_lm_fit
 
 
+@pytest.mark.serial  # >100K-element arrays
 def test_streaming_cost_matches_residual_cost_small():
     # both use the solver's convention F = 0.5 * sum(r**2), so they are compared directly
     x, y = PROBLEM.data(100_000, seed=3)

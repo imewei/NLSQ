@@ -26,6 +26,7 @@ PACKAGES = [
 ]
 
 
+@pytest.mark.serial  # each case spawns a JAX-importing subprocess
 class TestPackageImports:
     """Test that all packages import cleanly without circular dependency errors."""
 

@@ -90,6 +90,8 @@ class UnifiedCache:
         disk_cache_enabled : bool, default=False
             Enable disk caching tier (Phase 2 feature)
         """
+        if maxsize < 1:
+            raise ValueError(f"maxsize must be >= 1, got {maxsize}")
         self.maxsize = maxsize
         self.enable_stats = enable_stats
         self.disk_cache_enabled = disk_cache_enabled
@@ -122,11 +124,16 @@ class UnifiedCache:
         Bound methods are re-created on every attribute access, so they are
         keyed by their ``__self__``; everything else by the callable itself.
         """
-        target = func.__self__ if inspect.ismethod(func) else func
+        if inspect.ismethod(func):
+            # Different methods of one instance must not share a tag.
+            return (
+                f"{UnifiedCache._identity_tag(func.__self__)}:"
+                f"{UnifiedCache._identity_tag(func.__func__)}"
+            )
         try:
-            return str(_closure_serial(target))
+            return str(_closure_serial(func))
         except TypeError:  # unhashable / non-weakrefable target
-            return f"id{id(target)}"
+            return f"id{id(func)}"
 
     def _get_function_hash(self, func: Callable) -> str:
         """Generate an in-memory cache hash for a function.

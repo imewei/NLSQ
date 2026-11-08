@@ -208,6 +208,7 @@ class TestJAXConfigIntegration(unittest.TestCase):
 
         config = JAXConfig()
         mock_jax_config = MagicMock()
+        mock_jax_config.jax_compilation_cache_dir = None  # nothing configured yet
 
         with tempfile.TemporaryDirectory() as standard_dir:
             with patch.dict(

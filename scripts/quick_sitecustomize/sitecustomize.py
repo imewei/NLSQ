@@ -41,27 +41,28 @@ def _patch_numpy(max_samples: int) -> None:
     np.random.seed(0)
     random.seed(0)
 
-    def _wrap_rng(fn):
+    def _wrap_rng(fn, size_idx=0, dims=False):
+        # size_idx: positional index of `size` (normal/uniform: 2, since loc/low and
+        # scale/high precede it). dims=True: rand/randn take every positional as a dim.
         def wrapper(*args, **kwargs):
             args = list(args)
             if "size" in kwargs:
                 kwargs["size"] = _cap_size(kwargs["size"], max_samples)
-            elif args:
-                if len(args) >= 3:
-                    args[2] = _cap_size(args[2], max_samples)
-                else:
-                    args[0] = _cap_size(args[0], max_samples)
+            elif dims:
+                args = [_cap_size(a, max_samples) for a in args]
+            elif len(args) > size_idx:
+                args[size_idx] = _cap_size(args[size_idx], max_samples)
             return fn(*args, **kwargs)
 
         return wrapper
 
     rng = np.random
-    rng.normal = _wrap_rng(rng.normal)
+    rng.normal = _wrap_rng(rng.normal, 2)
     rng.random = _wrap_rng(rng.random)
-    rng.rand = _wrap_rng(rng.rand)
-    rng.randn = _wrap_rng(rng.randn)
+    rng.rand = _wrap_rng(rng.rand, dims=True)
+    rng.randn = _wrap_rng(rng.randn, dims=True)
     rng.random_sample = _wrap_rng(rng.random_sample)
-    rng.uniform = _wrap_rng(rng.uniform)
+    rng.uniform = _wrap_rng(rng.uniform, 2)
 
     linspace_orig = np.linspace
 

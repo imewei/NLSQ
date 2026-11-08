@@ -28,6 +28,12 @@ import numpy as np
 from scipy.optimize import lsq_linear
 
 from nlsq.config import JAXConfig
+from nlsq.core._option_checks import (
+    coerce_absolute_sigma,
+    is_integral_count,
+    validate_max_nfev,
+    validate_tolerance,
+)
 from nlsq.core.covariance import pcov_from_normal
 from nlsq.result import OptimizeResult
 
@@ -42,6 +48,7 @@ from nlsq.streaming.normal_equations import (
     make_chunk_stats,
     run_pass,
 )
+from nlsq.streaming.validators import validate_positive
 from nlsq.utils.logging import get_logger
 
 _jax_config = JAXConfig()  # enables jax_enable_x64, as every nlsq module does
@@ -476,15 +483,32 @@ def _check_factory_inputs(
         raise ValueError(
             "sigma must be None with a chunk factory: yield (x, y, sigma) blocks instead"
         )
-    if n_points is not None and (
-        isinstance(n_points, bool)
-        or not isinstance(n_points, int | np.integer)
-        or n_points < 1
+    if n_points is not None and not (
+        isinstance(n_points, int | np.integer) and is_integral_count(n_points, 1)
     ):
         raise ValueError(f"n_points must be a positive integer, got {n_points!r}")
     p = len(p0)
     lo, hi = check_bounds(bounds, p)
     return (None if n_points is None else int(n_points)), p, lo, hi
+
+
+def _check_tolerances(
+    ftol: float, xtol: float, gtol: float
+) -> tuple[float, float, float]:
+    """Reject NaN/inf/negative tolerances and all-below-eps, before any data pass.
+
+    Returns the validated values (``None`` becomes 0) for the caller to use.
+    """
+    eps = np.finfo(float).eps
+    ftol, xtol, gtol = (
+        validate_tolerance(name, tol, strict=True)
+        for name, tol in (("ftol", ftol), ("xtol", xtol), ("gtol", gtol))
+    )
+    if ftol < eps and xtol < eps and gtol < eps:
+        raise ValueError(
+            f"At least one of the tolerances must be higher than machine epsilon ({eps:.2e})."
+        )
+    return ftol, xtol, gtol
 
 
 def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
@@ -561,6 +585,10 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     """
     if not 0 < LAM0 <= LAMBDA_MAX:
         raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
+    ftol, xtol, gtol = _check_tolerances(ftol, xtol, gtol)
+    absolute_sigma = coerce_absolute_sigma(absolute_sigma)
+    if memory_limit_gb is not None:
+        validate_positive(memory_limit_gb, "memory_limit_gb")
     factory = is_chunk_factory(x)
     source: tuple[Any, Any, Any] | FactorySource
     if factory:
@@ -577,6 +605,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             sigma = np.asarray(sigma)
         n, p, lo, hi = _check_inputs(x, y, p0, sigma, bounds, n_points)
         chunk = derive_chunk_size(n, p, memory_limit_gb, chunk_size)
+    max_nfev = validate_max_nfev(max_nfev)
     if max_nfev is None:
         max_nfev = 100 * p
 

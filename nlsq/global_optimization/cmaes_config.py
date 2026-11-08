@@ -7,6 +7,7 @@ optimization using the evosax library.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -20,6 +21,17 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def _require_integral(name: str, value: object) -> None:
+    """Reject bool, NaN/inf and fractional values; accept ints and ``100.0``."""
+    if (
+        isinstance(value, bool)
+        or not math.isfinite(value)  # type: ignore[arg-type]
+        or value != int(value)  # type: ignore[call-overload]
+    ):
+        raise ValueError(f"{name} must be an integer, got {value!r}")
+
 
 # Global cache for evosax availability check
 _EVOSAX_AVAILABLE: bool | None = None
@@ -85,7 +97,11 @@ class CMAESConfig:
     sigma : float
         Initial step size (standard deviation). Default: 0.5.
     tol_fun : float
-        Function value tolerance for convergence. Default: 1e-8.
+        BIPOP stagnation tolerance: a run restarts after 5 consecutive
+        generations whose fitness spread (max - min) is below ``tol_fun``
+        times the generation's best finite fitness (relative, so it is
+        data-scale invariant). Not used when
+        ``restart_strategy='none'``. Default: 1e-8.
     tol_x : float
         Parameter tolerance for convergence. Default: 1e-8.
     restart_strategy : Literal['none', 'bipop']
@@ -162,6 +178,27 @@ class CMAESConfig:
         """Validate configuration after initialization."""
         self._validate()
 
+    def _validate_integral_fields(self) -> None:
+        """Reject bool/NaN/inf/fractional counts and seed; store ``100.0`` as ``100``.
+
+        Runs before the range checks: such values would otherwise pass the
+        comparisons and crash later inside evosax/JAX/SeedSequence.
+        """
+        for name in (
+            "popsize",
+            "max_generations",
+            "max_restarts",
+            "population_batch_size",
+            "data_chunk_size",
+            "checkpoint_interval",
+            "seed",
+        ):
+            value = getattr(self, name)
+            if value is not None:
+                _require_integral(name, value)
+                if not isinstance(value, int):
+                    object.__setattr__(self, name, int(value))
+
     def _validate(self) -> None:
         """Validate configuration parameters.
 
@@ -170,6 +207,13 @@ class CMAESConfig:
         ValueError
             If any parameter is invalid.
         """
+        self._validate_integral_fields()
+
+        # NaN passes every `<= 0` comparison, so require finiteness explicitly.
+        for name in ("sigma", "tol_fun", "tol_x"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be finite, got {getattr(self, name)}")
+
         if self.popsize is not None and self.popsize < 4:
             raise ValueError(f"popsize must be >= 4, got {self.popsize}")
 
@@ -189,6 +233,11 @@ class CMAESConfig:
 
         if self.max_restarts < 0:
             raise ValueError(f"max_restarts must be >= 0, got {self.max_restarts}")
+
+        if self.checkpoint_interval < 1:
+            raise ValueError(
+                f"checkpoint_interval must be >= 1, got {self.checkpoint_interval}",
+            )
 
         if self.restart_strategy not in ("none", "bipop"):
             raise ValueError(
@@ -242,10 +291,6 @@ class CMAESConfig:
                     "Checkpoint/resume is not implemented for "
                     "restart_strategy='bipop' yet. Set restart_strategy="
                     "'none' to use checkpointing.",
-                )
-            if self.checkpoint_interval < 1:
-                raise ValueError(
-                    f"checkpoint_interval must be >= 1, got {self.checkpoint_interval}",
                 )
 
     @classmethod

@@ -170,13 +170,8 @@ class TestMinpackCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # With nan_policy='omit' should skip NaN values
-        try:
-            popt, _pcov = curve_fit(model, x, y, nan_policy="omit")
-            # Should work with remaining points
-            self.assertEqual(len(popt), 2)
-        except:
-            # May not be implemented yet
-            pass
+        popt, _pcov = curve_fit(model, x, y, nan_policy="omit")
+        np.testing.assert_allclose(popt, [2.0, 0.0], atol=1e-6)
 
     def test_curve_fit_full_output(self):
         """Test curve_fit with full_output option."""
@@ -188,14 +183,10 @@ class TestMinpackCoverage(unittest.TestCase):
         y = np.array([2, 4, 6, 8, 10])
 
         # With full_output should return additional info
-        try:
-            result = curve_fit(model, x, y, full_output=True)
-            if isinstance(result, tuple) and len(result) > 2:
-                _popt, _pcov, infodict, _mesg, _ier = result
-                self.assertIn("nfev", infodict)
-        except:
-            # May not be implemented
-            pass
+        result = curve_fit(model, x, y, full_output=True)
+        self.assertEqual(len(result), 5)
+        _popt, _pcov, infodict, _mesg, _ier = result
+        self.assertIn("nfev", infodict)
 
     def test_curve_fit_jac(self):
         """Test curve_fit with analytical Jacobian."""

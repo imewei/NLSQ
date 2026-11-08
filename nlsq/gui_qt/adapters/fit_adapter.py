@@ -35,7 +35,7 @@ import numpy as np
 
 from nlsq.callbacks import StopOptimization
 from nlsq.core.minpack import fit
-from nlsq.gui_qt.session_state import n_points
+from nlsq.gui_qt.session_state import VALID_WORKFLOWS, n_points
 from nlsq.result import CurveFitResult
 
 logger = logging.getLogger(__name__)
@@ -217,6 +217,11 @@ class _CallbackWrapper:
         self.callback = callback
         self._aborted = False
 
+    def __deepcopy__(self, memo: dict) -> "_CallbackWrapper":
+        # multi_start deep-copies the callback per start; the abort flag and the
+        # wrapped ProgressCallback must stay shared with the caller's instance.
+        return self
+
     def __call__(
         self,
         iteration: int,
@@ -281,6 +286,10 @@ def _resolve_workflow(
     'auto' workflow, and says so in ``notes`` instead of doing it silently.
     """
     workflow = workflow or "auto"
+    if workflow not in VALID_WORKFLOWS:
+        raise ValueError(
+            f"Unknown workflow {workflow!r}; expected one of {sorted(VALID_WORKFLOWS)}"
+        )
     if workflow == "auto_global" and not (
         bounds is not None
         and (np.any(np.isfinite(bounds[0])) or np.any(np.isfinite(bounds[1])))

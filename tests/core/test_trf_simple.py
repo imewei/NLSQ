@@ -234,13 +234,9 @@ class TestTRFSpecialCases(unittest.TestCase):
         x = np.linspace(-1, 2, 20)
         y = 2 * np.maximum(x - 0.5, 0) + 0.1 * np.random.randn(20)
 
-        try:
-            popt, _pcov = curve_fit(model, x, y, p0=[1, 0], method="trf")
-            # If it succeeds, check result is reasonable
-            self.assertIsNotNone(popt)
-        except:
-            # Singular Jacobian might cause failure, which is acceptable
-            pass
+        popt, _pcov = curve_fit(model, x, y, p0=[1, 0], method="trf")
+        # Slope 2 and kink at 0.5 are recovered despite the flat region
+        np.testing.assert_allclose(popt, [2.0, 0.5], atol=0.25)
 
     def test_bounds_at_solution(self):
         """Test when solution is at the bounds."""

@@ -25,6 +25,9 @@ def n_points(xdata: Any) -> int:
     return int(arr.shape[-1]) if arr.ndim > 1 else int(arr.size)
 
 
+VALID_WORKFLOWS = frozenset({"auto", "auto_global", "hpc"})
+
+
 @dataclass(slots=True)
 class SessionState:
     """Container for all GUI session state fields.
@@ -454,6 +457,9 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
     >>> config["fitting"]["termination"]["gtol"]
     1e-08
     """
+    # The model page stores code/function/degree/name in model_config, not in
+    # the dedicated state fields; export whichever is populated.
+    mc = state.model_config or {}
     config: dict[str, Any] = {
         "metadata": {
             "workflow_name": "gui_workflow",
@@ -461,15 +467,15 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
         },
         "model": {
             "type": state.model_type,
-            "name": state.model_name,
             "auto_p0": state.auto_p0,
             "auto_bounds": state.auto_bounds,
             "polynomial": {
-                "degree": state.polynomial_degree,
+                "degree": mc.get("degree", state.polynomial_degree),
             },
             "custom": {
                 "file": state.custom_file_path or "",
-                "function": state.custom_function_name,
+                "function": mc.get("function") or state.custom_function_name,
+                "code": mc.get("code") or state.custom_code,
             },
         },
         "fitting": {
@@ -531,7 +537,7 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
         for i, val in enumerate(state.p0):
             param_config: dict[str, Any] = {
                 "name": f"param_{i}",
-                "initial": val,
+                "initial": float(val),
             }
             if state.bounds is not None:
                 param_config["bounds"] = [
@@ -539,7 +545,19 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
                     state.bounds[1][i] if state.bounds[1] else None,
                 ]
             config["model"]["parameters"].append(param_config)
+    elif state.bounds is not None:
+        # No parameters list to carry the bounds: use the flat fitting.bounds form.
+        config["fitting"]["bounds"] = {
+            "lower": [None if v is None else float(v) for v in state.bounds[0]],
+            "upper": [None if v is None else float(v) for v in state.bounds[1]],
+        }
 
+    if state.model_type == "builtin":  # a name is meaningless for polynomial/custom
+        config["model"] = {
+            "type": "builtin",
+            "name": mc.get("name") or state.model_name,
+            **{k: v for k, v in config["model"].items() if k != "type"},
+        }
     return config
 
 

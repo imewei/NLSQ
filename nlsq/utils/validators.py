@@ -302,7 +302,7 @@ class InputValidator:
             return errors, warnings_list
 
         try:
-            p0 = np.asarray(p0)
+            p0 = np.atleast_1d(np.asarray(p0))
             if len(p0) != n_params:
                 errors.append(
                     f"Initial guess p0 has {len(p0)} parameters, "

@@ -106,6 +106,7 @@ class TestAutosave2DAndBounds:
         np.testing.assert_array_equal(target.state.xdata, x)
         np.testing.assert_array_equal(target.state.ydata, y)
 
+    @pytest.mark.serial  # >100K-element arrays
     def test_size_guard_counts_points_not_rows(self):
         n = 100_001
         x = np.vstack([np.zeros(n), np.zeros(n)])

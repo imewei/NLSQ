@@ -12,6 +12,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
+from nlsq.core._option_checks import validate_max_nfev
+from nlsq.streaming.validators import (
+    coerce_integral_fields,
+    validate_non_negative_int,
+    validate_positive,
+    validate_positive_int,
+)
+
 if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
@@ -55,6 +63,12 @@ def _freeze_options(obj: Any, reserved: frozenset[str]) -> None:
             f"{type(obj).__name__} or pass them to curve_fit_large directly."
         )
     object.__setattr__(obj, "options", dict(obj.options))
+
+
+def _validate_chunk_size(chunk_size: Any) -> None:
+    """``chunk_size`` must be ``None`` or an integer >= 1 (bool/NaN/fractional rejected)."""
+    if chunk_size is not None:
+        validate_positive_int(chunk_size, "chunk_size")
 
 
 def reject_owned_kwargs(strategy: Any, kwargs: Mapping[str, Any]) -> None:
@@ -104,6 +118,15 @@ class Multistart:
     scale_factor: float = 1.0
     enabled: bool = True
 
+    def __post_init__(self) -> None:
+        validate_non_negative_int(self.n_starts, "n_starts")
+        coerce_integral_fields(self, ("n_starts",))
+        if str(self.sampler).lower() not in ("lhs", "sobol", "halton"):
+            raise ValueError(
+                f"sampler must be one of ('lhs', 'sobol', 'halton'), got {self.sampler!r}"
+            )
+        validate_positive(self.scale_factor, "scale_factor")
+
 
 @dataclass(frozen=True)
 class InMemory:
@@ -143,6 +166,10 @@ class InMemory:
     options: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.stability not in (False, None, "auto", "check"):
+            raise ValueError(
+                f"stability must be False, 'auto' or 'check', got {self.stability!r}"
+            )
         _freeze_options(self, _IN_MEMORY_RESERVED)
 
 
@@ -177,6 +204,8 @@ class Chunked:
     options: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        _validate_chunk_size(self.chunk_size)
+        coerce_integral_fields(self, ("chunk_size",))
         _freeze_options(self, _CHUNKED_RESERVED)
 
 
@@ -219,6 +248,11 @@ class Exact:
     max_nfev: int | None = None
     n_points: int | None = None
 
+    def __post_init__(self) -> None:
+        _validate_chunk_size(self.chunk_size)
+        coerce_integral_fields(self, ("chunk_size",))
+        object.__setattr__(self, "max_nfev", validate_max_nfev(self.max_nfev))
+
 
 @dataclass(frozen=True)
 class Auto:
@@ -240,6 +274,10 @@ class Auto:
     auto_size_detection: bool = True
     in_memory: InMemory = field(default_factory=InMemory)
     chunked: Chunked = field(default_factory=Chunked)
+
+    def __post_init__(self) -> None:
+        validate_non_negative_int(self.size_threshold, "size_threshold")
+        coerce_integral_fields(self, ("size_threshold",))
 
     def resolve(self, n_points: int) -> InMemory | Chunked:
         """Return the concrete strategy for ``n_points`` data points."""

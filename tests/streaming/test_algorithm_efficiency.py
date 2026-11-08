@@ -675,7 +675,9 @@ class TestImplicitVsMaterializedScaling:
                 _ = float(jnp.sum(result))
             except jax.errors.JaxRuntimeError as e:
                 tracemalloc.stop()
-                if "RESOURCE_EXHAUSTED" in str(e) or "out of memory" in str(e).lower():
+                if jax.default_backend() != "cpu" and (
+                    "RESOURCE_EXHAUSTED" in str(e) or "out of memory" in str(e).lower()
+                ):
                     pytest.skip("Skipped due to GPU memory exhaustion")
                 raise
 

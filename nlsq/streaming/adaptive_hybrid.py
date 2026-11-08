@@ -33,6 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax  # type: ignore[import-not-found]
 
+from nlsq.core._option_checks import coerce_absolute_sigma
 from nlsq.core.covariance import pcov_from_normal, warn_not_estimated
 from nlsq.global_optimization.config import GlobalOptimizationConfig
 from nlsq.global_optimization.sampling import (
@@ -191,6 +192,8 @@ class AdaptiveHybridStreamingOptimizer:
         self.normalizer: ParameterNormalizer | None = None
         self.normalized_model: NormalizedModelWrapper | None = None
         self.normalized_bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None
+        self._lbfgs_jit: tuple[Any, ...] | None = None  # see _lbfgs_step
+        self._pass_cache: tuple[np.ndarray, Any, Any, float] | None = None  # Phase 2
         self.normalization_jacobian: jnp.ndarray | None = None
 
         # Store original model and parameters (for reference)
@@ -1010,16 +1013,23 @@ class AdaptiveHybridStreamingOptimizer:
             lb = np.asarray(bounds[0], dtype=np.float64)
             ub = np.asarray(bounds[1], dtype=np.float64)
             if self.config.center_on_p0:
-                # Explore only a scale_factor-sized window of each finite range
+                # Same window as sampling.center_samples_around_p0: clamp p0 into
+                # the box, keep the window width and shift it inward (clipping
+                # each end would shrink it at a bound). Infinite spans fall back
+                # to clipping p0 +/- halfwidth.
                 with np.errstate(invalid="ignore"):
                     span = ub - lb
-                range_half = np.where(
-                    np.isfinite(span), span * scale_factor / 2, halfwidth
-                )
-                lb, ub = (
-                    np.maximum(lb, p0 - range_half),
-                    np.minimum(ub, p0 + range_half),
-                )
+                    finite = np.isfinite(span)
+                    pc = np.clip(p0, lb, ub)
+                    width = np.minimum(scale_factor * span, span)
+                    shifted = np.clip(pc - width / 2, lb, ub - width)
+                    range_half = np.where(finite, span * scale_factor / 2, halfwidth)
+                    lb, ub = (
+                        np.where(finite, shifted, np.maximum(lb, pc - range_half)),
+                        np.where(
+                            finite, shifted + width, np.minimum(ub, pc + range_half)
+                        ),
+                    )
                 halfwidth = range_half
             candidates = sample_in_bounds(samples, lb, ub, p0, halfwidth)
         else:
@@ -1254,8 +1264,36 @@ class AdaptiveHybridStreamingOptimizer:
         # Validate input parameters
         self._validate_numerics(params, context="at L-BFGS step input")
 
+        # One jitted value/grad and optimizer update per (loss_fn, optimizer): the
+        # eager optax L-BFGS update retraces its line search on every call.
+        cached = self._lbfgs_jit
+        if cached is None or cached[0] is not loss_fn or cached[1] is not optimizer:
+
+            @jax.jit
+            def _value_and_grad(p, x, y):
+                return jax.value_and_grad(loss_fn)(p, x, y)
+
+            @jax.jit
+            def _update(grads, state, p, value, x, y):
+                return optimizer.update(
+                    grads,
+                    state,
+                    p,
+                    value=value,
+                    grad=grads,
+                    value_fn=lambda q: loss_fn(q, x, y),
+                )
+
+            cached = self._lbfgs_jit = (
+                loss_fn,
+                optimizer,
+                _value_and_grad,
+                _update,
+            )
+        _value_and_grad, _update = cached[2], cached[3]
+
         # Compute loss and gradient
-        loss_value, grads = jax.value_and_grad(loss_fn)(params, x_batch, y_batch)
+        loss_value, grads = _value_and_grad(params, x_batch, y_batch)
 
         # Validate loss and gradients
         if not self._validate_numerics(
@@ -1276,19 +1314,10 @@ class AdaptiveHybridStreamingOptimizer:
         # Compute gradient norm
         grad_norm = jnp.linalg.norm(grads)
 
-        # L-BFGS requires a value_fn for line search
-        def value_fn(p):
-            return loss_fn(p, x_batch, y_batch)
-
         # Apply optimizer updates (L-BFGS with line search)
         try:
-            updates, new_opt_state = optimizer.update(
-                grads,
-                opt_state,
-                params,
-                value=loss_value,
-                grad=grads,
-                value_fn=value_fn,
+            updates, new_opt_state = _update(
+                grads, opt_state, params, loss_value, x_batch, y_batch
             )
             line_search_failed = False
         except Exception as e:
@@ -2862,7 +2891,12 @@ class AdaptiveHybridStreamingOptimizer:
         x_data, y_data = data_source
         n_points = len(x_data)
 
-        JTJ, JTr, total_cost = self._accumulate_pass(current_params, x_data, y_data)
+        # Reuse the pass at these exact parameters when Phase 2 already computed it.
+        cache = self._pass_cache
+        if cache is not None and np.array_equal(cache[0], np.asarray(current_params)):
+            _, JTJ, JTr, total_cost = cache
+        else:
+            JTJ, JTr, total_cost = self._accumulate_pass(current_params, x_data, y_data)
 
         # Add group variance regularization if enabled
         # This prevents per-angle parameters from absorbing angle-dependent signals
@@ -2919,13 +2953,33 @@ class AdaptiveHybridStreamingOptimizer:
                     * n_points
                 )
 
-        # Compute gradient norm for convergence check
-        gradient_norm = float(jnp.linalg.norm(JTr))
+        # Active set: a variable on a bound whose descent direction (JTr) points out
+        # of the box is held fixed, as in exact_lm.free_set.
+        free = None
+        if self.normalized_bounds is not None:
+            lb, ub = self.normalized_bounds
+            at_bound = ((current_params <= lb) & (JTr <= 0)) | (
+                (current_params >= ub) & (JTr >= 0)
+            )
+            if bool(jnp.any(at_bound)):
+                free = ~at_bound
+
+        if free is None:
+            gradient_norm = float(jnp.linalg.norm(JTr))
+            solve_JTJ, solve_JTr = JTJ, JTr
+        else:
+            # Projected gradient; the step is solved over the free variables only
+            # (fixed ones get an identity row so their step component is exactly 0).
+            gradient_norm = float(jnp.linalg.norm(jnp.where(free, JTr, 0.0)))
+            solve_JTr = jnp.where(free, JTr, 0.0)
+            solve_JTJ = jnp.where(free[:, None] & free[None, :], JTJ, 0.0) + jnp.diag(
+                (~free).astype(JTJ.dtype)
+            )
 
         # Solve for Gauss-Newton step
         step, predicted_reduction = self._solve_gauss_newton_step(
-            JTJ,
-            JTr,
+            solve_JTJ,
+            solve_JTr,
             trust_radius,
         )
 
@@ -2935,7 +2989,15 @@ class AdaptiveHybridStreamingOptimizer:
         # Clip to bounds if available (important for constrained optimization)
         if self.normalized_bounds is not None:
             lb, ub = self.normalized_bounds
+            unclipped = new_params
             new_params = jnp.clip(new_params, lb, ub)
+            if free is not None or not bool(jnp.array_equal(new_params, unclipped)):
+                # Predicted reduction must describe the step actually taken
+                step = new_params - current_params
+                predicted_reduction = jnp.maximum(
+                    jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step),
+                    0.0,
+                )
 
         # Evaluate cost at new parameters using optimized pre-compiled function
         # This provides 20-30% speedup compared to inline computation
@@ -3130,6 +3192,19 @@ class AdaptiveHybridStreamingOptimizer:
         self,
         data_source: tuple[jnp.ndarray, jnp.ndarray],
         initial_params: jnp.ndarray,
+        verbose: int | None = None,
+    ) -> dict[str, Any]:
+        """Run Phase 2 (see :meth:`_run_phase2_loop`); ``verbose`` caps ``config.verbose``."""
+        try:
+            return self._run_phase2_loop(data_source, initial_params, verbose)
+        finally:
+            self._pass_cache = None  # data-specific; never outlive the run
+
+    def _run_phase2_loop(
+        self,
+        data_source: tuple[jnp.ndarray, jnp.ndarray],
+        initial_params: jnp.ndarray,
+        verbose: int | None = None,
     ) -> dict[str, Any]:
         """Run Phase 2 streaming Gauss-Newton optimization.
 
@@ -3182,7 +3257,8 @@ class AdaptiveHybridStreamingOptimizer:
         n_points = len(x_data)
 
         # Get verbosity from config or default to 1 for progress output
-        verbose = getattr(self.config, "verbose", 1)
+        config_verbose = getattr(self.config, "verbose", 1)
+        verbose = config_verbose if verbose is None else min(verbose, config_verbose)
         log_frequency = getattr(
             self.config,
             "log_frequency",
@@ -3211,8 +3287,14 @@ class AdaptiveHybridStreamingOptimizer:
                 )
 
         # progress callback only; _accumulate_pass always uses the chunk loop
-        final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(
+        final_JTJ, init_JTr, final_residual_sum_sq = self._accumulate_pass(
             current_params, x_data, y_data, on_chunk=_report_init_progress
+        )
+        self._pass_cache = (
+            np.asarray(current_params),
+            final_JTJ,
+            init_JTr,
+            final_residual_sum_sq,
         )
 
         if verbose >= 1:
@@ -3331,8 +3413,14 @@ class AdaptiveHybridStreamingOptimizer:
                 # This ensures we have J^T J at the final parameters.
                 x_data, y_data = data_source
 
-                final_JTJ, _, final_residual_sum_sq = self._accumulate_pass(
+                final_JTJ, final_JTr, final_residual_sum_sq = self._accumulate_pass(
                     current_params, x_data, y_data
+                )
+                self._pass_cache = (
+                    np.asarray(current_params),
+                    final_JTJ,
+                    final_JTr,
+                    final_residual_sum_sq,
                 )
             else:
                 # Step rejected - trust radius is already updated in
@@ -4035,6 +4123,10 @@ class AdaptiveHybridStreamingOptimizer:
         The result dictionary is compatible with scipy.optimize.curve_fit
         and can be used interchangeably.
         """
+        # The config is a mutable dataclass; re-run its validation so a field
+        # changed after construction cannot bypass the constructor checks.
+        self.config.__post_init__()
+
         # Track total optimization time
         total_start_time = time.time()
 
@@ -4054,6 +4146,17 @@ class AdaptiveHybridStreamingOptimizer:
         else:
             raise NotImplementedError(
                 "Only tuple data sources (x_data, y_data) currently supported",
+            )
+
+        absolute_sigma = coerce_absolute_sigma(absolute_sigma)
+        # Paths that skip check_finite would otherwise return success=True at p0
+        # (NaN loss -> no step accepted). TRF raises the same message.
+        if not (
+            bool(jnp.all(jnp.isfinite(x_data))) and bool(jnp.all(jnp.isfinite(y_data)))
+        ):
+            raise ValueError(
+                "Residuals are not finite in the initial point: xdata/ydata "
+                "contain NaN or inf."
             )
 
         # sigma/absolute_sigma are accepted for API compatibility but no phase
@@ -4178,6 +4281,7 @@ class AdaptiveHybridStreamingOptimizer:
                 "switch_reason": f"Phase 1 failed: {phase1_failure}",
                 "iterations": 0,
             }
+        self._lbfgs_jit = None  # holds the warmup loss closure and optax optimizer
         phase1_duration = time.time() - phase1_start
         phase_timings["phase1_warmup"] = phase1_duration
         phase_iterations["phase1"] = phase1_result["iterations"]
@@ -4205,6 +4309,7 @@ class AdaptiveHybridStreamingOptimizer:
             phase2_result = self._run_phase2_gauss_newton(
                 data_source=(x_data, y_data),
                 initial_params=warmup_params,
+                verbose=verbose,
             )
         except Exception as exc:
             phase2_failure = f"{type(exc).__name__}: {exc}"
@@ -4267,6 +4372,7 @@ class AdaptiveHybridStreamingOptimizer:
         ):
             import warnings
 
+            from nlsq.core.covariance import _NLSQ_DIR
             from nlsq.result import OptimizeWarning
 
             warnings.warn(
@@ -4275,7 +4381,7 @@ class AdaptiveHybridStreamingOptimizer:
                 OptimizeWarning,
                 # Attribute the warning to the first frame outside nlsq (the
                 # user's call site), however many nlsq layers sit in between.
-                skip_file_prefixes=(str(Path(__file__).resolve().parents[1]),),
+                skip_file_prefixes=_NLSQ_DIR,
             )
         phase2_duration = time.time() - phase2_start
         phase_timings["phase2_gauss_newton"] = phase2_duration

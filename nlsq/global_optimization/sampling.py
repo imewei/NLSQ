@@ -436,9 +436,10 @@ def center_samples_around_p0(
     Notes
     -----
     The exploration region is:
-    - Half-width = scale_factor * (ub - lb) / 2
-    - Region = [p0 - half_width, p0 + half_width]
-    - Clipped to [lb, ub] to ensure valid samples
+    - Width = min(scale_factor, 1) * (ub - lb), centered on p0
+    - Near a bound the window is shifted inward (width preserved), not clipped
+    - For a non-finite span, half_width = (|p0| + 0.1) * scale_factor and
+      [p0 -/+ half_width] is clipped to [lb, ub]
 
     Examples
     --------
@@ -463,17 +464,20 @@ def center_samples_around_p0(
     # samples outside the true [lb, ub] bounds.
     p0 = jnp.clip(p0, lb, ub)
 
-    # Compute the exploration range
+    # Keep the window WIDTH and shift it inside [lb, ub] (clipping each end
+    # independently would shrink it near a bound, e.g. to 1/2^n of the box at a
+    # corner with scale_factor=1).
     full_range = ub - lb
-    half_width = scale_factor * full_range / 2.0
-
-    # Compute centered bounds
-    centered_lb = p0 - half_width
-    centered_ub = p0 + half_width
-
-    # Clip to original bounds
-    centered_lb = jnp.maximum(centered_lb, lb)
-    centered_ub = jnp.minimum(centered_ub, ub)
+    width = jnp.minimum(scale_factor * full_range, full_range)
+    shifted_lb = jnp.clip(p0 - width / 2.0, lb, ub - width)
+    centered_lb = shifted_lb
+    centered_ub = shifted_lb + width
+    # Non-finite span: width/shift are inf/NaN, so use a p0-based half-width
+    # (same rule as adaptive_hybrid) and clip the window to [lb, ub].
+    finite = jnp.isfinite(full_range)
+    half_width = (jnp.abs(p0) + 0.1) * scale_factor
+    centered_lb = jnp.where(finite, centered_lb, jnp.maximum(p0 - half_width, lb))
+    centered_ub = jnp.where(finite, centered_ub, jnp.minimum(p0 + half_width, ub))
 
     # Transform samples to centered bounds
     return scale_samples_to_bounds(samples, centered_lb, centered_ub)

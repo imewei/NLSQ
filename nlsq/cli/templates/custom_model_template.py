@@ -84,6 +84,7 @@ Common Pitfalls
 
 from typing import TYPE_CHECKING
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -388,7 +389,7 @@ def sigmoid(
     -----
     For dose-response: center = EC50, rate = Hill coefficient
     """
-    return amplitude / (1 + jnp.exp(-rate * (x - center))) + baseline
+    return amplitude * jax.nn.sigmoid(rate * (x - center)) + baseline
 
 
 def power_law(

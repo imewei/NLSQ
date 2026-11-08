@@ -36,13 +36,52 @@ Example Usage
 """
 
 import csv
+import math
+import os
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
-from nlsq.cli.errors import DataLoadError
+from nlsq.cli.errors import DataLoadError, cfg_get
+
+# CLI default per-array cap. HDF5 sizes are checked from metadata before any
+# allocation, so this only needs to stop absurd/compressed-bomb headers while
+# keeping the documented 100M+ point workflows loadable.
+_DEFAULT_MAX_LOAD_ELEMENTS = 2_000_000_000
+
+
+def _max_load_elements(file_path: Path, file_format: str) -> int:
+    """Per-array element cap for HDF5/NPZ loads (env ``NLSQ_MAX_LOAD_ELEMENTS``)."""
+    raw = os.environ.get("NLSQ_MAX_LOAD_ELEMENTS")
+    if raw is None:
+        return _DEFAULT_MAX_LOAD_ELEMENTS
+    try:
+        limit = int(raw)
+        if limit < 1:
+            raise ValueError
+    except ValueError:
+        raise DataLoadError(
+            f"NLSQ_MAX_LOAD_ELEMENTS must be a positive integer, got {raw!r}",
+            file_path=file_path,
+            file_format=file_format,
+        ) from None
+    return limit
+
+
+def _check_load_size(
+    n: int, name: str, file_path: Path, file_format: str, limit: int
+) -> None:
+    if n > limit:
+        raise DataLoadError(
+            f"Array '{name}' declares {n:,} elements, above the load limit of "
+            f"{limit:,}",
+            file_path=file_path,
+            file_format=file_format,
+            suggestion="Raise NLSQ_MAX_LOAD_ELEMENTS if this file is trusted.",
+        )
+
 
 # =============================================================================
 # Format Extension Mappings
@@ -135,17 +174,17 @@ class DataLoader:
             True if 2D surface data mode, False for 1D curve data.
         """
         # Check columns config (ASCII/CSV)
-        columns_config = config.get("columns", {})
+        columns_config = config.get("columns") or {}
         if columns_config.get("z") is not None:
             return True
 
         # Check NPZ config
-        npz_config = config.get("npz", {})
+        npz_config = config.get("npz") or {}
         if npz_config.get("z_key") is not None:
             return True
 
         # Check HDF5 config
-        hdf5_config = config.get("hdf5", {})
+        hdf5_config = config.get("hdf5") or {}
         return hdf5_config.get("z_path") is not None
 
     def load(
@@ -238,7 +277,7 @@ class DataLoader:
         DataLoadError
             If format cannot be determined.
         """
-        config_format = config.get("format", "auto")
+        config_format = cfg_get(config, "format", "auto")
 
         if config_format != "auto":
             if config_format not in SUPPORTED_FORMATS:
@@ -294,31 +333,48 @@ class DataLoader:
             For 1D: (xdata, ydata, sigma) where xdata/ydata are 1D.
             For 2D: (xdata, ydata, sigma) where xdata is (2, n), ydata is (n,).
         """
-        ascii_config = config.get("ascii", {})
-        columns_config = config.get(
-            "columns",
-            {"x": 0, "y": 1, "z": None, "sigma": None},
-        )
+        ascii_config = config.get("ascii") or {}
+        columns_config = config.get("columns") or {
+            "x": 0,
+            "y": 1,
+            "z": None,
+            "sigma": None,
+        }
 
-        delimiter = ascii_config.get("delimiter", None)  # None = whitespace
-        comment_char = ascii_config.get("comment_char", "#")
-        skip_header = ascii_config.get("skip_header", 0)
-        skip_footer = ascii_config.get("skip_footer", 0)
-        dtype = ascii_config.get("dtype", "float64")
+        delimiter = cfg_get(ascii_config, "delimiter", None)  # None = whitespace
+        comment_char = cfg_get(ascii_config, "comment_char", "#")
+        skip_header = cfg_get(ascii_config, "skip_header", 0)
+        skip_footer = cfg_get(ascii_config, "skip_footer", 0)
+        dtype = cfg_get(ascii_config, "dtype", "float64")
 
         try:
-            data = np.loadtxt(
-                file_path,
-                delimiter=delimiter,
-                comments=comment_char,
-                skiprows=skip_header,
-                dtype=dtype,
-                ndmin=2,
-            )
-
-            # Handle skip_footer
             if skip_footer > 0:
-                data = data[:-skip_footer]
+                # Drop footer rows ourselves, then parse with loadtxt so malformed
+                # cells raise exactly as in the skip_footer == 0 path ("nan"
+                # tokens still load; genfromtxt would silently turn junk into NaN).
+                with open(file_path) as fh:
+                    lines = fh.read().splitlines()[skip_header:]
+                rows = [
+                    ln
+                    for ln in lines
+                    if (ln.split(comment_char)[0] if comment_char else ln).strip()
+                ]
+                data = np.loadtxt(
+                    rows[:-skip_footer],
+                    delimiter=delimiter,
+                    comments=comment_char,
+                    dtype=dtype,
+                    ndmin=2,
+                )
+            else:
+                data = np.loadtxt(
+                    file_path,
+                    delimiter=delimiter,
+                    comments=comment_char,
+                    skiprows=skip_header,
+                    dtype=dtype,
+                    ndmin=2,
+                )
 
         except (ValueError, OSError) as e:
             raise DataLoadError(
@@ -330,8 +386,8 @@ class DataLoader:
             ) from e
 
         # Extract columns
-        x_col = columns_config.get("x", 0)
-        y_col = columns_config.get("y", 1)
+        x_col = cfg_get(columns_config, "x", 0)
+        y_col = cfg_get(columns_config, "y", 1)
         z_col = columns_config.get("z")
         sigma_col = columns_config.get("sigma")
 
@@ -405,14 +461,16 @@ class DataLoader:
             For 1D: (xdata, ydata, sigma) where xdata/ydata are 1D.
             For 2D: (xdata, ydata, sigma) where xdata is (2, n), ydata is (n,).
         """
-        csv_config = config.get("csv", {})
-        columns_config = config.get(
-            "columns",
-            {"x": 0, "y": 1, "z": None, "sigma": None},
-        )
+        csv_config = config.get("csv") or {}
+        columns_config = config.get("columns") or {
+            "x": 0,
+            "y": 1,
+            "z": None,
+            "sigma": None,
+        }
 
-        delimiter = csv_config.get("delimiter", ",")
-        has_header = csv_config.get("header", True)
+        delimiter = cfg_get(csv_config, "delimiter", ",")
+        has_header = cfg_get(csv_config, "header", True)
         if not isinstance(has_header, bool):
             # "false" (a quoted YAML string) is truthy and would silently drop
             # the first data row as a header
@@ -421,11 +479,13 @@ class DataLoader:
                 file_path=file_path,
                 suggestion="Use an unquoted YAML boolean: `header: false`.",
             )
-        encoding = csv_config.get("encoding", "utf-8")
+        encoding = cfg_get(csv_config, "encoding", "utf-8")
         if encoding.lower().replace("_", "-") == "utf-8":
             encoding = "utf-8-sig"  # strips a BOM, otherwise identical to utf-8
-        missing_values = csv_config.get("missing_values", ["", "NA", "null", "NaN"])
-        skip_header = csv_config.get("skip_header", 0)
+        missing_values = cfg_get(
+            csv_config, "missing_values", ["", "NA", "null", "NaN"]
+        )
+        skip_header = cfg_get(csv_config, "skip_header", 0)
 
         # Read header names if present
         header_names: list[str] | None = None
@@ -483,8 +543,8 @@ class DataLoader:
             ) from e
 
         # Extract columns by name or index
-        x_col = columns_config.get("x", 0)
-        y_col = columns_config.get("y", 1)
+        x_col = cfg_get(columns_config, "x", 0)
+        y_col = cfg_get(columns_config, "y", 1)
         z_col = columns_config.get("z")
         sigma_col = columns_config.get("sigma")
 
@@ -612,16 +672,37 @@ class DataLoader:
             For 1D: (xdata, ydata, sigma) where xdata/ydata are 1D.
             For 2D: (xdata, ydata, sigma) where xdata is (2, n), ydata is (n,).
         """
-        npz_config = config.get("npz", {})
+        npz_config = config.get("npz") or {}
 
-        x_key = npz_config.get("x_key", "x")
-        y_key = npz_config.get("y_key", "y")
+        x_key = cfg_get(npz_config, "x_key", "x")
+        y_key = cfg_get(npz_config, "y_key", "y")
         z_key = npz_config.get("z_key")
         sigma_key = npz_config.get("sigma_key")
 
         try:
+            limit = _max_load_elements(file_path, "npz")
             with np.load(file_path) as data:
                 available_keys = list(data.keys())
+
+                def _check(key: str) -> None:
+                    # Header only: a compressed member can declare far more than it stores.
+                    member = key if key.endswith(".npy") else key + ".npy"
+                    if member not in data.zip.namelist():
+                        return
+                    with data.zip.open(member) as fh:
+                        version = np.lib.format.read_magic(fh)
+                        reader = (
+                            np.lib.format.read_array_header_1_0
+                            if version == (1, 0)
+                            else np.lib.format.read_array_header_2_0
+                        )
+                        shape, _, dtype = reader(fh)
+                        payload = data.zip.getinfo(member).file_size - fh.tell()
+                    _check_load_size(math.prod(shape), key, file_path, "npz", limit)
+                    # Also bound the member's real uncompressed payload (header can lie).
+                    _check_load_size(
+                        payload // max(dtype.itemsize, 1), key, file_path, "npz", limit
+                    )
 
                 # Load x data
                 if x_key not in data:
@@ -632,6 +713,7 @@ class DataLoader:
                         context={"available_keys": available_keys},
                         suggestion=f"Available keys are: {', '.join(available_keys)}",
                     )
+                _check(x_key)
                 x_arr = data[x_key].astype(np.float64).flatten()
 
                 # Load y data
@@ -643,6 +725,7 @@ class DataLoader:
                         context={"available_keys": available_keys},
                         suggestion=f"Available keys are: {', '.join(available_keys)}",
                     )
+                _check(y_key)
                 y_arr = data[y_key].astype(np.float64).flatten()
 
                 # Handle 2D vs 1D data
@@ -656,6 +739,7 @@ class DataLoader:
                             context={"available_keys": available_keys},
                             suggestion=f"Available keys are: {', '.join(available_keys)}",
                         )
+                    _check(z_key)
                     z_arr = data[z_key].astype(np.float64).flatten()
 
                     # 2D surface data: x, y are coordinates, z is dependent variable
@@ -678,6 +762,7 @@ class DataLoader:
                             context={"available_keys": available_keys},
                             suggestion=f"Available keys are: {', '.join(available_keys)}",
                         )
+                    _check(sigma_key)
                     sigma = data[sigma_key].astype(np.float64).flatten()
 
         except DataLoadError:
@@ -732,14 +817,47 @@ class DataLoader:
                 suggestion="Install h5py: pip install h5py",
             ) from None
 
-        hdf5_config = config.get("hdf5", {})
+        hdf5_config = config.get("hdf5") or {}
 
-        x_path = hdf5_config.get("x_path", "/data/x")
-        y_path = hdf5_config.get("y_path", "/data/y")
+        x_path = cfg_get(hdf5_config, "x_path", "/data/x")
+        y_path = cfg_get(hdf5_config, "y_path", "/data/y")
         z_path = hdf5_config.get("z_path")
         sigma_path = hdf5_config.get("sigma_path")
 
         try:
+            limit = _max_load_elements(file_path, "hdf5")
+
+            def _read(f: Any, path: str) -> NDArray[np.float64]:
+                # Untrusted file: no external links / virtual datasets, size
+                # checked from metadata before anything is allocated.
+                if isinstance(f.get(path, getlink=True), h5py.ExternalLink):
+                    raise DataLoadError(
+                        f"Dataset '{path}' is an external link; external links are not followed",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
+                dset = f[path]
+                if not isinstance(dset, h5py.Dataset):
+                    raise DataLoadError(
+                        f"'{path}' is not a dataset",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
+                if getattr(dset, "file", f).filename != f.filename:
+                    raise DataLoadError(
+                        f"Dataset '{path}' resolves into another file via an external link",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
+                if getattr(dset, "is_virtual", False):
+                    raise DataLoadError(
+                        f"Dataset '{path}' is a virtual dataset; virtual datasets are not supported",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
+                _check_load_size(math.prod(dset.shape), path, file_path, "hdf5", limit)
+                return np.asarray(dset, dtype=np.float64).flatten()
+
             with h5py.File(file_path, "r") as f:
                 # Load x data
                 if x_path not in f:
@@ -751,7 +869,7 @@ class DataLoader:
                         context={"available_paths": available_paths},
                         suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                     )
-                x_arr = np.asarray(f[x_path], dtype=np.float64).flatten()
+                x_arr = _read(f, x_path)
 
                 # Load y data
                 if y_path not in f:
@@ -763,7 +881,7 @@ class DataLoader:
                         context={"available_paths": available_paths},
                         suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                     )
-                y_arr = np.asarray(f[y_path], dtype=np.float64).flatten()
+                y_arr = _read(f, y_path)
 
                 # Handle 2D vs 1D data
                 if is_2d and z_path is not None:
@@ -777,7 +895,7 @@ class DataLoader:
                             context={"available_paths": available_paths},
                             suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                         )
-                    z_arr = np.asarray(f[z_path], dtype=np.float64).flatten()
+                    z_arr = _read(f, z_path)
 
                     # 2D surface data: x, y are coordinates, z is dependent variable
                     # Stack x, y into shape (2, n_points)
@@ -800,11 +918,11 @@ class DataLoader:
                             context={"available_paths": available_paths},
                             suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                         )
-                    sigma = np.asarray(f[sigma_path], dtype=np.float64).flatten()
+                    sigma = _read(f, sigma_path)
 
         except DataLoadError:
             raise
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError, KeyError) as e:
             raise DataLoadError(
                 f"Failed to load HDF5 file: {e}",
                 file_path=file_path,
@@ -873,9 +991,9 @@ class DataLoader:
         DataLoadError
             If data fails validation.
         """
-        validation_config = config.get("validation", {})
-        require_finite = validation_config.get("require_finite", True)
-        min_points = validation_config.get("min_points", 2)
+        validation_config = config.get("validation") or {}
+        require_finite = cfg_get(validation_config, "require_finite", True)
+        min_points = cfg_get(validation_config, "min_points", 2)
 
         # Get number of data points (accounting for 2D xdata shape)
         if is_2d and xdata.ndim == 2:

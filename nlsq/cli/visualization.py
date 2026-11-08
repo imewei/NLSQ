@@ -35,6 +35,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 
+from nlsq.cli.errors import cfg_get
+
 # =============================================================================
 # Style Presets Dictionary
 # =============================================================================
@@ -190,9 +192,9 @@ class FitVisualizer:
         list[str]
             List of output file paths that were generated.
         """
-        vis_config = config.get("visualization", {})
+        vis_config = config.get("visualization") or {}
 
-        if not vis_config.get("enabled", True):
+        if not cfg_get(vis_config, "enabled", True):
             return []
 
         xdata = np.asarray(data.get("xdata", []))
@@ -205,11 +207,11 @@ class FitVisualizer:
             )
 
         output_paths: list[str] = []
-        output_dir = Path(vis_config.get("output_dir", "figures"))
+        output_dir = Path(cfg_get(vis_config, "output_dir", "figures"))
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        filename_prefix = vis_config.get("filename_prefix", "fit")
-        formats = vis_config.get("formats", ["pdf", "png"])
+        filename_prefix = cfg_get(vis_config, "filename_prefix", "fit")
+        formats = cfg_get(vis_config, "formats", ["pdf", "png"])
 
         # rc_context mutates global rcParams, so serialize drawing across
         # batch threads; each figure sees only its own style and it is restored.
@@ -233,8 +235,8 @@ class FitVisualizer:
                 plt.close(fig_combined)
 
             # Generate histogram if enabled
-            histogram_config = vis_config.get("histogram", {})
-            if histogram_config.get("enabled", False):
+            histogram_config = vis_config.get("histogram") or {}
+            if cfg_get(histogram_config, "enabled", False):
                 residuals = self._get_residuals(result, data, model)
                 if residuals is not None:
                     fig_hist = self._create_histogram_figure(residuals, vis_config)
@@ -261,7 +263,7 @@ class FitVisualizer:
         config : dict
             Visualization configuration containing style preset name.
         """
-        style_name = config.get("style", "publication")
+        style_name = cfg_get(config, "style", "publication")
         preset = STYLE_PRESETS.get(style_name, STYLE_PRESETS["publication"])
 
         rc: dict[str, Any] = {
@@ -272,7 +274,7 @@ class FitVisualizer:
         }
 
         # Override with config-specific font settings if provided
-        font_config = config.get("font", {})
+        font_config = config.get("font") or {}
         if "family" in font_config:
             rc["font.family"] = font_config["family"]
         if "size" in font_config:
@@ -294,8 +296,8 @@ class FitVisualizer:
         dict
             Dictionary mapping element names to hex colors.
         """
-        active_scheme = config.get("active_scheme", "default")
-        color_schemes = config.get("color_schemes", {})
+        active_scheme = cfg_get(config, "active_scheme", "default")
+        color_schemes = config.get("color_schemes") or {}
 
         # Default fallback colors
         default_colors = {
@@ -332,15 +334,17 @@ class FitVisualizer:
         matplotlib.figure.Figure
             The combined figure with two subplots.
         """
-        style_name = config.get("style", "publication")
+        style_name = cfg_get(config, "style", "publication")
         preset = STYLE_PRESETS.get(style_name, STYLE_PRESETS["publication"])
 
         # Get figure size from config or preset
-        figure_size = config.get("figure_size", preset.get("figure_size", [6.0, 4.5]))
+        figure_size = cfg_get(
+            config, "figure_size", preset.get("figure_size", [6.0, 4.5])
+        )
 
         # Check if residuals plot is enabled
-        residuals_config = config.get("residuals_plot", {})
-        show_residuals = residuals_config.get("enabled", True)
+        residuals_config = config.get("residuals_plot") or {}
+        show_residuals = cfg_get(residuals_config, "enabled", True)
 
         if show_residuals:
             # Create figure with 2 subplots (3:1 height ratio)
@@ -394,7 +398,7 @@ class FitVisualizer:
                 self._plot_residuals(ax_residuals, xdata, residuals, config, colors)
 
         # Apply spine visibility
-        spine_vis = preset.get("spine_visibility", {})
+        spine_vis = preset.get("spine_visibility") or {}
         for spine, visible in spine_vis.items():
             if spine in ax_main.spines:
                 ax_main.spines[spine].set_visible(visible)
@@ -441,22 +445,22 @@ class FitVisualizer:
         result : dict
             Fit result dictionary (for statistics annotation).
         """
-        main_config = config.get("main_plot", {})
-        data_config = main_config.get("data", {})
-        fit_config = main_config.get("fit", {})
-        confidence_config = main_config.get("confidence_band", {})
+        main_config = config.get("main_plot") or {}
+        data_config = main_config.get("data") or {}
+        fit_config = main_config.get("fit") or {}
+        confidence_config = main_config.get("confidence_band") or {}
 
         # Get data color from config or color scheme
-        data_color = data_config.get("color", colors.get("data", "#1f77b4"))
-        fit_color = fit_config.get("color", colors.get("fit", "#d62728"))
+        data_color = cfg_get(data_config, "color", cfg_get(colors, "data", "#1f77b4"))
+        fit_color = cfg_get(fit_config, "color", cfg_get(colors, "fit", "#d62728"))
 
         # Plot data points
-        marker = data_config.get("marker", "o")
-        size = data_config.get("size", 20)
-        alpha = data_config.get("alpha", 0.7)
-        data_label = data_config.get("label", "Data")
+        marker = cfg_get(data_config, "marker", "o")
+        size = cfg_get(data_config, "size", 20)
+        alpha = cfg_get(data_config, "alpha", 0.7)
+        data_label = cfg_get(data_config, "label", "Data")
 
-        if sigma is not None and data_config.get("show_errorbars", True):
+        if sigma is not None and cfg_get(data_config, "show_errorbars", True):
             ax.errorbar(
                 xdata,
                 ydata,
@@ -466,7 +470,7 @@ class FitVisualizer:
                 markersize=np.sqrt(size),
                 alpha=alpha,
                 label=data_label,
-                capsize=data_config.get("capsize", 2),
+                capsize=cfg_get(data_config, "capsize", 2),
             )
         else:
             ax.scatter(
@@ -480,20 +484,21 @@ class FitVisualizer:
             )
 
         # Generate fit curve
-        n_fit_points = fit_config.get("n_points", 500)
+        n_fit_points = cfg_get(fit_config, "n_points", 500)
         x_fit = np.linspace(xdata.min(), xdata.max(), n_fit_points)
 
         if len(popt) > 0:
             y_fit = model(x_fit, *popt)
 
             # Plot confidence band if enabled
-            if confidence_config.get("enabled", False) and pcov is not None:
-                confidence_level = confidence_config.get("level", 0.95)
-                confidence_color = confidence_config.get(
+            if cfg_get(confidence_config, "enabled", False) and pcov is not None:
+                confidence_level = cfg_get(confidence_config, "level", 0.95)
+                confidence_color = cfg_get(
+                    confidence_config,
                     "color",
-                    colors.get("confidence", fit_color),
+                    cfg_get(colors, "confidence", fit_color),
                 )
-                confidence_alpha = confidence_config.get("alpha", 0.2)
+                confidence_alpha = cfg_get(confidence_config, "alpha", 0.2)
 
                 lower, upper = self._calculate_confidence_band(
                     model,
@@ -517,9 +522,9 @@ class FitVisualizer:
                 x_fit,
                 y_fit,
                 color=fit_color,
-                linewidth=fit_config.get("linewidth", 1.5),
-                linestyle=fit_config.get("linestyle", "-"),
-                label=fit_config.get("label", "Fit"),
+                linewidth=cfg_get(fit_config, "linewidth", 1.5),
+                linestyle=cfg_get(fit_config, "linestyle", "-"),
+                label=cfg_get(fit_config, "label", "Fit"),
             )
 
         # Set labels
@@ -530,21 +535,21 @@ class FitVisualizer:
             ax.set_title(main_config["title"])
 
         # Grid
-        if main_config.get("show_grid", True):
-            ax.grid(True, alpha=main_config.get("grid_alpha", 0.3))
+        if cfg_get(main_config, "show_grid", True):
+            ax.grid(True, alpha=cfg_get(main_config, "grid_alpha", 0.3))
 
         # Legend
-        legend_config = main_config.get("legend", {})
-        if legend_config.get("enabled", True):
+        legend_config = main_config.get("legend") or {}
+        if cfg_get(legend_config, "enabled", True):
             ax.legend(
-                loc=legend_config.get("location", "best"),
-                frameon=legend_config.get("frameon", True),
+                loc=cfg_get(legend_config, "location", "best"),
+                frameon=cfg_get(legend_config, "frameon", True),
                 fontsize=legend_config.get("fontsize"),
             )
 
         # Annotation (fit statistics)
-        annotation_config = main_config.get("annotation", {})
-        if annotation_config.get("enabled", False):
+        annotation_config = main_config.get("annotation") or {}
+        if cfg_get(annotation_config, "enabled", False):
             self._add_statistics_annotation(ax, result, annotation_config)
 
     def _plot_residuals(
@@ -570,19 +575,20 @@ class FitVisualizer:
         colors : dict
             Color scheme dictionary.
         """
-        residuals_config = config.get("residuals_plot", {})
+        residuals_config = config.get("residuals_plot") or {}
 
         # Get color from config or scheme
-        residual_color = residuals_config.get(
+        residual_color = cfg_get(
+            residuals_config,
             "color",
-            colors.get("residuals", "#2ca02c"),
+            cfg_get(colors, "residuals", "#2ca02c"),
         )
 
         # Plot residuals
-        plot_type = residuals_config.get("type", "scatter")
-        marker = residuals_config.get("marker", "o")
-        size = residuals_config.get("size", 15)
-        alpha = residuals_config.get("alpha", 0.7)
+        plot_type = cfg_get(residuals_config, "type", "scatter")
+        marker = cfg_get(residuals_config, "marker", "o")
+        size = cfg_get(residuals_config, "size", 15)
+        alpha = cfg_get(residuals_config, "alpha", 0.7)
 
         if plot_type == "scatter":
             ax.scatter(
@@ -602,21 +608,21 @@ class FitVisualizer:
             ax.plot(xdata, residuals, marker=marker, color=residual_color, alpha=alpha)
 
         # Zero reference line
-        if residuals_config.get("show_zero_line", True):
+        if cfg_get(residuals_config, "show_zero_line", True):
             ax.axhline(
                 0,
-                linestyle=residuals_config.get("zero_line_style", "--"),
-                color=residuals_config.get("zero_line_color", "gray"),
-                linewidth=residuals_config.get("zero_line_width", 1.0),
+                linestyle=cfg_get(residuals_config, "zero_line_style", "--"),
+                color=cfg_get(residuals_config, "zero_line_color", "gray"),
+                linewidth=cfg_get(residuals_config, "zero_line_width", 1.0),
             )
 
         # Standard deviation bands
-        std_config = residuals_config.get("std_bands", {})
-        if std_config.get("enabled", False):
+        std_config = residuals_config.get("std_bands") or {}
+        if cfg_get(std_config, "enabled", False):
             std_residual = np.std(residuals)
-            levels = std_config.get("levels", [1, 2])
-            band_colors = std_config.get("colors", ["#fff3cd", "#ffe69c"])
-            band_alpha = std_config.get("alpha", 0.4)
+            levels = cfg_get(std_config, "levels", [1, 2])
+            band_colors = cfg_get(std_config, "colors", ["#fff3cd", "#ffe69c"])
+            band_alpha = cfg_get(std_config, "alpha", 0.4)
 
             for i, level in enumerate(reversed(levels)):
                 color = band_colors[min(i, len(band_colors) - 1)]
@@ -654,19 +660,21 @@ class FitVisualizer:
         matplotlib.figure.Figure
             The histogram figure.
         """
-        style_name = config.get("style", "publication")
+        style_name = cfg_get(config, "style", "publication")
         preset = STYLE_PRESETS.get(style_name, STYLE_PRESETS["publication"])
-        figure_size = config.get("figure_size", preset.get("figure_size", [6.0, 4.5]))
+        figure_size = cfg_get(
+            config, "figure_size", preset.get("figure_size", [6.0, 4.5])
+        )
 
         # hist()/norm.fit() raise on NaN/Inf (e.g. a diverged fit).
         residuals = np.asarray(residuals)[np.isfinite(residuals)]
 
         fig, ax = plt.subplots(figsize=figure_size, layout="constrained")
 
-        histogram_config = config.get("histogram", {})
+        histogram_config = config.get("histogram") or {}
 
         # Get bins
-        bins = histogram_config.get("bins", "auto")
+        bins = cfg_get(histogram_config, "bins", "auto")
         if bins == "sqrt":
             bins = int(np.sqrt(len(residuals)))
         elif bins == "sturges":
@@ -674,9 +682,11 @@ class FitVisualizer:
 
         # Get colors
         colors = self._get_color_scheme(config)
-        bar_color = histogram_config.get("color", colors.get("residuals", "#9467bd"))
-        bar_alpha = histogram_config.get("alpha", 0.7)
-        edgecolor = histogram_config.get("edgecolor", "white")
+        bar_color = cfg_get(
+            histogram_config, "color", cfg_get(colors, "residuals", "#9467bd")
+        )
+        bar_alpha = cfg_get(histogram_config, "alpha", 0.7)
+        edgecolor = cfg_get(histogram_config, "edgecolor", "white")
 
         # Plot histogram
         _n, _bin_edges, _patches = ax.hist(
@@ -689,7 +699,7 @@ class FitVisualizer:
         )
 
         # Overlay normal distribution fit
-        if histogram_config.get("show_normal_fit", True) and residuals.size:
+        if cfg_get(histogram_config, "show_normal_fit", True) and residuals.size:
             mu, std = stats.norm.fit(residuals)
             # Guard against std == 0 (e.g. perfect fit, all residuals identical),
             # which would cause norm.pdf to return inf/nan.
@@ -697,9 +707,10 @@ class FitVisualizer:
                 x_norm = np.linspace(residuals.min(), residuals.max(), 100)
                 y_norm = stats.norm.pdf(x_norm, mu, std)
 
-                normal_color = histogram_config.get(
+                normal_color = cfg_get(
+                    histogram_config,
                     "normal_color",
-                    colors.get("fit", "#d62728"),
+                    cfg_get(colors, "fit", "#d62728"),
                 )
                 ax.plot(
                     x_norm,
@@ -853,17 +864,17 @@ class FitVisualizer:
 
         statistics = _field(result, "statistics") or {}
 
-        if annotation_config.get("show_r_squared", True):
+        if cfg_get(annotation_config, "show_r_squared", True):
             r_squared = statistics.get("r_squared")
             if r_squared is not None:
                 lines.append(f"$R^2 = {r_squared:.4f}$")
 
-        if annotation_config.get("show_rmse", False):
+        if cfg_get(annotation_config, "show_rmse", False):
             rmse = statistics.get("rmse")
             if rmse is not None:
                 lines.append(f"RMSE = {rmse:.4g}")
 
-        if annotation_config.get("show_chi_squared", False):
+        if cfg_get(annotation_config, "show_chi_squared", False):
             chi_sq = statistics.get("chi_squared")
             if chi_sq is not None:
                 lines.append(f"$\\chi^2 = {chi_sq:.4g}$")
@@ -872,8 +883,8 @@ class FitVisualizer:
             return
 
         text = "\n".join(lines)
-        fontsize = annotation_config.get("fontsize", 9)
-        location = annotation_config.get("location", "upper right")
+        fontsize = cfg_get(annotation_config, "fontsize", 9)
+        location = cfg_get(annotation_config, "location", "upper right")
 
         # Map location string to axes coordinates
         location_map = {
@@ -928,9 +939,9 @@ class FitVisualizer:
         list[str]
             List of saved file paths.
         """
-        style_name = config.get("style", "publication")
+        style_name = cfg_get(config, "style", "publication")
         preset = STYLE_PRESETS.get(style_name, STYLE_PRESETS["publication"])
-        dpi = config.get("dpi", preset.get("dpi", 300))
+        dpi = cfg_get(config, "dpi", preset.get("dpi", 300))
 
         output_paths = []
 

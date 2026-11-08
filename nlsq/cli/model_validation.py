@@ -1024,6 +1024,16 @@ class AllowlistVisitor(DangerousPatternVisitor):
         self.generic_visit(node)
 
 
+def strict_models_enabled() -> bool:
+    """True when ``NLSQ_STRICT_MODELS`` requests the strict allowlist everywhere."""
+    return os.environ.get("NLSQ_STRICT_MODELS", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def validate_model(
     path: Path,
     trusted: bool = False,

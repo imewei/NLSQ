@@ -723,6 +723,22 @@ class DiagnosticsConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration values after initialization."""
+        # A string level (e.g. "full") would otherwise compare unequal to every
+        # DiagnosticLevel member and silently run as BASIC.
+        if isinstance(self.level, str):
+            try:
+                object.__setattr__(self, "level", DiagnosticLevel[self.level.upper()])
+            except KeyError:
+                valid = [m.name.lower() for m in DiagnosticLevel]
+                raise ValueError(
+                    f"level must be a DiagnosticLevel or one of {valid}, "
+                    f"got {self.level!r}"
+                ) from None
+        if not isinstance(self.level, DiagnosticLevel):
+            raise TypeError(
+                f"level must be a DiagnosticLevel, got {type(self.level).__name__}"
+            )
+
         # Validate thresholds are finite and positive. A bare `<= 0` check
         # silently accepts NaN (NaN <= 0 is False in IEEE 754), which would
         # disable the corresponding detector rather than reject the config.
@@ -740,10 +756,14 @@ class DiagnosticsConfig:
             raise ValueError("exploding_threshold must be positive")
         if not math.isfinite(self.sloppy_threshold) or self.sloppy_threshold <= 0:
             raise ValueError("sloppy_threshold must be positive")
-        if self.gradient_window_size <= 0:
-            raise ValueError("gradient_window_size must be positive")
-        if self.stagnation_window <= 0:
-            raise ValueError("stagnation_window must be positive")
+        for name in ("gradient_window_size", "stagnation_window"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not (
+                math.isfinite(value) and value == int(value)
+            ):
+                raise ValueError(f"{name} must be an integer, got {value!r}")
+            if value <= 0:
+                raise ValueError(f"{name} must be positive")
         if (
             not math.isfinite(self.stagnation_tolerance)
             or self.stagnation_tolerance <= 0

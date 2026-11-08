@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import math
 import os
 import threading
 import warnings
@@ -205,9 +206,31 @@ class JAXConfig:
         if os.getenv("NLSQ_DISABLE_PERSISTENT_CACHE") == "1":
             return
 
-        # Set cache directory. Honor the standard JAX_COMPILATION_CACHE_DIR
-        # if the user already set it, so NLSQ doesn't silently redirect a
-        # pre-existing JAX cache configuration to its own default location.
+        # Parse before touching jax.config so a bad value cannot leave the
+        # cache half-configured.
+        min_secs: float | None = None
+        raw_min_secs = os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS")
+        if raw_min_secs is not None:
+            try:
+                min_secs = float(raw_min_secs)
+                if not math.isfinite(min_secs) or min_secs < 0:
+                    raise ValueError(raw_min_secs)
+            except ValueError:
+                min_secs = None
+                _logger.warning(
+                    f"Invalid NLSQ_CACHE_MIN_COMPILE_TIME_SECS={raw_min_secs!r}; ignored"
+                )
+
+        # Keep a cache dir the user already configured (env var or jax.config).
+        # (JAX copies JAX_COMPILATION_CACHE_DIR into jax.config at import.)
+        # An explicit NLSQ_CACHE_MIN_COMPILE_TIME_SECS still applies.
+        if config.jax_compilation_cache_dir:
+            if min_secs is not None:
+                config.update("jax_persistent_cache_min_compile_time_secs", min_secs)
+            return
+
+        # Honor JAX_COMPILATION_CACHE_DIR set after jax was imported (jax.config
+        # did not pick it up), so NLSQ doesn't redirect it to its own default.
         cache_dir = os.getenv("JAX_COMPILATION_CACHE_DIR")
         if cache_dir:
             nlsq_cache_dir = os.getenv("NLSQ_JAX_CACHE_DIR")
@@ -230,10 +253,9 @@ class JAXConfig:
             config.update("jax_compilation_cache_dir", cache_dir)
 
             # Only cache compilations that take at least 1 second
-            min_compile_time = float(os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS", "1"))
             config.update(
                 "jax_persistent_cache_min_compile_time_secs",
-                min_compile_time,
+                1.0 if min_secs is None else min_secs,
             )
 
             _logger.debug(f"JAX persistent cache enabled at {cache_dir}")

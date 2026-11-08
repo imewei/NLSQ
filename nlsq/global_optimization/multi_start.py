@@ -52,9 +52,11 @@ TournamentSelector : Tournament selection for large datasets (Task Group 4)
 import copy
 import logging
 import os
+import sys
 import threading
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -159,6 +161,57 @@ def _fit_single_start(
     except Exception as e:
         _worker_logger.debug("Starting point failed: %s", e, exc_info=True)
         return (p0, float("inf"), None)
+
+
+_IGNORE_ENTRY = ("ignore", None, OptimizeWarning, None, 0)
+_ignore_lock = threading.Lock()
+_ignore_state = {"depth": 0, "added": False}
+
+
+def _context_aware_warnings() -> bool:
+    # Worker threads only see the caller's catch_warnings() context when they
+    # also inherit the context (thread_inherit_context; off on GIL builds by default).
+    return bool(getattr(sys.flags, "context_aware_warnings", False)) and bool(
+        getattr(sys.flags, "thread_inherit_context", False)
+    )
+
+
+@contextmanager
+def _suppress_optimize_warning() -> Iterator[None]:
+    """Ignore ``OptimizeWarning`` process-wide while any caller is inside.
+
+    ``warnings.catch_warnings`` saves/restores the whole global filter list and
+    is not thread-safe: overlapping users restore each other's stale snapshot and
+    leave the ignore filter installed forever. Here the filter is added on the
+    0 -> 1 transition and removed on 1 -> 0 (only if this helper added it), under
+    a lock. Limit: while one multi-start runs, other threads' OptimizeWarnings
+    are hidden too (shortcut: needs a per-thread flag at the emit site).
+    """
+    if _context_aware_warnings():
+        # Context-aware warnings: filters are per-context, so catch_warnings is
+        # already thread/task-safe and a global filter edit would hit the wrong list.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", OptimizeWarning)
+            yield
+        return
+    with _ignore_lock:
+        if _ignore_state["depth"] == 0:
+            _ignore_state["added"] = _IGNORE_ENTRY not in warnings.filters
+            if _ignore_state["added"]:
+                warnings.filterwarnings("ignore", category=OptimizeWarning)
+        _ignore_state["depth"] += 1
+    try:
+        yield
+    finally:
+        with _ignore_lock:
+            _ignore_state["depth"] -= 1
+            if _ignore_state["depth"] == 0 and _ignore_state["added"]:
+                if _IGNORE_ENTRY in warnings.filters:
+                    warnings.filters.remove(_IGNORE_ENTRY)  # type: ignore[attr-defined]  # runtime list
+                    mutated = getattr(warnings, "_filters_mutated", None)
+                    if mutated is not None:
+                        mutated()
+                _ignore_state["added"] = False
 
 
 def _select_worker_count(n_starts: int) -> int:
@@ -351,6 +404,9 @@ class MultiStartOrchestrator:
 
         # Generate samples in [0, 1]^n
         if self.config.sampler == "lhs":
+            # Base key is fixed (PRNGKey(0)) and not user-configurable: GlobalOptimizationConfig
+            # has no seed field; a per-call counter is folded in below, so repeated
+            # fit() calls differ but a fresh orchestrator reproduces the same sequence.
             # LHS accepts rng_key. If the caller didn't supply one, advance
             # a per-orchestrator counter so successive fit() calls don't
             # silently reuse the exact same starting points.
@@ -480,11 +536,9 @@ class MultiStartOrchestrator:
         # if every start fails). Suppress the per-start OptimizeWarning here so it
         # does not surface to the user once per failed start. The filter is set on
         # the main thread before any worker thread is spawned and held until the pool
-        # has fully joined, so concurrent workers observe a stable filter state
-        # (single writer) -- worker threads cannot safely use catch_warnings of their
-        # own because warnings.filters is process-global.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", OptimizeWarning)
+        # has fully joined. It is refcounted (not catch_warnings) so overlapping
+        # multi-start calls from different user threads cannot leak the filter.
+        with _suppress_optimize_warning():
             if n_workers <= 1:
                 # Sequential fallback (1 start or 1 worker)
                 for i, p0 in enumerate(starting_points):

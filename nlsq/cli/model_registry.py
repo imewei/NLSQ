@@ -39,7 +39,6 @@ import difflib
 import functools
 import inspect
 import logging
-import os
 import types
 import uuid
 from collections.abc import Callable
@@ -48,10 +47,11 @@ from typing import Any
 
 import numpy as np
 
-from nlsq.cli.errors import ModelError
+from nlsq.cli.errors import ModelError, cfg_get
 from nlsq.cli.model_validation import (
     get_audit_logger,
     resource_limits,
+    strict_models_enabled,
     validate_model,
     validate_path,
 )
@@ -151,7 +151,7 @@ class ModelRegistry:
         >>> # Polynomial model
         >>> poly = registry.get_model("poly", {"type": "polynomial", "degree": 2})
         """
-        model_type = config.get("type", "builtin")
+        model_type = cfg_get(config, "type", "builtin")
 
         if model_type == "builtin":
             return self._get_builtin_model(config)
@@ -184,7 +184,7 @@ class ModelRegistry:
         ModelError
             If the model name is not found in nlsq.functions.
         """
-        model_name = config.get("name", "")
+        model_name = cfg_get(config, "name", "")
 
         if not model_name:
             raise ModelError(
@@ -211,17 +211,13 @@ class ModelRegistry:
                 suggestion=suggestion,
             )
 
-        # Import the model from nlsq.core.functions
+        # 'polynomial' is a factory, not a model: build it from config['degree']
+        if model_name == "polynomial":
+            return self._get_polynomial_model(config)
+
         import nlsq.core.functions
 
         model = getattr(nlsq.core.functions, model_name)
-
-        # For polynomial factory, just return it as-is
-        # The polynomial function returns a callable when invoked with degree
-        if model_name == "polynomial":
-            # Store in cache and return
-            self._builtin_cache[model_name] = model
-            return model
 
         # Cache and return
         self._builtin_cache[model_name] = model
@@ -254,8 +250,8 @@ class ModelRegistry:
         ModelError
             If file_path or function_name is missing.
         """
-        file_path = config.get("path", "")
-        function_name = config.get("function", "")
+        file_path = cfg_get(config, "path", "")
+        function_name = cfg_get(config, "function", "")
 
         if not file_path:
             raise ModelError(
@@ -713,9 +709,7 @@ class ModelRegistry:
                 model_type="custom",
                 suggestion="Use an unquoted YAML boolean: `strict: true`.",
             )
-        is_strict = config_strict or os.environ.get(
-            "NLSQ_STRICT_MODELS", ""
-        ).strip().lower() in ("1", "true", "yes", "on")
+        is_strict = config_strict or strict_models_enabled()
 
         # Step 2: Validate file exists
         path = self._validate_model_file_exists(file_path, function_name)
@@ -768,6 +762,11 @@ class ModelRegistry:
             )
 
         try:
+            # int() would silently truncate 2.9 -> 2 and True -> 1
+            if isinstance(degree, bool) or (
+                isinstance(degree, float) and not degree.is_integer()
+            ):
+                raise ValueError(degree)
             degree = int(degree)
         except (ValueError, TypeError) as e:
             raise ModelError(

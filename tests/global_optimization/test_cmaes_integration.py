@@ -96,12 +96,6 @@ class TestEvosaxUnavailabilityFallback:
     These tests mock evosax as unavailable to verify fallback behavior.
     """
 
-    def test_cmaes_optimizer_raises_without_evosax(self) -> None:
-        """Test that CMAESOptimizer raises ImportError when evosax unavailable."""
-        # This test is skipped if evosax IS available (via pytestmark above)
-        # We need to test the import behavior directly
-        pass  # Tested via test_method_selector.py::test_select_explicit_cmaes_without_evosax_falls_back
-
     @pytest.mark.serial  # Log capture is unreliable during parallel execution
     def test_method_selector_fallback_logs_info(self, caplog) -> None:
         """Test that MethodSelector logs INFO when falling back from CMA-ES."""
