@@ -183,7 +183,7 @@ Memory Configuration
 
 Advanced memory configuration options.
 
-For complete API documentation, see :class:`nlsq.large_dataset.LDMemoryConfig` in the :doc:`nlsq.large_dataset` module.
+For complete API documentation, see :class:`nlsq.streaming.large_dataset.LDMemoryConfig` in the :doc:`nlsq.large_dataset` module.
 
 **Parameters:**
 
@@ -214,7 +214,7 @@ Data Chunking
 
 Utility class for chunking large arrays.
 
-For complete API documentation, see :class:`nlsq.large_dataset.DataChunker` in the :doc:`nlsq.large_dataset` module.
+For complete API documentation, see :class:`nlsq.streaming.large_dataset.DataChunker` in the :doc:`nlsq.large_dataset` module.
 
 Returns:
     Iterator yielding (x_chunk, y_chunk, indices) tuples

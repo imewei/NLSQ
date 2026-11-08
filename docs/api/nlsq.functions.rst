@@ -53,7 +53,7 @@ Fit a Gaussian (normal distribution) to data:
 
     # Generate synthetic data
     x = np.linspace(-5, 5, 100)
-    y_true = gaussian(x, amplitude=10, mean=0, std=1.5)
+    y_true = gaussian(x, amp=10, mu=0, sigma=1.5)
     y = y_true + np.random.normal(0, 0.5, len(x))
 
     # Fit with automatic parameter estimation
@@ -74,7 +74,7 @@ Fit an exponential decay curve:
 
     # Generate decay data
     x = np.linspace(0, 10, 100)
-    y_true = exponential_decay(x, amplitude=5, rate=0.5, offset=1)
+    y_true = exponential_decay(x, a=5, b=0.5, c=1)
     y = y_true + np.random.normal(0, 0.2, len(x))
 
     # Fit with automatic initial parameters
@@ -95,15 +95,16 @@ Fit a sigmoid (logistic) curve:
 
     # Generate sigmoid data
     x = np.linspace(-10, 10, 100)
-    y_true = sigmoid(x, L=10, k=1, x0=0)
+    y_true = sigmoid(x, L=10, x0=0, k=1, b=0)
     y = y_true + np.random.normal(0, 0.5, len(x))
 
     # Fit sigmoid
     popt, pcov = curve_fit(sigmoid, x, y)
 
     print(f"Maximum value: {popt[0]:.2f}")
-    print(f"Growth rate: {popt[1]:.2f}")
-    print(f"Midpoint: {popt[2]:.2f}")
+    print(f"Midpoint: {popt[1]:.2f}")
+    print(f"Growth rate: {popt[2]:.2f}")
+    print(f"Baseline: {popt[3]:.2f}")
 
 Power Law
 ~~~~~~~~~
@@ -116,7 +117,7 @@ Fit a power law relationship:
 
     # Generate power law data
     x = np.linspace(1, 100, 50)
-    y_true = power_law(x, scale=2, exponent=0.5)
+    y_true = power_law(x, a=2, b=0.5)
     y = y_true + np.random.normal(0, 0.1, len(x))
 
     # Fit power law
@@ -171,25 +172,30 @@ Each function has well-defined parameters with physical meaning:
     - ``a``: Slope
     - ``b``: Intercept
 
-**gaussian(x, amplitude, mean, std)**
-    - ``amplitude``: Height of the peak
-    - ``mean``: Center of the distribution
-    - ``std``: Standard deviation (width)
+**gaussian(x, amp, mu, sigma)**
+    - ``amp``: Height of the peak
+    - ``mu``: Center of the distribution
+    - ``sigma``: Standard deviation (width)
 
 **lorentzian(x, amp, x0, gamma)**
     - ``amp``: Peak amplitude
     - ``x0``: Peak center position
     - ``gamma``: Half-width at half-maximum (HWHM)
 
-**exponential_decay(x, amplitude, rate, offset)**
-    - ``amplitude``: Initial value
-    - ``rate``: Decay rate (positive)
-    - ``offset``: Asymptotic value
+**exponential_decay(x, a, b, c)**
+    - ``a``: Amplitude (initial value minus asymptote)
+    - ``b``: Decay rate (positive)
+    - ``c``: Asymptotic value
 
-**sigmoid(x, L, k, x0)**
-    - ``L``: Maximum value (carrying capacity)
-    - ``k``: Growth rate
+**sigmoid(x, L, x0, k, b)**
+    - ``L``: Maximum value (saturation level)
     - ``x0``: Midpoint (inflection point)
+    - ``k``: Steepness (growth rate)
+    - ``b``: Baseline offset
+
+**power_law(x, a, b)**
+    - ``a``: Scale
+    - ``b``: Exponent
 
 Interactive Notebooks
 ---------------------

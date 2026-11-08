@@ -28,8 +28,7 @@ Usage Example
    config = GlobalOptimizationConfig(
        n_starts=20,
        sampler="lhs",
-       parallel=True,
    )
 
    # Or use a preset
-   config = GlobalOptimizationConfig.from_preset("multimodal")
+   config = GlobalOptimizationConfig.from_preset("robust")

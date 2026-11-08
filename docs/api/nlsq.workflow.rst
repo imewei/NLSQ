@@ -144,44 +144,24 @@ OptimizationGoal
 Named Workflow Presets
 ----------------------
 
-The ``fit()`` function accepts named presets via the ``workflow`` parameter:
+The ``fit()`` function accepts three ``workflow`` values:
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 15 15 50
+   :widths: 20 80
 
-   * - Preset
-     - Strategy
-     - Tolerance
+   * - Workflow
      - Description
    * - ``"auto"``
-     - Memory-based
-     - Adaptive
-     - Automatic selection based on memory budget
-   * - ``"standard"``
-     - standard
-     - 1e-8
-     - Default curve_fit() behavior, no multi-start
-   * - ``"quality"``
-     - standard
-     - 1e-10
-     - Highest precision with 20-point multi-start
-   * - ``"fast"``
-     - standard
-     - 1e-6
-     - Speed-optimized, no multi-start
-   * - ``"large_robust"``
-     - chunked
-     - 1e-8
-     - Chunked processing with 10-point multi-start
-   * - ``"streaming"``
-     - streaming
-     - 1e-7
-     - AdaptiveHybridStreamingOptimizer for huge datasets
-   * - ``"hpc_distributed"``
-     - streaming
-     - 1e-6
-     - Multi-GPU/node HPC configuration with checkpointing
+     - Memory-aware local optimization (default). Large datasets are chunked or streamed automatically.
+   * - ``"auto_global"``
+     - Memory-aware global optimization (multi-start / CMA-ES). Requires ``bounds``.
+   * - ``"hpc"``
+     - ``"auto_global"`` plus checkpointing for HPC environments (``checkpoint_dir=``).
+
+The earlier presets ``"standard"``, ``"fast"``, ``"quality"``, ``"large_robust"``,
+``"streaming"``, ``"hpc_distributed"``, ``"cmaes"`` and ``"cmaes-global"`` were removed in v0.6.3
+and raise ``ValueError`` with migration guidance.
 
 **Usage:**
 
@@ -192,8 +172,10 @@ The ``fit()`` function accepts named presets via the ``workflow`` parameter:
    # Use automatic memory-based selection
    result = fit(model, x, y, p0=[1, 1, 0], workflow="auto")
 
-   # Use a named preset
-   result = fit(model, x, y, p0=[1, 1, 0], workflow="quality")
+   # Global optimization (replaces the removed "quality" preset)
+   result = fit(
+       model, x, y, p0=[1, 1, 0], workflow="auto_global", bounds=bounds, n_starts=20
+   )
 
    # Override memory detection
    result = fit(model, x, y, p0=[1, 1, 0], workflow="auto", memory_limit_gb=8.0)

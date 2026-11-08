@@ -64,9 +64,9 @@ Full signature:
    result = optimizer.least_squares(
        fun,  # Residual function f(x, *args) -> residuals
        x0,  # Initial parameter guess
-       jac=None,  # Jacobian: callable, '2-point', '3-point', 'cs'
+       jac=None,  # Jacobian: callable or None (JAX autodiff)
        bounds=(-np.inf, np.inf),  # (lower, upper) bounds
-       method="trf",  # 'trf', 'dogbox', 'lm'
+       method="trf",  # 'trf', 'lm'
        ftol=1e-8,  # Function tolerance
        xtol=1e-8,  # Parameter tolerance
        gtol=1e-8,  # Gradient tolerance
@@ -148,7 +148,7 @@ Jacobian Options
    result = optimizer.least_squares(
        fun=residuals,
        x0=x0,
-       jac="2-point",  # or '3-point', 'cs' (complex step)
+       jac=None,  # None = JAX autodiff; scipy string modes are not supported
        args=(xdata, ydata),
    )
 

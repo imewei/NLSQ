@@ -42,7 +42,6 @@ Minimal example
        p0: [2.0, 0.5]
 
    fitting:
-     solver: auto
      max_nfev: 200
 
 Defense layers example (v0.3.6+)

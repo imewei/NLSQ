@@ -485,6 +485,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (the "after" run was loaded), but a small regression cannot be excluded.
   `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
 
+### Changed (behavior, whole-codebase review round 7)
+- `curve_fit`, `fit`, `CurveFit.curve_fit`, `curve_fit_large` and the CMA-ES routes reject
+  invalid options up front with `ValueError`: unknown `method` (with a "did you mean"
+  hint), `stability` other than `False`/`None`/`'auto'`/`'check'` (including `True`), NaN
+  `ftol`/`xtol`/`gtol`, boolean `max_nfev`, unknown `tr_solver`, non-positive or
+  non-finite `f_scale`, and negative `n_starts` with multi-start.
+- `absolute_sigma` must be a bool (`bool`, `np.bool_`, or `0`/`1`); any other value raises
+  `TypeError` on the `curve_fit`/`fit`/`CurveFit.curve_fit`/`curve_fit_large` paths.
+- `ftol`/`xtol`/`gtol=inf` emit a warning (the solver stops at p0).
+  `curve_fit_large(method="exact_streaming")` rejects NaN, inf or negative tolerances and
+  a non-positive `memory_limit_gb`.
+- `curve_fit(..., method="hybrid_streaming")` raises when the initial residuals are not
+  finite instead of returning `success=True` at `p0`.
+- The CMA-ES path applies `nan_policy`/`check_finite` like TRF (`'omit'` drops non-finite
+  rows; `'raise'` raises). A 2-D `sigma` is treated as a covariance matrix (Cholesky
+  whitening). Data chunking supports the `(k, N)` xdata layout. CMA-ES `tol_fun` is
+  relative to the generation's best finite fitness (scale-invariant).
+- `CMAESConfig`: integer fields and `seed` reject bool, NaN and fractional values
+  (integral floats are coerced). `sigma`/`tol_fun`/`tol_x` must be finite.
+  `checkpoint_interval >= 1` is enforced always.
+- `HybridStreamingConfig`, `LDMemoryConfig`, `streaming.specs.{Multistart, Chunked,
+  Exact, Auto, InMemory}` and `DiagnosticsConfig` validate integer counts (bool, NaN and
+  fractional values are rejected; `100.0` is coerced to `100`). `DiagnosticsConfig.level`
+  accepts `"basic"`/`"full"` strings. `HybridStreamingConfig.verbose` must be 0, 1 or 2.
+  `AdaptiveHybridStreamingOptimizer.fit` re-validates a config mutated after construction.
+- `GlobalOptimizationConfig.from_dict` warns about and drops unknown keys;
+  `with_overrides` raises on them.
+- Multi-start start points centred on `p0` keep the window width near a bound (the window
+  shifts inward instead of being clipped), in both `center_samples_around_p0` and hybrid
+  `center_on_p0`.
+- Hybrid Gauss-Newton holds parameters that sit on an active bound fixed (projected
+  gradient), and `predicted_reduction` describes the clipped step.
+- Chunked `curve_fit_large`: chunks whose covariance is not numerically positive definite
+  (singular, indefinite or non-finite) are excluded from the precision-weighted
+  combination; the diagonal-precision fallback was removed. An `OptimizeWarning` reports
+  how many chunks were excluded.
+- Built-in `sigmoid` uses `jax.nn.sigmoid` (same values, no NaN Jacobian on saturation).
+- `ConvergenceMonitor(sensitivity=s)`: the oscillation threshold is `min(1, 0.7/s)`
+  (higher sensitivity now detects more, as documented).
+- CLI:
+  - A bare YAML key (`key:`) means "use the default" everywhere.
+  - Unknown `fitting.*` keys log a warning with a suggestion.
+  - `fitting.max_nfev` must be a positive integer and `fitting.check_finite` a YAML bool
+    (`ConfigError`).
+  - Model default bounds are not applied for `method: lm` and are logged when applied.
+  - `model: {name: polynomial, degree: N}` builds the polynomial.
+  - The export format is inferred from a `.csv` `results_file` suffix when `format` is not
+    given.
+  - Result files keep the file mode of an existing file; new files follow the process
+    umask (previously always 0600).
+- CLI data loading:
+  - HDF5 external links, virtual datasets and non-dataset paths are rejected.
+  - HDF5/NPZ arrays above `NLSQ_MAX_LOAD_ELEMENTS` (default 2,000,000,000 elements per
+    array) are rejected before allocation. ASCII/CSV loads are not capped.
+  - The ASCII `skip_footer` path raises on malformed cells like the default path.
+- GUI:
+  - AIC/BIC come from `CurveFitResult` (k parameters; NaN when RSS <= 0).
+  - The fit curve is drawn only over the data range, and plot decimation is reported in
+    the status line.
+  - Autosave restores data all-or-nothing and reports a skipped (over 100k-point) dataset.
+  - The YAML export uses the same schema as `load_yaml_config` (`yaml.safe_dump`).
+  - An unknown `workflow` raises `ValueError`. Clipboard paste detects a header row.
+  - `NLSQ_STRICT_MODELS` also applies to GUI custom models, and `NLSQ_DUMP_ENV` prints an
+    allowlisted, secret-redacted environment.
+
+### Added (round 7)
+- `OptimizeWarning` when the Jacobian is rank-deficient (the pseudo-inverse covariance is
+  not meaningful for unidentifiable parameters).
+- `OptimizeWarning` when `enable_overflow_check` actually clipped the model output at the
+  solution.
+- Env vars: `NLSQ_MAX_LOAD_ELEMENTS` (CLI HDF5/NPZ per-array load cap);
+  `NLSQ_SAVE_ITERATIONS=0/false/no/off` now disables saving;
+  `NLSQ_CACHE_MIN_COMPILE_TIME_SECS` ignores an invalid value with a warning and also
+  applies when the JAX cache dir is preconfigured.
+
+### Fixed (round 7)
+- `import nlsq` no longer fails when `stderr` has no file descriptor (faulthandler) or
+  when the `NLSQ_DEBUG` log dir is unwritable.
+- macOS: `import nlsq` no longer overrides a user-set `OMP_NUM_THREADS`, `MPLBACKEND`,
+  `QT_API` or `PYQTGRAPH_QT_LIB`. A preconfigured JAX compilation cache dir is respected.
+- `profile_transfers_runtime` uses a private `mkdtemp` trace dir. Iteration-history saves
+  in the same second no longer overwrite each other.
+- `UnifiedCache` keeps different bound methods of one instance apart and rejects
+  `maxsize < 1`. `MemoryManager` measures the memory delta with fresh RSS reads.
+- `CurveFitResult[np.int64(0)]` indexes like `[0]`.
+- `nlsq batch` serialises logger setup and closes replaced handlers.
+- Multi-start `OptimizeWarning` suppression no longer leaks the filter across concurrent
+  calls.
+
 ### Removed
 
 - `nlsq.facades` (`OptimizationFacade`, `StabilityFacade`, `DiagnosticsFacade`)

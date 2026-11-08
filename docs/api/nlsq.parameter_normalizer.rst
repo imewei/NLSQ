@@ -215,7 +215,7 @@ Transform covariance from normalized to original space using the Jacobian:
     print(J.shape)  # (n_params, n_params)
 
     # Transform covariance: Cov_orig = J @ Cov_norm @ J.T
-    cov_normalized = jnp.eye(2) * 0.01  # Example normalized covariance
+    cov_normalized = jnp.eye(len(p0)) * 0.01  # Example normalized covariance
     cov_original = J @ cov_normalized @ J.T
 
 Mathematical Details

@@ -517,7 +517,7 @@ The validator performs these checks:
 
 **Method**:
 
-- Valid method name ('trf', 'lm', 'dogbox')
+- Valid method name ('trf', 'lm')
 
 **Function Callable** (unless fast_mode=True):
 

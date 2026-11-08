@@ -826,7 +826,7 @@ validate-install:
 
 debug-modules:
 	@echo "$(BOLD)$(BLUE)Debugging modules...$(RESET)"
-	NLSQ_DEBUG=1 $(RUN_CMD) $(PYTHON) -c "from $(PACKAGE_NAME) import stability, recovery, memory_manager, smart_cache; print('All modules imported successfully')"
+	NLSQ_DEBUG=1 $(RUN_CMD) $(PYTHON) -c "import $(PACKAGE_NAME).stability.recovery, $(PACKAGE_NAME).caching.memory_manager, $(PACKAGE_NAME).caching.unified_cache; print('All modules imported successfully')"
 
 # ===================
 # Pre-push verification (run before pushing to ensure CI will pass)

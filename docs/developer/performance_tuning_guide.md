@@ -207,9 +207,9 @@ popt, pcov = curve_fit(model, x, y, method="trf", bounds=bounds)
 popt, pcov = curve_fit(model, x, y, method="lm")  # Slightly faster for unconstrained
 ```
 
-**Dogbox**: Alternative for bounded problems
+**TRF (default)**: Handles bounded problems (``method="dogbox"`` is not supported)
 ```python
-popt, pcov = curve_fit(model, x, y, method="dogbox", bounds=bounds)
+popt, pcov = curve_fit(model, x, y, method="trf", bounds=bounds)
 ```
 
 ### 6. Reduce Data When Possible
