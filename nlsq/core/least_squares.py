@@ -53,6 +53,7 @@ from nlsq.caching.unified_cache import get_global_cache
 from nlsq.common_scipy import EPS, in_bounds, make_strictly_feasible
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_GTOL, DEFAULT_XTOL
 from nlsq.core._option_checks import (
+    require_usable_tolerances,
     validate_f_scale,
     validate_max_nfev,
     validate_tolerance,
@@ -226,11 +227,7 @@ def check_tolerance(
     xtol = validate_tolerance("xtol", xtol)
     gtol = validate_tolerance("gtol", gtol)
 
-    if ftol < EPS and xtol < EPS and gtol < EPS:
-        raise ValueError(
-            "At least one of the tolerances must be higher than "
-            f"machine epsilon ({EPS:.2e}).",
-        )
+    require_usable_tolerances(ftol, xtol, gtol)
 
     return ftol, xtol, gtol
 

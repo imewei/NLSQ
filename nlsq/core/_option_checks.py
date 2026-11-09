@@ -11,6 +11,7 @@ One rule per option, used by ``curve_fit``, ``fit``, ``least_squares``,
 
 from __future__ import annotations
 
+import decimal
 import math
 import numbers
 import warnings
@@ -23,8 +24,11 @@ from nlsq.result.optimize_warning import OptimizeWarning
 
 __all__ = [
     "check_not_nan",
+    "check_sigma_values",
     "coerce_absolute_sigma",
+    "is_integral",
     "is_integral_count",
+    "require_usable_tolerances",
     "validate_f_scale",
     "validate_max_nfev",
     "validate_tolerance",
@@ -54,15 +58,40 @@ def coerce_absolute_sigma(value: Any) -> bool:
     )
 
 
-def is_integral_count(value: Any, minimum: int) -> bool:
-    """True for a real, finite, integral, non-bool number ``>= minimum``."""
+def is_integral(value: Any) -> bool:
+    """True for a real, finite, integral, non-bool number (``3``, ``np.int64(3)``, ``3.0``)."""
     value = _unwrap_scalar(value)
-    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+    if isinstance(value, (bool, np.bool_)) or not isinstance(
+        value, (numbers.Real, decimal.Decimal)
+    ):
         return False
     if isinstance(value, numbers.Integral):
-        return int(value) >= minimum
-    num = float(value)
-    return math.isfinite(num) and num == int(num) and num >= minimum
+        return True
+    # compare the original value, not its float rounding (Fraction, Decimal)
+    return math.isfinite(value) and value == int(value)  # type: ignore[call-overload,arg-type]
+
+
+def is_integral_count(value: Any, minimum: int) -> bool:
+    """True for a real, finite, integral, non-bool number ``>= minimum``."""
+    return is_integral(value) and int(_unwrap_scalar(value)) >= minimum
+
+
+def require_usable_tolerances(ftol: float, xtol: float, gtol: float) -> None:
+    """``ValueError`` when all three (already validated) tolerances are below eps."""
+    if ftol < _EPS and xtol < _EPS and gtol < _EPS:
+        raise ValueError(
+            "At least one of the tolerances must be higher than "
+            f"machine epsilon ({_EPS:.2e})."
+        )
+
+
+def check_sigma_values(sigma: Any, *, require_finite: bool = True) -> None:
+    """``ValueError`` for a zero (and, by default, non-finite) entry of a 1-D ``sigma``."""
+    s = np.asarray(sigma, dtype=float)
+    if require_finite and not np.isfinite(s).all():
+        raise ValueError("sigma must be finite (found NaN or inf)")
+    if np.any(s == 0):
+        raise ValueError("sigma values must be non-zero")
 
 
 def validate_max_nfev(

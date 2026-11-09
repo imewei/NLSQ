@@ -29,6 +29,7 @@ import psutil
 # Initialize JAX configuration through central config
 from nlsq.caching._closure_serial import closure_serial
 from nlsq.config import JAXConfig
+from nlsq.core._option_checks import check_sigma_values
 from nlsq.core.covariance import _NLSQ_DIR
 
 _jax_config = JAXConfig()
@@ -284,6 +285,10 @@ class ChunkBufferPool:
         return self._x_feature_shape
 
 
+class _DefaultMinChunk(int):
+    """Marks the untouched ``min_chunk_size`` default (an explicit 1000 is a plain int)."""
+
+
 @dataclass(slots=True)
 class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     """Configuration for memory management in large dataset fitting.
@@ -319,7 +324,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
 
     memory_limit_gb: float = 8.0
     safety_factor: float = 0.8
-    min_chunk_size: int = 1000
+    min_chunk_size: int = _DefaultMinChunk(1000)
     max_chunk_size: int = 1_000_000
     use_streaming: bool = True
     streaming_batch_size: int = 50000
@@ -348,10 +353,13 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         validate_positive_int(self.streaming_max_epochs, "streaming_max_epochs")
         validate_positive_int(self.gc_chunk_interval, "gc_chunk_interval")
         validate_range(self.min_success_rate, 0.0, 1.0, "min_success_rate")
-        if self.min_chunk_size == 1000 and self.max_chunk_size < 1000:
-            # only max_chunk_size was lowered: the untouched default minimum
-            # follows it instead of raising on a value the user never set
-            self.min_chunk_size = self.max_chunk_size
+        untouched_min = isinstance(self.min_chunk_size, _DefaultMinChunk)
+        if untouched_min:
+            # untouched default: follow a lowered max_chunk_size instead of
+            # raising on a value the user never set (an explicit 1000 raises)
+            self.min_chunk_size = _DefaultMinChunk(
+                min(self.min_chunk_size, self.max_chunk_size)
+            )
         if self.min_chunk_size > self.max_chunk_size:
             raise ValueError(
                 f"min_chunk_size ({self.min_chunk_size}) must not exceed "
@@ -367,6 +375,10 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
                 "gc_chunk_interval",
             ),
         )
+        if untouched_min:
+            # coerce_integral_fields stores a plain int; keep the provenance so
+            # dataclasses.replace()/copy/pickle still see the untouched default
+            self.min_chunk_size = _DefaultMinChunk(self.min_chunk_size)
 
 
 @dataclass(slots=True)
@@ -2572,14 +2584,13 @@ class LargeDatasetFitter:
         if kwargs.get("nan_policy") == "omit":
             valid_x = np.isfinite(xdata).reshape(len(xdata), -1).all(axis=1)
             sigma = sigma[valid_x & np.isfinite(ydata) & np.isfinite(sigma)]
-        if np.any(sigma == 0):
-            raise ValueError("sigma values must be non-zero")
-        if (
-            kwargs.get("nan_policy") != "omit"
-            and kwargs.get("check_finite") is not False
-            and not np.isfinite(sigma).all()
-        ):
-            raise ValueError("sigma must be finite (found NaN or inf)")
+        check_sigma_values(
+            sigma,
+            require_finite=(
+                kwargs.get("nan_policy") != "omit"
+                and kwargs.get("check_finite") is not False
+            ),
+        )
 
     @staticmethod
     def _require_finite(kwargs: dict, xdata: np.ndarray, ydata: np.ndarray) -> None:

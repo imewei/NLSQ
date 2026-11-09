@@ -80,6 +80,7 @@ from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
 from nlsq.core import device_policy
 from nlsq.core._option_checks import (
     check_not_nan,
+    check_sigma_values,
     coerce_absolute_sigma,
     validate_f_scale,
     validate_max_nfev,
@@ -2468,10 +2469,7 @@ def _check_1d_sigma(sigma: Any, kwargs: dict[str, Any]) -> None:
         return
     if s.ndim != 1:
         return
-    if not np.all(np.isfinite(s)):
-        raise ValueError("sigma must be finite (found NaN or inf)")
-    if np.any(s == 0):
-        raise ValueError("sigma values must be non-zero")
+    check_sigma_values(s)
 
 
 def _preprocess_nonfinite_for_cmaes(
@@ -3955,6 +3953,29 @@ class CurveFit:
         ]  # (M,) or (k, M)
 
     @staticmethod
+    def _drop_unobserved_sigma(sigma, data_mask):
+        """Apply ``data_mask`` to a full-length 1-D or covariance-matrix ``sigma``.
+
+        Keeps the stored sigma aligned with the masked residuals so
+        ``prediction_interval`` can weight by it. A sigma of any other shape is
+        returned unchanged (the interval then uses the pooled variance).
+        """
+        if sigma is None:
+            return sigma
+        valid_rows = np.asarray(data_mask, dtype=bool)
+        if valid_rows.all():
+            return sigma
+        sig = np.asarray(sigma)
+        n = sig.shape[0] if sig.ndim in (1, 2) else -1
+        if sig.ndim == 2 and sig.shape != (n, n):
+            return sigma
+        if 0 < n <= valid_rows.size:
+            # flength padding is appended after the caller's rows
+            keep = valid_rows[:n]
+            return sig[keep] if sig.ndim == 1 else sig[np.ix_(keep, keep)]
+        return sigma
+
+    @staticmethod
     def _warn_unsupported_args(method: str, **non_default: bool) -> None:
         """Warn (instead of silently dropping) for arguments a path ignores."""
         ignored = sorted(name for name, used in non_default.items() if used)
@@ -5053,6 +5074,7 @@ class CurveFit:
             return np.asarray(popt), _pcov, feval[:m]
 
         xdata, ydata = self._drop_unobserved_rows(res, xdata, ydata, data_mask)
+        sigma = self._drop_unobserved_sigma(sigma, data_mask)
 
         if return_full:
             # SciPy-compatible 5-tuple: (popt, pcov, infodict, mesg, ier)

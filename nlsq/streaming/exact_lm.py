@@ -31,6 +31,7 @@ from nlsq.config import JAXConfig
 from nlsq.core._option_checks import (
     coerce_absolute_sigma,
     is_integral_count,
+    require_usable_tolerances,
     validate_max_nfev,
     validate_tolerance,
 )
@@ -499,15 +500,11 @@ def _check_tolerances(
 
     Returns the validated values (``None`` becomes 0) for the caller to use.
     """
-    eps = np.finfo(float).eps
     ftol, xtol, gtol = (
         validate_tolerance(name, tol, strict=True)
         for name, tol in (("ftol", ftol), ("xtol", xtol), ("gtol", gtol))
     )
-    if ftol < eps and xtol < eps and gtol < eps:
-        raise ValueError(
-            f"At least one of the tolerances must be higher than machine epsilon ({eps:.2e})."
-        )
+    require_usable_tolerances(ftol, xtol, gtol)
     return ftol, xtol, gtol
 
 

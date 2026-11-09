@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
-from nlsq.core._option_checks import _unwrap_scalar
+from nlsq.core._option_checks import _unwrap_scalar, is_integral
 
 __all__ = [
     "CMAES_PRESETS",
@@ -27,13 +27,8 @@ logger = logging.getLogger(__name__)
 
 def _require_integral(name: str, value: object) -> None:
     """Reject bool, NaN/inf and fractional values; accept ints and ``100.0``."""
-    value = _unwrap_scalar(value)
-    if (
-        isinstance(value, bool)
-        or not math.isfinite(value)  # type: ignore[arg-type]
-        or value != int(value)  # type: ignore[call-overload]
-    ):
-        raise ValueError(f"{name} must be an integer, got {value!r}")
+    if not is_integral(value):
+        raise ValueError(f"{name} must be an integer, got {_unwrap_scalar(value)!r}")
 
 
 # Global cache for evosax availability check
@@ -187,7 +182,10 @@ class CMAESConfig:
         Runs before the range checks: such values would otherwise pass the
         comparisons and crash later inside evosax/JAX/SeedSequence.
         """
-        for name in (
+        # local: nlsq.streaming imports this package back at module load
+        from nlsq.streaming.validators import coerce_integral_fields
+
+        names = (
             "popsize",
             "max_generations",
             "max_restarts",
@@ -195,12 +193,12 @@ class CMAESConfig:
             "data_chunk_size",
             "checkpoint_interval",
             "seed",
-        ):
+        )
+        for name in names:
             value = getattr(self, name)
             if value is not None:
                 _require_integral(name, value)
-                if not isinstance(value, int):
-                    object.__setattr__(self, name, int(value))
+        coerce_integral_fields(self, names)
 
     def _validate(self) -> None:
         """Validate configuration parameters.

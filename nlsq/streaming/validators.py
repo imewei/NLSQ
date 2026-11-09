@@ -5,6 +5,7 @@ extracted from the monolithic __post_init__ method to reduce complexity and
 improve testability.
 """
 
+import decimal
 import math
 import numbers
 from typing import Any
@@ -76,7 +77,7 @@ def coerce_integral_fields(obj: object, names: tuple[str, ...]) -> None:
     for name in names:
         value = _unwrap_scalar(getattr(obj, name))
         if (
-            isinstance(value, numbers.Real)
+            isinstance(value, (numbers.Real, decimal.Decimal))
             and not isinstance(value, bool)
             and (
                 isinstance(value, numbers.Integral)
