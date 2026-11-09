@@ -434,9 +434,11 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
 def get_current_config(state: SessionState) -> dict[str, Any]:
     """Export the current session state as a workflow config dictionary.
 
-    This function converts the SessionState into a dictionary format compatible
-    with the workflow_config_template.yaml structure, suitable for export or
-    passing to NLSQ fitting functions.
+    This function converts the SessionState into the GUI's own session schema
+    (nested ``fitting.termination`` / ``fitting.objective`` / ``batch`` blocks,
+    no ``data`` section), read back by the GUI's ``load_yaml_config``. It is
+    NOT the flat CLI workflow schema of ``workflow_config_template.yaml``:
+    ``nlsq fit`` ignores most of these keys.
 
     Parameters
     ----------

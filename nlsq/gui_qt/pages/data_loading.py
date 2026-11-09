@@ -447,17 +447,25 @@ class DataLoadingPage(QWidget):
             self._validation_label.setStyleSheet("color: #f44336;")
             self._apply_btn.setEnabled(False)
 
+    def _clear_stats(self) -> None:
+        self._stats_points.setText("Points: -")
+        self._stats_x_range.setText("X Range: -")
+        self._stats_y_range.setText("Y Range: -")
+        self._stats_sigma.setText("Sigma: -")
+
     def _validate_and_update_stats(self) -> None:
         """Validate data and update statistics display."""
         from nlsq.gui_qt.adapters.data_adapter import compute_statistics, validate_data
 
         if self._xdata is None or self._ydata is None:
+            self._clear_stats()
             return
 
         # Validate
         result = validate_data(self._xdata, self._ydata, self._sigma)
 
         if not result.is_valid:
+            self._clear_stats()  # never leave the previous dataset's numbers up
             self._validation_label.setText(f"Validation: {result.message}")
             self._validation_label.setStyleSheet("color: #f44336;")
             self._apply_btn.setEnabled(False)
@@ -571,12 +579,21 @@ class DataLoadingPage(QWidget):
 
         # 2-D xdata is stored (k, n); the preview table wants one column per x
         x_cols = self._xdata.T if self._xdata.ndim == 2 else self._xdata
+        is_surface = self._xdata.ndim == 2 and self._xdata.shape[0] == 2
         if self._sigma is not None:
             self._raw_data = np.column_stack([x_cols, self._ydata, self._sigma])
-            self._column_names = ["x", "y", "sigma"]
+            self._column_names = (
+                ["x", "y", "z", "sigma"] if is_surface else ["x", "y", "sigma"]
+            )
         else:
             self._raw_data = np.column_stack([x_cols, self._ydata])
-            self._column_names = ["x", "y"]
+            self._column_names = ["x", "y", "z"] if is_surface else ["x", "y"]
+        if is_surface:
+            # columns are [x0, x1, z(, sigma)]: use the selector's 2-D layout so
+            # a later combo change keeps the 2-D mapping instead of x0/x1/z -> x/y/sigma
+            self._column_selector.set_mode("2d")
+        else:
+            self._column_selector.set_mode("1d")
 
         self._file_path_label.setText(state.data_file_name or "(Restored session)")
         self._file_path_label.setStyleSheet("color: green;")

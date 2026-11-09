@@ -313,7 +313,7 @@ class DefenseLayerTelemetry:
             Most recent events
         """
         with self._lock:
-            return list(self._event_log)[-n:]
+            return list(self._event_log)[-n:] if n > 0 else []
 
     def export_metrics(self) -> dict:
         """Export metrics in a format suitable for monitoring systems.

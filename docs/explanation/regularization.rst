@@ -199,7 +199,7 @@ For XPCS laminar flow analysis with 23 angular positions:
        y_data,
        p0=p0,
        method="hybrid_streaming",
-       hybrid_config=config,
+       config=config,
    )
 
    # Extract results
@@ -242,9 +242,7 @@ Perform fits with varying :math:`\lambda` and plot the L-curve:
            group_variance_indices=[(0, 23), (23, 46)],
        )
 
-       popt, _ = curve_fit(
-           model, x, y, p0=p0, method="hybrid_streaming", hybrid_config=config
-       )
+       popt, _ = curve_fit(model, x, y, p0=p0, method="hybrid_streaming", config=config)
 
        # Compute unregularized MSE
        residuals = y - model(x, *popt)
@@ -301,7 +299,7 @@ After fitting, validate the regularization effect:
        enable_group_variance_regularization=False,
    )
    popt_unreg, _ = curve_fit(
-       model, x, y, p0=p0, method="hybrid_streaming", hybrid_config=config_unreg
+       model, x, y, p0=p0, method="hybrid_streaming", config=config_unreg
    )
 
    contrast_std_unreg = jnp.std(popt_unreg[:23])

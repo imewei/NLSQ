@@ -112,7 +112,8 @@ def transform_from_bounds(
     ratio = (x_bounded - lower_bounds) / safe_range
 
     # Clamp to avoid log(0) or log(inf)
-    ratio_clamped = jnp.clip(ratio, epsilon, 1.0 - epsilon)
+    min_epsilon = jnp.maximum(epsilon, jnp.finfo(ratio.dtype).eps)
+    ratio_clamped = jnp.clip(ratio, min_epsilon, 1.0 - min_epsilon)
 
     # Logit: log(ratio / (1 - ratio))
     return jnp.log(ratio_clamped / (1.0 - ratio_clamped))

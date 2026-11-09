@@ -6,6 +6,7 @@ This widget displays fit quality statistics like R², RMSE, MAE, AIC, BIC.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
@@ -195,14 +196,20 @@ class FitStatisticsWidget(QWidget):
             converged: Whether the fit converged
         """
         # R² with theme-aware semantic color coding
-        self._r2_card.set_value(f"{r_squared:.6f}")
-        if r_squared >= 0.95:
-            self._r2_color_attr = "stat_good"
-        elif r_squared >= 0.9:
-            self._r2_color_attr = "stat_warning"
+        if math.isnan(r_squared):
+            # Undefined (e.g. constant y): shown as "nan", neutral colour (not 'bad').
+            self._r2_card.set_value("nan")
+            self._r2_color_attr = None
+            self._r2_card.set_value_color(self._theme.text_primary)
         else:
-            self._r2_color_attr = "stat_bad"
-        self._r2_card.set_value_color(getattr(self._theme, self._r2_color_attr))
+            self._r2_card.set_value(f"{r_squared:.6f}")
+            if r_squared >= 0.95:
+                self._r2_color_attr = "stat_good"
+            elif r_squared >= 0.9:
+                self._r2_color_attr = "stat_warning"
+            else:
+                self._r2_color_attr = "stat_bad"
+            self._r2_card.set_value_color(getattr(self._theme, self._r2_color_attr))
 
         # RMSE
         self._rmse_card.set_value(f"{rmse:.6g}")

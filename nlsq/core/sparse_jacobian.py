@@ -522,7 +522,9 @@ class SparseOptimizer:
 
             # Detect sparsity pattern from samples
             sample_size = min(1000, n_data)
-            sample_indices = np.random.choice(n_data, sample_size, replace=False)
+            sample_indices = np.random.default_rng(0).choice(
+                n_data, sample_size, replace=False
+            )
             _pattern, sparsity = self.sparse_computer.detect_sparsity_pattern(
                 func,
                 x0,

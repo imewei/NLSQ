@@ -449,7 +449,10 @@ class ResultExporter:
         # Copy to avoid mutating the caller's dict in-place
         uncertainties = list(data.get("uncertainties", []))
         statistics = data.get("statistics", {})
-        param_names = list(data.get("parameter_names", []))
+        param_names = data.get("parameter_names", [])
+        param_names = (
+            [param_names] if isinstance(param_names, str) else list(param_names)
+        )
 
         # Pad uncertainties to match popt length
         while len(uncertainties) < len(popt):

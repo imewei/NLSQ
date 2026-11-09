@@ -9,7 +9,7 @@ import math
 import numbers
 from typing import Any
 
-from nlsq.core._option_checks import is_integral_count
+from nlsq.core._option_checks import _unwrap_scalar, is_integral_count
 
 
 class ConfigValidationError(ValueError):
@@ -74,12 +74,14 @@ def coerce_integral_fields(obj: object, names: tuple[str, ...]) -> None:
     ``None`` are left untouched.
     """
     for name in names:
-        value = getattr(obj, name)
+        value = _unwrap_scalar(getattr(obj, name))
         if (
             isinstance(value, numbers.Real)
-            and not isinstance(value, numbers.Integral)
-            and math.isfinite(value)
-            and value == int(value)
+            and not isinstance(value, bool)
+            and (
+                isinstance(value, numbers.Integral)
+                or (math.isfinite(value) and value == int(value))
+            )
         ):
             object.__setattr__(obj, name, int(value))
 

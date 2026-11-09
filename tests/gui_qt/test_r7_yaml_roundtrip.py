@@ -44,3 +44,19 @@ def test_bare_termination_keys_use_defaults():
     )
     assert (r.gtol, r.ftol, r.xtol) == (base.gtol, base.ftol, base.xtol)
     assert r.max_iterations == base.max_iterations
+    assert r.max_function_evals == base.max_function_evals
+
+
+def test_bare_max_nfev_uses_default():
+    r = load_yaml_config("fitting:\n  max_nfev:\n  gtol:\n  ftol:\n  xtol:\n")
+    base = SessionState()
+    assert r.max_function_evals == base.max_function_evals
+    assert (r.gtol, r.ftol, r.xtol) == (base.gtol, base.ftol, base.xtol)
+
+
+def test_yaml_max_nfev_rejects_non_positive_integers():
+    import pytest
+
+    for bad in ("true", "2000.7", "0", "-5"):
+        with pytest.raises(ValueError, match="max_nfev"):
+            load_yaml_config(f"fitting:\n  max_nfev: {bad}\n")

@@ -32,6 +32,13 @@ class TestS3LoadLimit:
         with pytest.raises(DataLoadError, match="NLSQ_MAX_LOAD_ELEMENTS"):
             DataLoader()._load_npz(p, {})
 
+    def test_npz_key_ending_npy_still_checks_size(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("NLSQ_MAX_LOAD_ELEMENTS", "2")
+        p = tmp_path / "suffix.npz"
+        np.savez_compressed(p, **{"x.npy": np.arange(5.0)})
+        with pytest.raises(DataLoadError, match="NLSQ_MAX_LOAD_ELEMENTS"):
+            DataLoader().load(p, {"npz": {"x_key": "x.npy", "y_key": "x.npy"}})
+
     def test_small_files_unaffected(self, tmp_path, monkeypatch):
         monkeypatch.delenv("NLSQ_MAX_LOAD_ELEMENTS", raising=False)
         h = tmp_path / "ok.h5"
@@ -54,6 +61,16 @@ class TestS3LoadLimit:
 
 
 class TestS4Links:
+    def test_external_raw_dataset_rejected(self, tmp_path):
+        raw = tmp_path / "outside.bin"
+        np.array([3.0, 4.0]).tofile(raw)
+        p = tmp_path / "external.h5"
+        with h5py.File(p, "w") as f:
+            f.create_dataset("x", shape=(2,), dtype="f8", external=[(str(raw), 0, 16)])
+            f["y"] = [1.0, 2.0]
+        with pytest.raises(DataLoadError, match="external"):
+            DataLoader().load(p, _hdf5_cfg())
+
     def test_external_link_rejected(self, tmp_path):
         other = tmp_path / "other.h5"
         with h5py.File(other, "w") as f:

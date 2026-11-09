@@ -694,6 +694,9 @@ class MemoryManager:
             Memory statistics including current usage, peak, pool size
         """
         current_memory = self.get_memory_usage_bytes()
+        # The peak is otherwise only updated inside memory_guard(), so it could
+        # read below the current usage.
+        self._peak_memory = max(self._peak_memory, current_memory)
         available_memory = self.get_available_memory()
 
         pool_memory = sum(arr.nbytes for arr in self.memory_pool.values())

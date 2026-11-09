@@ -1,5 +1,6 @@
 """R4 CC-02 / CC-09: CMAESConfig and GlobalOptimizationConfig reject hostile values."""
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -71,3 +72,10 @@ def test_cmaes_config_rejects_bad_seed():
         CMAESConfig(seed=1.5)
     with pytest.raises(ValueError):
         CMAESConfig(seed=True)
+
+
+@pytest.mark.parametrize("name", ["seed", "max_restarts"])
+@pytest.mark.parametrize("bad", [np.bool_(True), np.array(True), jnp.array(True)])
+def test_cmaes_config_rejects_boolean_scalar_counts(name, bad):
+    with pytest.raises(ValueError, match=name):
+        CMAESConfig(**{name: bad})

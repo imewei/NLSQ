@@ -214,7 +214,7 @@ NLSQ is organized into well-separated layers (~74,000 lines):
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                             USER INTERFACES                                 │
-│  Qt GUI (PySide6)       CLI (Click)            Python API                   │
+│  Qt GUI (PySide6)       CLI (argparse)          Python API                   │
 │  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()       │
 │  ├── pyqtgraph plots    ├── Security auditing  ├── CurveFit class           │
 │  └── Native desktop     └── Export formats     └── LargeDatasetFitter       │

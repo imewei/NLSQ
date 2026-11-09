@@ -698,8 +698,17 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         if not accepted:
             termination = "max_nfev" if out_of_budget else "stalled"
             break
+        # MINPACK-style scaled norms (||D^1/2 s||, ||D^1/2 x||): the relative
+        # step test must not depend on the units of the parameters.
+        root_D = np.sqrt(np.where(D > 0, D, 1.0))
         step = step_termination(
-            actual, cost, rho, np.linalg.norm(s), np.linalg.norm(theta), ftol, xtol
+            actual,
+            cost,
+            rho,
+            np.linalg.norm(root_D * s),
+            np.linalg.norm(root_D * theta),
+            ftol,
+            xtol,
         )
         theta, cost, g, H = new, trial.cost, trial.g, trial.H
         if step:

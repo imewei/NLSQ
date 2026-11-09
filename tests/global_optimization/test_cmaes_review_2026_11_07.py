@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from nlsq import curve_fit
 from nlsq.global_optimization import CMAESConfig, CMAESOptimizer
 from nlsq.global_optimization.cmaes_optimizer import _create_fitness_function
 
@@ -99,6 +100,18 @@ class TestMultiDimXdataStreaming:
         assert np.isfinite(got)
         assert got == pytest.approx(ref, rel=1e-10)
 
+    @pytest.mark.parametrize("sample_axis", [0, 1])
+    def test_square_xdata_matches_full_evaluation(self, sample_axis, caplog):
+        x = jnp.arange(16.0).reshape(4, 4)
+        y = jnp.arange(4.0)
+
+        def model(x, a, b):
+            return a * jnp.sum(x, axis=1 - sample_axis) + b
+
+        expected = _fitness(model, x, y)
+        assert _fitness(model, x, y, chunk=2) == pytest.approx(expected, rel=1e-10)
+        assert "sample axis" in caplog.text and "ambiguous" in caplog.text
+
     def test_padding_masked_for_singular_model(self):
         # padded x=0 would give inf for 1/x if not masked out of the SSR
         X, y = self._xy()
@@ -109,6 +122,72 @@ class TestMultiDimXdataStreaming:
 
         ref = _fitness(model, Xn, y)
         assert _fitness(model, Xn, y, chunk=self.CHUNK) == pytest.approx(ref, rel=1e-10)
+
+
+@pytest.mark.parametrize("refine", [False, True])
+@pytest.mark.parametrize("omit", [False, True])
+def test_cmaes_excludes_masked_data_with_correlated_sigma(refine, omit):
+    x = np.arange(8.0)
+    y = 2 * x
+    y[-1] = 1000
+    mask = np.ones(len(x), dtype=bool)
+    mask[-1] = False
+    if omit:
+        y[1] = np.nan
+    covariance = 0.5 ** np.abs(np.subtract.outer(np.arange(8), np.arange(8)))
+    config = CMAESConfig(
+        max_generations=50, restart_strategy="none", seed=42, refine_with_nlsq=refine
+    )
+    result = curve_fit(
+        lambda x, a: a * x,
+        x,
+        y,
+        p0=[1.0],
+        bounds=([0.0], [10.0]),
+        sigma=covariance,
+        absolute_sigma=True,
+        data_mask=mask,
+        nan_policy="omit" if omit else "raise",
+        method="cmaes",
+        cmaes_config=config,
+    )
+    assert result.success
+    assert result.x[0] == pytest.approx(2, abs=0.05)
+    assert len(result.ydata) == np.count_nonzero(mask & np.isfinite(y))
+    if refine:
+        valid = mask & np.isfinite(y)
+        expected = 1 / (
+            x[valid] @ np.linalg.solve(covariance[np.ix_(valid, valid)], x[valid])
+        )
+        assert result.pcov[0, 0] == pytest.approx(expected, rel=1e-5)
+
+
+def test_cmaes_optimizer_directly_excludes_masked_data():
+    x = np.arange(8.0)
+    y = 2 * x
+    y[-1] = 1000
+    mask = np.arange(len(x)) != len(x) - 1
+    config = CMAESConfig(
+        max_generations=50, restart_strategy="none", seed=42, refine_with_nlsq=False
+    )
+    result = CMAESOptimizer(config).fit(
+        lambda x, a: a * x, x, y, p0=[1.0], bounds=([0.0], [10.0]), data_mask=mask
+    )
+    assert result["popt"][0] == pytest.approx(2, abs=0.05)
+
+
+def test_cmaes_mask_rejects_wrong_covariance_shape():
+    config = CMAESConfig(max_generations=1, restart_strategy="none")
+    with pytest.raises(ValueError, match="sigma covariance shape"):
+        CMAESOptimizer(config).fit(
+            lambda x, a: a * x,
+            np.arange(4.0),
+            np.arange(4.0),
+            p0=[1.0],
+            bounds=([0.0], [2.0]),
+            sigma=np.eye(5),
+            data_mask=[True, True, True, False],
+        )
 
 
 @pytest.mark.slow

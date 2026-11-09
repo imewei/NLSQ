@@ -290,7 +290,7 @@ class ResultsPage(QWidget):
         # Update parameter results
         if popt is not None and param_names:
             values = list(popt)
-            uncertainties = list(perr) if perr is not None else [0.0] * len(values)
+            uncertainties = list(perr) if perr is not None else []
 
             # Compute confidence intervals using t-distribution (correct for small n)
             ci = None
@@ -521,7 +521,7 @@ class ResultsPage(QWidget):
         r_squared = (
             1.0 - (ss_res / ss_tot)
             if (np.isfinite(ss_tot) and ss_tot >= np.finfo(float).tiny)
-            else 0.0
+            else float("nan")  # undefined for constant y; never faked
         )
 
         # RMSE (root mean square error)

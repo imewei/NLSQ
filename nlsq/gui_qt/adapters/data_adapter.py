@@ -123,10 +123,10 @@ def load_from_file(
             config = {**config, "format": EXTENSION_FORMAT_MAP[suffix.lower()]}
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(file_obj.read())
             tmp_path = Path(tmp.name)
 
         try:
+            tmp_path.write_bytes(file_obj.read())
             # Reset file position for potential re-reads
             file_obj.seek(0)
             return loader.load(tmp_path, config)
@@ -242,6 +242,16 @@ def load_from_clipboard(
     return xdata, ydata, sigma
 
 
+def _to_float(cell: str, decimal_comma: bool) -> float:
+    cell = cell.strip()
+    if not cell:
+        return np.nan
+    # European exports: ';'-separated with ',' as the decimal mark ("1,5").
+    if decimal_comma and cell.count(",") == 1 and "." not in cell:
+        cell = cell.replace(",", ".")
+    return float(cell)
+
+
 def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[float]]:
     """Parse delimited text lines into rows of floats.
 
@@ -269,7 +279,7 @@ def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[flo
             else line.strip("\r\n").split(delimiter)
         )
         try:
-            rows.append([float(p.strip()) if p.strip() else np.nan for p in parts])
+            rows.append([_to_float(p, decimal_comma=delimiter == ";") for p in parts])
         except ValueError as e:
             raise ValueError(
                 f"Cannot parse line {line_num} as numeric data: '{stripped_line}'",
@@ -340,8 +350,13 @@ def detect_delimiter(text: str) -> str | None:
         comma_count += line.count(",")
         semicolon_count += line.count(";")
 
-    # Semicolon CSV (European Excel exports); decimal commas make comma unreliable
-    if semicolon_count > 0 and semicolon_count >= max(tab_count, comma_count):
+    # Semicolon CSV (European Excel exports); decimal commas make comma unreliable,
+    # so a constant per-line semicolon count wins even when commas are more common
+    sc_per_line = {ln.count(";") for ln in lines if ln.strip()}
+    if semicolon_count > 0 and (
+        semicolon_count >= max(tab_count, comma_count)
+        or (len(sc_per_line) == 1 and 0 not in sc_per_line)
+    ):
         return ";"
 
     # If tabs are present and more common than commas, use tab

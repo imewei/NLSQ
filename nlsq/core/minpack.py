@@ -403,9 +403,12 @@ def fit(  # noqa: C901
         Optimization goal that modifies tolerances:
 
         - 'fast': Prioritize speed, use looser tolerances
-        - 'robust' or 'global': Standard tolerances, enable multi-start
+        - 'robust' or 'global': Standard tolerances
         - 'memory_efficient': Minimize memory usage
-        - 'quality': Highest precision, tighter tolerances, multi-start
+        - 'quality': Highest precision, tighter tolerances
+
+        ``goal`` only sets tolerances; pass ``multistart=True`` (and
+        ``n_starts``) to enable multi-start.
 
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss).
@@ -772,6 +775,11 @@ def _fit_with_config(
                 f"(loss={kwargs['loss']!r}); it minimizes plain least squares. "
                 "Use a standard workflow (e.g. fit(..., workflow='auto', "
                 "loss=...) or curve_fit(..., loss=...)) for robust loss."
+            )
+        if kwargs.get("data_mask") is not None or kwargs.get("nan_policy") == "omit":
+            raise ValueError(
+                "The hybrid streaming workflow does not support data_mask or "
+                "nan_policy='omit'; filter the data before calling fit()."
             )
         ignored = sorted(
             user_kwargs & {"f_scale", "max_nfev", "ftol", "xtol", "x_scale", "jac"}
@@ -1583,7 +1591,10 @@ def _fit_global_cmaes(
     import dataclasses
 
     from nlsq.global_optimization.cmaes_config import CMAESConfig
-    from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+    from nlsq.global_optimization.cmaes_optimizer import (
+        CMAESOptimizer,
+        _apply_data_mask,
+    )
 
     # Create or use provided config
     if cmaes_config is None:
@@ -1653,7 +1664,10 @@ def _fit_global_cmaes(
             )
 
     xdata, ydata, sigma = _preprocess_nonfinite_for_cmaes(
-        xdata, ydata, sigma, kwargs.get("nan_policy"), check_finite
+        xdata, ydata, sigma, kwargs.get("nan_policy"), check_finite, kwargs
+    )
+    xdata, ydata, sigma = _apply_data_mask(
+        xdata, ydata, sigma, kwargs.pop("data_mask", None)
     )
 
     optimizer = CMAESOptimizer(config=cmaes_config)
@@ -1683,6 +1697,7 @@ def _fit_global_cmaes(
         # its **kwargs flows through to _nlsq_refinement's curve_fit() call,
         # which does accept it -- forward it there instead of dropping it.
         absolute_sigma=absolute_sigma,
+        check_finite=check_finite,
         **extra_kwargs,
     )
 
@@ -1817,7 +1832,7 @@ def _fit_global_multistart(
         # "successful-looking" OptimizeResult with success=False on failure
         # rather than raising -- check it explicitly rather than silently
         # treating a failed chunked fit as a normal result.
-        if not result.get("success", True):
+        if not result.get("success", True) and not result.get("nonconverged", False):
             raise RuntimeError(
                 f"workflow='{workflow_name}' chunked multi-start fit "
                 f"failed: {result.get('message', 'unknown error')}",
@@ -2439,12 +2454,35 @@ def _validate_wrapper_options(
         kwargs["absolute_sigma"] = coerced
 
 
+def _check_1d_sigma(sigma: Any, kwargs: dict[str, Any]) -> None:
+    """Reject 0/NaN/inf 1-D sigma like the TRF and chunked paths do.
+
+    Skipped when ``data_mask`` is given: masked-out rows may legitimately hold
+    bad sigma values and the mask is applied later.
+    """
+    if sigma is None or kwargs.get("data_mask") is not None:
+        return
+    try:
+        s = np.asarray(sigma, float)
+    except (TypeError, ValueError):
+        return
+    if s.ndim != 1:
+        return
+    if not np.all(np.isfinite(s)):
+        raise ValueError("sigma must be finite (found NaN or inf)")
+    if np.any(s == 0):
+        raise ValueError("sigma values must be non-zero")
+
+
 def _preprocess_nonfinite_for_cmaes(
     xdata: Any,
     ydata: Any,
     sigma: Any,
     nan_policy: str | None,
     check_finite: bool,
+    kwargs: dict[str, Any],
+    *,
+    allow_rowwise: bool = False,
 ) -> tuple[Any, Any, Any]:
     """Apply the TRF path's nan_policy/check_finite handling before CMA-ES.
 
@@ -2470,14 +2508,38 @@ def _preprocess_nonfinite_for_cmaes(
         if check_finite:
             np.asarray_chkfinite(y)
             np.asarray_chkfinite(x)
+            _check_1d_sigma(sigma, kwargs)
         return xdata, ydata, sigma
-    if y.ndim != 1 or x.ndim == 0 or x.shape[-1] != y.shape[0]:
+    if (
+        y.ndim != 1
+        or x.ndim == 0
+        or (
+            x.shape[-1] != y.shape[0]
+            and (not allow_rowwise or x.shape[0] != y.shape[0])
+        )
+    ):
         # Skipping would leave the NaNs in the data the user asked to drop.
         raise ValueError(
             "nan_policy='omit' needs xdata with shape (n,) or (k, n) matching "
             f"ydata of shape (n,); got xdata {x.shape} and ydata {y.shape}"
         )
-    x, y, sigma, _, _ = _omit_nonfinite_rows(x, y, sigma, x.ndim, True)
+    points_axis_last = x.shape[-1] == y.shape[0]
+    ambiguous = allow_rowwise and x.ndim > 1 and x.shape[0] == x.shape[-1] == len(y)
+    original_x = x
+    if allow_rowwise and x.ndim > 2:
+        x = x.reshape((-1, len(y)) if points_axis_last else (len(y), -1))
+    x, y, sigma, _, omit_mask = _omit_nonfinite_rows(
+        x, y, sigma, x.ndim, points_axis_last
+    )
+    if ambiguous and not omit_mask.all():
+        raise ValueError("Cannot omit nonfinite data: sample axis is ambiguous")
+    if original_x.ndim > 2 and allow_rowwise:
+        x = np.compress(omit_mask, original_x, axis=-1 if points_axis_last else 0)
+    if kwargs.get("data_mask") is not None:
+        mask = np.asarray(kwargs["data_mask"])
+        if mask.shape != omit_mask.shape:
+            raise ValueError("Data mask doesn't match data lengths.")
+        kwargs["data_mask"] = mask[omit_mask]
     return x, y, sigma
 
 
@@ -2546,7 +2608,10 @@ def _run_cmaes_optimization(
         return None
 
     # Import CMAESOptimizer lazily to avoid evosax import at module load
-    from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+    from nlsq.global_optimization.cmaes_optimizer import (
+        CMAESOptimizer,
+        _apply_data_mask,
+    )
 
     # Use provided config or default
     config = cmaes_config if cmaes_config is not None else CMAESConfig()
@@ -2600,6 +2665,10 @@ def _run_cmaes_optimization(
         sigma,
         kwargs.get("nan_policy"),
         kwargs.get("check_finite", True),
+        kwargs,
+    )
+    xdata, ydata, sigma = _apply_data_mask(
+        xdata, ydata, sigma, kwargs.pop("data_mask", None)
     )
     # Forward remaining optimizer kwargs (ftol, xtol, gtol, max_nfev, ...) to
     # the NLSQ refinement step -- mirrors _fit_global_cmaes, whose **kwargs
@@ -2647,18 +2716,28 @@ def _run_cmaes_optimization(
     from nlsq.result import CurveFitResult
 
     # Build a minimal result dict with required fields
+    # The NLSQ refinement (when run) carries the real cost/jacobian/evaluation
+    # counts; without refinement CMA-ES provides none of them.
+    refined = result_dict.get("nlsq_result")
+
+    def _ref(name: str, default: Any = None) -> Any:
+        try:
+            return refined[name] if refined is not None else default
+        except (KeyError, TypeError, IndexError):
+            return getattr(refined, name, default)
+
     result = CurveFitResult(
         x=popt,
         pcov=pcov,
-        cost=None,  # CMA-ES doesn't provide this directly
-        fun=None,
-        jac=None,
-        grad=None,
-        optimality=None,
-        active_mask=None,
-        nfev=0,
-        njev=0,
-        nit=0,
+        cost=_ref("cost"),
+        fun=_ref("fun"),
+        jac=_ref("jac"),
+        grad=_ref("grad"),
+        optimality=_ref("optimality"),
+        active_mask=_ref("active_mask"),
+        nfev=_ref("nfev", 0),
+        njev=_ref("njev", 0),
+        nit=_ref("nit", 0),
         **_cmaes_termination_fields(result_dict),
         xdata=np.asarray(xdata),
         ydata=np.asarray(ydata),
@@ -2897,6 +2976,24 @@ def _prepare_optimizer_options(
 # =============================================================================
 # Main curve_fit function (refactored for reduced complexity)
 # =============================================================================
+
+
+def _normalize_bounds_kwarg(kwargs: dict[str, Any]) -> None:
+    if "bounds" in kwargs:
+        kwargs["bounds"] = _bounds_as_tuple(kwargs["bounds"])
+
+
+def _bounds_as_tuple(bounds: Any) -> Any:
+    """scipy.optimize.Bounds -> (lb, ub); anything else is returned unchanged."""
+    if hasattr(bounds, "lb") and hasattr(bounds, "ub"):
+        # scipy stores scalar limits as length-1 arrays; keep them scalar so
+        # they broadcast to every parameter like the tuple form does
+        lb, ub = (
+            np.asarray(b).item() if np.size(b) == 1 else b
+            for b in (bounds.lb, bounds.ub)
+        )
+        return (lb, ub)
+    return bounds
 
 
 def curve_fit(
@@ -3243,6 +3340,10 @@ def curve_fit(
     for _name, _value in zip(_positional_names, args, strict=False):
         kwargs.setdefault(_name, _value)
     args = ()
+
+    # scipy.optimize.Bounds -> (lb, ub) once, so every route (TRF, CMA-ES,
+    # multistart, streaming) sees the tuple form.
+    _normalize_bounds_kwarg(kwargs)
 
     _validate_wrapper_options(
         method if method is not None else kwargs.get("method"),
@@ -4041,7 +4142,11 @@ class CurveFit:
                 "nfev": result.get("nfev"),
                 "fvec": np.asarray(fun) if fun is not None else None,
             }
-            ier = 1 if result.get("success", False) else 5
+            ier = (
+                int(result.get("status", 1))
+                if result.get("success", False) and result.get("status", 1) > 0
+                else 5
+            )
             return (
                 result.x,
                 result["pcov"],
@@ -4250,7 +4355,9 @@ class CurveFit:
             # return a "successful-looking" OptimizeResult with success=False
             # rather than raising -- check it explicitly instead of silently
             # treating a failed fit as a normal result.
-            if not result.get("success", True):
+            if not result.get("success", True) and not result.get(
+                "nonconverged", False
+            ):
                 raise RuntimeError(
                     "method='auto' chunked fit failed: "
                     f"{result.get('message', 'unknown error')}",
@@ -4956,7 +5063,7 @@ class CurveFit:
             }
             mesg = res.message if hasattr(res, "message") else ""
             # SciPy ier convention: 1-4 = converged, 5 = max iterations
-            ier = 1 if (res.success and res.status > 0) else 5
+            ier = int(res.status) if (res.success and res.status > 0) else 5
             return np.asarray(popt), _pcov, infodict, mesg, ier
         if timeit:
             # lower GPU memory usage before returning raw res
@@ -4971,6 +5078,9 @@ class CurveFit:
         result["xdata"] = xdata
         result["ydata"] = ydata
         result["pcov"] = _pcov
+        # kept so prediction_interval can weight the noise term like the fit did
+        result["sigma"] = sigma
+        result["absolute_sigma"] = absolute_sigma
 
         # Compute diagnostics if requested
         if compute_diagnostics:

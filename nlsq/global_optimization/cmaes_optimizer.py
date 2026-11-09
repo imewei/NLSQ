@@ -107,9 +107,15 @@ def _streaming_axis(
     """Sample axis of ``xdata`` to chunk along, or None if not streaming.
 
     Axis 0 for (N, ...) input, the last axis for the SciPy multi-x (k, N)
-    layout. Streaming is skipped (with a warning) if no axis matches ydata.
+    layout. Streaming is skipped (with a warning) if the axis is ambiguous
+    or no axis matches ydata.
     """
     if data_chunk_size is None or n_data <= data_chunk_size:
+        return None
+    if xdata.ndim > 1 and xdata.shape[0] == xdata.shape[-1] == n_data:
+        logger.warning(
+            f"data_chunk_size ignored: sample axis of xdata {xdata.shape} is ambiguous"
+        )
         return None
     if xdata.shape[0] == n_data:
         return 0
@@ -131,6 +137,37 @@ def _chunk_samples(a: jax.Array, axis: int, fill: float, chunk: int) -> jax.Arra
     pad = [(0, -a.shape[0] % chunk)] + [(0, 0)] * (a.ndim - 1)
     a = jnp.pad(a, pad, constant_values=fill)
     return a.reshape((a.shape[0] // chunk, chunk, *a.shape[1:]))
+
+
+def _apply_data_mask(xdata, ydata, sigma, data_mask):
+    if data_mask is None:
+        return xdata, ydata, sigma
+    mask = np.asarray(data_mask, dtype=bool)
+    ydata = np.asarray(ydata)
+    xdata = np.asarray(xdata)
+    if mask.shape != (len(ydata),):
+        raise ValueError("Data mask doesn't match data lengths.")
+    if not mask.any():
+        raise ValueError("Data mask excludes all data points.")
+    if sigma is not None:
+        sigma = np.asarray(sigma)
+        if sigma.ndim == 1 and sigma.shape != mask.shape:
+            raise ValueError("sigma length does not match data lengths")
+        if sigma.ndim == 2 and sigma.shape != (len(mask), len(mask)):
+            raise ValueError("sigma covariance shape does not match data lengths")
+    if mask.all():
+        return xdata, ydata, sigma
+    if xdata.ndim > 1 and xdata.shape[0] == xdata.shape[-1] == len(ydata):
+        raise ValueError("Cannot apply data_mask: sample axis is ambiguous")
+    axis = -1 if xdata.shape[-1] == len(ydata) else 0
+    xdata = np.compress(mask, xdata, axis=axis)
+    ydata = ydata[mask]
+    if sigma is not None:
+        if sigma.ndim == 1:
+            sigma = sigma[mask]
+        elif sigma.ndim == 2:
+            sigma = sigma[np.ix_(mask, mask)]
+    return xdata, ydata, sigma
 
 
 def _create_fitness_function(
@@ -467,6 +504,8 @@ class CMAESOptimizer:
             Standard deviation of ydata for weighted residuals.
         **kwargs : Any
             Additional keyword arguments (passed to NLSQ refinement).
+            ``nan_policy`` (``'raise'`` default, ``'omit'``, ``'propagate'``) and
+            ``check_finite`` also apply to the global search, as in ``curve_fit``.
 
         Returns
         -------
@@ -509,6 +548,25 @@ class CMAESOptimizer:
                 "CMA-ES requires explicit bounds. "
                 "Provide bounds as (lower_bounds, upper_bounds).",
             )
+
+        # Same nan_policy/check_finite handling as curve_fit(method="cmaes"):
+        # without it a NaN makes every candidate's fitness infinite and only the
+        # NLSQ refinement would honor nan_policy. Idempotent when the caller
+        # already preprocessed (the data is then finite).
+        from nlsq.core.minpack import _preprocess_nonfinite_for_cmaes
+
+        xdata, ydata, sigma = _preprocess_nonfinite_for_cmaes(
+            xdata,
+            ydata,
+            sigma,
+            kwargs.get("nan_policy"),
+            kwargs.get("check_finite", True),
+            kwargs,
+            allow_rowwise=True,
+        )
+        xdata, ydata, sigma = _apply_data_mask(
+            xdata, ydata, sigma, kwargs.pop("data_mask", None)
+        )
 
         # Convert inputs to JAX arrays
         xdata_jax = jnp.asarray(xdata)
@@ -675,12 +733,23 @@ class CMAESOptimizer:
                 sigma,
                 **kwargs,
             )
-            diagnostics.nlsq_refinement = result.get("success", True)
+            refined = result.get("nlsq_result")
+            diagnostics.nlsq_refinement = bool(
+                result.get("success", getattr(refined, "success", True))
+            )
         else:
             # Return CMA-ES result without refinement
+            finite = bool(np.isfinite(best_fitness))
             result = {
                 "popt": np.asarray(best_params),
                 "pcov": self._estimate_pcov_from_cmaes(n_params),
+                "success": finite,
+                "status": 1 if finite else 0,
+                "message": (
+                    "CMA-ES optimization completed"
+                    if finite
+                    else "CMA-ES never found a finite fitness value"
+                ),
             }
             diagnostics.nlsq_refinement = False
 
@@ -1384,6 +1453,33 @@ class CMAESOptimizer:
             popt = np.asarray(result.x)  # type: ignore[union-attr]
             pcov = np.asarray(result.pcov)  # type: ignore[union-attr]
 
+            # TRF can stop at its first iteration after nudging a parameter off
+            # a bound (absolute gtol at tiny y); never return a worse point.
+            ssr_cma = self._weighted_ssr(f, xdata_np, ydata_np, sigma_np, p0_numpy)
+            ssr_ref = self._weighted_ssr(f, xdata_np, ydata_np, sigma_np, popt)
+            # A robust loss raises the plain SSR on purpose, so the plain-SSR
+            # comparison only applies to the default linear loss.
+            linear_loss = refinement_kwargs.get("loss", "linear") == "linear"
+            if (
+                linear_loss
+                and np.isfinite(ssr_cma)
+                and not ssr_ref <= ssr_cma * (1.0 + 1e-8)
+            ):
+                logger.warning(
+                    "NLSQ refinement increased the weighted SSR (%.6e -> %.6e); "
+                    "keeping the CMA-ES result.",
+                    ssr_cma,
+                    ssr_ref,
+                )
+                return {
+                    "popt": p0_numpy,
+                    "pcov": self._estimate_pcov_from_cmaes(len(p0_numpy)),
+                    "success": False,
+                    "status": 0,
+                    "message": "CMA-ES completed; NLSQ refinement did not "
+                    "improve the fit and was discarded",
+                }
+
             # Compute parameter change from CMA-ES to NLSQ
             param_change = np.linalg.norm(popt - p0_numpy)
             logger.info(
@@ -1416,6 +1512,22 @@ class CMAESOptimizer:
                 "status": 0,
                 "message": f"CMA-ES completed; NLSQ refinement failed: {e}",
             }
+
+    @staticmethod
+    def _weighted_ssr(f: Any, x: Any, y: Any, sigma: Any, p: Any) -> float:
+        """Weighted sum of squared residuals; ``inf`` if non-finite or f fails."""
+        try:
+            r = np.asarray(y, dtype=float) - np.asarray(f(x, *p), dtype=float)
+            if sigma is not None:
+                sig = np.asarray(sigma, dtype=float)
+                if sig.ndim == 2:
+                    r = np.linalg.solve(np.linalg.cholesky(sig), r)
+                else:
+                    r = r / sig
+            ssr = float(np.sum(r * r))
+        except Exception:
+            return float("inf")
+        return ssr if np.isfinite(ssr) else float("inf")
 
     def _estimate_pcov_from_cmaes(self, n_params: int) -> NDArray[np.floating]:
         """Estimate parameter covariance when NLSQ refinement is disabled.

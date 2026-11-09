@@ -350,7 +350,7 @@ max-complexity = 15
 known-first-party = ["nlsq"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 # Moderate strictness for scientific computing library (v0.3.0 - strengthened)
 warn_return_any = true  # Warn when returning Any (stricter)
 warn_unused_configs = true

@@ -39,6 +39,17 @@ from nlsq.cli.result_exporter import ResultExporter
 
 logger = logging.getLogger("nlsq.cli.workflow_runner")
 
+_KNOWN_TOP_LEVEL_KEYS = (
+    "data",
+    "model",
+    "fitting",
+    "export",
+    "metadata",
+    "validation",
+    "visualization",
+    "hybrid_streaming",
+)
+
 _KNOWN_FITTING_KEYS = (
     "p0",
     "bounds",
@@ -51,6 +62,22 @@ _KNOWN_FITTING_KEYS = (
     "absolute_sigma",
     "check_finite",
 )
+
+
+def _bound_array(value: Any, which: str) -> np.ndarray:
+    """Bound as float array; PyYAML reads ``1e-3``/``inf`` (no dot/sign) as str."""
+    try:
+        arr = np.asarray(value, dtype=float)  # None -> nan
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(
+            f"fitting.bounds {which} must contain only numbers, got {value!r}"
+        ) from exc
+    if np.isnan(arr).any():
+        raise ConfigError(
+            f"fitting.bounds {which} must not contain null/NaN, got {value!r}",
+            suggestion="Use -inf / inf for an unbounded side.",
+        )
+    return arr
 
 
 class WorkflowRunner:
@@ -136,6 +163,24 @@ class WorkflowRunner:
         CLIError
             If any other workflow error occurs.
         """
+        for key in config:
+            if key not in _KNOWN_TOP_LEVEL_KEYS:
+                close = difflib.get_close_matches(
+                    str(key), _KNOWN_TOP_LEVEL_KEYS, n=1, cutoff=0.5
+                )
+                logger.warning(
+                    "Unknown top-level config key %r is ignored%s. Valid keys: %s",
+                    key,
+                    f" (did you mean {close[0]!r}?)" if close else "",
+                    ", ".join(_KNOWN_TOP_LEVEL_KEYS),
+                )
+
+        if config.get("hybrid_streaming"):
+            logger.warning(
+                "'hybrid_streaming' section is accepted but NOT applied by the CLI "
+                "(it is only read by the GUI); the fit runs with its defaults."
+            )
+
         # Step 1: Load data
         xdata, ydata, sigma = self._load_data(config)
         self.last_data = (xdata, ydata, sigma)
@@ -300,8 +345,10 @@ class WorkflowRunner:
                 )
 
         # Extract p0
-        p0 = fitting_config.get("p0")
-        if p0 == "auto" or p0 is None:
+        p0: Any = fitting_config.get("p0")
+        if isinstance(p0, str) and p0.strip().lower() == "auto":
+            p0 = "auto"
+        if (isinstance(p0, str) and p0 == "auto") or p0 is None:
             # Try to estimate from model's estimate_p0 method
             if hasattr(model, "estimate_p0"):
                 try:
@@ -318,7 +365,18 @@ class WorkflowRunner:
                     )
                     p0 = None
         elif isinstance(p0, (list, tuple)):
-            p0 = np.asarray(p0)
+            try:  # PyYAML reads `1e0` (no dot) as a string
+                p0 = np.asarray([float(v) for v in p0])
+            except (TypeError, ValueError) as exc:
+                raise ConfigError(
+                    f"fitting.p0 must contain only numbers, got {list(p0)!r}"
+                ) from exc
+        elif isinstance(p0, (str, bytes, dict)):
+            raise ConfigError(
+                f"fitting.p0 must be a list of numbers or 'auto', got {p0!r}"
+            )
+        else:  # YAML scalar or ndarray from Python callers
+            p0 = np.atleast_1d(np.asarray(p0))
 
         # Extract bounds
         bounds_config = fitting_config.get("bounds")
@@ -328,9 +386,12 @@ class WorkflowRunner:
             if isinstance(bounds_config, dict):
                 lower = cfg_get(bounds_config, "lower", -np.inf)
                 upper = cfg_get(bounds_config, "upper", np.inf)
-                bounds = (np.asarray(lower), np.asarray(upper))
+                bounds = (_bound_array(lower, "lower"), _bound_array(upper, "upper"))
             elif isinstance(bounds_config, (list, tuple)) and len(bounds_config) == 2:
-                bounds = (np.asarray(bounds_config[0]), np.asarray(bounds_config[1]))
+                bounds = (
+                    _bound_array(bounds_config[0], "lower"),
+                    _bound_array(bounds_config[1], "upper"),
+                )
             else:
                 raise ConfigError(
                     "fitting.bounds must be {lower, upper} or [lower, upper], "
@@ -374,7 +435,12 @@ class WorkflowRunner:
             tol_val = fitting_config.get(tol_key)
             if tol_val is not None:
                 # YAML may parse scientific notation as strings (e.g., '1e-10')
-                fit_kwargs[tol_key] = float(tol_val)
+                try:
+                    fit_kwargs[tol_key] = float(tol_val)
+                except (TypeError, ValueError) as exc:
+                    raise ConfigError(
+                        f"fitting.{tol_key} must be a number, got {tol_val!r}"
+                    ) from exc
 
         # Max iterations
         max_nfev = fitting_config.get("max_nfev")

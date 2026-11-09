@@ -1,5 +1,6 @@
 """R5-03/05: integer coercion and exact_streaming bool max_nfev."""
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -39,6 +40,28 @@ def test_specs_integral_floats_become_int():
     assert _is_int(Chunked(chunk_size=100.0).chunk_size)
     assert _is_int(Exact(chunk_size=100.0).chunk_size)
     assert _is_int(Auto(size_threshold=1000.0).size_threshold)
+
+
+@pytest.mark.parametrize("scalar", [np.array(10.0), jnp.array(10.0)])
+def test_zero_dimensional_counts_work_for_chunked_fit(scalar):
+    from nlsq import curve_fit_large
+
+    strategy = Chunked(chunk_size=scalar)
+    assert type(strategy.chunk_size) is int
+    x = np.arange(20.0)
+    params, _ = curve_fit_large(
+        lambda x, a: a * x, x, 2 * x, p0=[1.0], strategy=strategy
+    )
+    np.testing.assert_allclose(params, [2.0])
+
+
+@pytest.mark.parametrize("scalar", [np.array(10.0), jnp.array(10.0)])
+def test_zero_dimensional_counts_are_coerced_for_configs(scalar):
+    assert type(Exact(chunk_size=scalar).chunk_size) is int
+    assert type(Auto(size_threshold=scalar).size_threshold) is int
+    assert type(Multistart(n_starts=scalar).n_starts) is int
+    assert type(LDMemoryConfig(min_chunk_size=scalar).min_chunk_size) is int
+    assert type(HybridStreamingConfig(chunk_size=scalar).chunk_size) is int
 
 
 @pytest.mark.parametrize("bad", [True, np.bool_(True)])

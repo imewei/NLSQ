@@ -116,10 +116,10 @@ from nlsq import curve_fit
 **Retry configuration:**
 ```python
 {
-    'max_retries': 3,
-    'retry_delay': 1.0,  # seconds
-    'backoff_factor': 2.0,  # Exponential backoff
-    'retry_on': [TimeoutError, MemoryError],
+    "max_retries": 3,
+    "retry_delay": 1.0,  # seconds
+    "backoff_factor": 2.0,  # Exponential backoff
+    "retry_on": [TimeoutError, MemoryError],
 }
 ```
 
@@ -173,11 +173,11 @@ from nlsq import curve_fit
 **Log structure:**
 ```python
 {
-    'timestamp': '2025-01-18T10:30:00Z',
-    'job_id': 'fit-12345',
-    'status': 'completed|failed|retrying',
-    'metrics': {...},
-    'diagnostics': {...}
+    "timestamp": "2025-01-18T10:30:00Z",
+    "job_id": "fit-12345",
+    "status": "completed|failed|retrying",
+    "metrics": {...},
+    "diagnostics": {...},
 }
 ```
 

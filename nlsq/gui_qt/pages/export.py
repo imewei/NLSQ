@@ -10,6 +10,8 @@ from __future__ import annotations
 import ast
 import contextlib
 import json
+import stat
+import tempfile
 import zipfile
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 from scipy import stats
 
+from nlsq.cli.result_exporter import NumpyJSONEncoder
 from nlsq.gui_qt.adapters.fit_adapter import _resolve_workflow
 from nlsq.gui_qt.session_state import n_points
 
@@ -406,20 +409,18 @@ class ExportPage(QWidget):
         """
         state = self._app_state.state
 
-        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-            # Export data as CSV
-            if state.xdata is not None and state.ydata is not None:
-                zf.writestr("data.csv", "\n".join(self._data_csv_lines()) + "\n")
-
-            # Export results as JSON
-            zf.writestr("results.json", self._generate_json())
-
-            # Export Python code
-            zf.writestr("fit_script.py", self.generate_python_code(for_bundle=True))
-
-            # Export config as YAML
-            config_yaml = self._generate_config_yaml()
-            zf.writestr("config.yaml", config_yaml)
+        destination = Path(path)
+        with tempfile.TemporaryDirectory(dir=destination.parent) as tmp_dir:
+            temporary = Path(tmp_dir) / destination.name
+            with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as zf:
+                if state.xdata is not None and state.ydata is not None:
+                    zf.writestr("data.csv", "\n".join(self._data_csv_lines()) + "\n")
+                zf.writestr("results.json", self._generate_json())
+                zf.writestr("fit_script.py", self.generate_python_code(for_bundle=True))
+                zf.writestr("config.yaml", self._generate_config_yaml())
+            if destination.exists():
+                temporary.chmod(stat.S_IMODE(destination.stat().st_mode))
+            temporary.replace(destination)
 
     def export_json(self, path: str) -> None:
         """Export results as JSON.
@@ -471,11 +472,9 @@ class ExportPage(QWidget):
                         ci_lower = value - t_val * uncert
                         ci_upper = value + t_val * uncert
                     except Exception:
-                        uncert = 0.0
-                        ci_lower = ci_upper = value
+                        uncert = ci_lower = ci_upper = ""
                 else:
-                    uncert = 0.0
-                    ci_lower = ci_upper = value
+                    uncert = ci_lower = ci_upper = ""
 
                 lines.append(f"{name},{value},{uncert},{ci_lower},{ci_upper}")
 
@@ -562,7 +561,7 @@ class ExportPage(QWidget):
                 lines.append("")
         return lines
 
-    def _script_fit_kwargs(self, workflow: str) -> list[str]:
+    def _script_fit_kwargs(self, workflow: str, multistart: bool = False) -> list[str]:
         """fit() keyword lines mirroring the settings the GUI fit used."""
         state = self._app_state.state
         # Mirror the settings the GUI fit used so a rerun reproduces its result
@@ -577,7 +576,9 @@ class ExportPage(QWidget):
         extra.append(
             f"    max_nfev={min(state.max_function_evals, state.max_iterations)},"
         )
-        if workflow == "auto_global" and state.n_starts > 0:
+        if (workflow == "auto_global" or multistart) and state.n_starts > 0:
+            if multistart:
+                extra.append("    multistart=True,")
             extra += [
                 f"    n_starts={state.n_starts},",
                 f"    sampler={state.sampler!r},",
@@ -668,6 +669,9 @@ class ExportPage(QWidget):
                 )
             elif model_type == "custom":
                 code = state.model_config.get("code", "")
+                model_path = state.model_config.get("path")
+                if not code and model_path:  # YAML-imported custom model file
+                    code = self._read_model_file(model_path)
                 func_name = state.model_config.get(
                     "function"
                 ) or self._first_function_name(code)
@@ -701,7 +705,11 @@ class ExportPage(QWidget):
                 np.array([fill if v is None else float(v) for v in b])
                 for b, fill in zip(state.bounds, (-np.inf, np.inf), strict=True)
             )
-        workflow = _resolve_workflow(getattr(state, "workflow", "auto"), bounds_arr, [])
+        selected = getattr(state, "workflow", "auto")
+        # mirrors execute_fit: p0 present -> multi-start runs inside inferred bounds
+        multistart = bool(state.p0) and state.n_starts > 0
+        workflow = _resolve_workflow(selected, bounds_arr, [], multistart)
+        multistart = multistart and selected == "auto_global" and workflow == "auto"
 
         # Add fitting options
         lines.extend(
@@ -735,7 +743,7 @@ class ExportPage(QWidget):
 
         lines.append(f"workflow = {workflow!r}  # Options: auto, auto_global, hpc")
 
-        extra = self._script_fit_kwargs(workflow)
+        extra = self._script_fit_kwargs(workflow, multistart)
 
         lines.extend(
             [
@@ -801,7 +809,7 @@ class ExportPage(QWidget):
                 params = {}
                 for i, name in enumerate(param_names):
                     value = float(popt[i]) if i < len(popt) else 0.0
-                    uncert = 0.0
+                    uncert = float("nan")
                     if pcov is not None:
                         with contextlib.suppress(Exception):
                             uncert = float(np.sqrt(pcov[i, i]))
@@ -834,7 +842,7 @@ class ExportPage(QWidget):
                     residuals = ydata - np.asarray(y_fit)
                     ss_res = float(np.sum(residuals**2))
                     ss_tot = float(np.sum((ydata - np.mean(ydata)) ** 2))
-                    r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+                    r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else float("nan")
                     rmse = float(np.sqrt(np.mean(residuals**2)))
 
                     # json.dumps emits non-standard NaN/Infinity tokens for
@@ -849,13 +857,36 @@ class ExportPage(QWidget):
         if state.model_config:
             data["model"] = state.model_config
 
-        return json.dumps(data, indent=2)
+        return json.dumps(data, indent=2, cls=NumpyJSONEncoder)
 
     def _generate_config_yaml(self) -> str:
         """Generate YAML configuration (same schema ``load_yaml_config`` reads)."""
         from nlsq.gui_qt.adapters.config_adapter import export_yaml_config
 
         return export_yaml_config(self._app_state.state)
+
+    @staticmethod
+    def _read_model_file(model_path: Any) -> str:
+        """Inline a custom-model ``.py`` file; never raise, never copy other files.
+
+        Only small ``.py`` files are inlined (a YAML config could name any
+        readable file, e.g. credentials); otherwise a stub comment is emitted.
+        """
+        path = Path(str(model_path))
+        try:
+            real = path.resolve()  # a symlink must not smuggle in another file
+            if (
+                real.suffix != ".py"
+                or not real.is_file()  # also rejects FIFOs/devices (read would block)
+                or real.stat().st_size > 256 * 1024
+            ):
+                raise ValueError("not a regular .py file of at most 256 KiB")
+            return real.read_text(encoding="utf-8")
+        except (OSError, ValueError, UnicodeDecodeError) as exc:
+            return (
+                f"# Custom model file {path.name!r} could not be inlined "
+                f"({type(exc).__name__}); define the model function here.\n"
+            )
 
     @staticmethod
     def _first_function_name(code: str) -> str | None:

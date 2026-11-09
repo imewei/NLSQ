@@ -97,7 +97,7 @@ Dose-Response
        response,
        p0=[0, 100, 10, 1],
        bounds=([0, 0, 0.001, 0.1], [50, 200, 1000, 10]),
-       preset="quality",
+       goal="quality",
    )
 
 5-Parameter Logistic

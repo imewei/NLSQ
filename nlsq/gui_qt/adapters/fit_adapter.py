@@ -278,12 +278,17 @@ class _CallbackWrapper:
 
 
 def _resolve_workflow(
-    workflow: str | None, bounds: tuple[np.ndarray, np.ndarray] | None, notes: list[str]
+    workflow: str | None,
+    bounds: tuple[np.ndarray, np.ndarray] | None,
+    notes: list[str],
+    can_multistart: bool = False,
 ) -> str:
     """Pick the workflow; auto_global strictly requires finite bounds.
 
-    Without any finite bound (common for polynomials) it degrades to the local
-    'auto' workflow, and says so in ``notes`` instead of doing it silently.
+    Without finite bounds on every parameter it degrades to the 'auto'
+    workflow and says so in ``notes`` instead of doing it silently. With
+    ``can_multistart`` (a p0 is available) the caller still runs multi-start,
+    sampling inside finite bounds inferred from p0 and the data.
     """
     workflow = workflow or "auto"
     if workflow not in VALID_WORKFLOWS:
@@ -292,12 +297,22 @@ def _resolve_workflow(
         )
     if workflow == "auto_global" and not (
         bounds is not None
-        and (np.any(np.isfinite(bounds[0])) or np.any(np.isfinite(bounds[1])))
+        and np.all(np.isfinite(bounds[0]))
+        and np.all(np.isfinite(bounds[1]))
     ):
-        notes.append(
-            "global multi-start search needs finite bounds; ran a local "
-            "fit instead (set parameter bounds to enable it)"
-        )
+        if can_multistart:
+            notes.append(
+                "global search needs finite bounds on every parameter (lower "
+                "and upper); multi-start sampled starting points inside bounds "
+                "inferred from p0 and the data instead (your bounds still "
+                "constrain every fit)"
+            )
+        else:
+            notes.append(
+                "global multi-start search needs finite bounds on every "
+                "parameter (lower and upper); ran a local fit instead (set all "
+                "bounds to enable it)"
+            )
         return "auto"
     return workflow
 
@@ -387,7 +402,16 @@ def execute_fit(
         fit_kwargs["callback"] = callback_wrapper
 
     notes: list[str] = []
-    workflow = _resolve_workflow(config.workflow, bounds, notes)
+    can_multistart = p0 is not None and config.n_starts > 0
+    workflow = _resolve_workflow(config.workflow, bounds, notes, can_multistart)
+    if can_multistart and config.workflow == "auto_global" and workflow == "auto":
+        fit_kwargs.update(
+            multistart=True,
+            n_starts=config.n_starts,
+            sampler=config.sampler,
+            center_on_p0=config.center_on_p0,
+            scale_factor=config.scale_factor,
+        )
 
     # Determine goal
     goal = config.goal

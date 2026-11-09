@@ -402,6 +402,12 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Initialize normalized parameters
         self.normalized_params = self.normalizer.normalize(self.original_p0)
+        if self.normalized_bounds is not None:
+            # An infeasible p0 would otherwise look better than every clipped
+            # trial step and never move (curve_fit/exact_lm clip it too).
+            self.normalized_params = jnp.clip(
+                self.normalized_params, *self.normalized_bounds
+            )
 
         # Generate multi-start candidates if enabled
         if self.config.enable_multistart:
@@ -1664,7 +1670,8 @@ class AdaptiveHybridStreamingOptimizer:
         """
         initial_loss = float(loss_fn(current_params, x_data, y_data))
         y_variance = float(jnp.var(y_data))
-        relative_loss = initial_loss / (y_variance + 1e-10)
+        # Scale-free: an absolute epsilon would swamp a small-valued y.
+        relative_loss = initial_loss / max(y_variance, float(np.finfo(np.float64).tiny))
 
         # Store for Layer 3 cost-increase guard
         self._warmup_initial_loss = initial_loss
@@ -2399,10 +2406,25 @@ class AdaptiveHybridStreamingOptimizer:
         """
         n_params = JTJ.shape[0]
 
-        # Add Tikhonov regularization for numerical stability
-        JTJ_reg = JTJ + regularization * jnp.eye(n_params, dtype=jnp.float64)
+        # Jacobi (diagonal) scaling: with Jacobian columns of very different
+        # magnitude, the relative singular-value cutoff below would zero the
+        # step for the weakly scaled parameters (J^T J squares the spread), and
+        # an absolute ridge would swamp J^T J when y (hence J) is tiny-valued.
+        # So scale first and add the Tikhonov term in the scaled (unit-diagonal)
+        # space. A column whose curvature is < 1e-20 of the strongest column's
+        # (norm ratio < 1e-10) is unidentifiable: exact GN would give it a huge
+        # step that the trust-region clip then propagates to every parameter,
+        # so it is held fixed instead (d=0 -> zero step component).
+        diag = jnp.diag(JTJ)
+        keep = diag > 1e-20 * jnp.max(diag)
+        d = jnp.where(keep, 1.0 / jnp.sqrt(jnp.where(keep, diag, 1.0)), 0.0)
+        JTJ_reg = JTJ * d[:, None] * d[None, :] + regularization * jnp.eye(
+            n_params, dtype=jnp.float64
+        )
+        JTr_orig = JTr
+        JTr = JTr * d
 
-        # Compute SVD of regularized J^T J
+        # Compute SVD of the scaled, regularized J^T J
         U, s, Vt = jnp.linalg.svd(JTJ_reg, full_matrices=False)
 
         # Solve for Gauss-Newton step using SVD
@@ -2432,8 +2454,9 @@ class AdaptiveHybridStreamingOptimizer:
         s_inv = jnp.where(s > s_threshold, 1.0 / s_safe, 0.0)
         step_hat = UTb * s_inv
 
-        # Transform back to parameter space
-        step = Vt.T @ step_hat
+        # Transform back to parameter space (undo the diagonal scaling)
+        step = d * (Vt.T @ step_hat)
+        JTr = JTr_orig
 
         # Apply trust region constraint
         step_norm = jnp.linalg.norm(step)
@@ -3060,6 +3083,8 @@ class AdaptiveHybridStreamingOptimizer:
             "predicted_reduction": predicted_reduction,
             "trust_radius": new_trust_radius,
             "gradient_norm": gradient_norm,
+            # A step cut off by the trust radius says nothing about convergence
+            "step_at_boundary": step_norm >= 0.999 * trust_radius,
         }
 
     def _gn_iteration_with_retry(
@@ -3452,7 +3477,16 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Check convergence: gradient norm (skip on a retry-exhaustion
             # fallback, where gradient_norm is a 0.0 sentinel, not a real value)
-            if not retry_exhausted and gradient_norm < self.config.gauss_newton_tol:
+            # The absolute tolerance is capped by the problem's own scale
+            # (||J||*||r||) so a small-valued y cannot satisfy it at the start.
+            gradient_scale = min(
+                1.0,
+                float(jnp.sqrt(jnp.trace(final_JTJ) * final_residual_sum_sq)),
+            )
+            if (
+                not retry_exhausted
+                and gradient_norm < self.config.gauss_newton_tol * gradient_scale
+            ):
                 # Record Phase 2 completion
                 phase_record = {
                     "phase": 2,
@@ -3482,9 +3516,15 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Check convergence: cost change (compare to cost before this step)
             cost_change = abs(cost_before_step - new_cost)
-            relative_change = cost_change / (abs(cost_before_step) + 1e-10)
+            relative_change = cost_change / max(
+                abs(cost_before_step), float(np.finfo(np.float64).tiny)
+            )
 
-            if not retry_exhausted and relative_change < self.config.gauss_newton_tol:
+            if (
+                not retry_exhausted
+                and not iter_result.get("step_at_boundary", False)
+                and relative_change < self.config.gauss_newton_tol
+            ):
                 phase_record = {
                     "phase": 2,
                     "name": "gauss_newton",

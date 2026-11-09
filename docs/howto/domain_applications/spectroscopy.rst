@@ -103,7 +103,7 @@ Bi-Exponential
        counts,
        p0=[1000, 2.5, 500, 8.0, 10],
        bounds=([0, 0.1, 0, 0.1, 0], [10000, 100, 10000, 100, 1000]),
-       preset="quality",
+       goal="quality",
    )
 
 Stretched Exponential

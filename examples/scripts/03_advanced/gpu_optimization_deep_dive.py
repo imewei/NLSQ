@@ -213,7 +213,6 @@ try:
         x_large[:100],
         y_large[:100],
         p0=[3, 0.5, 2, 1],
-        maxiter=20 if QUICK else 50,
         max_nfev=200 if QUICK else 1000,
     )
 except OptimizationError:
@@ -223,7 +222,6 @@ except OptimizationError:
             x_large[:100],
             y_large[:100],
             p0=[3, 0.5, 2, 1],
-            maxiter=20 if QUICK else 50,
             max_nfev=600 if QUICK else 1000,
             gtol=1e-6 if QUICK else 1e-8,
         )
@@ -239,7 +237,7 @@ for i in range(n_runs):
     p0 = [3.0 + i * 0.1, 0.5, 2.0, 1.0]
     start = time.time()
     popt, _ = cf_gpu.curve_fit(
-        complex_model, x_large, y_large, p0=p0, maxiter=20 if QUICK else 50
+        complex_model, x_large, y_large, p0=p0, max_nfev=20 if QUICK else 50
     )
     times.append((time.time() - start) * 1000)
 
@@ -302,7 +300,7 @@ cf_seq = CurveFit()
 sequential_runs = min(20 if QUICK else 100, n_datasets)
 for i in range(sequential_runs):  # Only fit a subset for speed
     popt, _ = cf_seq.curve_fit(
-        exponential_model, x_batch_data, y_batch_data[i], p0=[3.0, 0.5], maxiter=30
+        exponential_model, x_batch_data, y_batch_data[i], p0=[3.0, 0.5], max_nfev=30
     )
     results_sequential.append(popt)
 time_sequential = time.time() - start
@@ -447,14 +445,14 @@ def benchmark_nlsq(n_points_list, n_params=2, n_runs=5):
         y = 3.0 * jnp.exp(-0.5 * x) + np.random.normal(0, 0.1, n_points)
 
         # Warm up
-        _ = cf_bench.curve_fit(exponential_model, x, y, p0=[2.0, 0.3], maxiter=20)
+        _ = cf_bench.curve_fit(exponential_model, x, y, p0=[2.0, 0.3], max_nfev=20)
 
         # Benchmark
         times = []
         for _ in range(n_runs):
             start = time.time()
             popt, _ = cf_bench.curve_fit(
-                exponential_model, x, y, p0=[2.0, 0.3], maxiter=20
+                exponential_model, x, y, p0=[2.0, 0.3], max_nfev=20
             )
             # Note: popt is numpy array (already synchronous), no need for block_until_ready
             times.append((time.time() - start) * 1000)

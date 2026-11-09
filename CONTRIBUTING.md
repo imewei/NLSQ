@@ -72,15 +72,15 @@ For GPU development:
 
 ```bash
 # CUDA 12.x
-pip install --upgrade "jax[cuda12]>=0.6.0"
+pip install --upgrade "jax[cuda12]>=0.8.0"
 
 # Or for CPU-only development
-pip install --upgrade "jax[cpu]>=0.6.0"
+pip install --upgrade "jax[cpu]>=0.8.0"
 ```
 
 ### Dependency Management
 
-For detailed information about dependencies, version requirements, and the project's dependency management strategy, see [REQUIREMENTS.md](REQUIREMENTS.md).
+For detailed information about dependencies, version requirements, and the project's dependency management strategy, see `pyproject.toml` and `uv.lock`.
 
 ## Contributing Guidelines
 

@@ -40,7 +40,12 @@ import threading
 with contextlib.suppress(AttributeError, ValueError, RuntimeError, OSError):
     faulthandler.enable()
 
-_NLSQ_DEBUG = bool(os.environ.get("NLSQ_DEBUG"))
+_NLSQ_DEBUG = os.environ.get("NLSQ_DEBUG", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def _dbg(msg: str) -> None:
@@ -571,7 +576,53 @@ def fit(
     # NEW WORKFLOW SYSTEM (v0.6.3)
     # If workflow parameter is specified, delegate to minpack.fit()
     if workflow is not None:
+        import warnings as _warnings
+
         from nlsq.core.minpack import fit as minpack_fit
+
+        # Options that used to be dropped silently on this path: forward the ones
+        # minpack.fit honours (through its **kwargs), warn about the one it can't.
+        if preset is not None:
+            _warnings.warn(
+                "`preset` is ignored when `workflow` is given; use `workflow=` "
+                "or `goal=` instead.",
+                UserWarning,
+                stacklevel=2,
+            )
+        # Only the plain "auto" workflow feeds these into curve_fit (via
+        # **kwargs); the other workflows pass multistart/show_progress/... to
+        # their backends explicitly, so forwarding would raise a duplicate
+        # keyword TypeError. Say so instead of dropping them silently.
+        requested: dict[str, Any] = {}
+        if multistart is not None:
+            requested["multistart"] = multistart
+        if sampler != "lhs":
+            requested["sampler"] = sampler
+        if not center_on_p0:
+            requested["center_on_p0"] = center_on_p0
+        if scale_factor != 1.0:
+            requested["scale_factor"] = scale_factor
+        if show_progress:
+            requested["show_progress"] = show_progress
+        if chunk_size is not None:
+            requested["chunk_size"] = chunk_size
+        if size_threshold != 1_000_000:
+            requested["size_threshold"] = size_threshold
+        multistart_keys = ("multistart", "sampler", "center_on_p0", "scale_factor")
+        if isinstance(workflow, str) and workflow.strip().lower() == "auto":
+            forwarded = {k: v for k, v in requested.items() if k in multistart_keys}
+        else:
+            forwarded = {}
+        ignored = sorted(k for k in requested if k not in forwarded)
+        if ignored:
+            _warnings.warn(
+                f"{ignored} are not used when `workflow` is given and are "
+                "ignored; configure them through the workflow config or use "
+                "curve_fit()/curve_fit_large().",
+                UserWarning,
+                stacklevel=2,
+            )
+        kwargs = {**forwarded, **kwargs}
 
         # Forward to the new workflow-based fit
         return minpack_fit(
@@ -1197,7 +1248,10 @@ def curve_fit_large(
                 "together with strategy=; set them on the strategy instead",
             )
 
+    from nlsq.core.minpack import _bounds_as_tuple
     from nlsq.streaming.large_fit import fit_with_strategy
+
+    bounds = _bounds_as_tuple(bounds)
 
     return fit_with_strategy(
         strategy,

@@ -131,7 +131,7 @@ def main():
         # HybridStreamingConfig overrides:
         warmup_iterations=300,
         normalization_strategy="p0",  # 'bounds' requires explicit bounds
-        phase2_max_iterations=100,
+        gauss_newton_max_iterations=100,
     )
 
     popt, pcov = result

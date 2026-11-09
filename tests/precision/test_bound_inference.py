@@ -420,3 +420,22 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_infer_bounds_rejects_non_finite_data():
+    import numpy as np
+    import pytest
+
+    from nlsq.precision.bound_inference import infer_bounds
+
+    x = np.linspace(0, 1, 20)
+    y = np.exp(-x)
+    y[3] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        infer_bounds(x, y, [1.0, 1.0, 0.0])
+
+
+@pytest.mark.parametrize("bad", [0.0, -2.0, 0.5, float("nan"), float("inf")])
+def test_bound_inference_rejects_bad_safety_factor(bad):
+    with pytest.raises(ValueError, match="safety_factor"):
+        BoundsInference(np.arange(5.0), np.arange(5.0), [1.0], safety_factor=bad)

@@ -36,8 +36,10 @@ Example Usage
 """
 
 import csv
+import logging
 import math
 import os
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +52,8 @@ from nlsq.cli.errors import DataLoadError, cfg_get
 # allocation, so this only needs to stop absurd/compressed-bomb headers while
 # keeping the documented 100M+ point workflows loadable.
 _DEFAULT_MAX_LOAD_ELEMENTS = 2_000_000_000
+
+logger = logging.getLogger("nlsq.cli.data_loaders")
 
 
 def _max_load_elements(file_path: Path, file_format: str) -> int:
@@ -103,6 +107,36 @@ SUPPORTED_FORMATS = {"ascii", "csv", "npz", "hdf5"}
 # =============================================================================
 # DataLoader Class
 # =============================================================================
+
+
+def _real_float(arr: np.ndarray, key: str, file_path: Path) -> np.ndarray:
+    """float64 view of ``arr``; complex data would silently lose its imaginary part."""
+    if np.iscomplexobj(arr) and np.any(arr.imag != 0):
+        raise DataLoadError(
+            f"Array '{key}' is complex; only real-valued data can be fitted",
+            file_path=file_path,
+            file_format="npz",
+        )
+    return np.real(arr).astype(np.float64)
+
+
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _strip_unquoted_comment(line: str) -> str:
+    """Cut ``line`` at the first ``#`` that is not inside double quotes."""
+    in_quotes = False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            in_quotes = not in_quotes
+        elif ch == "#" and not in_quotes:
+            return line[:i]
+    return line
 
 
 class DataLoader:
@@ -499,20 +533,54 @@ class DataLoader:
                 header_names = [
                     col.strip() for col in next(csv.reader(f, delimiter=delimiter), [])
                 ]
+            if header_names and all(_is_number(c) for c in header_names):
+                # A header-less file read with the default has_header=True would
+                # silently lose its first data row.
+                logger.warning(
+                    "CSV 'header' row %r is entirely numeric; treating it as data "
+                    "(set csv.header: false to silence this).",
+                    header_names,
+                )
+                has_header = False
+                header_names = None
 
         try:
             # Calculate skip rows: additional skip_header + 1 for header row
             total_skip = skip_header + (1 if has_header else 0)
 
-            data = np.genfromtxt(
-                file_path,
-                delimiter=delimiter,
-                skip_header=total_skip,
-                encoding=encoding,
-                missing_values=missing_values,
-                filling_values=np.nan,
-                dtype=np.float64,
-            )
+            # genfromtxt does not understand quoting; numeric cells quoted by
+            # Excel/pandas ("1.0","2.0") would otherwise all become NaN.
+            def _unquoted_rows(fh):
+                # csv.reader unquotes properly. A quoted field containing the
+                # delimiter ("1,000", "a, b") stays ONE column but is no longer
+                # numeric, so it loads as NaN instead of splitting the row.
+                if len(delimiter) != 1:
+                    yield from (line.replace('"', "") for line in fh)
+                    return
+                # preamble/header lines are physical lines (a stray quote there
+                # must not swallow the data rows)
+                for _ in range(total_skip):
+                    yield fh.readline().rstrip("\r\n")
+                # Tokenise each physical line on its own so an unbalanced quote
+                # can never swallow the following lines; "#" comments are
+                # removed here (quote-aware), genfromtxt's own handling is off.
+                for line in fh:
+                    s = _strip_unquoted_comment(line.rstrip("\r\n"))
+                    if not s.strip():
+                        continue  # blank or comment-only line
+                    row = next(csv.reader([s], delimiter=delimiter), [])
+                    yield delimiter.join(c.replace(delimiter, " ") for c in row)
+
+            with open(file_path, encoding=encoding, newline="") as fh:
+                data = np.genfromtxt(
+                    _unquoted_rows(fh),
+                    delimiter=delimiter,
+                    skip_header=total_skip,
+                    comments="#" if len(delimiter) != 1 else None,  # type: ignore[arg-type]
+                    missing_values=missing_values,
+                    filling_values=np.nan,
+                    dtype=np.float64,
+                )
 
             if (
                 data.ndim == 2
@@ -686,7 +754,7 @@ class DataLoader:
 
                 def _check(key: str) -> None:
                     # Header only: a compressed member can declare far more than it stores.
-                    member = key if key.endswith(".npy") else key + ".npy"
+                    member = key if key in data.zip.namelist() else key + ".npy"
                     if member not in data.zip.namelist():
                         return
                     with data.zip.open(member) as fh:
@@ -714,7 +782,7 @@ class DataLoader:
                         suggestion=f"Available keys are: {', '.join(available_keys)}",
                     )
                 _check(x_key)
-                x_arr = data[x_key].astype(np.float64).flatten()
+                x_arr = _real_float(data[x_key], x_key, file_path).flatten()
 
                 # Load y data
                 if y_key not in data:
@@ -726,7 +794,7 @@ class DataLoader:
                         suggestion=f"Available keys are: {', '.join(available_keys)}",
                     )
                 _check(y_key)
-                y_arr = data[y_key].astype(np.float64).flatten()
+                y_arr = _real_float(data[y_key], y_key, file_path).flatten()
 
                 # Handle 2D vs 1D data
                 if is_2d and z_key is not None:
@@ -740,7 +808,7 @@ class DataLoader:
                             suggestion=f"Available keys are: {', '.join(available_keys)}",
                         )
                     _check(z_key)
-                    z_arr = data[z_key].astype(np.float64).flatten()
+                    z_arr = _real_float(data[z_key], z_key, file_path).flatten()
 
                     # 2D surface data: x, y are coordinates, z is dependent variable
                     # Stack x, y into shape (2, n_points)
@@ -763,11 +831,11 @@ class DataLoader:
                             suggestion=f"Available keys are: {', '.join(available_keys)}",
                         )
                     _check(sigma_key)
-                    sigma = data[sigma_key].astype(np.float64).flatten()
+                    sigma = _real_float(data[sigma_key], sigma_key, file_path).flatten()
 
         except DataLoadError:
             raise
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError, TypeError, zipfile.BadZipFile) as e:
             raise DataLoadError(
                 f"Failed to load NPZ file: {e}",
                 file_path=file_path,
@@ -855,7 +923,22 @@ class DataLoader:
                         file_path=file_path,
                         file_format="hdf5",
                     )
+                if dset.external:
+                    raise DataLoadError(
+                        f"Dataset '{path}' uses external storage; external storage is not supported",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
                 _check_load_size(math.prod(dset.shape), path, file_path, "hdf5", limit)
+                if math.prod(dset.shape) > 0 and dset.id.get_storage_size() == 0:
+                    # Declared but never written: reading would allocate the whole
+                    # declared shape (tiny file, huge array) and yield fill values.
+                    raise DataLoadError(
+                        f"Dataset '{path}' has no stored data (declared shape "
+                        f"{tuple(dset.shape)}, 0 bytes on disk)",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
                 return np.asarray(dset, dtype=np.float64).flatten()
 
             with h5py.File(file_path, "r") as f:

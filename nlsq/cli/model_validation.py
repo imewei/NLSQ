@@ -257,6 +257,14 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "touch",
         "symlink_to",
         "hardlink_to",
+        "mkdir",
+        # matplotlib / Qt file writers and process spawners
+        "savefig",
+        "startDetached",
+        "QProcess",
+        "QSaveFile",
+        "QFile",
+        "QDir",
     },
 )
 
@@ -360,7 +368,18 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "tempfile",
         "zipfile",
         "tarfile",
+        "bz2",
+        "gzip",
+        "lzma",
         "fileinput",
+        # GUI toolkits / plotting: QProcess spawns processes, QSaveFile and
+        # savefig write files
+        "PySide6",
+        "shiboken6",
+        "PyQt5",
+        "PyQt6",
+        "pyqtgraph",
+        "matplotlib",
         "mmap",
         "logging",
         # Network (urllib/http/socket already blocked)

@@ -155,8 +155,8 @@ from nlsq import curve_fit
 **Configuration options:**
 ```python
 config = {
-    'option1': {value},  # {Description and impact}
-    'option2': {value},  # {Description and impact}
+    "option1": {value},  # {Description and impact}
+    "option2": {value},  # {Description and impact}
 }
 ```
 

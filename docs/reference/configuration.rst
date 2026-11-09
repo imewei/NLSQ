@@ -46,7 +46,7 @@ Environment Variables
      - ``1``
    * - ``NLSQ_GPU_MEMORY_FRACTION``
      - Fraction of GPU memory XLA may claim (0.0-1.0)
-     - unset (grows as needed)
+     - ``0.8`` (NLSQ sets ``XLA_PYTHON_CLIENT_MEM_FRACTION`` unless already defined)
    * - ``NLSQ_MEMORY_LIMIT_GB``
      - ``MemoryConfig.memory_limit_gb``: memory limit in GB (0.1-1024) used by strategy selection; an out-of-range value is ignored with a warning
      - unset (detected system memory)

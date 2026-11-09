@@ -69,6 +69,19 @@ def test_results_page_cleared_when_result_invalidated(qapp, app_state, main_wind
     assert rp._last_result is None
 
 
+def test_missing_covariance_has_no_claimed_uncertainty(qapp, app_state):
+    from nlsq.gui_qt.pages.results import ResultsPage
+    from nlsq.result.curve_fit_result import CurveFitResult
+
+    app_state.set_data(np.arange(4.0), np.arange(4.0))
+    app_state.set_model("custom", model_func=lambda x, a: a * x)
+    result = CurveFitResult(x=np.array([1.0]), pcov=None, success=True)
+    app_state.set_fit_result(result)
+    page = ResultsPage(app_state)
+    page.update_results(result)
+    assert page._param_results._table.item(0, 2).text() == "-"
+
+
 def test_shortcut_navigation_respects_guards(qapp, app_state, main_window):
     _loaded(app_state, main_window)
     main_window._nav_list.setCurrentRow(0)

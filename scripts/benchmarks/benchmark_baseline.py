@@ -227,7 +227,7 @@ def main() -> None:
 
     # Save results
     output_path = (
-        Path(__file__).parent.parent
+        Path(__file__).resolve().parents[2]
         / "specs"
         / "002-performance-optimizations"
         / "baseline.json"

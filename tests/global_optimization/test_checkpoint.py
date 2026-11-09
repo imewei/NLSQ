@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -13,6 +15,7 @@ from nlsq.global_optimization.checkpoint import (
     serialize_evosax_state,
     serialize_key,
 )
+from nlsq.utils.safe_serialize import SafeSerializationError
 
 
 def _make_evosax_state():
@@ -148,6 +151,42 @@ def test_save_load_round_trip(tmp_path):
     assert restored.generation_counter == 5
     assert restored.fitness_history == [1.0, 0.5, 0.2, 0.05, 0.01]
     np.testing.assert_array_equal(np.asarray(restored.best_solution), [1.0, 2.0, 3.0])
+
+
+def test_save_does_not_overwrite_file_linked_from_old_temp_path(tmp_path):
+    victim = tmp_path / "valuable"
+    victim.write_bytes(b"valuable")
+    path = tmp_path / "checkpoint.h5"
+    try:
+        path.with_suffix(path.suffix + ".tmp").symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks are unavailable")
+
+    HPCCheckpointManager().save(path, _sample_state(), _sample_fingerprint())
+
+    assert victim.read_bytes() == b"valuable"
+    assert not path.is_symlink()
+
+
+def test_checkpoint_permissions_match_normal_file_creation(tmp_path):
+    reference = tmp_path / "reference"
+    reference.write_bytes(b"reference")
+    path = tmp_path / "checkpoint.h5"
+    HPCCheckpointManager().save(path, _sample_state(), _sample_fingerprint())
+    assert path.stat().st_mode & 0o777 == reference.stat().st_mode & 0o777
+
+
+def test_failed_save_keeps_checkpoint_and_cleans_temporary_directory(tmp_path):
+    manager = HPCCheckpointManager()
+    path = tmp_path / "checkpoint.h5"
+    fingerprint = _sample_fingerprint()
+    manager.save(path, _sample_state(), fingerprint)
+    with pytest.raises(SafeSerializationError):
+        manager.save(
+            path, replace(_sample_state(), fitness_history=[object()]), fingerprint
+        )
+    assert manager.load(path, fingerprint).generation_counter == 5
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_load_missing_file_raises(tmp_path):

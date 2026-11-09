@@ -169,7 +169,7 @@ class AlgorithmSelector:
             Estimated number of parameters
         """
         if p0 is not None:
-            return len(p0)
+            return int(np.size(p0))
 
         try:
             from nlsq.core.problem import _n_params_from_signature

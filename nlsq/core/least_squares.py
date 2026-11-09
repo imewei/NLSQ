@@ -179,6 +179,8 @@ def prepare_bounds(bounds, n) -> tuple[np.ndarray, np.ndarray]:
     Tuple[np.ndarray, np.ndarray]
         The prepared lower and upper bounds arrays.
     """
+    if hasattr(bounds, "lb") and hasattr(bounds, "ub"):  # scipy.optimize.Bounds
+        bounds = (bounds.lb, bounds.ub)
     lb, ub = (np.asarray(b, dtype=float) for b in bounds)
     if lb.ndim == 0:
         lb = np.resize(lb, n)
@@ -462,6 +464,7 @@ _logger = logging.getLogger(__name__)
 _WRAPPER_CACHE_SIZE = 32
 _wrapper_cache: OrderedDict[tuple, tuple] = OrderedDict()
 _wrapper_cache_lock = threading.Lock()
+_bind_lock = threading.RLock()
 
 
 def clear_wrapper_cache() -> None:
@@ -950,6 +953,8 @@ class LeastSquares:
             raise ValueError("`verbose` must be in [0, 1, 2].")
 
         # Validate bounds
+        if hasattr(bounds, "lb") and hasattr(bounds, "ub"):  # scipy.optimize.Bounds
+            bounds = (bounds.lb, bounds.ub)
         if len(bounds) != 2:
             raise ValueError("`bounds` must contain 2 elements.")
 
@@ -1616,6 +1621,17 @@ class LeastSquares:
 
         max_nfev = validate_max_nfev(max_nfev, allow_fractional=True)
 
+        # SciPy finite-difference selectors: NLSQ always uses autodiff, which
+        # is exact, so accept them (as for ``diff_step``) and fall back.
+        if isinstance(jac, str) and jac in ("2-point", "3-point", "cs"):
+            warn(
+                f"jac={jac!r} (finite differences) is not used by NLSQ; the "
+                "Jacobian is computed with JAX automatic differentiation.",
+                UserWarning,
+                stacklevel=2,
+            )
+            jac = None
+
         # Step 2: Validate inputs (pass prepared_bounds if available)
         x0, lb, ub, ftol, xtol, gtol, x_scale = self._validate_least_squares_inputs(
             x0,
@@ -1887,35 +1903,42 @@ class LeastSquares:
         if traced is None:
             return False
         key, private, in_keys = traced
-        if key != self._wrapper_key:
-            with _wrapper_cache_lock:
-                bundle = _wrapper_cache.get(key)
-                if bundle is not None:
-                    _wrapper_cache.move_to_end(key)
-            if bundle is None:
-                self.update_function(_model_from_jaxpr(private, in_keys))
-                self.autdiff_jac(None, mode=mode)
-                bundle = (
+        # Serialise bind: it reads back self.func_*/jac_* that a concurrent
+        # bind on the same instance could overwrite, which would cache one
+        # model's (or one width's) wrappers under another model's key.
+        with _bind_lock:
+            if key != self._wrapper_key:
+                with _wrapper_cache_lock:
+                    bundle = _wrapper_cache.get(key)
+                    if bundle is not None:
+                        _wrapper_cache.move_to_end(key)
+                if bundle is None:
+                    # size by THIS call's x0: another thread sharing the
+                    # instance may have overwritten self.n since least_squares set it
+                    self.n = int(np.size(x0))
+                    self.update_function(_model_from_jaxpr(private, in_keys))
+                    self.autdiff_jac(None, mode=mode)
+                    bundle = (
+                        self.func_none,
+                        self.func_1d,
+                        self.func_2d,
+                        self.jac_none,
+                        self.jac_1d,
+                        self.jac_2d,
+                    )
+                    with _wrapper_cache_lock:
+                        _wrapper_cache[key] = bundle
+                        while len(_wrapper_cache) > _WRAPPER_CACHE_SIZE:
+                            _wrapper_cache.popitem(last=False)
+                (
                     self.func_none,
                     self.func_1d,
                     self.func_2d,
                     self.jac_none,
                     self.jac_1d,
                     self.jac_2d,
-                )
-                with _wrapper_cache_lock:
-                    _wrapper_cache[key] = bundle
-                    while len(_wrapper_cache) > _WRAPPER_CACHE_SIZE:
-                        _wrapper_cache.popitem(last=False)
-            (
-                self.func_none,
-                self.func_1d,
-                self.func_2d,
-                self.jac_none,
-                self.jac_1d,
-                self.jac_2d,
-            ) = bundle
-            self._wrapper_key = key
+                ) = bundle
+                self._wrapper_key = key
         self.f = fun
         self.jac = None
         return True
@@ -2126,7 +2149,17 @@ class LeastSquares:
             if Jt.ndim == 2:
                 m_rows, n_par = data_mask.shape[0], args.size
                 if Jt.shape == (n_par, m_rows):
-                    pass
+                    if n_par == m_rows:
+                        # shape is static, so this fires once per trace
+                        warn(
+                            f"`jac` returned a square ({n_par}, {n_par}) array: "
+                            "orientation is ambiguous and is read as NLSQ's "
+                            "native (n_params, m). A SciPy-style (m, n_params) "
+                            "Jacobian must be transposed, or drop `jac` to use "
+                            "automatic differentiation.",
+                            UserWarning,
+                            stacklevel=2,
+                        )
                 elif Jt.shape == (m_rows, n_par):
                     Jt = Jt.T
                 else:

@@ -184,7 +184,7 @@ class AutosaveManager(QObject):
             if timestamp:
                 self.recovery_available.emit(timestamp)
                 return True
-        except (OSError, json.JSONDecodeError, ValueError, KeyError):
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, RecursionError):
             pass
 
         return False
@@ -211,6 +211,7 @@ class AutosaveManager(QObject):
             KeyError,
             TypeError,
             AttributeError,
+            RecursionError,
         ):
             return False
 

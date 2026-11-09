@@ -395,6 +395,7 @@ class FittingOptionsPage(QWidget):
         # snapshot_for_fit() deep-copies arrays so UI mutations can't race with
         # the worker reading the same ndarray objects.
         self._fit_thread = QThread()
+        self._fit_epoch = self._app_state.input_epoch
         self._fit_worker = FitWorker(state.snapshot_for_fit())
         self._fit_worker.moveToThread(self._fit_thread)
 
@@ -438,6 +439,15 @@ class FittingOptionsPage(QWidget):
         Args:
             result: Fit result object
         """
+        if getattr(self, "_fit_epoch", self._app_state.input_epoch) != (
+            self._app_state.input_epoch
+        ):
+            # data/model changed mid-fit: the result belongs to the old inputs
+            self._set_running_state(False)
+            self._app_state.set_fit_running(False)
+            self._status_label.setText("Fit discarded: data or model changed")
+            self._status_label.setStyleSheet("color: #FF9800;")
+            return
         self._set_running_state(False)
         self._status_label.setText("Fit completed")
         self._status_label.setStyleSheet("color: #4CAF50;")

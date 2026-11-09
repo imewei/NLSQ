@@ -233,7 +233,9 @@ def _finite_points(xdata: np.ndarray, points_axis_last: bool) -> np.ndarray:
     """Per-point finiteness mask of ``xdata`` (1-D, or 2-D in either layout)."""
     if xdata.ndim == 1:
         return np.isfinite(xdata)
-    return np.all(np.isfinite(xdata), axis=0 if points_axis_last else 1)
+    if points_axis_last:
+        return np.all(np.isfinite(xdata), axis=tuple(range(xdata.ndim - 1)))
+    return np.all(np.isfinite(xdata), axis=tuple(range(1, xdata.ndim)))
 
 
 def _determine_parameter_count(
@@ -430,8 +432,10 @@ def _select_optimization_method(
                 method=method,
                 loss=recommendations.get("loss", "linear"),
             )
-            # Apply recommended parameters to kwargs
-            for key in ["ftol", "xtol", "gtol", "max_nfev", "x_scale"]:
+            # Only the scaling is applied: injecting the recommended iteration
+            # cap or relaxed tolerances would silently truncate/loosen fits that
+            # converge with the solver defaults (stability must not change them).
+            for key in ["x_scale"]:
                 if key in recommendations and key not in kwargs:
                     kwargs[key] = recommendations[key]
         else:
@@ -620,9 +624,21 @@ def _validate_data_lengths(
     """
     m = len(ydata)
     xdims = xdata.ndim
-    xlen = len(xdata) if xdims == 1 or not points_axis_last else len(xdata[0])
+    xlen = len(xdata) if xdims == 1 or not points_axis_last else xdata.shape[-1]
     if xlen != m:
-        raise ValueError("X and Y data lengths dont match")
+        hint = ""
+        if xdims > 1:
+            hint = (
+                " NLSQ expects multi-dimensional xdata as (n_dims, n_points), "
+                "i.e. points on the last axis (transpose an (n_points, n_dims) "
+                "array with `.T`)."
+                if points_axis_last
+                else " This path expects xdata as (n_points, n_dims)."
+            )
+        raise ValueError(
+            f"X and Y data lengths dont match: xdata has shape "
+            f"{tuple(xdata.shape)} but ydata has {m} points.{hint}"
+        )
 
     return m, xdims
 
@@ -818,7 +834,7 @@ def _omit_nonfinite_rows(
     omit_mask = valid_mask
     ydata = ydata[valid_mask]
     xdata = (
-        xdata[:, valid_mask] if xdims > 1 and points_axis_last else xdata[valid_mask]
+        xdata[..., valid_mask] if xdims > 1 and points_axis_last else xdata[valid_mask]
     )
     if sigma_1d:
         sigma = sigma_arr[valid_mask]  # type: ignore[index]  # sigma_arr is not None whenever sigma_1d is True

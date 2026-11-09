@@ -337,9 +337,10 @@ class CurveFitResult(OptimizeResult):
 
         Notes
         -----
-        Adj R² = 1 - (1 - R²) * (n - 1) / (n - p - 1)
+        Adj R² = 1 - (1 - R²) * (n - 1) / (n - p)
 
-        where n is number of data points and p is number of parameters.
+        where n is number of data points and p is the number of fitted
+        parameters (including any intercept/offset parameter).
 
         Adjusted R² penalizes adding parameters and is better for comparing
         models with different numbers of parameters.
@@ -351,11 +352,11 @@ class CurveFitResult(OptimizeResult):
         p = len(self.popt)
         r2 = self.r_squared
 
-        if n - p - 1 <= 0:
+        if n - p <= 0:
             warnings.warn("Not enough degrees of freedom for adjusted R².")
             return np.nan
 
-        return 1 - (1 - r2) * (n - 1) / (n - p - 1)
+        return 1 - (1 - r2) * (n - 1) / (n - p)
 
     @property
     def rmse(self):
@@ -594,7 +595,7 @@ class CurveFitResult(OptimizeResult):
         # Residual variance (inherent data variability)
         n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
         dof = max(n - n_params, 1)
-        s2 = np.sum(self.residuals**2) / dof
+        s2 = self._noise_variance_at(x, n, dof)
 
         # t-value
         t_val = stats.t.ppf((1 + alpha) / 2, dof)
@@ -608,6 +609,47 @@ class CurveFitResult(OptimizeResult):
         # Return as (n, 2) array
         intervals = np.column_stack([lower, upper])
         return intervals
+
+    def _noise_variance_at(self, x, n: int, dof: int):
+        """Observation-noise variance for a prediction interval at ``x``.
+
+        Unweighted fits: pooled residual variance (a scalar). With a 1-D
+        ``sigma`` the noise follows the fit's weighting: ``sigma(x)**2`` times
+        the reduced chi-square (``absolute_sigma=False``) or ``sigma(x)**2``
+        alone (``absolute_sigma=True``); ``sigma(x)`` is the data sigma at the
+        data points and interpolated in x elsewhere (1-D x only).
+        """
+        resid = np.asarray(self.residuals, dtype=float)
+        sigma = getattr(self, "sigma", None)
+        if sigma is not None:
+            sig = np.asarray(sigma, dtype=float)
+            if sig.ndim == 0:
+                sig = np.full(resid.shape, float(sig))
+            elif sig.ndim == 2 and sig.shape[0] == sig.shape[1]:
+                # covariance-matrix sigma: marginal variance per observation
+                sig = np.sqrt(np.abs(np.diag(sig)))
+            if (
+                sig.ndim == 1
+                and sig.shape == resid.shape
+                and np.all(np.isfinite(sig))
+                and np.all(sig > 0)
+            ):
+                scale = (
+                    1.0
+                    if bool(getattr(self, "absolute_sigma", False))
+                    else float(np.sum((resid / sig) ** 2) / dof)
+                )
+                xd = np.asarray(getattr(self, "xdata", []), dtype=float)
+                xq = np.asarray(x, dtype=float)
+                if xq.shape == xd.shape and np.array_equal(xq, xd):
+                    sig_x = sig
+                elif xd.ndim == 1 and xq.ndim == 1:
+                    order = np.argsort(xd)
+                    sig_x = np.interp(xq, xd[order], sig[order])
+                else:
+                    sig_x = np.full(xq.shape[-1:], float(np.sqrt(np.mean(sig**2))))
+                return scale * sig_x**2
+        return np.sum(resid**2) / dof
 
     def confidence_band(self, x=None, alpha: float = 0.95):
         """Compute mean prediction confidence band.
@@ -734,16 +776,20 @@ class CurveFitResult(OptimizeResult):
         x = np.array(self.xdata)
         y = np.array(self.ydata)
 
-        # Sort index computed but we use dense grid for smooth plotting
-        _ = np.argsort(x)  # Available if needed for scatter ordering
-        # Recalculate predictions on sorted x for smooth line
-        # Use high density x for plotting if x is sparse?
-        # For strict correctness with user data, stick to sorted data points or interpolated?
-        # Usually for plotting we want a smooth line
-        # But predictions property gives y at xdata.
-        # Let's generate a dense grid for the line and band
-        x_dense = np.linspace(x.min(), x.max(), 500)
-        y_dense = np.array(self.model(x_dense, *self.popt))
+        multi_dim = x.ndim > 1
+        if multi_dim:
+            # Multi-dimensional xdata (k, n): no single abscissa exists, so plot
+            # against the observation index and evaluate at the data points.
+            x_eval = x
+            x = np.arange(y.size)
+            x_dense = x
+            y_dense = np.array(self.model(x_eval, *self.popt))
+            xlabel = "observation"
+        else:
+            # Dense grid for a smooth line and band
+            x_eval = x_dense = np.linspace(x.min(), x.max(), 500)
+            y_dense = np.array(self.model(x_dense, *self.popt))
+            xlabel = "x"
 
         # Extract plotting parameters from kwargs
         scatter_alpha = kwargs.pop("alpha", 0.6)
@@ -760,7 +806,7 @@ class CurveFitResult(OptimizeResult):
         fit_color = "red" if scatter_color is None else scatter_color
         if show_confidence and hasattr(self, "pcov") and self.pcov is not None:
             try:
-                lower, upper = self.confidence_band(x_dense, alpha=0.95)
+                lower, upper = self.confidence_band(x_eval, alpha=0.95)
                 ax1.fill_between(
                     x_dense,
                     lower,
@@ -788,7 +834,7 @@ class CurveFitResult(OptimizeResult):
         )
 
         # Labels and title
-        ax1.set_xlabel("x")
+        ax1.set_xlabel(xlabel)
         ax1.set_ylabel("y")
         ax1.set_title(f"Curve Fit (R² = {self.r_squared:.4f}, RMSE = {self.rmse:.4f})")
         ax1.legend()
@@ -798,7 +844,7 @@ class CurveFitResult(OptimizeResult):
         if show_residuals and ax2 is not None:
             ax2.scatter(x, self.residuals, alpha=0.6, color="gray")
             ax2.axhline(y=0, color="black", linestyle="--", linewidth=1)
-            ax2.set_xlabel("x")
+            ax2.set_xlabel(xlabel)
             ax2.set_ylabel("Residuals")
             ax2.set_title("Residual Plot")
             ax2.grid(True, alpha=0.3)

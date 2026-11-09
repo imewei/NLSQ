@@ -146,14 +146,15 @@ class TestTransformFromBounds:
         x_recovered2 = transform_to_bounds(x_unbounded2, lb, ub)
         np.testing.assert_allclose(x_recovered2, x_bounded2, rtol=1e-4)
 
-    def test_handles_edge_values(self) -> None:
+    @pytest.mark.parametrize("dtype", [jnp.float32, jnp.float64])
+    def test_handles_edge_values(self, dtype) -> None:
         """Test that edge values are handled without NaN/Inf."""
-        lb = jnp.array([0.0])
-        ub = jnp.array([1.0])
+        lb = jnp.array([0.0], dtype=dtype)
+        ub = jnp.array([1.0], dtype=dtype)
 
         # Test at bounds (should be clamped by epsilon)
-        x_at_lb = jnp.array([0.0])
-        x_at_ub = jnp.array([1.0])
+        x_at_lb = jnp.array([0.0], dtype=dtype)
+        x_at_ub = jnp.array([1.0], dtype=dtype)
 
         result_lb = transform_from_bounds(x_at_lb, lb, ub)
         result_ub = transform_from_bounds(x_at_ub, lb, ub)

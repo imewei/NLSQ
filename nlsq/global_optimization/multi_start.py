@@ -52,6 +52,7 @@ TournamentSelector : Tournament selection for large datasets (Task Group 4)
 import copy
 import logging
 import os
+import re
 import sys
 import threading
 import warnings
@@ -163,7 +164,15 @@ def _fit_single_start(
         return (p0, float("inf"), None)
 
 
-_IGNORE_ENTRY = ("ignore", None, OptimizeWarning, None, 0)
+# Hide the N-1 losing starts' non-convergence noise, but let a typo'd-kwarg warning through
+_IGNORE_MSG = r"(?!Ignoring unknown keyword)"
+_IGNORE_ENTRY = (
+    "ignore",
+    re.compile(_IGNORE_MSG, re.IGNORECASE),
+    OptimizeWarning,
+    None,
+    0,
+)
 _ignore_lock = threading.Lock()
 _ignore_state = {"depth": 0, "added": False}
 
@@ -191,14 +200,18 @@ def _suppress_optimize_warning() -> Iterator[None]:
         # Context-aware warnings: filters are per-context, so catch_warnings is
         # already thread/task-safe and a global filter edit would hit the wrong list.
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", OptimizeWarning)
+            warnings.filterwarnings(
+                "ignore", message=_IGNORE_MSG, category=OptimizeWarning
+            )
             yield
         return
     with _ignore_lock:
         if _ignore_state["depth"] == 0:
             _ignore_state["added"] = _IGNORE_ENTRY not in warnings.filters
             if _ignore_state["added"]:
-                warnings.filterwarnings("ignore", category=OptimizeWarning)
+                warnings.filterwarnings(
+                    "ignore", message=_IGNORE_MSG, category=OptimizeWarning
+                )
         _ignore_state["depth"] += 1
     try:
         yield
@@ -400,10 +413,18 @@ class MultiStartOrchestrator:
             return np.array([]).reshape(0, n_params)
 
         # Get sampler function
-        sampler = get_sampler(self.config.sampler)
+        sampler_name = self.config.sampler
+        if sampler_name == "sobol" and n_params > 21:
+            warnings.warn(
+                f"Sobol sampling supports at most 21 dimensions (got {n_params}); "
+                "falling back to Latin hypercube sampling.",
+                stacklevel=2,
+            )
+            sampler_name = "lhs"
+        sampler = get_sampler(sampler_name)
 
         # Generate samples in [0, 1]^n
-        if self.config.sampler == "lhs":
+        if sampler_name == "lhs":
             # Base key is fixed (PRNGKey(0)) and not user-configurable: GlobalOptimizationConfig
             # has no seed field; a per-call counter is folded in below, so repeated
             # fit() calls differ but a fresh orchestrator reproduces the same sequence.
@@ -606,6 +627,13 @@ class MultiStartOrchestrator:
         if results:
             _best_params, _best_loss, best_result = results[0]
             best_pcov = getattr(best_result, "pcov", None)
+            if not getattr(best_result, "success", True):
+                warnings.warn(
+                    "Optimal parameters not found: "
+                    f"{getattr(best_result, 'message', 'did not converge')}",
+                    OptimizeWarning,
+                    stacklevel=2,
+                )
             if best_pcov is not None and np.all(np.isinf(np.asarray(best_pcov))):
                 warnings.warn(
                     "Covariance of the parameters could not be estimated",
@@ -764,6 +792,12 @@ class MultiStartOrchestrator:
                 lb = np.full(n_params, lb[0])
             if len(ub) == 1:
                 ub = np.full(n_params, ub[0])
+
+            if len(lb) != n_params or len(ub) != n_params:
+                raise ValueError(
+                    f"bounds have {len(lb)} lower / {len(ub)} upper entries but "
+                    f"p0 has {n_params} parameters"
+                )
 
             # The user's bounds (possibly infinite) constrain every actual fit.
             fit_bounds = (lb, ub)

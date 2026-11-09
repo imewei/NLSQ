@@ -11,6 +11,8 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
+from nlsq.core._option_checks import _unwrap_scalar
+
 __all__ = [
     "CMAES_PRESETS",
     "CMAESConfig",
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 def _require_integral(name: str, value: object) -> None:
     """Reject bool, NaN/inf and fractional values; accept ints and ``100.0``."""
+    value = _unwrap_scalar(value)
     if (
         isinstance(value, bool)
         or not math.isfinite(value)  # type: ignore[arg-type]

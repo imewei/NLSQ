@@ -98,6 +98,20 @@ def _save_iterations_setting() -> str | None:
     return val
 
 
+class _StderrUnlessRootConfigured(logging.StreamHandler):
+    """Console handler that stands down once the application configures logging.
+
+    Records propagate to the root logger, so an app calling
+    ``logging.basicConfig()`` after ``import nlsq`` would otherwise see every
+    line twice.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if logging.getLogger().handlers:
+            return
+        super().emit(record)
+
+
 class NLSQLogger:
     """Comprehensive logger for NLSQ optimization routines.
 
@@ -134,7 +148,7 @@ class NLSQLogger:
 
         # Library default is quiet: INFO records would otherwise reach any
         # root handler the application installs (e.g. logging.basicConfig()).
-        if os.getenv("NLSQ_DEBUG", "0") == "1":
+        if os.getenv("NLSQ_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}:
             level = LogLevel.DEBUG
         elif level is None:
             verbose = os.getenv("NLSQ_VERBOSE", "0") == "1"
@@ -167,10 +181,15 @@ class NLSQLogger:
         # (e.g. `nlsq fit --stdout` JSON). Skipped when the application has
         # configured the root logger, since records propagate there and would
         # otherwise print twice.
-        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler = _StderrUnlessRootConfigured(sys.stderr)
 
         # Check modes
-        debug_mode = os.getenv("NLSQ_DEBUG", "0") == "1"
+        debug_mode = os.getenv("NLSQ_DEBUG", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         verbose_mode = os.getenv("NLSQ_VERBOSE", "0") == "1"
 
         if debug_mode:
@@ -286,6 +305,10 @@ class NLSQLogger:
         ...     logger.info("Starting optimization")
         """
         op_id = uuid.uuid4().hex
+        # Per-thread stack: operations may interleave (e.g. generator-based),
+        # so on exit drop this id and fall back to the newest still-open one.
+        stack = _context.__dict__.setdefault("op_stack", [])
+        stack.append(op_id)
         _context.operation_id = op_id
         start_time = time.perf_counter()
 
@@ -310,9 +333,11 @@ class NLSQLogger:
                 # Remove oldest entries (first inserted)
                 keys = list(self.timers)
                 for k in keys[: len(keys) // 2]:
-                    del self.timers[k]
+                    self.timers.pop(k, None)  # another thread may have removed it
             self.info(f"END {name}", elapsed=f"{elapsed:.3f}s")
-            _context.operation_id = None
+            if op_id in stack:
+                stack.remove(op_id)
+            _context.operation_id = stack[-1] if stack else None
 
     def fit_start(
         self,
@@ -785,7 +810,9 @@ def enable_debug_mode():
 
     # Recreate global handlers
     root_nlsq = logging.getLogger("nlsq")
-    root_nlsq.handlers.clear()
+    for handler in list(root_nlsq.handlers):
+        root_nlsq.removeHandler(handler)
+        handler.close()  # releases the debug log file
     root_nlsq._nlsq_initialized = False  # type: ignore[attr-defined]
 
     # Force setup on next logger access

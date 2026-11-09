@@ -15,7 +15,7 @@ import sys
 def main() -> int:
     """Main entry point for the NLSQ Qt GUI."""
     # Enable debug logging if requested
-    if os.environ.get("NLSQ_DEBUG"):
+    if os.environ.get("NLSQ_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
         import logging
 
         logging.basicConfig(level=logging.DEBUG)

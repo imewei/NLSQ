@@ -825,6 +825,7 @@ def get_latex_equation(model_name: str) -> str:
         "exponential_decay": r"y = a \cdot e^{-bx} + c",
         "exponential_growth": r"y = a \cdot e^{bx} + c",
         "gaussian": r"y = A \exp\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)",
+        "lorentzian": r"y = \frac{A}{1 + \left(\frac{x - x_0}{\gamma}\right)^2}",
         "sigmoid": r"y = \frac{L}{1 + e^{-k(x - x_0)}} + b",
         "power_law": r"y = a \cdot x^b",
         "polynomial": r"y = c_0 x^n + c_1 x^{n-1} + \cdots + c_n",

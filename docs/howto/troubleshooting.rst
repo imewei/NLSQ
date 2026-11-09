@@ -149,14 +149,14 @@ Issue: GPU out of memory (OOM)
 
    from nlsq.streaming.large_dataset import fit_large_dataset
 
-   popt, pcov, info = fit_large_dataset(
+   result = fit_large_dataset(
        model,
        x,
        y,
        p0=[2, 1],
        memory_limit_gb=4.0,  # Limit GPU memory usage
-       chunk_size=100_000,
    )
+   popt, pcov = result.x, result.pcov
 
 3. **Use memory-efficient solver:**
 
@@ -172,7 +172,7 @@ Issue: GPU out of memory (OOM)
 
    import jax
 
-   jax.clear_backends()  # Release all GPU memory
+   jax.clear_caches()  # Drop compiled-function caches (frees device executables)
 
 Issue: GPU slower than CPU
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -490,7 +490,8 @@ Issue: Memory usage keeps growing
 
    from nlsq.streaming.large_dataset import fit_large_dataset
 
-   popt, pcov, info = fit_large_dataset(model, x_large, y_large, memory_limit_gb=4.0)
+   result = fit_large_dataset(model, x_large, y_large, memory_limit_gb=4.0)
+   popt, pcov = result.x, result.pcov
 
 --------------
 
@@ -508,14 +509,14 @@ Issue: ``MemoryError`` during fit
 
    from nlsq.streaming.large_dataset import fit_large_dataset
 
-   popt, pcov, info = fit_large_dataset(
+   result = fit_large_dataset(
        model,
        x,
        y,
        p0=[2, 1],
-       chunk_size=100_000,  # Process 100K points at a time
-       memory_limit_gb=4.0,
+       memory_limit_gb=4.0,  # chunk size is derived from this budget
    )
+   popt, pcov = result.x, result.pcov
 
 2. **Use minibatch solver:**
 

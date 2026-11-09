@@ -8,7 +8,7 @@ pytestmark = pytest.mark.serial
 
 GOOD = "def m(x, a):\n    return a * x\n"
 # denylist-clean but outside the strict allowlist
-GZIP = "import gzip\n" + GOOD
+GZIP = "import colorsys\n" + GOOD
 
 
 class TestS1StrictModels:

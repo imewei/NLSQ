@@ -182,6 +182,26 @@ def _unsanitize_array_data(data: Any) -> Any:
     return data
 
 
+def _float_to_serializable(obj: Any) -> Any:
+    """Float scalar -> JSON value; non-finite as marker, extended precision rejected."""
+    value = float(obj)
+    if (
+        isinstance(obj, np.floating)
+        and obj.itemsize > 8
+        and np.isfinite(obj)
+        and value != obj
+    ):
+        # extended precision would be silently rounded to float64
+        raise SafeSerializationError(
+            f"Cannot serialize {type(obj).__name__} without losing precision"
+        )
+    if np.isnan(value):
+        return {"__nlsq_type__": "float", "value": "nan"}
+    if np.isinf(value):
+        return {"__nlsq_type__": "float", "value": "inf" if value > 0 else "-inf"}
+    return value
+
+
 def _convert_to_serializable(obj: Any) -> Any:
     """Convert object to JSON-serializable form.
 
@@ -216,13 +236,7 @@ def _convert_to_serializable(obj: Any) -> Any:
         return int(obj)
 
     if isinstance(obj, (float, np.floating)):
-        value = float(obj)
-        # Handle special float values
-        if np.isnan(value):
-            return {"__nlsq_type__": "float", "value": "nan"}
-        if np.isinf(value):
-            return {"__nlsq_type__": "float", "value": "inf" if value > 0 else "-inf"}
-        return value
+        return _float_to_serializable(obj)
 
     # Handle tuples (convert to list with marker)
     if isinstance(obj, tuple):
@@ -316,7 +330,7 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
         )
     try:
         return np.array(data, dtype=dtype).reshape(shape)
-    except (ValueError, TypeError) as e:
+    except (ValueError, TypeError, OverflowError) as e:
         raise SafeSerializationError(
             f"Malformed ndarray in serialized data: {e}",
         ) from e
@@ -473,6 +487,8 @@ def safe_loads(data: bytes) -> Any:
         KeyError,
         TypeError,
         ValueError,
+        OverflowError,
+        AttributeError,
     ) as e:
         raise SafeSerializationError(f"Deserialization failed: {e!r}") from e
     except RecursionError as e:

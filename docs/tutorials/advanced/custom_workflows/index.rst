@@ -40,7 +40,7 @@ Quick Example
        def __init__(self):
            self.optimizer = LeastSquares()
 
-       def fit(self, model, x, y, p0, bounds=None):
+       def fit(self, model, x, y, p0, bounds=(-np.inf, np.inf)):
            # Custom preprocessing (drop non-finite points)
            finite = np.isfinite(x) & np.isfinite(y)
            x, y = x[finite], y[finite]

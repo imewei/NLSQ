@@ -65,7 +65,7 @@ def _huber2(z, mask):
 @jit
 def _soft_l1_1(z):
     t = 1 + z
-    return 2 * (t**0.5 - 1), t
+    return jnp.where(jnp.isinf(z), z, 2 * (z / (t**0.5 + 1))), t
 
 
 @jit

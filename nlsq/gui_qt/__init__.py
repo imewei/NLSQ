@@ -154,7 +154,12 @@ def run_desktop() -> int:
     Returns:
         int: Application exit code (0 for success)
     """
-    _debug = bool(os.environ.get("NLSQ_DEBUG"))
+    _debug = os.environ.get("NLSQ_DEBUG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     def _stage(msg: str) -> None:
         if _debug:

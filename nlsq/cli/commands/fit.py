@@ -142,6 +142,16 @@ def run_fit(
         if config["visualization"].get("filename_prefix") is None:
             config["visualization"]["filename_prefix"] = default_figure_prefix
 
+    # A relative data.input_file next to the YAML wins over a same-named file in
+    # the CWD (matches the GUI; `nlsq batch a/w.yaml b/w.yaml` would otherwise
+    # fit ./data.csv for every workflow). Fall back to the CWD-relative path.
+    _data_cfg = config.get("data")
+    if isinstance(_data_cfg, dict) and isinstance(_data_cfg.get("input_file"), str):
+        _in = Path(_data_cfg["input_file"])
+        _beside = Path(workflow_path).resolve().parent / _in
+        if not _in.is_absolute() and _beside.is_file():
+            _data_cfg["input_file"] = str(_beside)
+
     # Execute workflow
     runner = WorkflowRunner()
     result = runner.run(config)

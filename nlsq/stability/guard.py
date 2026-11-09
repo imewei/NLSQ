@@ -809,8 +809,10 @@ def estimate_condition_number(xdata: np.ndarray) -> float:
         # Create a simple design matrix [1, x, x^2]
         X = np.column_stack([np.ones_like(xdata), xdata, xdata**2])
     else:
-        # Use data directly for multidimensional case
-        X = xdata
+        # Use data directly for multidimensional case; >2-D (points on the
+        # last axis) is flattened to (features, n_points) since cond() of a
+        # stack would be batched.
+        X = xdata.reshape(-1, xdata.shape[-1]) if xdata.ndim > 2 else xdata
 
     # Compute condition number
     try:

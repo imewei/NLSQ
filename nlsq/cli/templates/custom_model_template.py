@@ -230,8 +230,8 @@ def estimate_p0(xdata: np.ndarray, ydata: np.ndarray) -> list[float]:
     ratio = y0 / amplitude if amplitude > 0 else 0.0
     if abs(ratio) <= 1:
         phase = float(np.arccos(np.clip(ratio, -1, 1)))
-        # Determine sign from slope
-        if len(ydata) > 1 and ydata[1] < ydata[0]:
+        # y'(0) < 0 means sin(phase) > 0 (phase in (0, pi)); y'(0) > 0 means phase < 0
+        if len(ydata) > 1 and ydata[1] > ydata[0]:
             phase = -phase
     else:
         phase = 0.0

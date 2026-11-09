@@ -20,6 +20,40 @@ class FakeFitResult:
         self.nfev = 1
 
 
+def test_bundle_export_failure_preserves_existing_file(
+    app_state, qtbot, tmp_path, monkeypatch
+):
+    from nlsq.gui_qt.pages.export import ExportPage
+
+    page = ExportPage(app_state)
+    qtbot.addWidget(page)
+    destination = tmp_path / "session.zip"
+    destination.write_bytes(b"existing session")
+
+    def fail_config():
+        raise ValueError("cannot serialize config")
+
+    monkeypatch.setattr(page, "_generate_config_yaml", fail_config)
+    with pytest.raises(ValueError, match="cannot serialize config"):
+        page.export_session_bundle(str(destination))
+    assert destination.read_bytes() == b"existing session"
+    assert list(tmp_path.iterdir()) == [destination]
+
+
+def test_json_export_accepts_numpy_result_scalars(app_state, qtbot):
+    from nlsq.gui_qt.pages.export import ExportPage
+
+    result = FakeFitResult([1.0])
+    result.success = np.bool_(True)
+    result.nfev = np.int64(3)
+    app_state.set_fit_result(result)
+    page = ExportPage(app_state)
+    qtbot.addWidget(page)
+    statistics = json.loads(page._generate_json())["statistics"]
+    assert statistics["converged"] is True
+    assert statistics["n_evaluations"] == 3
+
+
 def _nan_model(x, a):
     return np.full_like(x, np.nan)
 
@@ -96,6 +130,32 @@ class TestGenerateJsonNonFiniteParameters:
         assert param["ci_lower"] is None
         assert param["ci_upper"] is None
         assert param["value"] == 2.0
+
+    @pytest.mark.parametrize("pcov", [None, np.empty((0, 0))])
+    def test_missing_covariance_is_not_reported_as_zero(
+        self, app_state, qtbot, tmp_path, pcov
+    ):
+        import csv
+
+        from nlsq.gui_qt.pages.export import ExportPage
+
+        app_state.set_data(np.arange(4.0), np.arange(4.0))
+        app_state.set_model("custom", model_func=lambda x, a: a * x)
+        result = FakeFitResult([1.0])
+        result.pcov = pcov
+        app_state.set_fit_result(result)
+        page = ExportPage(app_state)
+        qtbot.addWidget(page)
+
+        param = json.loads(page._generate_json())["parameters"]["a"]
+        assert param["uncertainty"] is None
+        assert param["ci_lower"] is None
+        assert param["ci_upper"] is None
+        path = tmp_path / "params.csv"
+        page.export_csv(str(path))
+        with path.open() as f:
+            row = next(csv.DictReader(f))
+        assert row["uncertainty"] == row["ci_lower"] == row["ci_upper"] == ""
 
 
 class TestGeneratedScriptMatchesGui:
