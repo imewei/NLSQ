@@ -27,7 +27,9 @@ Key Design Decisions (v0.3.0)
 
 3. **rescale_data parameter**: Applications requiring unit preservation can
    set rescale_data=False to preserve physical units. The default (True) rescales
-   data to [0, 1] when ill-conditioning is detected.
+   data to [0, 1] when ill-conditioning is detected. ``curve_fit`` never uses
+   this: it forces ``rescale_data=False`` and ``replace_nonfinite=False``
+   because the rescale cannot be inverted for an arbitrary model.
 
 Module Constants
 ================
@@ -1139,8 +1141,8 @@ def apply_automatic_fixes(
         If True (default), rescale xdata/ydata to [0, 1] when ill-conditioned
         or large range is detected. Set to False for applications requiring
         unit preservation where data must maintain physical units (e.g.,
-        time in seconds, frequency in Hz). NaN/Inf handling
-        and parameter normalization are still applied when stability='auto'.
+        time in seconds, frequency in Hz). NaN/Inf replacement follows
+        ``replace_nonfinite``; p0 normalization always runs on the returned copy.
         Default: True.
     replace_nonfinite : bool, optional
         If True (default), replace NaN/Inf in xdata/ydata with the mean of the

@@ -179,3 +179,37 @@ def test_integral_check_uses_exact_value_and_accepts_decimal():
         CMAESConfig(seed=Fraction(18014398509481985, 2))  # type: ignore[arg-type]
     cfg = CMAESConfig(popsize=Decimal(20))  # type: ignore[arg-type]
     assert cfg.popsize == 20 and type(cfg.popsize) is int
+
+
+# --- review-pr pass 2 -------------------------------------------------------
+
+
+def test_validate_tolerance_returns_float_not_raw_object():
+    out = validate_tolerance("ftol", np.array(1e-8))
+    assert type(out) is float and out == 1e-8
+    assert type(validate_tolerance("ftol", None)) is float
+
+
+def test_check_optimizer_kwargs_rejects_0d_nan_f_scale():
+    from nlsq.core.minpack import _check_optimizer_kwargs
+
+    with pytest.raises(ValueError, match="f_scale"):
+        _check_optimizer_kwargs({"f_scale": np.array(np.nan)})
+
+
+def test_diagnostics_config_window_sizes_coerced_to_int():
+    from nlsq.diagnostics.types import DiagnosticsConfig
+
+    cfg = DiagnosticsConfig(gradient_window_size=50.0, stagnation_window=np.int64(4))
+    assert type(cfg.gradient_window_size) is int and cfg.gradient_window_size == 50
+    assert type(cfg.stagnation_window) is int
+    with pytest.raises(ValueError, match="integer"):
+        DiagnosticsConfig(gradient_window_size="x")
+
+
+def test_hybrid_config_rejects_numpy_bool_verbose():
+    from nlsq.streaming.hybrid_config import HybridStreamingConfig
+    from nlsq.streaming.validators import ConfigValidationError
+
+    with pytest.raises((ConfigValidationError, ValueError), match="verbose"):
+        HybridStreamingConfig(verbose=np.True_)

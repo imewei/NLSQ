@@ -50,9 +50,11 @@ def test_f6_polynomial_degree_must_be_integer(degree):
         ModelRegistry().get_model("p", {"type": "polynomial", "degree": degree})
 
 
-@pytest.mark.parametrize("degree", [2, 2.0, "3"])
-def test_f6_polynomial_integer_degrees_ok(degree):
-    ModelRegistry().get_model("p", {"type": "polynomial", "degree": degree})
+@pytest.mark.parametrize(("degree", "n_coef"), [(2, 3), (2.0, 3), ("3", 4)])
+def test_f6_polynomial_integer_degrees_ok(degree, n_coef):
+    model = ModelRegistry().get_model("p", {"type": "polynomial", "degree": degree})
+    # all-ones coefficients at x=2 give sum(2**k) over the n_coef terms
+    assert float(model(2.0, *([1.0] * n_coef))) == pytest.approx(2**n_coef - 1)
 
 
 def test_f7_builtin_polynomial_routes_to_model_builder():

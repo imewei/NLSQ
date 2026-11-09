@@ -4,7 +4,8 @@ One rule per option, used by ``curve_fit``, ``fit``, ``least_squares``,
 ``curve_fit_large`` (including ``exact_streaming``) and the hybrid optimizer:
 
 - ``absolute_sigma``: ``bool``, ``np.bool_``, 0-d arrays of those, or 0/1, coerced to ``bool``.
-- ``ftol``/``xtol``/``gtol``: NaN raises, ``+inf`` and values below machine epsilon warn.
+- ``ftol``/``xtol``/``gtol``: NaN raises; ``+inf`` or below machine epsilon warns;
+  all three below epsilon raises; ``strict`` (exact solver) also raises on inf/negative.
 - ``max_nfev``: ``None`` or a positive integer (integral floats coerced; bool rejected).
 - integer counts: :func:`is_integral_count` backs ``streaming.validators``.
 """
@@ -147,7 +148,7 @@ def validate_tolerance(name: str, tol: Any, *, strict: bool = False) -> float:
     negative values instead.
     """
     if tol is None:
-        return 0
+        return 0.0
     value = check_not_nan(name, tol)
     if strict and not (math.isfinite(value) and value >= 0):
         raise ValueError(f"{name} must be finite and non-negative, got {tol}")
@@ -162,6 +163,6 @@ def validate_tolerance(name: str, tol: Any, *, strict: bool = False) -> float:
             "disables the corresponding termination condition."
         )
     else:
-        return tol
+        return value
     warnings.warn(msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
-    return tol
+    return value

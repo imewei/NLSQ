@@ -79,6 +79,7 @@ from nlsq.caching.unified_cache import UnifiedCache, get_global_cache
 from nlsq.constants import DEFAULT_FTOL, DEFAULT_XTOL
 from nlsq.core import device_policy
 from nlsq.core._option_checks import (
+    _unwrap_scalar,
     check_not_nan,
     check_sigma_values,
     coerce_absolute_sigma,
@@ -2265,12 +2266,9 @@ def _apply_stability_checks(
 
     Returns
     -------
-    xdata : array_like
-        Possibly modified x data.
-    ydata : array_like
-        Possibly modified y data.
-    args : tuple
-        Possibly modified positional arguments.
+    xdata, ydata, args
+        Returned unchanged (rescaling and NaN/Inf replacement are disabled);
+        kept in the signature for compatibility.
     """
     from nlsq.stability.guard import apply_automatic_fixes, check_problem_stability
 
@@ -2307,7 +2305,8 @@ def _apply_stability_checks(
             )
 
             # NOTE: apply_automatic_fixes() can also rescale xdata/ydata to
-            # [0, 1] (Fix 1/2) and split p0 by order of magnitude (Fix 4).
+            # [0, 1] (data rescaling) and split p0 by order of magnitude
+            # (p0 normalization).
             # Those two are NOT applied here: they change the coordinate
             # system / initial-guess semantics that `f` is evaluated in
             # without reparameterizing `f` itself, so the popt this function
@@ -2317,7 +2316,8 @@ def _apply_stability_checks(
             # either for an arbitrary nonlinear model. NaN/Inf imputation is
             # also disabled (replace_nonfinite=False): it would silently alter
             # the data before nan_policy/check_finite can raise or omit.
-            # rescale_data=False is forced regardless of the caller's argument.
+            # rescale_data=False is forced for this call; the caller's flag
+            # only controls the warning below.
             xdata_fixed, ydata_fixed, _p0_unused, fix_info = apply_automatic_fixes(
                 xdata,
                 ydata,
@@ -2432,7 +2432,7 @@ def _check_optimizer_kwargs(kwargs: dict[str, Any]) -> None:
             kwargs["max_nfev"], allow_fractional=True
         )
     validate_tr_solver(kwargs.get("tr_solver"))
-    f_scale = kwargs.get("f_scale", 1.0)
+    f_scale = _unwrap_scalar(kwargs.get("f_scale", 1.0))
     if isinstance(f_scale, (int, float, np.number)):
         validate_f_scale(f_scale)
 
@@ -3154,7 +3154,7 @@ def curve_fit(
         Multiplier for the exploration range around p0. Smaller values (0.5)
         mean tighter exploration, larger values (2.0) mean wider exploration.
         Only used when multistart=True or global_search=True. Default: 1.0.
-    method : {'auto', 'cmaes', 'multi-start', 'trf'} | None, optional
+    method : {'auto', 'cmaes', 'multi-start', 'trf', 'lm', 'hybrid_streaming'} | None, optional
         Optimization method to use:
 
         - 'auto': Automatically select based on parameter scale ratio.
@@ -3167,6 +3167,10 @@ def curve_fit(
         - 'multi-start': Use multi-start optimization with Latin Hypercube
           Sampling for initial points.
         - 'trf': Use Trust Region Reflective (default behavior).
+        - 'lm': alias for unbounded problems; runs the same trust-region
+          solver as 'trf'.
+        - 'hybrid_streaming': Adaptive hybrid streaming optimizer; ``xdata``
+          is taken as ``(n_points, n_features)``.
         - None: Default behavior (TRF with optional multi-start if enabled).
 
         Default: None.

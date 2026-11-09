@@ -8,6 +8,8 @@ exact covariance computation.
 from dataclasses import dataclass
 from typing import Literal
 
+import numpy as np
+
 from nlsq.streaming.validators import (
     coerce_integral_fields,
     validate_cg_config,
@@ -553,7 +555,7 @@ class HybridStreamingConfig:
             validate_positive_int(self.gc_chunk_interval, "gc_chunk_interval")
 
             # `True in (0, 1, 2)` is True, so reject bool explicitly.
-            if isinstance(self.verbose, bool):
+            if isinstance(self.verbose, (bool, np.bool_)):
                 raise ConfigValidationError("verbose must be one of: (0, 1, 2)")
             validate_enum_value(self.verbose, (0, 1, 2), "verbose")  # type: ignore[arg-type]
 

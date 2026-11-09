@@ -159,3 +159,24 @@ def test_chunked_mask_selects_the_same_rows_as_full_fit(omit):
     )
     np.testing.assert_allclose(actual, expected, rtol=1e-5)
     np.testing.assert_allclose(actual_cov, expected_cov, rtol=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("mask", "match"),
+    [
+        (np.ones(29, dtype=bool), "doesn't match"),
+        (np.zeros(30, dtype=bool), "excludes all"),
+    ],
+    ids=["wrong_length", "all_excluded"],
+)
+def test_chunked_rejects_invalid_data_mask(mask, match):
+    x = np.arange(30.0)
+    y = 2 * x + 1
+    with pytest.raises(ValueError, match=match):
+        curve_fit_large(
+            lambda x, a, b: a * x + b,
+            x,
+            y,
+            p0=[1.0, 0.0],
+            strategy=Chunked(chunk_size=10, options={"data_mask": mask}),
+        )

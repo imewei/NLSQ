@@ -40,6 +40,7 @@ def test_csv_stray_quote_in_preamble_does_not_swallow_data(tmp_path):
     np.testing.assert_allclose(x, [1, 3, 5])
 
 
+@pytest.mark.serial  # spawns a JAX-importing subprocess
 def test_nlsq_debug_zero_is_off():
     import subprocess
     import sys

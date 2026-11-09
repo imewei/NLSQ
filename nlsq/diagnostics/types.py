@@ -17,6 +17,8 @@ from typing import Any
 
 import numpy as np
 
+from nlsq.core._option_checks import is_integral
+
 
 def _validate_fim(fim: np.ndarray) -> str | None:
     """Validate a pre-computed Fisher Information Matrix.
@@ -758,12 +760,11 @@ class DiagnosticsConfig:
             raise ValueError("sloppy_threshold must be positive")
         for name in ("gradient_window_size", "stagnation_window"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not (
-                math.isfinite(value) and value == int(value)
-            ):
+            if not is_integral(value):
                 raise ValueError(f"{name} must be an integer, got {value!r}")
             if value <= 0:
                 raise ValueError(f"{name} must be positive")
+            object.__setattr__(self, name, int(value))
         if (
             not math.isfinite(self.stagnation_tolerance)
             or self.stagnation_tolerance <= 0

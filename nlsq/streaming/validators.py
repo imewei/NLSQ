@@ -10,7 +10,7 @@ import math
 import numbers
 from typing import Any
 
-from nlsq.core._option_checks import _unwrap_scalar, is_integral_count
+from nlsq.core._option_checks import _unwrap_scalar, is_integral, is_integral_count
 
 
 class ConfigValidationError(ValueError):
@@ -76,14 +76,7 @@ def coerce_integral_fields(obj: object, names: tuple[str, ...]) -> None:
     """
     for name in names:
         value = _unwrap_scalar(getattr(obj, name))
-        if (
-            isinstance(value, (numbers.Real, decimal.Decimal))
-            and not isinstance(value, bool)
-            and (
-                isinstance(value, numbers.Integral)
-                or (math.isfinite(value) and value == int(value))
-            )
-        ):
+        if is_integral(value):
             object.__setattr__(obj, name, int(value))
 
 

@@ -159,7 +159,7 @@ class InMemory:
     """
 
     method: FitMethod | None = None
-    stability: Literal["auto", "check", False] = False
+    stability: Literal["auto", "check", False] | None = False
     rescale_data: bool = True
     max_jacobian_elements_for_svd: int = 10_000_000
     multistart: Multistart = field(default_factory=lambda: Multistart(enabled=False))
