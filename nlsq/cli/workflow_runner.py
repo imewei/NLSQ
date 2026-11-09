@@ -36,6 +36,7 @@ from nlsq.cli.errors import (
 )
 from nlsq.cli.model_registry import ModelRegistry
 from nlsq.cli.result_exporter import ResultExporter
+from nlsq.core._option_checks import coerce_absolute_sigma
 
 logger = logging.getLogger("nlsq.cli.workflow_runner")
 
@@ -465,16 +466,13 @@ class WorkflowRunner:
         # Sigma handling
         absolute_sigma = cfg_get(fitting_config, "absolute_sigma", False)
         # Same rule as curve_fit: bool / np.bool_ / the integers 0 and 1 only.
-        if isinstance(absolute_sigma, (int, np.integer)) and not isinstance(
-            absolute_sigma, (bool, np.bool_)
-        ):
-            if absolute_sigma in (0, 1):
-                absolute_sigma = bool(absolute_sigma)
-        if not isinstance(absolute_sigma, (bool, np.bool_)):
+        try:
+            absolute_sigma = coerce_absolute_sigma(absolute_sigma)
+        except TypeError:
             raise ConfigError(
                 f"fitting.absolute_sigma must be true or false, got {absolute_sigma!r}",
                 suggestion="Use an unquoted YAML boolean: `absolute_sigma: true`.",
-            )
+            ) from None
         fit_kwargs["absolute_sigma"] = bool(absolute_sigma)
 
         # Check finite

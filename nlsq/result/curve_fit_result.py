@@ -559,7 +559,9 @@ class CurveFitResult(OptimizeResult):
         Notes
         -----
         Prediction intervals account for both parameter uncertainty (from pcov)
-        and inherent data variability (residual variance).
+        and inherent data variability. For an unweighted fit the latter is the
+        pooled residual variance; for a fit with ``sigma`` it is weighted by
+        ``sigma(x)**2`` (see ``_noise_variance_at``).
         """
         if not hasattr(self, "model"):
             raise AttributeError(
@@ -614,7 +616,8 @@ class CurveFitResult(OptimizeResult):
         """Observation-noise variance for a prediction interval at ``x``.
 
         Unweighted fits: pooled residual variance (a scalar). With a 1-D
-        ``sigma`` the noise follows the fit's weighting: ``sigma(x)**2`` times
+        ``sigma`` (a scalar sigma is broadcast; a 2-D covariance ``sigma`` uses
+        its diagonal) the noise follows the fit's weighting: ``sigma(x)**2`` times
         the reduced chi-square (``absolute_sigma=False``) or ``sigma(x)**2``
         alone (``absolute_sigma=True``); ``sigma(x)`` is the data sigma at the
         data points and interpolated in x elsewhere (1-D x only).

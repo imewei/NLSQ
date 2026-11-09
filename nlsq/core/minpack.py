@@ -2773,7 +2773,9 @@ def _apply_output_flags(
         return popt, pcov, np.asarray(f(jnp.asarray(xdata), *popt))
     if kwargs.get("full_output"):
         info = {"nfev": result.get("nfev"), "fvec": None}
-        ier = 1 if result.get("success", False) and result.get("status", 1) > 0 else 5
+        status = result.get("status")
+        status = 1 if status is None else int(status)
+        ier = 1 if result.get("success", False) and status > 0 else 5
         return popt, pcov, info, result.get("message", ""), ier
     if kwargs.get("timeit"):
         return popt, pcov, result, 0.0, 0.0
@@ -4142,11 +4144,9 @@ class CurveFit:
                 "nfev": result.get("nfev"),
                 "fvec": np.asarray(fun) if fun is not None else None,
             }
-            ier = (
-                int(result.get("status", 1))
-                if result.get("success", False) and result.get("status", 1) > 0
-                else 5
-            )
+            status = result.get("status")
+            status = 1 if status is None else int(status)
+            ier = status if result.get("success", False) and status > 0 else 5
             return (
                 result.x,
                 result["pcov"],
