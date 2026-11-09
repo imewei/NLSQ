@@ -213,3 +213,84 @@ def test_hybrid_config_rejects_numpy_bool_verbose():
 
     with pytest.raises((ConfigValidationError, ValueError), match="verbose"):
         HybridStreamingConfig(verbose=np.True_)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"min_chunk_size": -5, "max_chunk_size": -1},
+        {"min_chunk_size": 1.5},
+        {"chunk_size_mb": -1},
+        {"auto_chunk_threshold_gb": float("nan")},
+        {"auto_chunk_threshold_gb": 0.0},
+        {"memory_limit_gb": True},
+    ],
+)
+def test_memory_config_rejects_invalid_fields(kwargs):
+    from nlsq.config import MemoryConfig
+
+    with pytest.raises(ValueError):
+        MemoryConfig(**kwargs)
+
+
+def test_memory_config_coerces_integral_and_allows_inf_threshold():
+    from nlsq.config import MemoryConfig
+
+    cfg = MemoryConfig(
+        min_chunk_size=10.0, max_chunk_size=np.int64(20), auto_chunk_threshold_gb=np.inf
+    )
+    assert type(cfg.min_chunk_size) is int and type(cfg.max_chunk_size) is int
+
+
+def test_global_opt_config_integer_fields_accept_integral_and_coerce():
+    from nlsq.global_optimization import GlobalOptimizationConfig
+
+    cfg = GlobalOptimizationConfig(
+        elimination_rounds=np.int64(2), batches_per_round=10.0
+    )
+    assert type(cfg.elimination_rounds) is int and cfg.batches_per_round == 10
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"elimination_rounds": True},
+        {"elimination_rounds": 1.5},
+        {"batches_per_round": 0},
+        {"sampler": 1},
+        {"scale_factor": True},
+        {"center_on_p0": "yes"},
+    ],
+)
+def test_global_opt_config_rejects_bad_types(kwargs):
+    from nlsq.global_optimization import GlobalOptimizationConfig
+
+    with pytest.raises((TypeError, ValueError)):
+        GlobalOptimizationConfig(**kwargs)
+
+
+@pytest.mark.parametrize("pair", [(True, 3), (0, np.True_)])
+def test_group_variance_indices_reject_bool(pair):
+    from nlsq.streaming.validators import (
+        ConfigValidationError,
+        validate_group_variance_config,
+    )
+
+    with pytest.raises(ConfigValidationError, match="integers"):
+        validate_group_variance_config(True, 0.1, [pair])
+
+
+def test_group_variance_indices_accept_numpy_int():
+    from nlsq.streaming.validators import validate_group_variance_config
+
+    validate_group_variance_config(True, 0.1, [(np.int64(0), np.int64(3))])
+
+
+def test_memory_config_count_check_is_exact():
+    from fractions import Fraction
+
+    from nlsq.config import MemoryConfig
+
+    with pytest.raises(ValueError, match="min_chunk_size"):
+        MemoryConfig(min_chunk_size=Fraction(2**53 + 1, 2**53))
+    assert MemoryConfig(max_chunk_size=10**400).max_chunk_size == 10**400

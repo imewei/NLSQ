@@ -752,7 +752,7 @@ class AdaptiveHybridStreamingOptimizer:
     ) -> tuple[jnp.ndarray, jnp.ndarray, int, int]:
         """Get padded flat arrays for dynamic_slice-based scan, with caching.
 
-        B006: Avoids pre-stacking data into (n_chunks, chunk_size, ...) arrays.
+        Avoids pre-stacking data into (n_chunks, chunk_size, ...) arrays.
         Instead, pads flat arrays minimally and caches them for reuse across
         iterations (x/y data is constant, only params change).
 
@@ -858,7 +858,7 @@ class AdaptiveHybridStreamingOptimizer:
         """
         chunk_size = self.config.chunk_size
 
-        # B006: Use cached padded flat arrays + dynamic_slice
+        # Use cached padded flat arrays + dynamic_slice
         x_padded, y_padded, n_points, _n_chunks = self._get_padded_data(
             x_data,
             y_data,

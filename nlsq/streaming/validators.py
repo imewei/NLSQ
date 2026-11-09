@@ -10,6 +10,8 @@ import math
 import numbers
 from typing import Any
 
+import numpy as np
+
 from nlsq.core._option_checks import _unwrap_scalar, is_integral, is_integral_count
 
 
@@ -406,7 +408,10 @@ def validate_group_variance_config(
                 f"group_variance_indices[{idx}] must be a (start, end) tuple",
             )
         start, end = item
-        if not isinstance(start, int) or not isinstance(end, int):
+        if not all(
+            isinstance(v, (int, np.integer)) and not isinstance(v, (bool, np.bool_))
+            for v in (start, end)
+        ):
             raise ConfigValidationError(
                 f"group_variance_indices[{idx}] start/end must be integers",
             )
@@ -686,12 +691,14 @@ def validate_multistart_config(
     Raises
     ------
     ConfigValidationError
-        If any parameter is invalid when enabled.
+        If any parameter is invalid. The fields are checked even when
+        multi-start is disabled (they can be enabled later and are coerced to
+        int); only then is ``n_starts=0`` accepted.
     """
-    if not enabled:
-        return
-
-    validate_positive_int(n_starts, "n_starts")
+    if enabled:
+        validate_positive_int(n_starts, "n_starts")
+    else:
+        validate_non_negative_int(n_starts, "n_starts")
 
     validate_multistart_sampler(sampler)
     validate_range(

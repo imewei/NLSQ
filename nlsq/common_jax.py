@@ -679,7 +679,7 @@ class CommonJIT:
 
 
 # ---------------------------------------------------------------------------
-# JIT-compiled versions of trust-region helper functions (B002, B003 fixes)
+# JIT-compiled versions of trust-region helper functions
 # These eliminate GPU→CPU sync overhead by keeping all operations on device.
 # ---------------------------------------------------------------------------
 
@@ -865,7 +865,7 @@ def make_strictly_feasible_jax(
 
 
 # =====================================================================
-# JAX-compiled bounded-path helpers (B004 optimization)
+# JAX-compiled bounded-path helpers (keep step selection on device)
 # These replace NumPy versions from common_scipy.py in the hot path
 # to avoid implicit device-to-host transfers.
 # =====================================================================

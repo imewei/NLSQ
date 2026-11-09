@@ -38,11 +38,14 @@ Custom configuration:
 """
 
 import math
+import numbers
 import warnings
 from dataclasses import dataclass, field, fields
 from typing import Any, Literal
 
 import numpy as np
+
+from nlsq.core._option_checks import _unwrap_scalar, is_integral_count
 
 # Import CMA-ES presets to include in global PRESETS
 from nlsq.global_optimization.cmaes_config import CMAES_PRESETS
@@ -104,19 +107,31 @@ _MULTISTART_PRESETS: dict[str, dict[str, Any]] = {
 PRESETS: dict[str, dict[str, Any]] = {**_MULTISTART_PRESETS, **CMAES_PRESETS}
 
 
-def _require_int(name: str, value: Any) -> None:
-    """Raise TypeError unless ``value`` is a real ``int`` (not a ``bool``).
-
-    ``bool`` is a subclass of ``int`` in Python, so an explicit exclusion is
-    needed or ``True``/``False`` would silently pass an ``isinstance(x, int)``
-    check.
-    """
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise TypeError(f"{name} must be an int, got {type(value)}")
-
-
 class _NonIntegralValueError(ValueError, TypeError):
     """Bad count value; also a TypeError so pre-existing ``except TypeError`` callers keep working."""
+
+
+def _require_int(name: str, value: Any, minimum: int) -> int:
+    """Return ``value`` as ``int`` (ints, numpy ints, ``2.0``); bool is rejected.
+
+    Non-numbers raise ``TypeError``; non-integral, non-finite or ``< minimum``
+    numbers raise ``_NonIntegralValueError`` (a ``ValueError`` and ``TypeError``).
+    """
+    value = _unwrap_scalar(value)
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        raise TypeError(f"{name} must be an int, got {type(value)}")
+    if not is_integral_count(value, minimum):
+        bound = "non-negative" if minimum == 0 else "positive"
+        raise _NonIntegralValueError(f"{name} must be a {bound} integer, got {value!r}")
+    return int(value)  # type: ignore[call-overload]
+
+
+def _require_real(name: str, value: Any) -> float:
+    """Return a real non-bool number as ``float``; ``TypeError`` otherwise."""
+    value = _unwrap_scalar(value)
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        raise TypeError(f"{name} must be a number, got {type(value)}")
+    return float(value)
 
 
 @dataclass(slots=True)
@@ -206,19 +221,12 @@ class GlobalOptimizationConfig:
         """Validate configuration after initialization."""
         # Validate n_starts
         # Same rule as Multistart/curve_fit: non-negative integral, coerced to int.
-        n_starts = self.n_starts
-        if isinstance(n_starts, (bool, np.bool_)) or not isinstance(
-            n_starts, (int, float, np.integer, np.floating)
-        ):
-            raise TypeError(f"n_starts must be an int, got {type(n_starts)}")
-        if not math.isfinite(n_starts) or n_starts != int(n_starts) or n_starts < 0:
-            raise _NonIntegralValueError(
-                f"n_starts must be a non-negative integer, got {n_starts!r}"
-            )
-        object.__setattr__(self, "n_starts", int(n_starts))
+        object.__setattr__(self, "n_starts", _require_int("n_starts", self.n_starts, 0))
 
         # Validate sampler
         valid_samplers = ("lhs", "sobol", "halton")
+        if not isinstance(self.sampler, str):
+            raise TypeError(f"sampler must be a str, got {type(self.sampler)}")
         if self.sampler.lower() not in valid_samplers:
             raise ValueError(
                 f"sampler must be one of {valid_samplers}, got '{self.sampler}'",
@@ -226,13 +234,21 @@ class GlobalOptimizationConfig:
         # Normalize sampler to lowercase
         object.__setattr__(self, "sampler", self.sampler.lower())
 
+        if not isinstance(self.center_on_p0, (bool, np.bool_)):
+            raise TypeError(
+                f"center_on_p0 must be a bool, got {type(self.center_on_p0)}"
+            )
+        object.__setattr__(self, "center_on_p0", bool(self.center_on_p0))
+
         # Validate scale_factor
+        _require_real("scale_factor", self.scale_factor)
         if not math.isfinite(self.scale_factor) or self.scale_factor <= 0:
             raise ValueError(
                 f"scale_factor must be finite and positive, got {self.scale_factor}",
             )
 
         # Validate elimination_fraction
+        _require_real("elimination_fraction", self.elimination_fraction)
         if not math.isfinite(self.elimination_fraction) or not (
             0 < self.elimination_fraction < 1
         ):
@@ -241,18 +257,18 @@ class GlobalOptimizationConfig:
             )
 
         # Validate elimination_rounds
-        _require_int("elimination_rounds", self.elimination_rounds)
-        if self.elimination_rounds < 0:
-            raise ValueError(
-                f"elimination_rounds must be non-negative, got {self.elimination_rounds}",
-            )
+        object.__setattr__(
+            self,
+            "elimination_rounds",
+            _require_int("elimination_rounds", self.elimination_rounds, 0),
+        )
 
         # Validate batches_per_round
-        _require_int("batches_per_round", self.batches_per_round)
-        if self.batches_per_round <= 0:
-            raise ValueError(
-                f"batches_per_round must be positive, got {self.batches_per_round}",
-            )
+        object.__setattr__(
+            self,
+            "batches_per_round",
+            _require_int("batches_per_round", self.batches_per_round, 1),
+        )
 
         # Validate parameter combinations
         if self.n_starts == 0 and self.elimination_rounds > 0:

@@ -6,15 +6,34 @@ import copy
 import json
 import logging
 import math
+import numbers
 import os
 import threading
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+import numpy as np
+
 # Module logger: calling logging.info()/debug() on the root logger would run
 # logging.basicConfig() and attach a stderr handler to the application's root.
 _logger = logging.getLogger(__name__)
+
+
+def _is_positive_count(value) -> bool:
+    """True for a finite integral non-bool real ``>= 1`` (``3``, ``np.int64(3)``, ``3.0``).
+
+    Mirrors ``nlsq.core._option_checks.is_integral_count``, which this module
+    cannot import (nlsq.core imports nlsq.config at import time).
+    """
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        return False
+    # compare the value itself, not a float rounding (huge ints, Fraction)
+    if not isinstance(value, numbers.Integral) and not (
+        math.isfinite(value) and value == int(value)  # type: ignore[call-overload]
+    ):
+        return False
+    return value >= 1  # type: ignore[operator]
 
 
 @dataclass(slots=True)
@@ -57,6 +76,27 @@ class MemoryConfig:
 
     def __post_init__(self):
         """Validate configuration values."""
+        for name in ("memory_limit_gb", "gpu_memory_fraction", "safety_factor"):
+            if isinstance(getattr(self, name), (bool, np.bool_)):
+                raise ValueError(f"{name} must be a number, not bool")
+        if self.chunk_size_mb is not None:
+            if not _is_positive_count(self.chunk_size_mb):
+                raise ValueError(
+                    f"chunk_size_mb must be None or a positive integer, got {self.chunk_size_mb!r}",
+                )
+            self.chunk_size_mb = int(self.chunk_size_mb)
+        threshold = self.auto_chunk_threshold_gb
+        # +inf is the documented "chunking disabled" value (configure_for_large_datasets)
+        if isinstance(threshold, (bool, np.bool_)) or not threshold > 0:
+            raise ValueError(
+                f"auto_chunk_threshold_gb must be positive, got {threshold!r}",
+            )
+        for name in ("min_chunk_size", "max_chunk_size"):
+            value = getattr(self, name)
+            if not _is_positive_count(value):
+                raise ValueError(f"{name} must be a positive integer, got {value!r}")
+            setattr(self, name, int(value))
+
         if self.memory_limit_gb is not None and not 0.1 <= self.memory_limit_gb <= 1024:
             raise ValueError(
                 f"memory_limit_gb must be between 0.1 and 1024, got {self.memory_limit_gb}",
