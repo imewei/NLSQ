@@ -2692,6 +2692,10 @@ def _run_cmaes_optimization(
         "full_output",
     )
     extra_kwargs = {k: v for k, v in kwargs.items() if k not in _already_passed}
+    if not compute_covariance:
+        # Reaches the NLSQ refinement curve_fit call, the only place CMA-ES
+        # computes a covariance.
+        extra_kwargs["compute_covariance"] = False
 
     # Run CMA-ES optimization
     result_dict = optimizer.fit(
@@ -2708,7 +2712,9 @@ def _run_cmaes_optimization(
     # Convert dict result to CurveFitResult-like structure
     # CMAESOptimizer returns {"popt": ..., "pcov": ..., ...}
     popt = result_dict["popt"]
-    pcov = result_dict["pcov"]
+    # None when the refinement skipped it (compute_covariance=False); the
+    # unrefined fallbacks return an inf placeholder, which is dropped here.
+    pcov = result_dict["pcov"] if compute_covariance else None
 
     # Create a CurveFitResult-compatible object
     # We need to construct a result that behaves like CurveFitResult
@@ -2742,10 +2748,6 @@ def _run_cmaes_optimization(
         ydata=np.asarray(ydata),
         model=f,
     )
-
-    if not compute_covariance:
-        # CMA-ES / its refinement already produced pcov; only drop it.
-        result["pcov"] = None
 
     # Add multi-start diagnostics placeholder
     result["multistart_diagnostics"] = {
@@ -3193,15 +3195,16 @@ def curve_fit(
         of the Jacobian. ``CurveFitResult.confidence_intervals``,
         ``confidence_band`` and ``prediction_interval`` then raise
         ``AttributeError``; ``summary()`` omits the error column. Default: True.
-        Every route honours the flag. Routes that run the TRF fit through
-        ``CurveFit.curve_fit`` (the default path, ``fallback=True``,
+        Per route: the default path, ``fallback=True``,
         ``compute_diagnostics=True``, ``auto_bounds=True``, ``multistart=True``,
-        ``global_search=True``, ``method='multi-start'`` and ``method='auto'``
-        when it selects the in-memory strategy) skip the computation. The
-        ``method='cmaes'``, ``method='hybrid_streaming'`` and ``method='auto'``
-        streaming/chunked routes compute their covariance inside the
-        optimizer, so they only drop it from the returned result (nothing is
-        saved).
+        ``global_search=True``, ``method='multi-start'``, ``method='cmaes'``
+        (the flag reaches its NLSQ refinement fit) and ``method='auto'`` when
+        it selects the in-memory strategy honour the flag: no covariance is
+        computed and no covariance warning is emitted.
+        ``method='hybrid_streaming'`` and ``method='auto'`` when it selects the
+        streaming or chunked strategy raise ``ValueError``, because those
+        engines compute the covariance internally (the chunked GLS combiner
+        needs the per-chunk covariances).
     *args, **kwargs
         Additional arguments passed to CurveFit.curve_fit method.
 
@@ -4089,8 +4092,8 @@ class CurveFit:
         full_output : bool, default=False
             Return the SciPy-style ``(popt, pcov, infodict, mesg, ier)`` tuple.
         compute_covariance : bool, default=True
-            When False, ``pcov`` is ``None`` (and ``perr`` is dropped). The
-            hybrid engine still computes it internally, so nothing is saved.
+            ``False`` raises ``ValueError``: the hybrid engine always computes
+            the covariance.
         **kwargs
             Additional parameters (verbose, config overrides, nan_policy)
 
@@ -4101,6 +4104,13 @@ class CurveFit:
         """
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
         from nlsq.streaming.strategy import build_large_strategy
+
+        if not compute_covariance:
+            raise ValueError(
+                "compute_covariance=False is not supported by "
+                "method='hybrid_streaming' (the engine always computes the "
+                "covariance). Use method='trf' to skip it."
+            )
 
         self._warn_unsupported_args(
             "method='hybrid_streaming'",
@@ -4205,11 +4215,7 @@ class CurveFit:
         result["model"] = f
         result["xdata"] = xdata
         result["ydata"] = ydata
-        if compute_covariance:
-            result["pcov"] = result_dict.get("pcov", np.full((n, n), np.inf))
-        else:
-            result["pcov"] = None
-            result.pop("perr", None)
+        result["pcov"] = result_dict.get("pcov", np.full((n, n), np.inf))
 
         if return_eval:
             return result.x, result["pcov"], np.asarray(f(xdata, *result.x))
@@ -4302,9 +4308,9 @@ class CurveFit:
         diagnostics_config : DiagnosticsConfig, optional
             Configuration for diagnostics
         compute_covariance : bool, default=True
-            When False, ``pcov`` is ``None``. The standard strategy skips the
-            computation; the streaming and chunked strategies compute it
-            internally and only drop it from the result.
+            When False, ``pcov`` is ``None``. Only the standard strategy
+            honours it; the streaming and chunked strategies raise
+            ``ValueError`` (their engines always compute the covariance).
         **kwargs
             Additional parameters
 
@@ -4387,6 +4393,12 @@ class CurveFit:
             return result
 
         if strategy == "chunked":
+            if not compute_covariance:
+                raise ValueError(
+                    "compute_covariance=False is not supported by the "
+                    "method='auto' chunked strategy (the GLS combiner needs "
+                    "the per-chunk covariances). Use method='trf' to skip it."
+                )
             # sigma/data_mask would need to be sliced consistently with each
             # chunk, which LargeDatasetFitter doesn't do -- fail loudly
             # instead of silently returning an unweighted/unmasked fit
@@ -4446,11 +4458,7 @@ class CurveFit:
 
             # Convert OptimizeResult to CurveFitResult format
             popt = result.x
-            pcov = (
-                result.get("pcov", np.full((n_params, n_params), np.inf))
-                if compute_covariance
-                else None
-            )
+            pcov = result.get("pcov", np.full((n_params, n_params), np.inf))
 
             if timeit:
                 ctime = result.get("execution_time", 0)
