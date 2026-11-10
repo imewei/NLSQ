@@ -2550,6 +2550,7 @@ def _run_cmaes_optimization(
     method: str,
     cmaes_config: CMAESConfig | None,
     kwargs: dict[str, Any],
+    compute_covariance: bool = True,
 ) -> CurveFitResult | None:
     """Run CMA-ES global optimization if appropriate.
 
@@ -2741,6 +2742,10 @@ def _run_cmaes_optimization(
         ydata=np.asarray(ydata),
         model=f,
     )
+
+    if not compute_covariance:
+        # CMA-ES / its refinement already produced pcov; only drop it.
+        result["pcov"] = None
 
     # Add multi-start diagnostics placeholder
     result["multistart_diagnostics"] = {
@@ -3024,6 +3029,7 @@ def curve_fit(
     compute_diagnostics: bool = False,
     diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
     diagnostics_config: DiagnosticsConfig | None = None,
+    compute_covariance: bool = True,
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
     """
@@ -3180,6 +3186,22 @@ def curve_fit(
         including max_generations, restart_strategy, and popsize.
         Only used when method='cmaes' or method='auto' selects CMA-ES.
         Default: None.
+    compute_covariance : bool, optional
+        When False, ``pcov`` is returned as ``None`` (in the tuple, the
+        ``CurveFitResult`` and the ``full_output``/``return_eval``/``timeit``
+        tuples) and the final covariance is not computed, which skips an SVD
+        of the Jacobian. ``CurveFitResult.confidence_intervals``,
+        ``confidence_band`` and ``prediction_interval`` then raise
+        ``AttributeError``; ``summary()`` omits the error column. Default: True.
+        Every route honours the flag. Routes that run the TRF fit through
+        ``CurveFit.curve_fit`` (the default path, ``fallback=True``,
+        ``compute_diagnostics=True``, ``auto_bounds=True``, ``multistart=True``,
+        ``global_search=True``, ``method='multi-start'`` and ``method='auto'``
+        when it selects the in-memory strategy) skip the computation. The
+        ``method='cmaes'``, ``method='hybrid_streaming'`` and ``method='auto'``
+        streaming/chunked routes compute their covariance inside the
+        optimizer, so they only drop it from the returned result (nothing is
+        saved).
     *args, **kwargs
         Additional arguments passed to CurveFit.curve_fit method.
 
@@ -3187,8 +3209,9 @@ def curve_fit(
     -------
     popt : ndarray
         Optimal values for the parameters.
-    pcov : ndarray
-        The estimated covariance of popt.
+    pcov : ndarray or None
+        The estimated covariance of popt; ``None`` when
+        ``compute_covariance=False``.
 
     When fallback=True, the returned object also contains:
 
@@ -3383,6 +3406,7 @@ def curve_fit(
             "compute_diagnostics": compute_diagnostics,
             "diagnostics_level": diagnostics_level,
             "diagnostics_config": diagnostics_config,
+            "compute_covariance": compute_covariance,
         }
         return _curve_fit_with_auto_bounds(
             lambda **kw: curve_fit(f, xdata, ydata, **{**_inner, **kw}),
@@ -3437,11 +3461,16 @@ def curve_fit(
                 method,
                 cmaes_config,
                 kwargs,
+                compute_covariance,
             )
             if result is not None:
                 return result
         # If bounds is None and method='cmaes', we could warn, but for 'auto'
         # we just fall through to standard path
+
+    # Multistart, fallback and the standard path all end in CurveFit.curve_fit,
+    # which owns the keyword; CMA-ES above took it as an explicit argument.
+    kwargs["compute_covariance"] = compute_covariance
 
     # Handle multi-start optimization. method="multi-start" is a documented
     # Literal value on this function's own signature but was only ever
@@ -3940,6 +3969,15 @@ class CurveFit:
             self.logger,
         )
 
+    def _final_covariance(
+        self, res, ysize: int, p0: np.ndarray, absolute_sigma: bool, compute: bool
+    ) -> tuple[np.ndarray | None, bool]:
+        """``_compute_covariance``, or ``(None, False)`` when ``compute`` is False."""
+        if compute:
+            return self._compute_covariance(res, ysize, p0, absolute_sigma)
+        self.logger.debug("covariance skipped", reason="compute_covariance=False")
+        return None, False
+
     @staticmethod
     def _drop_unobserved_rows(res, xdata, ydata, data_mask):
         """Drop padded (flength) and caller-masked rows from stored data/residuals.
@@ -4011,6 +4049,7 @@ class CurveFit:
         timeit: bool = False,
         return_eval: bool = False,
         full_output: bool = False,
+        compute_covariance: bool = True,
         **kwargs,
     ) -> CurveFitResult | tuple:
         """Handle curve fitting with hybrid_streaming method.
@@ -4049,6 +4088,9 @@ class CurveFit:
             Return ``(popt, pcov, f(xdata, *popt))``.
         full_output : bool, default=False
             Return the SciPy-style ``(popt, pcov, infodict, mesg, ier)`` tuple.
+        compute_covariance : bool, default=True
+            When False, ``pcov`` is ``None`` (and ``perr`` is dropped). The
+            hybrid engine still computes it internally, so nothing is saved.
         **kwargs
             Additional parameters (verbose, config overrides, nan_policy)
 
@@ -4163,7 +4205,11 @@ class CurveFit:
         result["model"] = f
         result["xdata"] = xdata
         result["ydata"] = ydata
-        result["pcov"] = result_dict.get("pcov", np.full((n, n), np.inf))
+        if compute_covariance:
+            result["pcov"] = result_dict.get("pcov", np.full((n, n), np.inf))
+        else:
+            result["pcov"] = None
+            result.pop("perr", None)
 
         if return_eval:
             return result.x, result["pcov"], np.asarray(f(xdata, *result.x))
@@ -4206,6 +4252,7 @@ class CurveFit:
         diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
         diagnostics_config: DiagnosticsConfig | None = None,
         full_output: bool = False,
+        compute_covariance: bool = True,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray] | CurveFitResult:
         """Handle curve fitting with automatic memory-based strategy selection.
@@ -4254,6 +4301,10 @@ class CurveFit:
             Level of diagnostics to compute
         diagnostics_config : DiagnosticsConfig, optional
             Configuration for diagnostics
+        compute_covariance : bool, default=True
+            When False, ``pcov`` is ``None``. The standard strategy skips the
+            computation; the streaming and chunked strategies compute it
+            internally and only drop it from the result.
         **kwargs
             Additional parameters
 
@@ -4325,6 +4376,7 @@ class CurveFit:
                 timeit=timeit,
                 return_eval=return_eval,
                 full_output=full_output,
+                compute_covariance=compute_covariance,
                 config=config,
                 **kwargs,
             )
@@ -4394,7 +4446,11 @@ class CurveFit:
 
             # Convert OptimizeResult to CurveFitResult format
             popt = result.x
-            pcov = result.get("pcov", np.full((n_params, n_params), np.inf))
+            pcov = (
+                result.get("pcov", np.full((n_params, n_params), np.inf))
+                if compute_covariance
+                else None
+            )
 
             if timeit:
                 ctime = result.get("execution_time", 0)
@@ -4433,6 +4489,7 @@ class CurveFit:
             diagnostics_level=diagnostics_level,
             diagnostics_config=diagnostics_config,
             full_output=full_output,
+            compute_covariance=compute_covariance,
             **kwargs,
         )
 
@@ -4723,6 +4780,7 @@ class CurveFit:
         compute_diagnostics: bool = False,
         diagnostics_level: DiagnosticLevel = DiagnosticLevel.BASIC,
         diagnostics_config: DiagnosticsConfig | None = None,
+        compute_covariance: bool = True,
         **kwargs,
     ) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -4731,6 +4789,9 @@ class CurveFit:
 
         Parameters
         ----------
+        compute_covariance : bool, optional
+            When False, skip the final covariance and return ``pcov=None``
+            in every return shape. See :func:`nlsq.curve_fit`.
         method : str | None, optional
             Optimization algorithm. Options:
 
@@ -4762,6 +4823,7 @@ class CurveFit:
                 timeit=timeit,
                 return_eval=return_eval,
                 full_output=full_output,
+                compute_covariance=compute_covariance,
                 **kwargs,
             )
 
@@ -4787,6 +4849,7 @@ class CurveFit:
                 diagnostics_level=diagnostics_level,
                 diagnostics_config=diagnostics_config,
                 full_output=full_output,
+                compute_covariance=compute_covariance,
                 **kwargs,
             )
 
@@ -5057,7 +5120,9 @@ class CurveFit:
         cost = 2 * res.cost  # res.cost is half sum of squares!
 
         # Compute covariance matrix
-        pcov, warn_cov = self._compute_covariance(res, ysize, p0, absolute_sigma)
+        pcov, warn_cov = self._final_covariance(
+            res, ysize, p0, absolute_sigma, compute_covariance
+        )
         _pcov = pcov
 
         return_full = full_output
