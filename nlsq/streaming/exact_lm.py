@@ -495,6 +495,29 @@ def _open_source(
     ), sigma is not None
 
 
+# one slot: (model, weighted, kernel) of the last TSQR pass
+_jac_kernel: list[tuple[Any, bool, Callable[..., jax.Array]]] = []
+
+
+def _chunk_jacobian(
+    model: Callable[..., Any], weighted: bool
+) -> Callable[..., jax.Array]:
+    """:func:`make_chunk_jacobian` kernel, cached for the last ``(model, weighted)``.
+
+    Rebuilt only when ``model`` is a different object or ``weighted`` changes, so repeated
+    fits of one model do not re-trace (the jitted kernel bakes ``model`` in).
+    """
+    if (
+        not _jac_kernel
+        or _jac_kernel[0][0] is not model
+        or _jac_kernel[0][1] != weighted
+    ):
+        _jac_kernel[:] = [
+            (model, weighted, make_chunk_jacobian(model, weighted=weighted))
+        ]
+    return _jac_kernel[0][2]
+
+
 @jax.jit
 def _qr_append(R: jax.Array, J: jax.Array) -> jax.Array:
     return jnp.linalg.qr(jnp.vstack([R, J]), mode="r")
@@ -516,7 +539,7 @@ def tsqr_r_factor(
     padded-tail mask are those of :func:`run_pass`; a factory source verifies its count.
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
-    jac = make_chunk_jacobian(model, weighted=weighted)
+    jac = _chunk_jacobian(model, weighted)
     R = jnp.zeros((0, th.shape[0]), dtype=jnp.float64)
     blocks = (
         source.blocks()
@@ -527,6 +550,22 @@ def tsqr_r_factor(
         Jc = jac(th, xc, mask) if sc is None else jac(th, xc, sc, mask)
         R = _qr_append(R, Jc)
     return np.asarray(R)
+
+
+def _warn_tsqr_route(H: np.ndarray, kappa: float) -> None:
+    """The TSQR-route ``UserWarning`` above ``COND_WARN`` (non-finite ``H`` named as such)."""
+    if not np.isfinite(H).all():
+        state = "is non-finite"
+    elif kappa > COND_WARN:
+        state = f"is ill-conditioned (sqrt(cond(H)) > {COND_WARN:.0e})"
+    else:
+        return
+    warnings.warn(
+        f"normal-equation Hessian {state}; covariance computed by QR; the parameters "
+        "may stop short of the optimum: check the result",
+        UserWarning,
+        skip_file_prefixes=_NLSQ_DIR,
+    )
 
 
 def _check_factory_inputs(
@@ -790,14 +829,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         R = tsqr_r_factor(model, theta, source, chunk, weighted=weighted)
         pcov = pcov_from_jacobian(R, cost, n, p, absolute_sigma, _covariance_svd)[0]
         covariance_method = "tsqr"
-        if kappa > COND_WARN:
-            warnings.warn(
-                f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
-                f"{COND_WARN:.0e}); covariance computed by QR; the parameters may stop "
-                "short of the optimum: check the result",
-                UserWarning,
-                skip_file_prefixes=_NLSQ_DIR,
-            )
+        _warn_tsqr_route(H, kappa)
     else:
         pcov = pcov_from_normal(H, cost, n, p, absolute_sigma)[0]
         covariance_method = "normal"

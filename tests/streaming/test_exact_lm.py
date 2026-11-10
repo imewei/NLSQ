@@ -3,6 +3,7 @@
 The same Stage 0 cases against the frozen prototype live in test_exact_lm_prototype.py.
 """
 
+import types
 import warnings
 
 import jax
@@ -14,6 +15,12 @@ from scipy.optimize import least_squares
 import nlsq.streaming.exact_lm as lm
 from benchmarks.compare.problems import PROBLEMS
 from nlsq import curve_fit
+from nlsq.core.covariance import (
+    normal_condition,
+    pcov_from_jacobian,
+    pcov_from_normal,
+)
+from nlsq.core.minpack import _covariance_svd
 from nlsq.result.optimize_warning import OptimizeWarning
 from tests.streaming.exact_lm_kkt import assert_kkt
 
@@ -1230,29 +1237,16 @@ def test_assert_kkt_rejects_undefined_objective():
 
 # ---- TSQR covariance for ill-conditioned exact fits -------------------------------------
 
-import types
-
-from nlsq.core.covariance import (
-    normal_condition,
-    pcov_from_jacobian,
-    pcov_from_normal,
-)
-from nlsq.core.minpack import _covariance_svd
-from nlsq.streaming import exact_lm
-from nlsq.streaming.exact_lm import exact_lm_fit
-
 two_exp = lambda x, a1, k1, a2, k2: a1 * jnp.exp(-k1 * x) + a2 * jnp.exp(-k2 * x)
 exp_decay = lambda x, a, b, c: a * jnp.exp(-b * x) + c
 x = np.linspace(0.0, 5.0, 3001)
 noise = 1e-3 * np.random.default_rng(0).standard_normal(x.size)
 y_exp = np.asarray(exp_decay(x, 2.5, 1.3, 0.5)) + noise
-# cond(J) ~ 8e6 here, ~2e5 at the fitted popt. The brief's 1.0001 gives cond ~ 6e13 and
-# the fit lands on k1 == k2 (cond ~ 2e15, rank 3), where pcov differs at the 1e-2 level
-# between any two backward-stable factorizations, the reference included.
+# cond(J) ~ 8e6 here, ~2e5 at the fitted popt. The plan's original rate 1.0001 is
+# numerically rank-deficient at popt; see test_rank_deficient_original_input_regression.
 TRUE_ILL = (2.0, 1.0, 1.5, 1.02)
 y_ill = np.asarray(two_exp(x, *TRUE_ILL)) + noise
 P0_ILL = [2.0, 0.9, 1.5, 1.1]
-TIGHT = {"ftol": 1e-12, "xtol": 1e-12, "gtol": 1e-12}
 
 
 def full_jac(model, x, theta, sigma=None):
@@ -1268,14 +1262,14 @@ def factory(xs, ys):
 
 @pytest.fixture
 def spy_tsqr(monkeypatch):
-    real = exact_lm.tsqr_r_factor
+    real = lm.tsqr_r_factor
     spy = types.SimpleNamespace(calls=0)
 
     def wrapper(*a, **k):
         spy.calls += 1
         return real(*a, **k)
 
-    monkeypatch.setattr(exact_lm, "tsqr_r_factor", wrapper)
+    monkeypatch.setattr(lm, "tsqr_r_factor", wrapper)
     return spy
 
 
@@ -1287,10 +1281,10 @@ def _sv(A):
 def test_tsqr_r_factor_matches_full_jacobian(weighted):
     sigma = 0.5 + np.random.default_rng(1).random(x.size) if weighted else None
     theta = np.array(TRUE_ILL)
-    src, w = exact_lm._open_source(
+    src, w = lm._open_source(
         x, y_ill, sigma, 700, 4, None, None
     )  # 3001 = 4*700 + 201: padded tail
-    R = exact_lm.tsqr_r_factor(two_exp, theta, src, 700, weighted=w)
+    R = lm.tsqr_r_factor(two_exp, theta, src, 700, weighted=w)
     ref = _sv(full_jac(two_exp, x, theta, sigma))
     # backward-stable QR and SVD fix each singular value to O(eps * s_max) absolutely
     # (Weyl), so a relative 1e-12 holds only for s_i >~ 1e-4 * s_max
@@ -1301,12 +1295,10 @@ def test_tsqr_r_factor_matches_full_jacobian(weighted):
 
 def test_tsqr_r_factor_factory_replay():
     theta = np.array(TRUE_ILL)
-    src_a, _ = exact_lm._open_source(x, y_ill, None, 700, 4, None, None)
-    src_f, _ = exact_lm._open_source(
-        factory(x, y_ill), None, None, 700, 4, None, x.size
-    )
-    R_a = exact_lm.tsqr_r_factor(two_exp, theta, src_a, 700, weighted=False)
-    R_f = exact_lm.tsqr_r_factor(two_exp, theta, src_f, 700, weighted=False)
+    src_a, _ = lm._open_source(x, y_ill, None, 700, 4, None, None)
+    src_f, _ = lm._open_source(factory(x, y_ill), None, None, 700, 4, None, x.size)
+    R_a = lm.tsqr_r_factor(two_exp, theta, src_a, 700, weighted=False)
+    R_f = lm.tsqr_r_factor(two_exp, theta, src_f, 700, weighted=False)
     np.testing.assert_allclose(_sv(R_f), _sv(R_a), rtol=1e-13)
 
 
@@ -1319,18 +1311,18 @@ def test_tsqr_pass_detects_changed_replay_count():
             (x[i : min(i + cs, m)], y_ill[i : min(i + cs, m)]) for i in range(0, m, cs)
         )
 
-    src, _ = exact_lm._open_source(fac, None, None, 700, 4, None, x.size)
-    exact_lm.tsqr_r_factor(
+    src, _ = lm._open_source(fac, None, None, 700, 4, None, x.size)
+    lm.tsqr_r_factor(
         two_exp, np.array(TRUE_ILL), src, 700, weighted=False
     )  # full count: ok
     state["short"] = True
     with pytest.raises(ValueError, match="points"):
-        exact_lm.tsqr_r_factor(two_exp, np.array(TRUE_ILL), src, 700, weighted=False)
+        lm.tsqr_r_factor(two_exp, np.array(TRUE_ILL), src, 700, weighted=False)
 
 
 def test_declared_count_mismatch_raises():
     with pytest.raises(ValueError, match="n_points"):
-        exact_lm_fit(
+        lm.exact_lm_fit(
             two_exp,
             factory(x, y_ill),
             None,
@@ -1345,8 +1337,8 @@ def test_tsqr_r_factor_rank_deficient():
         a * jnp.exp(-k * x) + b * jnp.exp(-k * x)
     )  # a, b not separable
     theta = np.array([1.0, 1.0, 1.3])
-    src, _ = exact_lm._open_source(x, y_exp, None, 700, 3, None, None)
-    R = exact_lm.tsqr_r_factor(dup, theta, src, 700, weighted=False)
+    src, _ = lm._open_source(x, y_exp, None, 700, 3, None, None)
+    R = lm.tsqr_r_factor(dup, theta, src, 700, weighted=False)
     with pytest.warns(OptimizeWarning, match="rank-deficient"):
         got, _ = pcov_from_jacobian(R, 0.5, x.size, 3, False, _covariance_svd)
     with pytest.warns(OptimizeWarning, match="rank-deficient"):
@@ -1360,7 +1352,7 @@ def test_tsqr_r_factor_rank_deficient():
     "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
 )
 def test_ill_conditioned_exact_uses_tsqr(spy_tsqr):
-    res = exact_lm_fit(two_exp, x, y_ill, P0_ILL, chunk_size=1000, **TIGHT)
+    res = lm.exact_lm_fit(two_exp, x, y_ill, P0_ILL, chunk_size=1000, **TIGHT)
     assert res.success
     ref, _ = pcov_from_jacobian(
         full_jac(two_exp, x, res.x), res.cost, x.size, 4, False, _covariance_svd
@@ -1371,12 +1363,12 @@ def test_ill_conditioned_exact_uses_tsqr(spy_tsqr):
 
 
 def test_well_conditioned_exact_skips_tsqr(spy_tsqr):
-    res = exact_lm_fit(exp_decay, x, y_exp, [1.0, 1.0, 0.0], chunk_size=1000)
+    res = lm.exact_lm_fit(exp_decay, x, y_exp, [1.0, 1.0, 0.0], chunk_size=1000)
     assert res.covariance_method == "normal" and spy_tsqr.calls == 0
 
 
 def test_skip_never_calls_tsqr(spy_tsqr):
-    res = exact_lm_fit(
+    res = lm.exact_lm_fit(
         two_exp, x, y_ill, P0_ILL, chunk_size=1000, compute_covariance=False, **TIGHT
     )
     assert (
@@ -1388,14 +1380,14 @@ def test_skip_never_calls_tsqr(spy_tsqr):
     "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
 )
 def test_failed_fit_still_reports_route(spy_tsqr):
-    res = exact_lm_fit(two_exp, x, y_ill, P0_ILL, chunk_size=1000, max_nfev=2)
+    res = lm.exact_lm_fit(two_exp, x, y_ill, P0_ILL, chunk_size=1000, max_nfev=2)
     assert not res.success and res.covariance_method in ("normal", "tsqr")
 
 
 def test_tsqr_route_warns_when_kappa_above_cond_warn():
     y2 = np.asarray(two_exp(x, 2.0, 1.0, 1.5, 1.00001)) + noise
     with pytest.warns(UserWarning, match="computed by QR"):
-        exact_lm_fit(two_exp, x, y2, P0_ILL, chunk_size=1000, **TIGHT)
+        lm.exact_lm_fit(two_exp, x, y2, P0_ILL, chunk_size=1000, **TIGHT)
 
 
 def test_pcov_from_normal_warning_text_unchanged():
@@ -1414,3 +1406,52 @@ def test_pcov_from_normal_warning_text_unchanged():
 )
 def test_normal_condition(H, expected):
     assert normal_condition(H) == pytest.approx(expected, rel=1e-12)
+
+
+def _retained_svd(A, n):
+    """Singular values kept by pcov_from_jacobian: s > eps * max(n, p) * s[0]."""
+    s = np.asarray(_covariance_svd(np.asarray(A))[0])
+    return int(np.sum(s > np.finfo(float).eps * max(n, A.shape[1]) * s[0]))
+
+
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
+def test_rank_deficient_original_input_regression():
+    """The plan's original ill-conditioned input: second rate 1.0001, 3001 points, seed 0.
+
+    The fit converges onto k1 == k2, where J is numerically rank-deficient (cond ~ 2e15).
+    A pseudo-inverse truncated at the cutoff is ill-posed there: two backward-stable
+    factorizations (the full-J reference included) disagree at the 1e-2 level, so no
+    elementwise pcov tolerance is a sound criterion. Criterion instead:
+    (a) covariance_method == "tsqr";
+    (b) the rank-deficiency OptimizeWarning is emitted, as for the full-J reference;
+    (c) the retained singular-value count of the TSQR R equals that of the full-J
+        reference, both with the production cutoff eps * max(n, p) * s[0];
+    (d) pcov is finite wherever the reference's is finite.
+    """
+    y = np.asarray(two_exp(x, 2.0, 1.0, 1.5, 1.0001)) + noise
+    with pytest.warns(OptimizeWarning, match="rank-deficient"):
+        res = lm.exact_lm_fit(two_exp, x, y, P0_ILL, chunk_size=1000, **TIGHT)
+    assert res.covariance_method == "tsqr"
+    J = full_jac(two_exp, x, res.x)
+    with pytest.warns(OptimizeWarning, match="rank-deficient"):
+        ref, _ = pcov_from_jacobian(J, res.cost, x.size, 4, False, _covariance_svd)
+    src, w = lm._open_source(x, y, None, 1000, 4, None, None)
+    R = lm.tsqr_r_factor(two_exp, res.x, src, 1000, weighted=w)
+    assert _retained_svd(R, x.size) == _retained_svd(J, x.size) < 4
+    assert np.isfinite(res.pcov[np.isfinite(ref)]).all()
+
+
+def test_tsqr_warning_names_non_finite_hessian():
+    H = np.array([[1.0, np.nan], [np.nan, 1.0]])
+    with pytest.warns(UserWarning, match="non-finite") as rec:
+        lm._warn_tsqr_route(H, normal_condition(H))
+    assert not any("ill-conditioned" in str(r.message) for r in rec)
+
+
+def test_tsqr_jacobian_kernel_cached_per_model_and_weighting():
+    k = lm._chunk_jacobian(two_exp, False)
+    assert lm._chunk_jacobian(two_exp, False) is k
+    assert lm._chunk_jacobian(two_exp, True) is not k
+    assert lm._chunk_jacobian(exp_decay, True) is not lm._chunk_jacobian(two_exp, True)

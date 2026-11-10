@@ -2,8 +2,11 @@
 
 For every case the fit's ``pcov`` (``covariance_method`` "normal" or "tsqr") is compared
 with ``pcov_from_jacobian(full_jac(popt), ..., _covariance_svd)`` at the same ``popt``:
-scale-aware ``max |dC_ij| / sqrt(C_ii C_jj) <= 1e-8`` and the same rank decision. The
-route taken is asserted too, so a case cannot silently test the other route. Controlled
+scale-aware ``max |dC_ij| / sqrt(C_ii C_jj) <= 1e-8`` and the same rank decision: the
+count of directions the route actually retains (singular values of the TSQR ``R`` above
+``pcov_from_jacobian``'s cutoff, or eigenvalues of the accumulated ``H`` above
+``pcov_from_normal``'s) equals the reference's count on the full ``J`` and the rank the
+case was built with. The route taken is asserted too, so a case cannot silently test the other route. Controlled
 cases use a linear pointwise model ``f(x, *theta) = B[x] @ theta`` whose singular values,
 hence ``kappa(J)``, are exact by construction. Arrays stay below 100K elements.
 """
@@ -21,6 +24,7 @@ from nlsq.core.minpack import _covariance_svd
 from nlsq.result import OptimizeWarning
 from nlsq.streaming import exact_lm
 from nlsq.streaming.exact_lm import exact_lm_fit
+from nlsq.streaming.normal_equations import make_chunk_stats, run_pass
 
 pytestmark = pytest.mark.slow
 
@@ -57,11 +61,30 @@ def _full_jac(model, x, theta, sigma=None):
     return J if sigma is None else J / np.asarray(sigma)[:, None]
 
 
-def _rank(C):
-    """Rank of the correlation matrix (scale-free, so graded columns do not matter)."""
-    d = np.sqrt(np.diag(C))
-    w = np.linalg.eigvalsh(C / np.outer(d, d))
-    return int(np.sum(w > 1e-10 * w[-1]))
+def _svd_retained(A, n):
+    """Count kept by ``pcov_from_jacobian``: ``s > eps * max(n, p) * s[0]``."""
+    s = np.asarray(_covariance_svd(np.asarray(A))[0])
+    return int(np.sum(s > np.finfo(float).eps * max(n, A.shape[1]) * s[0]))
+
+
+def _eig_retained(H):
+    """Count kept by ``pcov_from_normal``: eigenvalues of the power-of-two scaled ``H``
+    above ``p * eps * lambda_max``."""
+    s = np.ldexp(1.0, int(np.frexp(np.max(np.abs(H)))[1]) - 1)
+    w = np.linalg.eigh((H / s + (H / s).T) / 2)[0]
+    return int(np.sum(w > H.shape[0] * np.finfo(np.float64).eps * w[-1]))
+
+
+def _route_retained(res, model, x, y, sigma, chunk):
+    """Directions retained by the route ``res`` took, from its own factor at ``res.x``."""
+    p = res.x.size
+    src, w = exact_lm._open_source(x, y, sigma, chunk, p, None, None)
+    if res.covariance_method == "tsqr":
+        R = exact_lm.tsqr_r_factor(model, res.x, src, chunk, weighted=w)
+        return _svd_retained(R, x.size)
+    return _eig_retained(
+        run_pass(make_chunk_stats(model, weighted=w), res.x, src, chunk).H
+    )
 
 
 def _check(
@@ -75,8 +98,12 @@ def _check(
     bounds=None,
     chunk=700,
     tol=TIGHT,
+    rank=None,
 ):
-    """Fit, compare with the reference and return ``(route, err, kappa)``."""
+    """Fit, compare with the reference and return ``(route, err, kappa)``.
+
+    ``rank`` is the rank the case was built with (default: full, ``len(p0)``).
+    """
     kw = {} if bounds is None else {"bounds": bounds}
     res = exact_lm_fit(
         model,
@@ -98,7 +125,9 @@ def _check(
     d = np.sqrt(np.outer(np.diag(ref), np.diag(ref)))
     err = float(np.max(np.abs(res.pcov - ref) / d))
     print(f"route={res.covariance_method} kappa={kappa:.4g} err={err:.3g}")
-    assert _rank(res.pcov) == _rank(ref)
+    expected = len(p0) if rank is None else rank
+    got = _route_retained(res, model, x, y, sigma, chunk)
+    assert got == _svd_retained(J, x.size) == expected, (got, expected)
     assert err <= GATE, (res.covariance_method, kappa, err)
     return res.covariance_method, err, kappa
 
@@ -182,12 +211,13 @@ def test_active_bound():
 
 
 def test_rank_deficient():
-    # s = (10, 5, 1, 0): rank 3, so kappa = inf and the TSQR route
+    # s = (10, 5, 1, 0): rank 3. Rounding leaves lambda_min of H tiny but positive
+    # (normal_condition ~ 1.7e8, not inf), still far above TSQR_KAPPA: the TSQR route
     _, x, y = _controlled(1)  # data only; the model below is singular
     B = _basis(2000, np.array([10.0, 5.0, 1.0, 1.0]))
     U, s, VT = np.linalg.svd(B, full_matrices=False)
     B = (U[:, :3] * s[:3]) @ VT[:3]
     with pytest.warns(OptimizeWarning, match="rank-deficient"):
         # default tolerances: at 1e-12 the LM stalls on the flat null direction
-        route, _, _ = _check(_linear(B), x, y, np.zeros(P), tol={})
+        route, _, _ = _check(_linear(B), x, y, np.zeros(P), tol={}, rank=3)
     assert route == "tsqr"

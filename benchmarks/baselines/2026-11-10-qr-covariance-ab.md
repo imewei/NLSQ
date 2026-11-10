@@ -117,8 +117,10 @@ bodies return a truncated pseudo-inverse with a rank-deficient warning and still
 ### Gate G-cov (`tests/streaming/test_exact_cov_accuracy.py`, CPU, float64)
 
 Each case compares the fit's `pcov` with `pcov_from_jacobian(full_jac(popt), ..., _covariance_svd)` at the
-same `popt`. Metric: `max_ij |dC_ij| / sqrt(C_ii C_jj)`, gate 1e-8, and the same rank decision (the rank of
-the correlation matrix). `chunk_size=700` gives a padded tail on every case except column scales, which uses
+same `popt`. Metric: `max_ij |dC_ij| / sqrt(C_ii C_jj)`, gate 1e-8, and the same rank decision. That decision is the count of
+directions the route actually retains: singular values of the TSQR R above `eps*max(n,p)*s[0]`, or eigenvalues
+of the accumulated H above `p*eps*lambda_max`. It must equal both the full-J reference's count and the rank the
+case was constructed with (fix round 1; it replaced a correlation-matrix proxy). `chunk_size=700` gives a padded tail on every case except column scales, which uses
 `chunk_size=128`.
 
 Controlled cases use `B = U diag(geomspace(kappa, 1, 4)) V^T` with n = 2000. `svd(B)` reproduces `s` to 1e-12.
@@ -154,10 +156,10 @@ RTX 4090 Laptop GPU with JAX CUDA, outside the sandbox. It uses the harness data
 
 | problem | covariance_method | kappa | nfev | fit wall (s) |
 |---|---|---|---|---|
-| exp_decay | normal | 6.33 | 5 | 1.17 (incl. compile) |
-| gaussian | normal | 6.45 | 15 | 0.60 |
-| two_exp | normal | 761.7 | 19 | 1.71 |
-| bounded_exp | normal | 6.65 | 22 | 0.37 |
+| exp_decay | normal | 6.33 | 5 | 1.13 (incl. compile) |
+| gaussian | normal | 6.45 | 15 | 0.65 |
+| two_exp | normal | 761.7 | 19 | 0.41 |
+| bounded_exp | normal | 6.65 | 22 | 0.35 |
 
 All four take the `"normal"` route at 10M. two_exp sits at 762, below 1e3, matching the spec's 762 at the
 true parameters.
@@ -167,10 +169,13 @@ device, chunk is 4,194,304, both are warmed up, and the times are wall clock to 
 
 | n | tsqr min / median (s) | data pass min / median (s) | ratio |
 |---|---|---|---|
-| 10M | 0.151 / 0.153 | 0.011 / 0.013 | ~13x |
-| 100M | 0.821 / 0.823 | 0.060 / 0.061 | ~14x |
+| 10M | 0.098 / 0.098 | 0.012 / 0.013 | ~8x |
+| 100M | 0.765 / 0.768 | 0.057 / 0.063 | ~13x |
 
-The TSQR pass costs more than one LM iteration, which is one data pass: about 13-14x one pass, or 8.2 ms per
-1M rows. The spec estimated about 15 ms per 1M rows (about 1 s at 100M); the measurement is under that. The
+These times are from fix round 1, after the Jacobian kernel was cached per `(model, weighted)`. Before that,
+every call re-traced the kernel, and the same measurement gave 0.151 s at 10M and 0.821 s at 100M.
+
+The TSQR pass costs more than one LM iteration, which is one data pass: about 8-13x one pass. The marginal
+slope is 7.4 ms per 1M rows ((0.765 - 0.098) s / 90M rows). The spec estimated about 15 ms per 1M rows (about 1 s at 100M); the measurement is under that. The
 cost is reported, as the spec asks, and it does not block: the pass runs only when kappa > 1e3, and none of
 the four benchmark problems takes that route.
