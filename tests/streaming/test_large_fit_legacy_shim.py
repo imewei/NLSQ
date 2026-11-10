@@ -239,7 +239,11 @@ def test_strategy_call_matches_legacy_call():
     x, y = _data()
     p0 = [1.5, 0.4]
     popt_s, pcov_s = curve_fit_large(
-        model, x, y, p0=p0, strategy=Chunked(chunk_size=500)
+        model,
+        x,
+        y,
+        p0=p0,
+        strategy=Auto(auto_size_detection=False, chunked=Chunked(chunk_size=500)),
     )
     popt_l, pcov_l = curve_fit_large(
         model, x, y, p0=p0, chunk_size=500, auto_size_detection=False

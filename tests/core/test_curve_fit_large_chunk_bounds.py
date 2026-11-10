@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from nlsq import curve_fit_large
+from nlsq.streaming.specs import Chunked
 
 
 def _model(x, a, b):
@@ -30,8 +31,7 @@ def test_forced_large_path_accepts_small_chunk_bounds(n, chunk_size):
         x,
         y,
         p0=[1.0, 1.0],
-        auto_size_detection=False,
-        chunk_size=chunk_size,
+        strategy=Chunked(chunk_size=chunk_size),
     )
     np.testing.assert_allclose(popt, [2.0, 0.7], atol=0.1)
 
@@ -57,8 +57,7 @@ def _bounds_seen_by_fitter(monkeypatch, n, chunk_size):
             x,
             y,
             p0=[1.0, 1.0],
-            auto_size_detection=False,
-            chunk_size=chunk_size,
+            strategy=Chunked(chunk_size=chunk_size),
         )
     return seen[0]
 
@@ -78,7 +77,7 @@ def test_forced_large_path_on_a_tiny_input_matches_a_full_fit():
     # One-point chunks used to be fit separately and silently gave [2.08, 1.5].
     x = np.linspace(0, 1, 5)
     y = 2.0 * np.exp(-3.0 * x)
-    popt, _ = curve_fit_large(_model, x, y, p0=[1.0, 1.0], auto_size_detection=False)
+    popt, _ = curve_fit_large(_model, x, y, p0=[1.0, 1.0], strategy=Chunked())
     np.testing.assert_allclose(popt, [2.0, 3.0], rtol=1e-6)
 
 
@@ -102,8 +101,7 @@ def test_non_positive_chunk_size_is_rejected_by_name(bad):
             x,
             y,
             p0=[1.0, 1.0],
-            auto_size_detection=False,
-            chunk_size=bad,
+            strategy=Chunked(chunk_size=bad),
         )
 
 
@@ -135,7 +133,7 @@ def test_balanced_chunks_with_sigma_stay_aligned():
         y,
         p0=[1.0, 1.0],
         sigma=sigma,
-        auto_size_detection=False,
+        strategy=Chunked(),
     )
     np.testing.assert_allclose(popt, [2.0, 3.0], atol=0.05)
 
@@ -150,7 +148,7 @@ def test_ragged_tail_with_more_parameters_than_tail_points_matches_a_full_fit():
     y = 2 * x * x + 3 * x + 4
     y[1] += 100  # 4 + 4 + 2 chunks left a two-point tail for three parameters
     popt, _ = curve_fit_large(
-        quad, x, y, p0=[1.0, 1.0, 1.0], chunk_size=4, auto_size_detection=False
+        quad, x, y, p0=[1.0, 1.0, 1.0], strategy=Chunked(chunk_size=4)
     )
     expected, _ = curve_fit(quad, x, y, p0=[1.0, 1.0, 1.0])
     np.testing.assert_allclose(popt, expected, rtol=0.05)
@@ -166,7 +164,7 @@ def test_one_point_tail_does_not_corrupt_the_combined_fit():
     x = np.linspace(0, 5, 1001)
     y = 2 * x + 3
     y[607] += 1000
-    popt, _ = curve_fit_large(line, x, y, p0=[1.0, 1.0], auto_size_detection=False)
+    popt, _ = curve_fit_large(line, x, y, p0=[1.0, 1.0], strategy=Chunked())
     expected, _ = curve_fit(line, x, y, p0=[1.0, 1.0])
     np.testing.assert_allclose(popt, expected, rtol=0.05)
 
@@ -179,7 +177,7 @@ def test_chunk_size_below_the_parameter_count_is_enlarged_with_a_warning(caplog)
     y = 2 * x * x + 3 * x + 4
     with caplog.at_level("WARNING", logger="nlsq"):
         popt, _ = curve_fit_large(
-            quad, x, y, p0=[1.0, 1.0, 1.0], chunk_size=2, auto_size_detection=False
+            quad, x, y, p0=[1.0, 1.0, 1.0], strategy=Chunked(chunk_size=2)
         )
     np.testing.assert_allclose(popt, [2.0, 3.0, 4.0], rtol=1e-6)
     assert "underdetermined" in caplog.text
@@ -192,7 +190,7 @@ def test_default_chunking_keeps_a_many_parameter_fit_in_one_chunk():
 
     x = np.arange(1001, dtype=float) % 501
     y = np.full(1001, 2.0)
-    popt, _ = curve_fit_large(gather, x, y, p0=np.ones(501), auto_size_detection=False)
+    popt, _ = curve_fit_large(gather, x, y, p0=np.ones(501), strategy=Chunked())
     np.testing.assert_allclose(popt, 2.0, rtol=1e-6)
 
 
@@ -223,6 +221,6 @@ def test_chunk_bounds_are_computed_once_per_fit(monkeypatch):
         y,
         p0=[1.0, 1.0],
         sigma=sigma,
-        auto_size_detection=False,
+        strategy=Chunked(),
     )
     assert len(calls) <= 2  # one for the loop's sigma slices, one inside create_chunks

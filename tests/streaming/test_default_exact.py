@@ -445,3 +445,14 @@ def test_docstring_good_model_fits(dispatch):
     popt, _ = curve_fit_large(good_model, x, y, p0=[1.0, 5e-5], size_threshold=TH)
     assert dispatch == ["exact"]
     np.testing.assert_allclose(popt, [2.0, 1e-4], rtol=1e-6)
+
+
+def test_legacy_options_reach_the_default_exact():
+    """The shim leaves ``Auto.exact`` at its default; the effective Exact inherits."""
+    from nlsq import _legacy_to_strategy
+    from nlsq.streaming.large_fit import _effective_exact
+
+    auto = _legacy_to_strategy(ftol=1e-10, chunk_size=500)
+    assert isinstance(auto, Auto)
+    assert auto.exact == Exact()
+    assert _effective_exact(auto, {"ftol": 1e-10}) == Exact(chunk_size=500, ftol=1e-10)

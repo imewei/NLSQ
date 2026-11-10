@@ -327,7 +327,7 @@ def test_auto_dispatches_on_sample_count(
         large_fit, "_fit_chunked", lambda *a, **k: called.append("chunked")
     )
     _call(
-        Auto(size_threshold=threshold),
+        Auto(size_threshold=threshold, exact=None),
         np.zeros(xdata_shape),
         np.zeros(n_points),
     )

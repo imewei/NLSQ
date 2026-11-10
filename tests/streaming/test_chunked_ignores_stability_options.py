@@ -8,6 +8,7 @@ import pytest
 
 import nlsq
 from nlsq.core import minpack
+from nlsq.streaming.specs import Auto, Chunked, InMemory
 
 N = 600
 X = np.linspace(0.0, 4.0, N)
@@ -34,11 +35,17 @@ def test_chunk_fits_receive_no_stability_keywords(monkeypatch, show_progress) ->
         X,
         Y,
         p0=[2.0, 1.0],
-        auto_size_detection=False,
-        chunk_size=200,
-        stability="check",
-        rescale_data=False,
-        max_jacobian_elements_for_svd=123,
+        # exact=None: the default large path is exact streaming, not chunk fits
+        strategy=Auto(
+            auto_size_detection=False,
+            in_memory=InMemory(
+                stability="check",
+                rescale_data=False,
+                max_jacobian_elements_for_svd=123,
+            ),
+            chunked=Chunked(chunk_size=200),
+            exact=None,
+        ),
         show_progress=show_progress,
     )
     assert len(seen) >= 2

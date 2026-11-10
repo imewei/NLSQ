@@ -58,6 +58,7 @@ from nlsq.result import CurveFitResult, OptimizeResult
 from nlsq.streaming import adaptive_hybrid, large_dataset
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.streaming.large_dataset import LDMemoryConfig
+from nlsq.streaming.specs import Chunked
 
 HYBRID = "AdaptiveHybridStreamingOptimizer"
 FITTER = "LargeDatasetFitter"
@@ -589,6 +590,15 @@ def _drive_clf_chunked(ctx: SimpleNamespace, **kw: Any) -> Any:
     return nlsq.curve_fit_large(MODEL, X, Y, p0=P0, size_threshold=100, **kw)
 
 
+def _drive_clf_chunked_pinned(
+    ctx: SimpleNamespace, chunk_size: int | None = None, **kw: Any
+) -> Any:
+    # The default large path is exact streaming; Chunked() selects the chunked engine.
+    return nlsq.curve_fit_large(
+        MODEL, X, Y, p0=P0, strategy=Chunked(chunk_size=chunk_size), **kw
+    )
+
+
 def _expect_clf_ambient(call: Call, *, size: int, progress: bool) -> None:
     # The fitter is built and run inside memory_context(chunk bounds, progress).
     assert call.ambient["min_chunk_size"] == size
@@ -689,7 +699,7 @@ def _check_clf_chunked_args(rec: Recorder, result: Any, ctx: Any) -> None:
 def _drive_clf_chunked_x_only(ctx: SimpleNamespace) -> Any:
     # The table loop runs drive() before check(): hand the error to the check.
     try:
-        return _drive_clf_chunked(ctx, memory_limit_gb=2.0)
+        return _drive_clf_chunked_pinned(ctx, memory_limit_gb=2.0)
     except RuntimeError as exc:
         return exc
 
@@ -701,7 +711,7 @@ def _check_clf_chunked_x_only(rec: Recorder, result: Any, ctx: Any) -> None:
 
 
 def _drive_clf_chunked_progress(ctx: SimpleNamespace) -> Any:
-    return _drive_clf_chunked(
+    return _drive_clf_chunked_pinned(
         ctx, memory_limit_gb=2.0, show_progress=True, chunk_size=450
     )
 
@@ -1726,7 +1736,7 @@ ROWS: list[Row] = [
         "init.curve_fit_large[chunked,real]",
         "nlsq.curve_fit_large",
         FITTER,
-        lambda ctx: _drive_clf_chunked(ctx, memory_limit_gb=2.0),
+        lambda ctx: _drive_clf_chunked_pinned(ctx, memory_limit_gb=2.0),
         _check_clf_chunked_real,
         marks=SERIAL,
     ),

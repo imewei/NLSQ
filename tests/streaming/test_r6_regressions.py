@@ -86,6 +86,7 @@ def test_hybrid_warning_prefix_is_package_dir_with_separator():
 def test_chunked_large_rejects_bad_sigma_instead_of_dropping_chunk(bad):
     """A single bad sigma entry used to discard a whole chunk silently (R9)."""
     from nlsq import curve_fit_large
+    from nlsq.streaming.specs import Chunked
 
     rng = np.random.default_rng(0)
     n = 2001
@@ -100,6 +101,5 @@ def test_chunked_large_rejects_bad_sigma_instead_of_dropping_chunk(bad):
             y,
             p0=[1, 0],
             sigma=s,
-            chunk_size=500,
-            size_threshold=10,
+            strategy=Chunked(chunk_size=500),
         )

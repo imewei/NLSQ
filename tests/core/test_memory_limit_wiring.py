@@ -15,7 +15,8 @@ from nlsq.config import (
     set_memory_limits,
 )
 from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
-from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
+from nlsq.streaming import exact_lm
+from nlsq.streaming.large_dataset import LDMemoryConfig
 
 N, P = 1_000_000, 3
 DETECTED_GB = 12.5  # pinned: live free memory drifts between two reads
@@ -136,13 +137,14 @@ def test_tiny_global_limit_changes_the_selected_strategy():
 def test_curve_fit_large_leaves_the_users_global_limit_alone(monkeypatch):
     set_memory_limits(memory_limit_gb=32.0)
     seen = []
-    original = LargeDatasetFitter.fit
+    original = exact_lm.exact_lm_fit
 
-    def spy(self, *args, **kwargs):
+    def spy(*args, **kwargs):
         seen.append(get_memory_config().memory_limit_gb)
-        return original(self, *args, **kwargs)
+        return original(*args, **kwargs)
 
-    monkeypatch.setattr(LargeDatasetFitter, "fit", spy)
+    # The default large path is exact streaming, not LargeDatasetFitter
+    monkeypatch.setattr(exact_lm, "exact_lm_fit", spy)
     x = np.linspace(0, 5, 20_000)
     y = 2.0 * np.exp(-0.7 * x)
     curve_fit_large(

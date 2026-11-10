@@ -13,6 +13,7 @@ from benchmarks.compare.problems import PROBLEMS
 from nlsq import curve_fit_large
 from nlsq.streaming import ExactSolverError
 from nlsq.streaming.large_dataset import LargeDatasetFitter
+from nlsq.streaming.specs import Chunked
 
 EXP = PROBLEMS["exp_decay"]
 N = 3000
@@ -367,7 +368,7 @@ def test_default_chunked_path_unchanged(monkeypatch, spy):
     x = np.linspace(0.0, 4.0, 5000)
     y = 2.0 * x + 1.0 + np.random.default_rng(0).normal(0, 0.01, 5000)
     popt, _ = curve_fit_large(
-        lambda x, a, b: a * x + b, x, y, p0=[1.0, 0.0], size_threshold=1000
+        lambda x, a, b: a * x + b, x, y, p0=[1.0, 0.0], strategy=Chunked()
     )
     assert not spy
     (res,) = results

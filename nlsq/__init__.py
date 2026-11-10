@@ -1012,20 +1012,29 @@ def curve_fit_large(
 ) -> "CurveFitResult | tuple[Any, ...]":
     """Curve fitting with automatic memory management for large datasets.
 
-    Automatically selects processing strategy based on dataset size:
+    Automatically selects the processing strategy by dataset size:
 
-    - Below ``size_threshold`` (default 1M points): standard ``curve_fit``
-    - At or above ``size_threshold``: chunked processing (each chunk is
-      fit independently and combined via precision-weighted GLS)
+    - Below ``size_threshold`` (default 1M points): standard ``curve_fit``.
+    - At or above ``size_threshold``: exact streaming Levenberg-Marquardt, the
+      full-data fit of ``method="exact_streaming"``. Its result is the
+      full-batch optimum and does not depend on chunking.
 
-    There is currently no automatic escalation to a separate "streaming"
-    algorithm for very large datasets -- chunked processing is used
-    regardless of how far above ``size_threshold`` the dataset is. To use
-    the full-dataset streaming optimizer (``AdaptiveHybridStreamingOptimizer``,
-    which accumulates Gauss-Newton statistics across the whole dataset
-    instead of fitting each chunk independently) explicitly, pass
-    ``method="hybrid_streaming"``, or ``method="exact_streaming"`` for an exact,
-    chunk-independent Levenberg-Marquardt fit.
+    Pass ``strategy=Chunked()`` to get the chunked fit instead (each chunk is fit
+    independently and combined by precision-weighted GLS, an approximation for
+    nonlinear models). ``method="hybrid_streaming"`` selects the adaptive
+    hybrid optimizer explicitly.
+
+    The exact default needs 1-D ``xdata`` and a pointwise model (see Notes).
+    Input it cannot fit is handled in one of two ways:
+
+    - The call asks for a chunked-only feature (``method``, ``multistart`` or
+      ``global_search``, or an extra keyword other than ``ftol``, ``xtol``,
+      ``gtol`` and ``max_nfev``): a ``UserWarning`` is issued and the chunked
+      fit is used.
+    - The data cannot be fit exactly (multi-feature 2-D ``xdata``, a model that
+      is not pointwise, or a non-finite ``sigma`` with ``check_finite=False``):
+      ``ValueError`` naming ``strategy=Chunked()``. Nothing falls back silently,
+      so a result is never replaced by a GLS approximation without a notice.
 
     Parameters
     ----------
@@ -1139,29 +1148,52 @@ def curve_fit_large(
     -----
     All large datasets use streaming optimization for 100% data utilization.
 
+    **Exact default (at or above** ``size_threshold`` **)**
+
+    - ``sigma`` may be a 1-D array, a scalar, or contain negative nonzero values
+      (the objective uses ``(r / sigma)**2``, so ``|sigma|`` is used).
+    - ``bounds`` are handled by an active set, as for ``method="exact_streaming"``.
+    - ``max_nfev`` counts full-data passes (default ``100 * len(p0)``), not
+      function evaluations. ``ftol``, ``xtol`` and ``gtol`` are accepted, and
+      ``chunk_size`` sets the pass block size.
+    - A stalled fit or one that runs out of passes raises
+      :class:`nlsq.streaming.ExactSolverError` (the result is in ``.result``)
+      instead of returning an unconverged point. There is no retry on the
+      chunked fit; the message names ``strategy=Chunked()``.
+    - The model must be pointwise: ``f(x, *p)[i]`` depends only on ``x[i]`` and
+      ``p``. A probe on the first points raises ``ValueError`` for a model that
+      mixes points, but it is a guard, not a proof: a model that mixes points
+      beyond the probe is not detected and gives a wrong fit.
+    - ``strategy=Chunked()`` restores the previous chunked behaviour, including
+      ``multistart`` and ``method``.
+
     **Options ignored by chunked processing**
 
-    The chunked path (at or above ``size_threshold``, or whenever
-    ``auto_size_detection=False``) does not forward ``stability``,
-    ``rescale_data`` or ``max_jacobian_elements_for_svd`` to the per-chunk fits,
-    and the multi-start options (``multistart``, ``n_starts``, ``global_search``,
-    ``sampler``, ``center_on_p0``, ``scale_factor``) have no effect on them. These
-    options only take effect on the in-memory path (fewer than ``size_threshold``
+    The chunked path (selected with ``strategy=Chunked()`` or by the fallback
+    above) does not forward ``stability``, ``rescale_data`` or
+    ``max_jacobian_elements_for_svd`` to the per-chunk fits, and the multi-start
+    options (``multistart``, ``n_starts``, ``global_search``, ``sampler``,
+    ``center_on_p0``, ``scale_factor``) have no effect on them. These options
+    only take effect on the in-memory path (fewer than ``size_threshold``
     points).
 
     **Explicit strategies**
 
     Without ``strategy``, the options are translated into
     ``Auto(size_threshold, auto_size_detection, in_memory=InMemory(...),
-    chunked=Chunked(...))``, ``Hybrid(config, verbose)`` for
+    chunked=Chunked(...), exact=Exact())``, ``Hybrid(config, verbose)`` for
     ``method="hybrid_streaming"`` or ``Exact(...)`` for
-    ``method="exact_streaming"``. Passing the strategy directly gives the same
-    fit with the settings in one object.
+    ``method="exact_streaming"``. ``Auto.exact`` takes ``chunk_size`` from
+    ``Chunked`` and ``ftol``, ``xtol``, ``gtol`` and ``max_nfev`` from the call
+    unless ``Exact`` sets them. ``Auto(exact=None)`` restores the chunked fit
+    above the threshold. Passing the strategy directly gives the same fit with
+    the settings in one object.
 
     **Important: Model Function Requirements for Chunking**
 
-    When auto_size_detection triggers chunked processing (>1M points), your model
-    function MUST respect the size of xdata. Model output shape must match ydata shape.
+    When the large path is used (>=1M points by default), your model function
+    MUST respect the size of xdata and be pointwise. Model output shape must match
+    ydata shape.
 
     INCORRECT - Fixed-size output (causes shape errors):
 
@@ -1198,7 +1230,7 @@ def curve_fit_large(
     ...                             p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]),
     ...                             multistart=True, n_starts=10)
 
-    With an explicit strategy (always chunked, 500 points per chunk):
+    Opt out of the exact default and use the chunked fit, 500 points per chunk:
 
     >>> from nlsq.streaming import Chunked
     >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata, p0=[1, 2, 3],
