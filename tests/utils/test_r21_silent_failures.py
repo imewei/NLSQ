@@ -9,6 +9,7 @@ import pytest
 
 from nlsq import curve_fit, curve_fit_large
 from nlsq.global_optimization import CMAESConfig
+from nlsq.streaming import Chunked
 
 
 def _model(x, a, b):
@@ -26,9 +27,7 @@ def test_chunked_fit_nan_policy_raise_overrides_check_finite_false():
             x,
             y,
             p0=[1, 0.1],
-            size_threshold=1000,
-            chunk_size=1000,
-            nan_policy="raise",
+            strategy=Chunked(chunk_size=1000, options={"nan_policy": "raise"}),
             check_finite=False,
         )
 

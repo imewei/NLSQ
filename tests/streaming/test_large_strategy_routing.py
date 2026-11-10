@@ -640,23 +640,25 @@ def _check_clf_chunked_real(rec: Recorder, result: Any, ctx: Any) -> None:
 
 
 def _drive_clf_chunked_args(ctx: SimpleNamespace) -> Any:
-    return _drive_clf_chunked(
-        ctx,
-        memory_limit_gb=3.0,
-        chunk_size=300,
-        method="lm",
-        sigma=SIG,
-        absolute_sigma=True,
-        check_finite=False,
-        bounds=FINITE_BOUNDS,
-        multistart=True,
-        n_starts=5,
-        sampler="sobol",
-        center_on_p0=False,
-        scale_factor=2.0,
-        gtol=1e-3,
-        max_nfev=7,
-    )
+    # method="lm" and multistart reach chunked through the fallback, which warns
+    with pytest.warns(UserWarning, match="exact streaming not used"):
+        return _drive_clf_chunked(
+            ctx,
+            memory_limit_gb=3.0,
+            chunk_size=300,
+            method="lm",
+            sigma=SIG,
+            absolute_sigma=True,
+            check_finite=False,
+            bounds=FINITE_BOUNDS,
+            multistart=True,
+            n_starts=5,
+            sampler="sobol",
+            center_on_p0=False,
+            scale_factor=2.0,
+            gtol=1e-3,
+            max_nfev=7,
+        )
 
 
 def _check_clf_chunked_args(rec: Recorder, result: Any, ctx: Any) -> None:

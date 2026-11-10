@@ -356,7 +356,7 @@ def test_fit_rejects_exact_streaming(spy, n):
     assert not spy
 
 
-def test_default_chunked_path_unchanged(monkeypatch, spy):
+def test_explicit_chunked_strategy_bypasses_the_exact_default(monkeypatch, spy):
     results = []
     real = LargeDatasetFitter.fit
 
@@ -370,10 +370,13 @@ def test_default_chunked_path_unchanged(monkeypatch, spy):
     popt, _ = curve_fit_large(
         lambda x, a, b: a * x + b, x, y, p0=[1.0, 0.0], strategy=Chunked()
     )
-    assert not spy
+    assert not spy  # Chunked() never reaches the exact solver
     (res,) = results
     assert res["equivalent_to_full_batch"] is (res["n_chunks"] == 1)
     np.testing.assert_allclose(popt, [2.0, 1.0], rtol=1e-2)
+    # control: the same input on the default route does take the exact route
+    curve_fit_large(lambda x, a, b: a * x + b, x, y, p0=[1.0, 0.0], size_threshold=1000)
+    assert len(spy) == 1 and len(results) == 1
 
 
 # ---- chunk factories (callable xdata) ---------------------------------------------------

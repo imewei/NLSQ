@@ -178,14 +178,17 @@ def test_qr_covariance_matches_svd(shape, rank):
         rng.normal(size=(shape[0], rank)) @ rng.normal(size=(rank, shape[1]))
     )
     deficient = rank < shape[1]
-    ctx = (
-        pytest.warns(OptimizeWarning, match="rank-deficient")
-        if deficient
-        else contextlib.nullcontext()
-    )
-    with ctx:
+
+    def ctx():  # a fresh context per use: a pytest.warns object is single-use
+        return (
+            pytest.warns(OptimizeWarning, match="rank-deficient")
+            if deficient
+            else contextlib.nullcontext()
+        )
+
+    with ctx():
         got, _ = pcov_from_jacobian(J, 0.7, shape[0], shape[1], False, _covariance_svd)
-    with ctx:
+    with ctx():
         ref, _ = pcov_from_jacobian(J, 0.7, shape[0], shape[1], False, _svd_ref)
     assert _rel(got, ref) <= 1e-12
 
@@ -218,8 +221,42 @@ def test_qr_covariance_kernel_uses_r_factor(monkeypatch):
     assert calls == ["r"]
 
 
-def test_nan_jacobian_still_gives_inf_pcov():
-    J = jnp.asarray(np.array([[1.0, 0.0], [np.nan, 1.0], [0.0, 2.0]]))
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf], ids=["nan", "+inf", "-inf"])
+def test_nan_jacobian_still_gives_inf_pcov(bad):
+    J = jnp.asarray(np.array([[1.0, 0.0], [bad, 1.0], [0.0, 2.0]]))
     with pytest.warns(OptimizeWarning):
         pcov, fired = pcov_from_jacobian(J, 0.5, 3, 2, False, _covariance_svd)
     assert fired and np.all(np.isinf(pcov))
+
+
+def _rank_and_pcov(kernel, J, n):
+    """``(rank-deficiency warned, pcov)`` of ``J`` through ``kernel``."""
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        pcov, _ = pcov_from_jacobian(J, 0.7, n, J.shape[1], False, kernel)
+    return any(issubclass(w.category, OptimizeWarning) for w in rec), pcov
+
+
+def test_qr_covariance_all_zero_column_matches_svd():
+    J = np.random.default_rng(3).normal(size=(100, 4))
+    J[:, 2] = 0.0
+    qr_warned, got = _rank_and_pcov(_covariance_svd, jnp.asarray(J), 100)
+    ref_warned, ref = _rank_and_pcov(_svd_ref, jnp.asarray(J), 100)
+    assert qr_warned and ref_warned  # same rank decision: rank 3 < 4
+    np.testing.assert_array_equal(
+        got[2], 0.0
+    )  # the unidentifiable direction is dropped
+    np.testing.assert_array_equal(got == 0.0, ref == 0.0)
+    assert _rel(got, ref) <= 1e-12
+
+
+def test_qr_covariance_trailing_zero_padded_rows_match_svd():
+    J = np.random.default_rng(4).normal(size=(80, 3))
+    padded = np.vstack([J, np.zeros((20, 3))])
+    qr_warned, got = _rank_and_pcov(_covariance_svd, jnp.asarray(padded), 100)
+    ref_warned, ref = _rank_and_pcov(_svd_ref, jnp.asarray(padded), 100)
+    assert not qr_warned and not ref_warned  # padding does not change the rank
+    assert _rel(got, ref) <= 1e-12
+    # zero rows add nothing to J^T J: same pcov as the unpadded Jacobian at the same n
+    _, unpadded = _rank_and_pcov(_covariance_svd, jnp.asarray(J), 100)
+    assert _rel(got, unpadded) <= 1e-12

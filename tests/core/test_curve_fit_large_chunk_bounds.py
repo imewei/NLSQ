@@ -94,15 +94,19 @@ def test_chunk_size_above_the_default_ceiling_is_kept(monkeypatch):
 
 @pytest.mark.parametrize("bad", [0, -5])
 def test_non_positive_chunk_size_is_rejected_by_name(bad):
+    """Legacy ``chunk_size=`` keyword on the default (exact) route, a public API check."""
     x, y = _data(20_000)
     with pytest.raises(ValueError, match=r"^chunk_size must be positive"):
         curve_fit_large(
-            _model,
-            x,
-            y,
-            p0=[1.0, 1.0],
-            strategy=Chunked(chunk_size=bad),
+            _model, x, y, p0=[1.0, 1.0], auto_size_detection=False, chunk_size=bad
         )
+
+
+@pytest.mark.parametrize("bad", [0, -5])
+def test_non_positive_chunk_size_is_rejected_by_name_on_chunked(bad):
+    x, y = _data(20_000)
+    with pytest.raises(ValueError, match=r"^chunk_size must be positive"):
+        curve_fit_large(_model, x, y, p0=[1.0, 1.0], strategy=Chunked(chunk_size=bad))
 
 
 @pytest.mark.parametrize(
