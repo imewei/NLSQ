@@ -244,6 +244,15 @@ def test_default_route_2d_sigma_error_is_neutral(dispatch):
     assert "exact_streaming" not in msg
     assert "sigma must be 1-D" in msg and "(2000, 2000)" in msg
     assert "strategy=Chunked()" in msg
+    # non-finite 2-D sigma unchecked: the shape is reported, not just non-finiteness
+    bad = np.eye(2_000)
+    bad[0, 0] = np.inf
+    with pytest.raises(ValueError) as exc:
+        curve_fit_large(
+            m, x, y, p0=P0, sigma=bad, check_finite=False, size_threshold=1_000
+        )
+    assert "(2000, 2000)" in str(exc.value)
+    assert "strategy=Chunked()" in str(exc.value)
     # the explicit route keeps its text
     with pytest.raises(
         ValueError, match=r"sigma must be 1-D for method='exact_streaming'"

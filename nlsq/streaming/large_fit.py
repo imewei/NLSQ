@@ -349,7 +349,7 @@ def _exact_ineligible(
 
     ``"engine"``: ``auto.chunked`` asks for a chunked-engine feature (fall back with a
     warning). ``"data"``: exact cannot fit this input (raise). Scalar and signed
-    ``sigma`` are not reasons; a 2-D ``sigma`` raises in the exact path itself.
+    ``sigma`` are not reasons; a 2-D ``sigma`` is a data reason (checked before finiteness so the error names its shape).
     """
     from nlsq.streaming.exact_lm import check_model_contract
     from nlsq.streaming.strategy import normalize_p0_bounds
@@ -367,6 +367,8 @@ def _exact_ineligible(
         )
     if xdata.ndim != 1:
         return "data", "multi-feature xdata"
+    if sigma is not None and np.ndim(sigma) > 1:
+        return "data", f"sigma must be 1-D (or a scalar), got shape {np.shape(sigma)}"
     if (
         sigma is not None
         and not check_finite
