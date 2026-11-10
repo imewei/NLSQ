@@ -71,7 +71,7 @@ def test_ab_parses_harness_json(tmp_path):
     }
 
 
-def _run_main(monkeypatch, tmp_path, base_recs, cand_recs, rounds=2):
+def _run_main(monkeypatch, tmp_path, base_recs, cand_recs, rounds=2, extra=()):
     """Run `ab_nlsq.main` with the harness subprocess replaced by fixtures."""
     by_checkout = {"base": base_recs, "cand": cand_recs}
 
@@ -83,6 +83,7 @@ def _run_main(monkeypatch, tmp_path, base_recs, cand_recs, rounds=2):
     argv = ["--base", str(tmp_path / "base"), "--cand", str(tmp_path / "cand")]
     argv += ["--libraries", "nlsq", "--sizes", "1000", "--problems", "exp_decay"]
     argv += ["--rounds", str(rounds), "--out-root", str(tmp_path / "runs")]
+    argv += list(extra)
     return ab_nlsq.main(argv)
 
 
@@ -125,3 +126,66 @@ def test_require_gpu_backend_decision():
     assert not ab_nlsq.backend_matches("gpu", "cpu")
     assert ab_nlsq.backend_matches("cpu", "cpu")
     assert ab_nlsq.backend_matches("cpu", "gpu")  # cpu is forced via env, not checked
+
+
+CASE = ("nlsq", "exp_decay", 1000)
+
+
+def _check(base_rec, cand_rec, gate):
+    b = {CASE: base_rec} if base_rec is not None else {}
+    c = {CASE: cand_rec} if cand_rec is not None else {}
+    return ab_nlsq.check_correctness([CASE], b, c, gate)
+
+
+def test_check_correctness_equal_mode_unchanged():
+    assert _check(_rec(cost=1.0), _rec(cost=1.0 + 1e-8), "equal") == ([], set())
+    bad, skipped = _check(_rec(cost=1.0), _rec(cost=0.5), "equal")  # lower still fails
+    assert bad and not skipped
+    assert ab_nlsq.check_correctness([CASE], {CASE: _rec()}, {CASE: _rec()}) == (
+        [],
+        set(),
+    )
+
+
+def test_check_correctness_no_worse():
+    assert _check(_rec(cost=1.0), _rec(cost=1.0), "no-worse") == ([], set())
+    assert _check(_rec(cost=1.0), _rec(cost=1.0 - 1e-9), "no-worse") == ([], set())
+    bad, skipped = _check(_rec(cost=1.0), _rec(cost=1.0 + 1e-3), "no-worse")
+    assert bad and not skipped
+    # equal within rtol: timed, no violation
+    assert _check(_rec(cost=1.0), _rec(cost=1.0 + 1e-8), "no-worse") == ([], set())
+
+
+def test_check_correctness_no_worse_skips_costlier_base():
+    # cand is far cheaper: base is ok-but-inaccurate -> skipped, not a violation
+    assert _check(_rec(cost=1.0), _rec(cost=0.5), "no-worse") == ([], {CASE})
+
+
+@pytest.mark.parametrize("gate", ["equal", "no-worse"])
+def test_check_correctness_status_violations(gate):
+    failed = _rec(status="failed", cost=None)
+    for b, c in [(_rec(), failed), (failed, _rec()), (failed, failed), (None, _rec())]:
+        bad, skipped = _check(b, c, gate)
+        assert bad and not skipped
+
+
+def test_ab_no_worse_skips_costlier_base_in_timing(monkeypatch, tmp_path, capsys):
+    # base warm_median_s is None: indexing it would raise if the case were timed
+    base = [_rec(warm=None, cost=1.0)]
+    cand = [_rec(warm=0.05, cost=0.5)]
+    argv_extra = ["--cost-gate", "no-worse"]
+    assert _run_main(monkeypatch, tmp_path, base, cand, extra=argv_extra) == 0
+    out = capsys.readouterr().out
+    assert "SKIPPED" in out and "nlsq/exp_decay/1000" in out
+    assert "ratio" in out and "0.500" not in out
+
+
+def test_ab_timed_case_missing_warm_is_violation(monkeypatch, tmp_path, capsys):
+    ok = [_rec(warm=0.1, cost=1.0)]
+    for gate in ("equal", "no-worse"):
+        for bad in (None, float("nan")):
+            rc = _run_main(
+                monkeypatch, tmp_path, [_rec(warm=bad)], ok, extra=["--cost-gate", gate]
+            )
+            assert rc == 1, (gate, bad)
+    assert "warm_median_s" in capsys.readouterr().err
