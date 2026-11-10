@@ -265,7 +265,7 @@ class Auto:
         Point count at and above which the large path (``exact``, else ``chunked``)
         is used.
     auto_size_detection : bool
-        If False, always use the large path.
+        If False, always take the large path: exact if eligible, else chunked.
     in_memory : InMemory
         Strategy used below the threshold.
     chunked : Chunked

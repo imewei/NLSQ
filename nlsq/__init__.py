@@ -1016,8 +1016,12 @@ def curve_fit_large(
 
     - Below ``size_threshold`` (default 1M points): standard ``curve_fit``.
     - At or above ``size_threshold``: exact streaming Levenberg-Marquardt, the
-      full-data fit of ``method="exact_streaming"``. Its result is the
-      full-batch optimum and does not depend on chunking.
+      full-data fit of ``method="exact_streaming"``. It solves the full-batch
+      least-squares problem, every iteration using the whole data set, and
+      stops at a stationary point within the tolerances. The result is
+      mathematically independent of the chunk size (up to floating-point
+      reduction order and the stopping tolerance) and is not a GLS
+      approximation.
 
     Pass ``strategy=Chunked()`` to get the chunked fit instead (each chunk is fit
     independently and combined by precision-weighted GLS, an approximation for
@@ -1059,8 +1063,8 @@ def curve_fit_large(
     method : str, optional
         Optimization algorithm ('trf', 'lm', or None for auto), or
         ``'hybrid_streaming'``, or ``'exact_streaming'`` (opt-in): an exact
-        full-data Levenberg-Marquardt fit whose result does not depend on
-        chunking, for any dataset size (``size_threshold`` is not consulted).
+        full-data Levenberg-Marquardt fit whose result is mathematically
+        independent of chunking, for any dataset size (``size_threshold`` is not consulted).
         It requires a pointwise, deterministic model written with
         ``jax.numpy``, 1-D ``xdata`` (multi-feature 2-D ``xdata`` raises
         ``ValueError``) and ``multistart=False``. ``xdata``, ``ydata`` and
@@ -1084,17 +1088,18 @@ def curve_fit_large(
         ``ftol``, ``xtol``, ``gtol``, ``max_nfev`` (full-data passes,
         default ``100 * len(p0)``) and ``n_points``. A failed fit (stalled or out of passes)
         raises :class:`nlsq.streaming.ExactSolverError` with the full result
-        as ``.result``. ``pcov`` is computed from the normal equations
-        ``J^T J``, which squares ``cond(J)``: the conditioning study measured
-        covariance errors of 4.7e-6 (``tol=1e-12``) and 5.8e-8 (``1e-15``) at
-        ``cond(J) = 8.5e3`` and 5e-6 at ``7e5`` (one row each, so treat these as
-        indicative, not guaranteed), and a ``UserWarning`` is issued beyond
-        ``1e4``, where the fitted parameters can also stop short: check such
-        results.
+        as ``.result``. ``pcov`` is computed adaptively: from the normal
+        equations ``J^T J`` when ``sqrt(cond(J^T J)) <= 1e3`` (``TSQR_KAPPA``),
+        otherwise by one extra TSQR pass for the ``R`` factor of ``J`` at the
+        solution, which avoids squaring ``cond(J)``. A ``UserWarning`` is issued
+        on the TSQR route beyond ``1e4``, where the fitted parameters can also
+        stop short: check such results. ``compute_covariance=False`` skips
+        both routes (and their warnings).
     memory_limit_gb : float, optional
         Maximum memory usage in GB.
     auto_size_detection : bool, optional
-        Auto-detect dataset size for processing strategy.
+        If False, always take the large path: exact if eligible, else chunked.
+        Default: True (choose by ``size_threshold``).
     size_threshold : int, optional
         Point threshold for large dataset processing (default: 1M).
     show_progress : bool, optional
@@ -1165,7 +1170,7 @@ def curve_fit_large(
       mixes points, but it is a guard, not a proof: a model that mixes points
       beyond the probe is not detected and gives a wrong fit.
     - ``strategy=Chunked()`` restores the previous chunked behaviour, including
-      ``multistart`` and ``method``.
+      ``method``. Chunked ignores ``multistart`` (see below).
 
     **Options ignored by chunked processing**
 
