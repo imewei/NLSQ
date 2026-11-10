@@ -29,11 +29,13 @@ import psutil
 # Initialize JAX configuration through central config
 from nlsq.caching._closure_serial import closure_serial
 from nlsq.config import JAXConfig
+from nlsq.core._option_checks import check_sigma_values
+from nlsq.core.covariance import _NLSQ_DIR
 
 _jax_config = JAXConfig()
 
 
-from nlsq.result import OptimizeResult
+from nlsq.result import OptimizeResult, OptimizeWarning
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.streaming.strategy import build_large_strategy
 from nlsq.utils.logging import get_logger
@@ -283,6 +285,10 @@ class ChunkBufferPool:
         return self._x_feature_shape
 
 
+class _DefaultMinChunk(int):
+    """Marks the untouched ``min_chunk_size`` default (an explicit 1000 is a plain int)."""
+
+
 @dataclass(slots=True)
 class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     """Configuration for memory management in large dataset fitting.
@@ -318,7 +324,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
 
     memory_limit_gb: float = 8.0
     safety_factor: float = 0.8
-    min_chunk_size: int = 1000
+    min_chunk_size: int = _DefaultMinChunk(1000)
     max_chunk_size: int = 1_000_000
     use_streaming: bool = True
     streaming_batch_size: int = 50000
@@ -332,6 +338,7 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         # Local import: nlsq.streaming.validators has no heavy deps, but keeps
         # this module's import graph unchanged.
         from nlsq.streaming.validators import (
+            coerce_integral_fields,
             validate_positive,
             validate_positive_int,
             validate_range,
@@ -343,12 +350,35 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
         validate_positive_int(self.min_chunk_size, "min_chunk_size")
         validate_positive_int(self.max_chunk_size, "max_chunk_size")
         validate_positive_int(self.streaming_batch_size, "streaming_batch_size")
+        validate_positive_int(self.streaming_max_epochs, "streaming_max_epochs")
+        validate_positive_int(self.gc_chunk_interval, "gc_chunk_interval")
         validate_range(self.min_success_rate, 0.0, 1.0, "min_success_rate")
-        if self.gc_chunk_interval < 1:
-            raise ValueError(
-                f"gc_chunk_interval must be >= 1, got {self.gc_chunk_interval} "
-                "(it is used as a modulo divisor during chunked fitting)",
+        untouched_min = isinstance(self.min_chunk_size, _DefaultMinChunk)
+        if untouched_min:
+            # untouched default: follow a lowered max_chunk_size instead of
+            # raising on a value the user never set (an explicit 1000 raises)
+            self.min_chunk_size = _DefaultMinChunk(
+                min(self.min_chunk_size, self.max_chunk_size)
             )
+        if self.min_chunk_size > self.max_chunk_size:
+            raise ValueError(
+                f"min_chunk_size ({self.min_chunk_size}) must not exceed "
+                f"max_chunk_size ({self.max_chunk_size})"
+            )
+        coerce_integral_fields(
+            self,
+            (
+                "min_chunk_size",
+                "max_chunk_size",
+                "streaming_batch_size",
+                "streaming_max_epochs",
+                "gc_chunk_interval",
+            ),
+        )
+        if untouched_min:
+            # coerce_integral_fields stores a plain int; keep the provenance so
+            # dataclasses.replace()/copy/pickle still see the untouched default
+            self.min_chunk_size = _DefaultMinChunk(self.min_chunk_size)
 
 
 @dataclass(slots=True)
@@ -747,15 +777,36 @@ def _collect_if_rss_grew(last_rss: int | None, growth_bytes: float) -> int | Non
     return _safe_rss()
 
 
-def _ssr_reuse_eligible(kwargs: dict) -> bool:
-    """True when ``res.cost`` of a chunk fit equals half the chunk SSR.
+def _unfitted_params(f, current_params):
+    """Best parameter vector for a failed fit: the running estimate, else NaN of
+    the model's own width (read from the signature), else a 2-vector of ones."""
+    if current_params is not None:
+        return current_params
+    try:
+        import inspect
 
-    Checked options: ``loss`` (must be absent or "linear"), ``nan_policy``
+        # only positional parameters after x are fitted (not *args/**kw/kw-only)
+        pos = (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        n = sum(p.kind in pos for p in inspect.signature(f).parameters.values()) - 1
+        if n >= 1:
+            return np.full(n, np.nan)
+    except (TypeError, ValueError):
+        pass
+    return np.ones(2)
+
+
+def _ssr_reuse_eligible(kwargs: dict) -> bool:
+    """True when ``2 * res.cost`` of a chunk fit can stand in for the chunk SSR.
+
+    Checked options: ``nan_policy``
     (absent or "raise"), and ``data_mask`` / ``return_eval`` / ``full_output`` /
     ``timeit`` (any set to a value other than None/False makes it ineligible).
     """
-    if kwargs.get("loss", "linear") != "linear":
-        return False
+    # A robust ``loss`` is allowed: 2*res.cost is then the robust cost, which is
+    # what curve_fit's own covariance scaling (2*cost/(n-p)) uses.
     if kwargs.get("nan_policy", "raise") != "raise":
         return False
     return not any(
@@ -1034,7 +1085,7 @@ class LargeDatasetFitter:
         Maximum memory usage in GB. System memory is auto-detected if None.
     config : LDMemoryConfig, optional
         Advanced configuration for fine-tuning memory management behavior.
-    curve_fit_class : nlsq.minpack.CurveFit, optional
+    curve_fit_class : nlsq.core.minpack.CurveFit, optional
         Custom CurveFit instance for specialized fitting requirements.
     multistart : bool, default False
         Enable multi-start optimization for global search.
@@ -1047,7 +1098,7 @@ class LargeDatasetFitter:
     ----------
     config : LDMemoryConfig
         Active memory management configuration
-    curve_fitter : nlsq.minpack.CurveFit
+    curve_fitter : nlsq.core.minpack.CurveFit
         Internal curve fitting engine with JAX acceleration
     logger : Logger
         Internal logging for performance monitoring and debugging
@@ -1177,7 +1228,7 @@ class LargeDatasetFitter:
             Memory limit in GB (default: 8.0)
         config : LDMemoryConfig, optional
             Custom memory configuration
-        curve_fit_class : nlsq.minpack.CurveFit, optional
+        curve_fit_class : nlsq.core.minpack.CurveFit, optional
             Custom CurveFit instance to use
         logger : logging.Logger, optional
             External logger instance for integration with application logging.
@@ -1204,6 +1255,7 @@ class LargeDatasetFitter:
         self._accum_n = 0
         self._accum_information: np.ndarray | None = None
         self._accum_info_vector: np.ndarray | None = None
+        self._n_unusable_cov_chunks = 0  # chunks left out of the GLS combination
         # Neutral outside a fit (unscaled covariance); each run sets the caller's choice.
         self._absolute_sigma = True
 
@@ -1928,7 +1980,7 @@ class LargeDatasetFitter:
         self.logger.info("Fitting dataset in single chunk")
 
         try:
-            popt, _pcov = self.curve_fit.curve_fit(
+            inner = self.curve_fit.curve_fit(
                 f,
                 _scipy_x(xdata),
                 ydata,
@@ -1938,15 +1990,25 @@ class LargeDatasetFitter:
                 solver=solver,
                 **kwargs,
             )
+            popt, _pcov = inner
 
-            # Create result object
+            # Carry the inner fit's own verdict: a max_nfev stop is not success.
+            converged = bool(getattr(inner, "success", True))
+            nfev = getattr(inner, "nfev", None)
             result = OptimizeResult(
                 x=popt,
-                success=True,
+                success=converged,
                 fun=None,  # Could compute final residuals if needed
-                nfev=1,  # Approximation
-                message="Single-chunk fit completed successfully",
+                nfev=int(nfev) if nfev is not None else 1,
+                message=(
+                    "Single-chunk fit completed successfully"
+                    if converged
+                    else "Single-chunk fit did not converge: "
+                    f"{getattr(inner, 'message', '')}"
+                ),
             )
+            # popt is still the best point found (curve_fit warns, not raises)
+            result["nonconverged"] = not converged
 
             # Add covariance matrix and parameters
             result["pcov"] = _pcov
@@ -1957,7 +2019,7 @@ class LargeDatasetFitter:
         except Exception as e:
             self.logger.error(f"Single-chunk fit failed: {e}")
             result = OptimizeResult(
-                x=p0 if p0 is not None else np.ones(2),
+                x=p0 if p0 is not None else _unfitted_params(f, None),
                 success=False,
                 message=f"Fit failed: {e}",
             )
@@ -2045,7 +2107,7 @@ class LargeDatasetFitter:
         except Exception as e:
             self.logger.error(f"Streaming fit failed: {e}")
             result = OptimizeResult(
-                x=p0 if p0 is not None else np.ones(2),
+                x=p0 if p0 is not None else _unfitted_params(f, None),
                 success=False,
                 message=f"Streaming fit failed: {e}",
             )
@@ -2062,9 +2124,8 @@ class LargeDatasetFitter:
     ) -> np.ndarray | None:
         """Compute a usable precision (inverse-covariance) matrix for a chunk.
 
-        Returns None when the chunk covariance is missing, wrong-shaped, or not
-        invertible to a finite positive contribution. Falls back to a diagonal
-        precision when the full matrix is singular but its diagonal is usable.
+        Returns None when the chunk covariance is missing, wrong-shaped,
+        non-finite, or not numerically positive definite (singular/indefinite).
 
         Args:
             pcov_chunk: Per-chunk parameter covariance from curve_fit, or None.
@@ -2079,21 +2140,23 @@ class LargeDatasetFitter:
         if pcov.shape != (n_params, n_params):
             return None
 
-        if np.all(np.isfinite(pcov)):
-            try:
-                prec = np.linalg.inv(pcov)
-            except np.linalg.LinAlgError:
-                prec = None
-            if prec is not None:
-                prec = 0.5 * (prec + prec.T)  # symmetrize
-                if np.all(np.isfinite(prec)):
-                    return prec
-
-        # Fall back to a diagonal precision from finite, positive variances.
-        diag = np.diag(pcov)
-        if np.all(np.isfinite(diag)) and np.all(diag > 0):
-            return np.diag(1.0 / diag)
-        return None
+        if not np.all(np.isfinite(pcov)):
+            return None
+        pcov = 0.5 * (pcov + pcov.T)
+        # np.linalg.inv of a singular PSD matrix does not raise: it returns a
+        # finite indefinite ~1e16+ matrix. Require numerical positive
+        # definiteness so such chunks are counted and warned about instead.
+        # Test the correlation-scaled matrix so the verdict does not depend on
+        # the parameter units (diag(pcov) can legitimately span 1e16).
+        d = np.sqrt(np.diag(pcov)) if np.all(np.diag(pcov) > 0) else None
+        if d is None:
+            return None
+        w = np.linalg.eigvalsh(pcov / np.outer(d, d))
+        if w[0] <= n_params * np.finfo(float).eps * w[-1]:
+            return None
+        prec = np.linalg.inv(pcov)
+        prec = 0.5 * (prec + prec.T)
+        return prec if np.all(np.isfinite(prec)) else None
 
     def _update_parameters_convergence(
         self,
@@ -2148,7 +2211,9 @@ class LargeDatasetFitter:
 
         # Accumulate this chunk's information (inverse covariance).
         prec = self._chunk_precision(pcov_chunk, n_params)
-        if prec is not None:
+        if prec is None:
+            self._n_unusable_cov_chunks += 1
+        else:
             contrib_vec = prec @ popt_chunk
             if self._accum_information is None:
                 self._accum_information = prec.copy()
@@ -2509,11 +2574,34 @@ class LargeDatasetFitter:
         return failure_summary
 
     @staticmethod
+    def _require_valid_sigma(
+        kwargs: dict, sigma: np.ndarray, xdata: np.ndarray, ydata: np.ndarray
+    ) -> None:
+        # Otherwise only the chunk holding the bad entry fails (and is dropped
+        # while above min_success_rate), silently discarding its data.
+        if sigma.ndim != 1:
+            return  # 2-D covariance sigma gets its own, clearer error below
+        if kwargs.get("nan_policy") == "omit":
+            valid_x = np.isfinite(xdata).reshape(len(xdata), -1).all(axis=1)
+            sigma = sigma[valid_x & np.isfinite(ydata) & np.isfinite(sigma)]
+        check_sigma_values(
+            sigma,
+            require_finite=(
+                kwargs.get("nan_policy") != "omit"
+                and kwargs.get("check_finite") is not False
+            ),
+        )
+
+    @staticmethod
     def _require_finite(kwargs: dict, xdata: np.ndarray, ydata: np.ndarray) -> None:
         # Otherwise a bad chunk is dropped (while above min_success_rate) and
         # the fit still reports success.
-        if kwargs.get("check_finite") and not (
-            np.isfinite(xdata).all() and np.isfinite(ydata).all()
+        # check_finite=False is an explicit opt-out (failed chunks are dropped
+        # with a warning), but an explicit nan_policy="raise" must still raise.
+        if (
+            kwargs.get("nan_policy") != "omit"
+            and (kwargs.get("check_finite") or kwargs.get("nan_policy") == "raise")
+            and not (np.isfinite(xdata).all() and np.isfinite(ydata).all())
         ):
             raise ValueError("x and y must be finite (found NaN or inf)")
 
@@ -2687,9 +2775,25 @@ class LargeDatasetFitter:
                 f"chunks failed and were dropped from the fit "
                 f"({n_dropped} points; indices {failure_summary['failed_chunk_indices']}); "
                 "the result uses the remaining data only.",
-                UserWarning,
-                stacklevel=2,
+                OptimizeWarning,
+                skip_file_prefixes=_NLSQ_DIR,
             )
+
+        n_unusable = self._n_unusable_cov_chunks
+        if n_unusable:
+            msg = (
+                f"{n_unusable} of {stats.n_chunks} chunks had unusable covariance "
+                "(not numerically positive definite (singular, indefinite or "
+                "non-finite), e.g. an unidentifiable parameter) and were excluded "
+                "from the precision-weighted combination."
+            )
+            if self._accum_information is None:
+                msg += (
+                    " No chunk contributed, so the result is the LAST chunk's fit "
+                    "alone and pcov is a parameter-history proxy, not an estimator "
+                    "covariance."
+                )
+            warnings.warn(msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
 
         # Assemble result
         result = OptimizeResult(
@@ -2715,6 +2819,7 @@ class LargeDatasetFitter:
 
     def _check_success_rate_and_create_result(
         self,
+        f: Callable,
         chunk_results: list,
         current_params: np.ndarray | None,
         param_history: list,
@@ -2742,15 +2847,14 @@ class LargeDatasetFitter:
                 f"Too many chunks failed ({success_rate:.1%} success rate, "
                 f"minimum required: {self.config.min_success_rate:.1%})",
             )
+            fallback = _unfitted_params(f, current_params)
             result = OptimizeResult(
-                x=current_params if current_params is not None else np.ones(2),
+                x=fallback,
                 success=False,
                 message=f"Chunked fit failed: {success_rate:.1%} success rate",
             )
             # Add empty popt and pcov for consistency
-            result["popt"] = (
-                current_params if current_params is not None else np.ones(2)
-            )
+            result["popt"] = fallback
             # Not-estimated convention: all-inf, not identity (see comment
             # on the streaming-fit failure fallback above).
             result["pcov"] = np.full((len(result["popt"]), len(result["popt"])), np.inf)
@@ -2766,7 +2870,7 @@ class LargeDatasetFitter:
             chunk_times=chunk_times,
         )
 
-    def _fit_chunked(
+    def _fit_chunked(  # noqa: C901 - chunk processing, retries and aggregation
         self,
         f: Callable,
         xdata: np.ndarray,
@@ -2790,6 +2894,13 @@ class LargeDatasetFitter:
         # it out and re-slice per chunk below instead of forwarding it whole
         # via **kwargs (which would raise a per-chunk shape mismatch).
         full_sigma = kwargs.pop("sigma", None)
+        full_mask = kwargs.pop("data_mask", None)
+        if full_mask is not None:
+            full_mask = np.asarray(full_mask, dtype=bool)
+            if full_mask.shape != (len(xdata),):
+                raise ValueError("Data mask doesn't match data lengths.")
+            if not full_mask.any():
+                raise ValueError("Data mask excludes all data points.")
         # Chunks are fitted with absolute_sigma=True so their covariances are
         # unscaled and combine as true information; the caller's choice is
         # honoured once, on the combined covariance (_pooled_variance).
@@ -2799,6 +2910,8 @@ class LargeDatasetFitter:
         self._accum_n = 0
         if full_sigma is not None:
             full_sigma = np.asarray(full_sigma)
+            if full_sigma.ndim == 0:
+                full_sigma = np.broadcast_to(full_sigma, (len(xdata),))
             if full_sigma.ndim != 1:
                 # A 2-D (m, m) covariance matrix happens to satisfy the
                 # length check below (len() on it equals m, same as
@@ -2818,6 +2931,7 @@ class LargeDatasetFitter:
                     f"sigma length ({len(full_sigma)}) does not match "
                     f"xdata length ({len(xdata)})",
                 )
+            self._require_valid_sigma(kwargs, full_sigma, xdata, ydata)
 
         # Contiguous chunking biases fits on ordered/monotonic x (each chunk
         # covers only a narrow x-window, so per-chunk local optima can land
@@ -2854,6 +2968,7 @@ class LargeDatasetFitter:
         # estimate combines ALL chunks rather than keeping the last chunk's fit.
         self._accum_information = None  # Sum_k C_k^{-1}  (n_params x n_params)
         self._accum_info_vector = None  # Sum_k C_k^{-1} theta_k  (n_params,)
+        self._n_unusable_cov_chunks = 0
 
         # Get gc_chunk_interval from config (FR-007)
         gc_chunk_interval = self.config.gc_chunk_interval
@@ -2898,11 +3013,44 @@ class LargeDatasetFitter:
                     # Use only valid data points (exclude zero-padding)
                     x_valid = x_chunk[:valid_length]
                     y_valid = y_chunk[:valid_length]
+                    mask_valid = (
+                        None
+                        if full_mask is None
+                        else full_mask[shuffle_idx[start_idx:end_idx]]
+                    )
+                    if mask_valid is not None and not mask_valid.any():
+                        continue
                     if full_sigma is not None:
                         # Same shuffle_idx slice create_chunks used for x/y.
                         sigma_valid = full_sigma[
                             shuffle_idx[start_idx : start_idx + valid_length]
                         ]
+                    if kwargs.get("nan_policy") == "omit":
+                        from nlsq.core.problem import (
+                            _finite_points,
+                            _omit_nonfinite_rows,
+                        )
+
+                        finite = np.isfinite(y_valid) & _finite_points(x_valid, False)
+                        if sigma_valid is not None:
+                            finite &= np.isfinite(sigma_valid)
+                        if not finite.any():
+                            continue
+
+                        x_valid, y_valid, sigma_valid, _, omit_mask = (
+                            _omit_nonfinite_rows(
+                                x_valid, y_valid, sigma_valid, x_valid.ndim, False
+                            )
+                        )
+                        if mask_valid is not None:
+                            mask_valid = mask_valid[omit_mask]
+                    if mask_valid is not None:
+                        if not mask_valid.any():
+                            continue
+                        x_valid, y_valid = x_valid[mask_valid], y_valid[mask_valid]
+                        if sigma_valid is not None:
+                            sigma_valid = sigma_valid[mask_valid]
+                    if sigma_valid is not None:
                         chunk_kwargs = {**kwargs, "sigma": sigma_valid}
                     chunk_res = self.curve_fit.curve_fit(
                         f,
@@ -2943,7 +3091,7 @@ class LargeDatasetFitter:
                         chunk_idx,
                         stats.n_chunks,
                         chunk_ssr=chunk_ssr,
-                        chunk_n=valid_length,
+                        chunk_n=len(y_valid),
                     )
 
                     # Early stopping if parameters converged
@@ -2970,8 +3118,8 @@ class LargeDatasetFitter:
                     # Retry chunk with helper method
                     chunk_result, retry_params = self._retry_failed_chunk(
                         f=f,
-                        x_chunk=x_chunk,
-                        y_chunk=y_chunk,
+                        x_chunk=x_valid,
+                        y_chunk=y_valid,
                         chunk_idx=chunk_idx,
                         chunk_start_time=chunk_start_time,
                         chunk_times=chunk_times,
@@ -2980,7 +3128,7 @@ class LargeDatasetFitter:
                         bounds=bounds,
                         method=method,
                         solver=solver,
-                        valid_length=valid_length,
+                        valid_length=len(y_valid),
                         **chunk_kwargs,
                     )
                     # Fold a successful retry into the same precision-weighted
@@ -3021,7 +3169,12 @@ class LargeDatasetFitter:
                 )
 
             # Check success rate and create final result
+            if not chunk_results:
+                raise ValueError(
+                    "No observations remain after applying mask and nan_policy"
+                )
             return self._check_success_rate_and_create_result(
+                f,
                 chunk_results=chunk_results,
                 current_params=current_params,
                 param_history=param_history,
@@ -3031,15 +3184,14 @@ class LargeDatasetFitter:
 
         except Exception as e:
             self.logger.error(f"Chunked fitting failed: {e}")
+            fallback = _unfitted_params(f, current_params)
             result = OptimizeResult(
-                x=current_params if current_params is not None else np.ones(2),
+                x=fallback,
                 success=False,
                 message=f"Chunked fit failed: {e}",
             )
             # Add empty popt and pcov for consistency
-            result["popt"] = (
-                current_params if current_params is not None else np.ones(2)
-            )
+            result["popt"] = fallback
             # Not-estimated convention: all-inf, not identity (see comment
             # on the streaming-fit failure fallback above).
             result["pcov"] = np.full((len(result["popt"]), len(result["popt"])), np.inf)

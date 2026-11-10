@@ -257,6 +257,14 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "touch",
         "symlink_to",
         "hardlink_to",
+        "mkdir",
+        # matplotlib / Qt file writers and process spawners
+        "savefig",
+        "startDetached",
+        "QProcess",
+        "QSaveFile",
+        "QFile",
+        "QDir",
     },
 )
 
@@ -360,7 +368,18 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "tempfile",
         "zipfile",
         "tarfile",
+        "bz2",
+        "gzip",
+        "lzma",
         "fileinput",
+        # GUI toolkits / plotting: QProcess spawns processes, QSaveFile and
+        # savefig write files
+        "PySide6",
+        "shiboken6",
+        "PyQt5",
+        "PyQt6",
+        "pyqtgraph",
+        "matplotlib",
         "mmap",
         "logging",
         # Network (urllib/http/socket already blocked)
@@ -1022,6 +1041,16 @@ class AllowlistVisitor(DangerousPatternVisitor):
     def visit_NamedExpr(self, node: ast.NamedExpr) -> Any:
         self._bind(node.target, node.value)
         self.generic_visit(node)
+
+
+def strict_models_enabled() -> bool:
+    """True when ``NLSQ_STRICT_MODELS`` requests the strict allowlist everywhere."""
+    return os.environ.get("NLSQ_STRICT_MODELS", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def validate_model(

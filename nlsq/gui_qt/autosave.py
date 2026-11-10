@@ -94,7 +94,7 @@ def _restore_model(state: SessionState) -> None:
 
     try:
         state.model_func = get_model(state.model_type, state.model_config)
-    except (ValueError, TypeError, KeyError, ModelError) as exc:
+    except (ValueError, TypeError, KeyError, AttributeError, ModelError) as exc:
         logger.warning("Could not restore model selection: %s", exc)
 
 
@@ -178,11 +178,13 @@ class AutosaveManager(QObject):
 
         try:
             data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return False
             timestamp = data.get("timestamp")
             if timestamp:
                 self.recovery_available.emit(timestamp)
                 return True
-        except (OSError, json.JSONDecodeError, ValueError, KeyError):
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, RecursionError):
             pass
 
         return False
@@ -198,9 +200,19 @@ class AutosaveManager(QObject):
 
         try:
             data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return False
             self._restore_state(data)
             return True
-        except (OSError, json.JSONDecodeError, ValueError, KeyError, TypeError):
+        except (
+            OSError,
+            json.JSONDecodeError,
+            ValueError,
+            KeyError,
+            TypeError,
+            AttributeError,
+            RecursionError,
+        ):
             return False
 
     def clear_recovery(self) -> None:
@@ -255,6 +267,14 @@ class AutosaveManager(QObject):
 
         # Serialize data arrays (skip large datasets to avoid OOM)
         max_autosave_points = 100_000
+        if state.ydata is not None and len(state.ydata) > max_autosave_points:
+            # Recovery will come back without data; make that explicit.
+            data["data_skipped"] = len(state.ydata)
+            logger.warning(
+                "Autosave omits data: %d points exceed the %d-point autosave limit.",
+                len(state.ydata),
+                max_autosave_points,
+            )
         # xdata is (n,) or, for 2-D surface data, (n_coords, n)
         if state.xdata is not None and n_points(state.xdata) <= max_autosave_points:
             data["xdata"] = np.asarray(state.xdata).tolist()
@@ -324,38 +344,47 @@ class AutosaveManager(QObject):
 
         # Restore data arrays — validate before accepting to avoid emitting
         # data_changed with NaN/Inf-contaminated or malformed arrays.
-        xdata = (
-            self._validate_restored_array(data["xdata"], max_ndim=2)
-            if "xdata" in data
-            else None
-        )
-        ydata = (
-            self._validate_restored_array(data["ydata"]) if "ydata" in data else None
-        )
-        sigma = (
-            self._validate_restored_array(data["sigma"], positive=True)
-            if "sigma" in data
-            else None
-        )
-
+        # All-or-nothing: a partial restore would pair the wrong x/y/sigma.
+        raw = {key: data[key] for key in ("xdata", "ydata", "sigma") if key in data}
+        restored: dict[str, np.ndarray] = {}
+        for key, value in raw.items():
+            try:
+                arr = self._validate_restored_array(
+                    value, positive=key == "sigma", max_ndim=2 if key == "xdata" else 1
+                )
+            except (TypeError, ValueError):
+                arr = None
+            if arr is not None:
+                restored[key] = arr
         # Cross-validate lengths — independently-valid arrays of mismatched
         # length would silently pair the wrong sigma/y with the wrong x.
-        lengths = {a.shape[-1] for a in (xdata, ydata, sigma) if a is not None}
-        if len(lengths) <= 1:
-            if xdata is not None:
-                state.xdata = xdata
-            if ydata is not None:
-                state.ydata = ydata
-            if sigma is not None:
-                state.sigma = sigma
+        lengths = {a.shape[-1] for a in restored.values()}
+        if len(restored) < len(raw) or len(lengths) > 1:
+            logger.warning(
+                "Autosave recovery dropped all data arrays: %s invalid or "
+                "inconsistent in the recovery file.",
+                ", ".join(k for k in raw if k not in restored) or "lengths of arrays",
+            )
+        else:
+            for key, arr in restored.items():
+                setattr(state, key, arr)
+        if "data_skipped" in data:
+            logger.warning(
+                "Autosave recovery has no data: the %s-point dataset exceeded "
+                "the autosave limit and must be reloaded.",
+                data["data_skipped"],
+            )
 
         # Restore model config
-        if "model_config" in data:
+        if isinstance(data.get("model_config"), dict):
             state.model_config = data["model_config"]
 
         # Restore fitting options
-        if "p0" in data:
-            state.p0 = data["p0"]
+        p0 = data.get("p0")
+        if isinstance(p0, list) and all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in p0
+        ):
+            state.p0 = [float(v) for v in p0]
         if "bounds" in data:
             try:
                 lb, ub = data["bounds"]
@@ -367,7 +396,7 @@ class AutosaveManager(QObject):
                 pass
 
         # Restore other attributes
-        if "auto_p0" in data:
+        if isinstance(data.get("auto_p0"), bool):
             state.auto_p0 = data["auto_p0"]
         _restore_settings(state, data.get("settings"))
         _restore_model(state)

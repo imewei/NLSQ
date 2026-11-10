@@ -35,7 +35,7 @@ import numpy as np
 
 from nlsq.callbacks import StopOptimization
 from nlsq.core.minpack import fit
-from nlsq.gui_qt.session_state import n_points
+from nlsq.gui_qt.session_state import VALID_WORKFLOWS, n_points
 from nlsq.result import CurveFitResult
 
 logger = logging.getLogger(__name__)
@@ -217,6 +217,11 @@ class _CallbackWrapper:
         self.callback = callback
         self._aborted = False
 
+    def __deepcopy__(self, memo: dict) -> "_CallbackWrapper":
+        # multi_start deep-copies the callback per start; the abort flag and the
+        # wrapped ProgressCallback must stay shared with the caller's instance.
+        return self
+
     def __call__(
         self,
         iteration: int,
@@ -273,22 +278,41 @@ class _CallbackWrapper:
 
 
 def _resolve_workflow(
-    workflow: str | None, bounds: tuple[np.ndarray, np.ndarray] | None, notes: list[str]
+    workflow: str | None,
+    bounds: tuple[np.ndarray, np.ndarray] | None,
+    notes: list[str],
+    can_multistart: bool = False,
 ) -> str:
     """Pick the workflow; auto_global strictly requires finite bounds.
 
-    Without any finite bound (common for polynomials) it degrades to the local
-    'auto' workflow, and says so in ``notes`` instead of doing it silently.
+    Without finite bounds on every parameter it degrades to the 'auto'
+    workflow and says so in ``notes`` instead of doing it silently. With
+    ``can_multistart`` (a p0 is available) the caller still runs multi-start,
+    sampling inside finite bounds inferred from p0 and the data.
     """
     workflow = workflow or "auto"
+    if workflow not in VALID_WORKFLOWS:
+        raise ValueError(
+            f"Unknown workflow {workflow!r}; expected one of {sorted(VALID_WORKFLOWS)}"
+        )
     if workflow == "auto_global" and not (
         bounds is not None
-        and (np.any(np.isfinite(bounds[0])) or np.any(np.isfinite(bounds[1])))
+        and np.all(np.isfinite(bounds[0]))
+        and np.all(np.isfinite(bounds[1]))
     ):
-        notes.append(
-            "global multi-start search needs finite bounds; ran a local "
-            "fit instead (set parameter bounds to enable it)"
-        )
+        if can_multistart:
+            notes.append(
+                "global search needs finite bounds on every parameter (lower "
+                "and upper); multi-start sampled starting points inside bounds "
+                "inferred from p0 and the data instead (your bounds still "
+                "constrain every fit)"
+            )
+        else:
+            notes.append(
+                "global multi-start search needs finite bounds on every "
+                "parameter (lower and upper); ran a local fit instead (set all "
+                "bounds to enable it)"
+            )
         return "auto"
     return workflow
 
@@ -378,7 +402,16 @@ def execute_fit(
         fit_kwargs["callback"] = callback_wrapper
 
     notes: list[str] = []
-    workflow = _resolve_workflow(config.workflow, bounds, notes)
+    can_multistart = p0 is not None and config.n_starts > 0
+    workflow = _resolve_workflow(config.workflow, bounds, notes, can_multistart)
+    if can_multistart and config.workflow == "auto_global" and workflow == "auto":
+        fit_kwargs.update(
+            multistart=True,
+            n_starts=config.n_starts,
+            sampler=config.sampler,
+            center_on_p0=config.center_on_p0,
+            scale_factor=config.scale_factor,
+        )
 
     # Determine goal
     goal = config.goal

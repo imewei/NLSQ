@@ -8,9 +8,9 @@ and stacked page layout.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import QEventLoop, QSettings, Qt, QTimer
+from PySide6.QtCore import QByteArray, QEventLoop, QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -56,6 +56,16 @@ PAGE_CONFIG = [
     ("results", "Results", "SP_FileDialogInfoView"),
     ("export", "Export", "SP_DialogSaveButton"),
 ]
+
+
+def _thread_running(thread: Any) -> bool:
+    """isRunning() that treats an already-deleted QThread as finished."""
+    if thread is None:
+        return False
+    try:
+        return bool(thread.isRunning())
+    except RuntimeError:  # underlying C++ object deleted after a clean abort
+        return False
 
 
 class MainWindow(QMainWindow):
@@ -109,7 +119,6 @@ class MainWindow(QMainWindow):
             # (SIGBUS on macOS when a modal dialog parents to a window that
             # hasn't been shown yet).
             QTimer.singleShot(0, self._check_recovery)
-            self._autosave.start()
 
     def _setup_window(self) -> None:
         """Configure window properties."""
@@ -489,11 +498,12 @@ class MainWindow(QMainWindow):
     def _restore_state(self) -> None:
         """Restore window state from settings."""
         geometry = self._settings.value("geometry")
-        if geometry is not None:
+        # QSettings can hand back str/int from a hand-edited or corrupt file
+        if isinstance(geometry, (QByteArray, bytes)):
             self.restoreGeometry(geometry)
 
         window_state = self._settings.value("windowState")
-        if window_state is not None:
+        if isinstance(window_state, (QByteArray, bytes)):
             self.restoreState(window_state)
 
         # Restore current page
@@ -509,6 +519,17 @@ class MainWindow(QMainWindow):
 
     def _check_recovery(self) -> None:
         """Check for and offer session recovery."""
+        try:
+            self._offer_recovery()
+        finally:
+            # Autosave starts only AFTER the recovery decision: its first tick
+            # would otherwise overwrite the recovery file under the open dialog.
+            if not os.environ.get("NLSQ_SAFE_MODE") and not getattr(
+                self, "_closing", False
+            ):
+                self._autosave.start()
+
+    def _offer_recovery(self) -> None:
         from PySide6.QtWidgets import QMessageBox
 
         if self._autosave.check_recovery():
@@ -569,12 +590,12 @@ class MainWindow(QMainWindow):
                 # blocked, so the page's own _cleanup_thread() (the thing
                 # that calls thread.quit()) can never run. Pump events via a
                 # nested QEventLoop instead so that chain can complete.
-                if fit_thread is not None and fit_thread.isRunning():
+                if _thread_running(fit_thread):
                     wait_loop = QEventLoop()
                     fit_thread.finished.connect(wait_loop.quit)
                     QTimer.singleShot(2000, wait_loop.quit)
                     wait_loop.exec()
-                if fit_thread is not None and fit_thread.isRunning():
+                if _thread_running(fit_thread):
                     # Still running: closing now would deliver its eventual
                     # finished/error signal into widgets we're about to
                     # destroy. Give the user an explicit choice instead of
@@ -592,7 +613,9 @@ class MainWindow(QMainWindow):
                         event.ignore()
                         return
 
-        # Stop autosave and clear recovery file (clean shutdown)
+        # Stop autosave and clear recovery file (clean shutdown). _closing
+        # keeps a still-pending _check_recovery from restarting the timer.
+        self._closing = True
         self._autosave.stop()
         self._autosave.clear_recovery()
 

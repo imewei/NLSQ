@@ -58,7 +58,7 @@ class ConvergenceMonitor:
         self.step_size_history: deque[float] = deque(maxlen=window_size)
 
         # Pattern detection thresholds
-        self.oscillation_threshold = 0.7 * sensitivity
+        self.oscillation_threshold = min(1.0, 0.7 / sensitivity)
         self.stagnation_threshold = 1e-10 * sensitivity
         self.divergence_threshold = 1.5 / sensitivity
 
@@ -83,7 +83,7 @@ class ConvergenceMonitor:
             Step size taken
         """
         self.cost_history.append(cost)
-        self.param_history.append(params.copy())
+        self.param_history.append(np.atleast_1d(params).copy())
 
         if gradient is not None:
             grad_norm = np.linalg.norm(gradient)
@@ -129,21 +129,32 @@ class ConvergenceMonitor:
 
         costs = np.array(self.cost_history)
 
-        # Check for alternating pattern
+        # Reversal rate among genuine moves: plateaus and roundoff-sized moves
+        # are not directions, so up/flat/down/flat alternation still scores 1.0
+        # while one roundoff blip in a flat history scores 0.
+        def _reversal_rate(d: np.ndarray) -> float:
+            d = np.asarray(d, dtype=float)
+            scale = float(np.max(np.abs(d))) if d.size else 0.0
+            sg = np.sign(d[np.abs(d) > 1e-9 * scale]) if scale > 0 else d[:0]
+            if sg.size < 3:  # fewer than 2 reversals' worth of evidence
+                return 0.0
+            return float(np.sum(np.diff(sg) != 0) / (sg.size - 1))
+
+        # Roundoff is relative to the cost magnitude, not to the largest step
+        costs_scale = float(np.max(np.abs(costs)))
         differences = np.diff(costs)
-        sign_changes = np.sum(np.diff(np.sign(differences)) != 0)
-        oscillation_score = sign_changes / max(1, len(differences) - 1)
+        differences[np.abs(differences) <= 1e-9 * costs_scale] = 0.0
+        oscillation_score = _reversal_rate(differences)
 
         # Also check parameter oscillation
         if len(self.param_history) >= 3:
-            params = np.array(self.param_history)
+            params = np.array(self.param_history, dtype=float)
             param_diffs = np.diff(params, axis=0)
+            pscale = np.max(np.abs(params), axis=0)
+            for i in range(param_diffs.shape[1]):
+                param_diffs[np.abs(param_diffs[:, i]) <= 1e-9 * pscale[i], i] = 0.0
             param_sign_changes = np.mean(
-                [
-                    np.sum(np.diff(np.sign(param_diffs[:, i])) != 0)
-                    / max(1, len(param_diffs) - 1)
-                    for i in range(params.shape[1])
-                ],
+                [_reversal_rate(param_diffs[:, i]) for i in range(params.shape[1])],
             )
             oscillation_score = max(oscillation_score, param_sign_changes)
 
@@ -172,7 +183,7 @@ class ConvergenceMonitor:
         if cost_mean == 0:
             relative_variance = cost_variance
         else:
-            relative_variance = cost_variance / (abs(cost_mean) + 1e-10)
+            relative_variance = cost_variance / cost_mean**2  # scale-free (CV squared)
 
         # Check gradient stagnation
         if len(self.gradient_history) >= 3:

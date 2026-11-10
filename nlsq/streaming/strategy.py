@@ -117,7 +117,11 @@ class _ChunkedStrategy:
         return run(f, x, y, p0=p0, **common)
 
     def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
-        if not getattr(native, "success", True):
+        # nonconverged: curve_fit already warned and returned its best point,
+        # so only a hard failure raises here.
+        if not getattr(native, "success", True) and not getattr(
+            native, "nonconverged", False
+        ):
             raise RuntimeError(
                 f"chunked fit failed: {getattr(native, 'message', None)}"
             )

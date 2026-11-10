@@ -36,6 +36,7 @@ Verbosity Levels
 import json
 import logging
 import sys
+import threading
 from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -67,6 +68,15 @@ class Colors:
 # =============================================================================
 # CLI-Specific Exception Classes
 # =============================================================================
+
+
+def cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
+    """``cfg.get(key, default)`` that also returns *default* for a bare YAML key.
+
+    A bare ``key:`` parses to ``None``, which ``dict.get`` would pass through.
+    """
+    value = cfg.get(key)
+    return default if value is None else value
 
 
 class CLIError(Exception):
@@ -418,6 +428,8 @@ class CLILogger:
 
 # Global logger instance
 _cli_logger: CLILogger | None = None
+# Serialises handler swaps: `nlsq batch` calls setup_logging from worker threads.
+_setup_lock = threading.Lock()
 
 
 def setup_logging(
@@ -472,62 +484,65 @@ def setup_logging(
     """
     global _cli_logger  # noqa: PLW0603
 
-    logger = CLILogger()
-    logger.verbosity = verbosity
+    with _setup_lock:
+        logger = CLILogger()
+        logger.verbosity = verbosity
 
-    # Clear existing handlers
-    logger.logger.handlers.clear()
+        # Remove and close existing handlers (avoids leaking file descriptors)
+        for old in list(logger.logger.handlers):
+            logger.logger.removeHandler(old)
+            old.close()
 
-    # Set up file handler if log_file provided
-    if log_file is not None:
-        log_path = Path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        # Set up file handler if log_file provided
+        if log_file is not None:
+            log_path = Path(log_file)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if rotation_enabled:
-            file_handler: logging.Handler = RotatingFileHandler(
-                log_path,
-                maxBytes=max_bytes,
-                backupCount=backup_count,
-                encoding="utf-8",
-            )
-        else:
-            file_handler = logging.FileHandler(log_path, encoding="utf-8")
+            if rotation_enabled:
+                file_handler: logging.Handler = RotatingFileHandler(
+                    log_path,
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                    encoding="utf-8",
+                )
+            else:
+                file_handler = logging.FileHandler(log_path, encoding="utf-8")
 
-        # Set formatter based on structured option
-        if structured:
-            file_handler.setFormatter(JsonFormatter())
-        else:
-            file_handler.setFormatter(
-                logging.Formatter(
-                    fmt="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-                    datefmt="%Y-%m-%d %H:%M:%S",
-                ),
-            )
+            # Set formatter based on structured option
+            if structured:
+                file_handler.setFormatter(JsonFormatter())
+            else:
+                file_handler.setFormatter(
+                    logging.Formatter(
+                        fmt="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S",
+                    ),
+                )
 
-        file_handler.setLevel(logging.DEBUG)  # File gets all messages
-        logger.logger.addHandler(file_handler)
-        logger._file_handler = file_handler
+            file_handler.setLevel(logging.DEBUG)  # File gets all messages
+            logger.logger.addHandler(file_handler)
+            logger._file_handler = file_handler
 
-    # Set up console handler if enabled
-    if console:
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setFormatter(ColoredConsoleFormatter(use_colors=use_colors))
+        # Set up console handler if enabled
+        if console:
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setFormatter(ColoredConsoleFormatter(use_colors=use_colors))
 
-        # Console level based on verbosity
-        level_map = {
-            0: logging.ERROR,
-            1: logging.WARNING,
-            2: logging.INFO,
-            3: logging.DEBUG,
-        }
-        console_handler.setLevel(level_map[verbosity])
-        logger.logger.addHandler(console_handler)
-        logger._console_handler = console_handler
+            # Console level based on verbosity
+            level_map = {
+                0: logging.ERROR,
+                1: logging.WARNING,
+                2: logging.INFO,
+                3: logging.DEBUG,
+            }
+            console_handler.setLevel(level_map[logger.verbosity])
+            logger.logger.addHandler(console_handler)
+            logger._console_handler = console_handler
 
-    # Prevent propagation to root logger
-    logger.logger.propagate = False
+        # Prevent propagation to root logger
+        logger.logger.propagate = False
 
-    _cli_logger = logger
+        _cli_logger = logger
     return logger
 
 
@@ -581,15 +596,15 @@ def setup_logging_from_config(logging_config: dict[str, Any]) -> CLILogger:
     ... }
     >>> logger = setup_logging_from_config(config)
     """
-    structured_config = logging_config.get("structured", {})
-    rotation_config = logging_config.get("rotation", {})
+    structured_config = logging_config.get("structured") or {}
+    rotation_config = logging_config.get("rotation") or {}
 
     return setup_logging(
         log_file=logging_config.get("log_file"),
-        console=logging_config.get("console", True),
-        verbosity=logging_config.get("verbosity", 1),
-        structured=structured_config.get("enabled", False),
-        rotation_enabled=rotation_config.get("enabled", False),
-        max_bytes=rotation_config.get("max_bytes", 10485760),
-        backup_count=rotation_config.get("backup_count", 5),
+        console=cfg_get(logging_config, "console", True),
+        verbosity=cfg_get(logging_config, "verbosity", 1),
+        structured=cfg_get(structured_config, "enabled", False),
+        rotation_enabled=cfg_get(rotation_config, "enabled", False),
+        max_bytes=cfg_get(rotation_config, "max_bytes", 10485760),
+        backup_count=cfg_get(rotation_config, "backup_count", 5),
     )

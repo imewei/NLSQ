@@ -219,8 +219,6 @@ Fine-tune specific parameters:
         enable_checkpoints=True,
         checkpoint_frequency=50,
         validate_numerics=True,
-        # Precision
-        precision="float64",  # 'auto', 'float32', 'float64'
     )
 
 Normalization Strategies

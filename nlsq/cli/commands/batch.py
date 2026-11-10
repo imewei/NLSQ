@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from nlsq.cli.errors import CLIError, setup_logging
+from nlsq.cli.errors import CLIError, cfg_get, setup_logging
 
 
 def _run_single_workflow(
@@ -201,10 +201,10 @@ def _warn_output_collisions(workflow_paths: list[str], logger: Any) -> None:
         targets = []
         if isinstance(export, dict) and export.get("results_file"):
             targets.append(export["results_file"])
-        if isinstance(vis, dict) and vis.get("enabled", False):
-            prefix = vis.get("filename_prefix", Path(path).stem)
+        if isinstance(vis, dict) and cfg_get(vis, "enabled", False):
+            prefix = cfg_get(vis, "filename_prefix", Path(path).stem)
             targets.append(
-                Path(vis.get("output_dir", "figures")) / f"{prefix}_combined"
+                Path(cfg_get(vis, "output_dir", "figures")) / f"{prefix}_combined"
             )
         for target in targets:
             key = os.path.abspath(target)

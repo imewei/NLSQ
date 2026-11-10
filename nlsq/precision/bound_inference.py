@@ -70,7 +70,7 @@ class BoundsInference:
     >>> inference = BoundsInference(x, y, p0)
     >>> bounds = inference.infer()
     >>> print(bounds)
-    ([0.0, 0.0, 0.0], [25.0, 5.0, 10.0])
+    (array([0.  , 0.01, 0.  ]), array([20.,  5., 10.]))
     """
 
     def __init__(
@@ -85,8 +85,17 @@ class BoundsInference:
         self.xdata = np.asarray(xdata)
         self.ydata = np.asarray(ydata)
         self.p0 = np.asarray(p0)
+        if not (np.isfinite(safety_factor) and safety_factor >= 1):
+            raise ValueError(
+                f"safety_factor must be finite and >= 1, got {safety_factor!r}"
+            )
         self.safety_factor = safety_factor
         self.enforce_positivity = enforce_positivity
+
+        # NaN would otherwise propagate into some bounds (and be dropped from
+        # others by Python's min/max), returning bounds that look valid.
+        if not (np.isfinite(self.xdata).all() and np.isfinite(self.ydata).all()):
+            raise ValueError("xdata and ydata must be finite to infer bounds")
 
         # Data statistics
         self.x_min = np.min(self.xdata)

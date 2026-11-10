@@ -25,6 +25,7 @@ Examples
 
 """
 
+import contextlib
 import faulthandler
 import inspect
 import os
@@ -34,9 +35,17 @@ import threading
 # Enable faulthandler FIRST so any SIGBUS/SIGSEGV during import prints a
 # traceback to stderr instead of dying silently.  This is deliberately before
 # the environment lock and all library imports below.
-faulthandler.enable()
+# sys.stderr may be None (pythonw, embedded hosts) or lack a usable fileno
+# (captured streams); a missing crash dump must not break import.
+with contextlib.suppress(AttributeError, ValueError, RuntimeError, OSError):
+    faulthandler.enable()
 
-_NLSQ_DEBUG = bool(os.environ.get("NLSQ_DEBUG"))
+_NLSQ_DEBUG = os.environ.get("NLSQ_DEBUG", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def _dbg(msg: str) -> None:
@@ -68,12 +77,11 @@ if sys.platform == "darwin":
     # macOS-specific: Prevent SIGBUS from Metal/OpenGL/XLA conflicts
     if "XLA_FLAGS" not in os.environ:
         os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false"
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["MPLBACKEND"] = "Agg"
-    if "QT_MAC_WANTS_LAYER" not in os.environ:
-        os.environ["QT_MAC_WANTS_LAYER"] = "1"
-    os.environ["QT_API"] = "pyside6"
-    os.environ["PYQTGRAPH_QT_LIB"] = "PySide6"
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MPLBACKEND", "Agg")
+    os.environ.setdefault("QT_MAC_WANTS_LAYER", "1")
+    os.environ.setdefault("QT_API", "pyside6")
+    os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
     # Force software OpenGL — prevents Metal/OpenGL context conflicts that
     # cause SIGBUS on macOS 26+ Apple Silicon with PySide6 / Qt 6.10.
     os.environ.setdefault("QT_OPENGL", "software")
@@ -568,7 +576,53 @@ def fit(
     # NEW WORKFLOW SYSTEM (v0.6.3)
     # If workflow parameter is specified, delegate to minpack.fit()
     if workflow is not None:
+        import warnings as _warnings
+
         from nlsq.core.minpack import fit as minpack_fit
+
+        # Options that used to be dropped silently on this path: forward the ones
+        # minpack.fit honours (through its **kwargs), warn about the one it can't.
+        if preset is not None:
+            _warnings.warn(
+                "`preset` is ignored when `workflow` is given; use `workflow=` "
+                "or `goal=` instead.",
+                UserWarning,
+                stacklevel=2,
+            )
+        # Only the plain "auto" workflow feeds these into curve_fit (via
+        # **kwargs); the other workflows pass multistart/show_progress/... to
+        # their backends explicitly, so forwarding would raise a duplicate
+        # keyword TypeError. Say so instead of dropping them silently.
+        requested: dict[str, Any] = {}
+        if multistart is not None:
+            requested["multistart"] = multistart
+        if sampler != "lhs":
+            requested["sampler"] = sampler
+        if not center_on_p0:
+            requested["center_on_p0"] = center_on_p0
+        if scale_factor != 1.0:
+            requested["scale_factor"] = scale_factor
+        if show_progress:
+            requested["show_progress"] = show_progress
+        if chunk_size is not None:
+            requested["chunk_size"] = chunk_size
+        if size_threshold != 1_000_000:
+            requested["size_threshold"] = size_threshold
+        multistart_keys = ("multistart", "sampler", "center_on_p0", "scale_factor")
+        if isinstance(workflow, str) and workflow.strip().lower() == "auto":
+            forwarded = {k: v for k, v in requested.items() if k in multistart_keys}
+        else:
+            forwarded = {}
+        ignored = sorted(k for k in requested if k not in forwarded)
+        if ignored:
+            _warnings.warn(
+                f"{ignored} are not used when `workflow` is given and are "
+                "ignored; configure them through the workflow config or use "
+                "curve_fit()/curve_fit_large().",
+                UserWarning,
+                stacklevel=2,
+            )
+        kwargs = {**forwarded, **kwargs}
 
         # Forward to the new workflow-based fit
         return minpack_fit(
@@ -1159,6 +1213,10 @@ def curve_fit_large(
                 "This parameter was removed in v0.2.0. Use streaming instead.",
             )
 
+    from nlsq.core.minpack import _CURVE_FIT_METHODS, _check_method
+
+    _check_method(method, (*_CURVE_FIT_METHODS, "exact_streaming"))
+
     legacy = {
         "method": method,
         "stability": stability,
@@ -1190,7 +1248,10 @@ def curve_fit_large(
                 "together with strategy=; set them on the strategy instead",
             )
 
+    from nlsq.core.minpack import _bounds_as_tuple
     from nlsq.streaming.large_fit import fit_with_strategy
+
+    bounds = _bounds_as_tuple(bounds)
 
     return fit_with_strategy(
         strategy,

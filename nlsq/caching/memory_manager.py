@@ -457,12 +457,15 @@ class MemoryManager:
             if not is_available:
                 raise MemoryError(message)
 
+        # Delta measurement: bypass the TTL cache or both reads return the same RSS.
+        self._memory_usage_cache = None
         initial_memory = self.get_memory_usage_bytes()
 
         try:
             yield
         finally:
             # Track peak memory
+            self._memory_usage_cache = None
             current_memory = self.get_memory_usage_bytes()
             self._peak_memory = max(self._peak_memory, current_memory)
 
@@ -480,7 +483,10 @@ class MemoryManager:
             )
 
             # Track telemetry for adaptive safety factor (Task 5.2)
-            self._record_safety_telemetry(bytes_needed, current_memory - initial_memory)
+            # RSS can drop when memory is freed; clamp so a negative delta counts as "used nothing".
+            self._record_safety_telemetry(
+                bytes_needed, max(0, current_memory - initial_memory)
+            )
 
     def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: float):
         """Record telemetry for adaptive safety factor calculation.
@@ -688,6 +694,9 @@ class MemoryManager:
             Memory statistics including current usage, peak, pool size
         """
         current_memory = self.get_memory_usage_bytes()
+        # The peak is otherwise only updated inside memory_guard(), so it could
+        # read below the current usage.
+        self._peak_memory = max(self._peak_memory, current_memory)
         available_memory = self.get_available_memory()
 
         pool_memory = sum(arr.nbytes for arr in self.memory_pool.values())
@@ -700,12 +709,13 @@ class MemoryManager:
             "usage_fraction": self.get_memory_usage_fraction(),
             "pool_memory_gb": pool_memory / 1e9,
             "pool_arrays": pool_arrays,
-            "allocations": len(self.allocation_history),
+            "allocations": len(self.allocation_history),  # len() is atomic
         }
 
-        if self.allocation_history:
-            total_requested = sum(a["bytes_requested"] for a in self.allocation_history)
-            total_used = sum(a["bytes_used"] for a in self.allocation_history)
+        history = list(self.allocation_history)  # snapshot: other threads append
+        if history:
+            total_requested = sum(a["bytes_requested"] for a in history)
+            total_used = sum(a["bytes_used"] for a in history)
             stats["total_requested_gb"] = total_requested / 1e9
             stats["total_used_gb"] = total_used / 1e9
             stats["efficiency"] = (

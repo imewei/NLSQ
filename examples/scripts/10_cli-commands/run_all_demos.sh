@@ -34,6 +34,11 @@ echo ""
 # Create output directory
 mkdir -p output
 
+# Sample data files are gitignored; generate them on a fresh clone
+if [ ! -f data/polynomial_data.npz ] || [ ! -f data/large_dataset.h5 ]; then
+    python3 data/generate_sample_data.py
+fi
+
 # ==============================================================================
 # Demo 1: nlsq info
 # ==============================================================================

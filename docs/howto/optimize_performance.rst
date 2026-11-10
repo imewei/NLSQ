@@ -277,25 +277,13 @@ For datasets with different x-values:
 
 .. code:: python
 
-   from jax import pmap, vmap
-   import jax.numpy as jnp
+   from nlsq import CurveFit
 
-   # Split datasets across GPUs
-   n_gpus = jax.device_count()
-   datasets_per_gpu = len(datasets) // n_gpus
-
-
-   @pmap
-   def fit_batch_on_gpu(x_batch, y_batch):
-       """Fit batch of datasets on one GPU"""
-       return vmap(lambda x, y: curve_fit(model, x, y, p0=[2, 1, 0]))(x_batch, y_batch)
-
-
-   # Reshape data for multi-GPU: (n_gpus, datasets_per_gpu, ...)
-   x_reshaped = ...
-   y_reshaped = ...
-
-   results = fit_batch_on_gpu(x_reshaped, y_reshaped)
+   # curve_fit() runs a host-side optimizer loop, so it cannot be wrapped in
+   # jax.vmap/pmap. Reuse one CurveFit instance (one JIT compilation per
+   # shape) and loop over the datasets.
+   cf = CurveFit()
+   results = [cf.curve_fit(model, x, y, p0=[2, 1, 0]) for x, y in datasets]
 
 --------------
 
@@ -314,19 +302,15 @@ Large Dataset Memory Management
    y_huge = model(x_huge, 2.5, 1.3, 0.5) + 0.01 * np.random.randn(50_000_000)
 
    # Automatic memory management
-   popt, pcov, info = fit_large_dataset(
+   result = fit_large_dataset(
        f=model,
        xdata=x_huge,
        ydata=y_huge,
        p0=[2, 1, 0],
-       memory_limit_gb=4.0,  # Limit to 4 GB
-       chunk_size="auto",  # Automatic chunk sizing
-       solver="cg",  # Memory-efficient solver
-       progress=True,
+       memory_limit_gb=4.0,  # Limit to 4 GB; chunk size is chosen automatically
+       show_progress=True,
    )
-
-   print(f"Peak memory: {info['peak_memory_gb']:.2f} GB")
-   print(f"Processed in {info['n_chunks']} chunks")
+   popt, pcov = result.x, result.pcov  # an OptimizeResult, not a tuple
 
 Memory Profiling
 ~~~~~~~~~~~~~~~~
@@ -551,7 +535,8 @@ Issue 3: Out of Memory (OOM)
 
    from nlsq.streaming.large_dataset import fit_large_dataset
 
-   popt, pcov, info = fit_large_dataset(model, x, y, memory_limit_gb=4.0)
+   result = fit_large_dataset(model, x, y, memory_limit_gb=4.0)
+   popt, pcov = result.x, result.pcov
 
 4. **Disable JIT for very large models:**
 
@@ -742,12 +727,12 @@ Performance Guidelines
 
    # Expected: 10-100x faster Jacobian computation vs jacfwd on GPU
 
-**Standard fitting problem (3 params, 1000 residuals):**
+**Standard fitting problem (2 params, 1000 residuals):**
 
 .. code:: python
 
    # Automatic selection (uses jacfwd)
-   popt, pcov = curve_fit(exponential, xdata, ydata, p0=[1, 1, 1], jacobian_mode="auto")
+   popt, pcov = curve_fit(exponential, xdata, ydata, p0=[1, 1], jacobian_mode="auto")
 
    # Expected: Comparable or faster vs jacrev
 

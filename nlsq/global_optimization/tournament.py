@@ -230,7 +230,7 @@ class TournamentSelector:
             return self.get_top_candidates(top_m)
 
         # Run elimination rounds
-        for round_num in range(self.config.elimination_rounds):
+        for round_num in range(self.current_round, self.config.elimination_rounds):
             if self.n_survivors <= top_m:
                 self.logger.info(
                     f"Round {round_num}: Only {self.n_survivors} survivors, "

@@ -261,8 +261,9 @@ p0 = [4.5, 24.0, 3.0]  # pKa, Ve, pH0
 bounds_lower = [3.0, 20.0, 2.5]
 bounds_upper = [6.0, 30.0, 4.0]
 
-# Fit only the buffer region (5-35 mL) for better pKa estimation
-mask_fit = (V_titrant >= 5) & (V_titrant <= 35)
+# Fit only the buffer region (5-22 mL, before the equivalence point; the
+# Henderson-Hasselbalch model cannot describe the post-equivalence pH jump)
+mask_fit = (V_titrant >= 5) & (V_titrant <= 22)
 V_fit = V_titrant[mask_fit]
 pH_fit = pH_measured[mask_fit]
 sigma_fit = sigma_pH[mask_fit]

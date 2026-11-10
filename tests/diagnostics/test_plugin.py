@@ -1344,7 +1344,7 @@ class TestPluginErrorHandling:
         sample_parameters: np.ndarray,
         sample_residuals: np.ndarray,
     ) -> None:
-        """Test that plugin modifying inputs doesn't affect other plugins."""
+        """Document that in-place input modification by a plugin is not isolated."""
         from nlsq.diagnostics.plugin import PluginRegistry, run_plugins
 
         original_params = sample_parameters.copy()
@@ -1386,7 +1386,11 @@ class TestPluginErrorHandling:
         PluginRegistry.register(ModifyingPlugin())
         PluginRegistry.register(CheckingPlugin())
 
-        run_plugins(sample_jacobian, sample_parameters, sample_residuals)
+        results = run_plugins(sample_jacobian, sample_parameters, sample_residuals)
 
-        # Original array may be modified (this is expected behavior with numpy)
-        # The test documents this behavior - plugins should not modify inputs
+        # Current contract: plugins receive the caller's arrays without a copy,
+        # so an in-place modification is visible to later plugins and the caller.
+        # Plugins must not modify inputs; this pins the behaviour, not an endorsement.
+        assert original_params[0] != 999.0
+        assert sample_parameters[0] == 999.0
+        assert results["checker"].data["first_param"] == 999.0

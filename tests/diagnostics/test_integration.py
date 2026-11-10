@@ -236,12 +236,7 @@ class TestCurveFitDiagnosticsIntegration:
         """Test diagnostics are disabled by default."""
         x, y = well_conditioned_data
         result = curve_fit(simple_model, x, y, p0=[2.0, 0.5])
-        # diagnostics property should return None or not be computed
-        # depending on implementation
-        diag = getattr(result, "diagnostics", None)
-        if diag is not None:
-            # If property exists, it might be lazy or None
-            pass  # Implementation may vary
+        assert result.diagnostics is None
 
     # Test different models
     def test_linear_model_diagnostics(self, linear_model) -> None:

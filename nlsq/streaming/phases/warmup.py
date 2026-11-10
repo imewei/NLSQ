@@ -214,7 +214,9 @@ class WarmupPhase:
         # =====================================================
         initial_loss = float(loss_fn(current_params, x_data, y_data))
         y_variance = float(jnp.var(y_data))
-        relative_loss = initial_loss / (y_variance + 1e-10)
+        relative_loss = initial_loss / max(
+            y_variance, float(jnp.finfo(jnp.float64).tiny)
+        )
 
         self._initial_loss = initial_loss
         self._relative_loss = relative_loss

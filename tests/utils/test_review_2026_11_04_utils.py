@@ -102,6 +102,7 @@ def test_noncanonical_and_duplicate_int_keys_rejected():
     assert safe_loads(safe_dumps({1: "a", -2: "b"})) == {1: "a", -2: "b"}
 
 
+@pytest.mark.serial  # spawns a JAX-importing subprocess
 def test_nested_log_dir_created(tmp_path):
     target = tmp_path / "a" / "b"
     code = "import nlsq"

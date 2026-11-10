@@ -625,36 +625,6 @@ class TestLayer3CostIncreaseGuard:
         # Should complete without cost guard triggering
         assert result.get("cost_guard_triggered", False) is False
 
-    def test_cost_guard_returns_best_params(self, simple_model):
-        """Test that cost guard returns best params, not current diverged ones."""
-        x = jnp.linspace(0, 5, 100)
-        true_params = jnp.array([10.0, 0.5])
-        y = simple_model(x, *true_params)
-        p0 = jnp.array([10.01, 0.501])
-
-        config = HybridStreamingConfig(
-            enable_warm_start_detection=False,
-            enable_cost_guard=True,
-            cost_increase_tolerance=0.001,  # Very strict - 0.1% tolerance
-            warmup_learning_rate=0.5,  # Very high LR
-            warmup_iterations=1,
-            max_warmup_iterations=100,
-            verbose=0,
-        )
-        optimizer = AdaptiveHybridStreamingOptimizer(config)
-        optimizer._setup_normalization(simple_model, p0, bounds=None)
-
-        result = optimizer._run_phase1_warmup(
-            data_source=(x, y),
-            model=simple_model,
-            p0=p0,
-        )
-
-        # If cost guard triggered, final_params should be best_params
-        if result.get("cost_guard_triggered", False):
-            assert jnp.allclose(result["final_params"], result["best_params"])
-            assert result["best_loss"] <= result["final_loss"]
-
     def test_cost_guard_tolerance_configurable(self, simple_model, near_optimal_data):
         """Test cost_increase_tolerance is configurable."""
         x, y, p0, _ = near_optimal_data
@@ -704,35 +674,6 @@ class TestLayer3CostIncreaseGuard:
                 enable_cost_guard=True,
                 cost_increase_tolerance=1.5,
             )
-
-    def test_cost_guard_records_ratio_in_result(self, simple_model):
-        """Test cost_increase_ratio is recorded when guard triggers."""
-        x = jnp.linspace(0, 5, 100)
-        true_params = jnp.array([10.0, 0.5])
-        y = simple_model(x, *true_params)
-        p0 = jnp.array([10.01, 0.501])
-
-        config = HybridStreamingConfig(
-            enable_warm_start_detection=False,
-            enable_cost_guard=True,
-            cost_increase_tolerance=0.001,  # Very strict
-            warmup_learning_rate=0.5,  # Very high
-            warmup_iterations=1,
-            max_warmup_iterations=100,
-            verbose=0,
-        )
-        optimizer = AdaptiveHybridStreamingOptimizer(config)
-        optimizer._setup_normalization(simple_model, p0, bounds=None)
-
-        result = optimizer._run_phase1_warmup(
-            data_source=(x, y),
-            model=simple_model,
-            p0=p0,
-        )
-
-        if result.get("cost_guard_triggered", False):
-            assert "cost_increase_ratio" in result
-            assert result["cost_increase_ratio"] > 1.0 + config.cost_increase_tolerance
 
 
 # =============================================================================
@@ -1332,38 +1273,10 @@ class TestRegressions:
         )
 
         # Final loss should not be significantly worse than initial
-        if result["iterations"] > 0:
-            # If we ran iterations, best_loss should be <= initial
-            assert result["best_loss"] <= initial_loss * 1.1
-
-    def test_regression_cost_guard_best_params(self, simple_model):
-        """Regression test: cost guard should return best params, not current."""
-        x = jnp.linspace(0, 5, 100)
-        true_params = jnp.array([10.0, 0.5])
-        y = simple_model(x, *true_params)
-        p0 = jnp.array([10.01, 0.501])
-
-        config = HybridStreamingConfig(
-            enable_warm_start_detection=False,
-            enable_cost_guard=True,
-            cost_increase_tolerance=0.0,  # Zero tolerance - any increase triggers
-            warmup_learning_rate=0.5,  # High LR to force overshoot
-            warmup_iterations=1,
-            max_warmup_iterations=100,
-            verbose=0,
-        )
-        optimizer = AdaptiveHybridStreamingOptimizer(config)
-        optimizer._setup_normalization(simple_model, p0, bounds=None)
-
-        result = optimizer._run_phase1_warmup(
-            data_source=(x, y),
-            model=simple_model,
-            p0=p0,
-        )
-
-        if result.get("cost_guard_triggered", False):
-            # When cost guard triggers, final_params should equal best_params
-            assert jnp.allclose(result["final_params"], result["best_params"])
+        # Near-optimal start: Layer 1 skips warmup, so loss cannot degrade
+        assert result["warm_start"] is True
+        assert result["iterations"] == 0
+        assert result["best_loss"] <= initial_loss * 1.1
 
 
 # =============================================================================

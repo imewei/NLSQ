@@ -384,7 +384,8 @@ popt, pcov = curve_fit(model, x, y, p0=p0, multistart=True, n_starts=10)
 
 **Key APIs:**
 ```python
-from nlsq import fit, WorkflowConfig, OptimizationGoal
+from nlsq import fit
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 # Auto-select workflow
 popt, pcov = fit(model, x, y, p0=p0)
@@ -392,9 +393,8 @@ popt, pcov = fit(model, x, y, p0=p0)
 # With preset
 popt, pcov = fit(model, x, y, p0=p0, preset="robust")
 
-# With custom config
-config = WorkflowConfig(goal=OptimizationGoal.QUALITY)
-popt, pcov = fit(model, x, y, p0=p0, config=config)
+# With an explicit workflow configuration
+popt, pcov = fit(model, x, y, p0=p0, workflow=HybridStreamingConfig())
 ```
 
 ---
@@ -583,9 +583,9 @@ UserWarning: JAX is not using 64-bit precision
 ```
 RuntimeError: CUDA out of memory
 ```
-**Solution**: Use `preset="memory_efficient"` or streaming tier
+**Solution**: Use `goal="memory_efficient"` (or `curve_fit_large`)
 ```python
-popt, pcov = fit(model, x, y, p0=p0, preset="memory_efficient")
+popt, pcov = fit(model, x, y, p0=p0, goal="memory_efficient")
 ```
 
 ### Stuck in local minimum

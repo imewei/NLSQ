@@ -99,7 +99,7 @@ print("❌ PROBLEM: Poor initial guess")
 try:
     p0_bad = [0.1, 10.0]  # Far from true values [5.0, 0.5]
     popt_bad, _ = cf.curve_fit(
-        exponential_decay, jnp.array(x_data), jnp.array(y_data), p0=p0_bad, maxiter=100
+        exponential_decay, jnp.array(x_data), jnp.array(y_data), p0=p0_bad, max_nfev=100
     )
     print(f"  Fitted params: a={popt_bad[0]:.2f}, b={popt_bad[1]:.2f}")
     print("  True params: a=5.0, b=0.5 (likely poor fit!)\n")
@@ -129,9 +129,9 @@ popt_iter, _ = cf.curve_fit(
     jnp.array(x_data),
     jnp.array(y_data),
     p0=[1.0, 1.0],
-    maxiter=1000,  # Default is often 200-400
+    max_nfev=1000,  # Default is often 200-400
 )
-print(f"  Fitted with maxiter=1000: a={popt_iter[0]:.2f}, b={popt_iter[1]:.2f} ✓")
+print(f"  Fitted with max_nfev=1000: a={popt_iter[0]:.2f}, b={popt_iter[1]:.2f} ✓")
 
 
 # ======================================================================

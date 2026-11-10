@@ -2537,7 +2537,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             p_value = self.cJIT.evaluate_quadratic(J_h, g_h, p_h, diag=diag_h)
             return p, p_h, -p_value
 
-        # B004: Use JAX-compiled versions to avoid D2H array transfers.
+        # Use JAX-compiled versions to avoid D2H array transfers.
         # Convert inputs to JAX arrays for on-device computation.
         x_jnp = jnp.asarray(x)
         p_jnp = jnp.asarray(p)

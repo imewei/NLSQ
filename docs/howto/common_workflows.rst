@@ -24,7 +24,6 @@ Use this when you have a single dataset and a simple model.
        p0: [2.0, 0.5]
 
    fitting:
-     solver: auto
      max_nfev: 200
 
 Multi-start global search (LHS)
@@ -60,7 +59,6 @@ Use this when you need chunking and memory controls for big data.
      memory_limit_gb: 4.0
 
    fitting:
-     solver: cg
      max_nfev: 100
 
 Reproducible batch runs
@@ -79,7 +77,6 @@ Use this when running multiple datasets in a batch or on a scheduler.
      save_config: true
 
    fitting:
-     solver: auto
      max_nfev: 150
 
 Multi-dataset with per-file outputs
@@ -98,7 +95,6 @@ Use this when you want each input file to write to its own output folder.
      save_config: true
 
    fitting:
-     solver: auto
      max_nfev: 150
 
 Warm-start refinement (v0.3.6+)

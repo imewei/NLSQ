@@ -283,7 +283,7 @@ have reviewed line by line, never for files received from others. A quoted
 value such as ``"false"`` is rejected rather than treated as a boolean.
 
 Strict allowlist mode (opt-in)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Because a denylist cannot be made complete, a stricter **allowlist** mode is
 available. It runs every denylist check and additionally rejects any import or

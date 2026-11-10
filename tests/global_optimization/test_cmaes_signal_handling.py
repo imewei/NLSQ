@@ -67,6 +67,7 @@ def test_signal_handlers_restored_after_normal_fit(tmp_path):
         "SIGTERM producing SystemExit(75), doesn't apply on that platform."
     ),
 )
+@pytest.mark.serial  # spawns a JAX-importing subprocess
 def test_sigterm_mid_run_leaves_valid_checkpoint(tmp_path):
     checkpoint_path = tmp_path / "sigterm-test.h5"
     script = textwrap.dedent(

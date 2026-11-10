@@ -64,7 +64,7 @@ Full method signature:
        check_finite=True,  # Check for inf/NaN
        bounds=(-np.inf, np.inf),  # Parameter bounds
        method="trf",  # Optimization method
-       jac="2-point",  # Jacobian computation
+       jac=None,  # None = JAX autodiff (string jac modes are not supported)
        full_output=False,  # Return full result
        nan_policy="raise",  # NaN handling
        **kwargs  # Additional options

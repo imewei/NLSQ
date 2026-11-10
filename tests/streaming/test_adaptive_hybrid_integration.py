@@ -233,6 +233,7 @@ class TestCovarianceAccuracy:
 class TestLargeDatasetPerformance:
     """Test performance and memory usage on large datasets."""
 
+    @pytest.mark.serial  # >100K-element arrays
     @pytest.mark.slow
     @pytest.mark.timeout(180)
     def test_large_dataset_memory_efficient(self):

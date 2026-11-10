@@ -372,6 +372,7 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
         self.true_params = [2.5, 1.3]
         np.random.seed(456)
 
+    @pytest.mark.serial  # >100K-element arrays
     def test_end_to_end_20M_workflow(self):
         """Test complete workflow for 20M point dataset (simulated)."""
         # Simulate with smaller dataset for testing
@@ -416,6 +417,7 @@ class TestIntegrationLargeDatasets(unittest.TestCase):
 
             np.testing.assert_allclose(popt, self.true_params, rtol=0.1)
 
+    @pytest.mark.serial  # >100K-element arrays
     def test_progressive_fitting_strategy(self):
         """Test progressive fitting with chunked processing."""
         n_points = 100_000
@@ -931,8 +933,6 @@ def test_ssr_from_result_none_when_rows_dropped():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"loss": "soft_l1"},
-        {"loss": "huber"},
         {"nan_policy": "omit"},
         {"nan_policy": "impute"},
         {"data_mask": np.ones(3, dtype=bool)},
@@ -942,7 +942,7 @@ def test_ssr_from_result_none_when_rows_dropped():
     ],
     ids=lambda k: next(iter(k)) + "=" + str(next(iter(k.values())))[:8],
 )
-def test_ssr_eligibility_false_for_robust_loss_and_omit(kwargs):
+def test_ssr_eligibility_false_for_omit_and_other_blockers(kwargs):
     from nlsq.streaming.large_dataset import _ssr_reuse_eligible
 
     assert not _ssr_reuse_eligible(kwargs)
@@ -950,6 +950,11 @@ def test_ssr_eligibility_false_for_robust_loss_and_omit(kwargs):
 
 def test_ssr_eligibility_true_for_plain_options():
     from nlsq.streaming.large_dataset import _ssr_reuse_eligible
+
+    # a robust loss is eligible: 2*res.cost is then the robust cost, which is
+    # what the full-batch covariance scaling uses (chunked pcov matched in r26)
+    assert _ssr_reuse_eligible({"loss": "soft_l1"})
+    assert _ssr_reuse_eligible({"loss": "huber", "f_scale": 0.1})
 
     assert _ssr_reuse_eligible({})
     assert _ssr_reuse_eligible(
@@ -1081,6 +1086,7 @@ def _run_gc_gate(monkeypatch, memory_limit_gb, retain_bytes_per_chunk):
     """
     import dataclasses
     import gc
+    import mmap
     import sys
     import warnings
 
@@ -1102,7 +1108,11 @@ def _run_gc_gate(monkeypatch, memory_limit_gb, retain_bytes_per_chunk):
 
     def retaining_fit(*a, **k):
         if retain_bytes_per_chunk:
-            kept.append(np.ones(retain_bytes_per_chunk, dtype=np.uint8))
+            # Fresh anonymous mapping: malloc'd blocks can reuse already-resident
+            # freed heap pages (no RSS growth) after a long run in one process.
+            buf = np.frombuffer(mmap.mmap(-1, retain_bytes_per_chunk), dtype=np.uint8)
+            buf.fill(1)
+            kept.append(buf)
         return inner(*a, **k)
 
     fitter.curve_fit = MagicMock(wraps=fitter.curve_fit)

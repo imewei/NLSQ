@@ -153,7 +153,7 @@ Common Migration Patterns
    # NLSQ streaming for large datasets
    from nlsq import fit
 
-   result = fit(model, x_large, y_large, workflow="streaming", memory_limit_gb=4.0)
+   result = fit(model, x_large, y_large, workflow="auto", memory_limit_gb=4.0)
 
 When to Migrate
 ~~~~~~~~~~~~~~~

@@ -111,6 +111,20 @@ class TestLossFunctionsComputation(unittest.TestCase):
         assert cost >= 0
         assert jnp.isfinite(cost)
 
+    def test_soft_l1_preserves_small_residual_cost(self):
+        loss_func = self.loss_func_jit.get_loss_function("soft_l1")
+        for dtype, residual in [(jnp.float32, 1e-4), (jnp.float64, 1e-9)]:
+            f = jnp.array([residual], dtype=dtype)
+            rho = loss_func(f, 1.0)
+            cost = loss_func(f, 1.0, jnp.array([True]), cost_only=True)
+            assert_allclose(rho[0], [residual**2], rtol=1e-6, atol=0)
+            assert_allclose(cost, residual**2 / 2, rtol=1e-6, atol=0)
+
+    def test_soft_l1_infinite_residual_has_infinite_cost(self):
+        loss_func = self.loss_func_jit.get_loss_function("soft_l1")
+        cost = loss_func(jnp.array([jnp.inf]), 1.0, jnp.array([True]), cost_only=True)
+        assert jnp.isinf(cost)
+
     def test_cauchy_cost_computation(self):
         """Test Cauchy loss cost computation."""
         loss_func = self.loss_func_jit.get_loss_function("cauchy")

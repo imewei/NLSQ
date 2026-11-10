@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -228,8 +229,30 @@ class HPCCheckpointManager:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         bak_path = self.bak_path(path)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        with tempfile.TemporaryDirectory(dir=path.parent) as tmp_dir:
+            tmp_path = Path(tmp_dir) / path.name
+            self._write_checkpoint(tmp_path, state, fingerprint)
 
+            if path.exists():
+                path.replace(bak_path)
+            os.replace(tmp_path, path)
+        # fsync the containing directory too: a bare file fsync only
+        # guarantees the file's *contents* survive a crash, not that the
+        # rename's directory-entry update does (POSIX rename durability
+        # requires syncing the directory that holds the renamed entry).
+        # os.open() cannot open a directory on Windows -- this hardening
+        # step is POSIX-only; skip it there rather than crash (the file
+        # rename itself, via os.replace() above, already happened).
+        if os.name != "nt":
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+
+    def _write_checkpoint(
+        self, tmp_path: Path, state: CMAESCheckpointState, fingerprint: dict[str, Any]
+    ) -> None:
         with h5py.File(tmp_path, "w") as f:
             f.attrs["timestamp"] = time.time()
 
@@ -256,24 +279,6 @@ class HPCCheckpointManager:
             f.flush()
             os.fsync(f.id.get_vfd_handle())
 
-        if path.exists():
-            path.replace(bak_path)
-        os.replace(tmp_path, path)
-
-        # fsync the containing directory too: a bare file fsync only
-        # guarantees the file's *contents* survive a crash, not that the
-        # rename's directory-entry update does (POSIX rename durability
-        # requires syncing the directory that holds the renamed entry).
-        # os.open() cannot open a directory on Windows -- this hardening
-        # step is POSIX-only; skip it there rather than crash (the file
-        # rename itself, via os.replace() above, already happened).
-        if os.name != "nt":
-            dir_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
-
     def load(
         self,
         path: str | Path,
@@ -298,6 +303,7 @@ class HPCCheckpointManager:
             OSError,
             ValueError,
             KeyError,
+            OverflowError,
             SafeSerializationError,
         ) as primary_error:
             if not bak_path.exists():

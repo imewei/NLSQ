@@ -13,6 +13,8 @@ Module Hierarchy
    │
    ├── core/                  # Core optimization
    │   ├── minpack.py              # SciPy-compatible curve_fit() API
+   │   ├── problem.py              # prepare_problem(): input preparation
+   │   ├── covariance.py           # pcov_from_jacobian() / pcov_from_normal()
    │   ├── least_squares.py        # LeastSquares class
    │   ├── trf.py                  # TRF algorithm (~2500 lines)
    │   ├── trf_jit.py              # JIT-compiled helpers
@@ -35,7 +37,8 @@ Module Hierarchy
    │   └── curve_fit_result.py     # CurveFitResult
    │
    ├── streaming/             # Large datasets
-   │   ├── optimizer.py            # Base streaming
+   │   ├── exact_lm.py             # Exact chunk-accumulated LM (exact_streaming)
+   │   ├── specs.py, strategy.py   # Strategy specs, build_large_strategy()
    │   ├── large_dataset.py        # LargeDatasetFitter
    │   ├── adaptive_hybrid.py      # AdaptiveHybridStreamingOptimizer
    │   ├── telemetry.py            # DefenseLayerTelemetry
@@ -51,8 +54,7 @@ Module Hierarchy
    │   ├── guard.py                # NumericalStabilityGuard
    │   ├── svd_fallback.py         # SVD fallback
    │   ├── fallback.py             # FallbackOrchestrator + strategies
-   │   ├── recovery.py             # OptimizationRecovery
-   │   └── condition_monitor.py    # Condition tracking
+   │   └── recovery.py             # OptimizationRecovery
    │
    ├── precision/             # Precision control
    │   └── parameter_normalizer.py
@@ -116,9 +118,9 @@ NLSQ uses lazy loading to minimize import time:
    # Fast import (~620ms including JAX)
    import nlsq
 
-   # Specialty modules load on first access
-   nlsq.streaming  # Loads streaming module
-   nlsq.global_optimization  # Loads global optimization
+   # Specialty exports load their module on first access
+   nlsq.LargeDatasetFitter  # Loads the streaming module
+   nlsq.GlobalOptimizationConfig  # Loads global optimization
 
 This reduces memory usage and startup time for simple use cases.
 

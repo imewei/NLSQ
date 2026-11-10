@@ -28,15 +28,11 @@ class TestAdditionalCoverage(unittest.TestCase):
 
         # Test different loss functions
         for loss in ["linear", "soft_l1", "huber", "cauchy", "arctan"]:
-            try:
-                popt, _pcov = curve_fit(model, x, y, loss=loss)
-                self.assertEqual(len(popt), 2)
-                # Should still fit reasonably despite outliers
+            popt, _pcov = curve_fit(model, x, y, loss=loss)
+            self.assertEqual(len(popt), 2)
+            if loss != "linear":  # plain least squares is not outlier-robust
                 self.assertGreater(popt[0], 1.5)
                 self.assertLess(popt[0], 2.5)
-            except:
-                # Some loss functions might not be implemented
-                pass
 
     def test_curve_fit_tr_solvers(self):
         """Test different trust region solvers."""
@@ -49,12 +45,8 @@ class TestAdditionalCoverage(unittest.TestCase):
 
         # Test different solvers
         for solver in ["exact", "lsmr"]:
-            try:
-                popt, _pcov = curve_fit(model, x, y, tr_solver=solver)
-                self.assertAlmostEqual(popt[0], 2.0, places=1)
-            except:
-                # Solver might not be implemented
-                pass
+            popt, _pcov = curve_fit(model, x, y, tr_solver=solver)
+            self.assertAlmostEqual(popt[0], 2.0, places=1)
 
     def test_curve_fit_nan_handling(self):
         """Test curve_fit with NaN values."""
@@ -67,14 +59,13 @@ class TestAdditionalCoverage(unittest.TestCase):
 
         # Test with nan_policy
         for policy in ["raise", "omit", "propagate"]:
-            try:
+            if policy == "omit":
                 popt, _pcov = curve_fit(model, x, y, nan_policy=policy)
-                if policy == "omit":
-                    # Should work with remaining points
-                    self.assertEqual(len(popt), 2)
-            except:
-                # Expected for some policies
-                pass
+                # Fits the remaining 4 points exactly (y = 2x)
+                np.testing.assert_allclose(popt, [2.0, 0.0], atol=1e-6)
+            else:
+                with self.assertRaises(ValueError):
+                    curve_fit(model, x, y, nan_policy=policy)
 
     def test_curve_fit_verbose_levels(self):
         """Test different verbose levels."""
@@ -133,21 +124,11 @@ class TestAdditionalCoverage(unittest.TestCase):
         for func_name in ["linear", "huber", "soft_l1", "cauchy", "arctan"]:
             if hasattr(loss_jit, func_name):
                 func = getattr(loss_jit, func_name)
-                try:
-                    if func_name == "linear":
-                        result = func(z)
-                        self.assertEqual(result.shape, z.shape)
-                    else:
-                        # Most loss functions take a scale parameter
-                        result = func(z, 1.0)
-                        if isinstance(result, tuple):
-                            rho, _drho, _d2rho = result
-                            self.assertEqual(rho.shape, z.shape)
-                        else:
-                            self.assertEqual(result.shape, z.shape)
-                except:
-                    # Function might have different signature
-                    pass
+                if func_name == "linear":
+                    self.assertEqual(func(z).shape, z.shape)
+                else:
+                    # (rho, drho, d2rho) stacked along axis 0
+                    self.assertEqual(func(z, 1.0).shape, (3, *z.shape))
 
     def test_least_squares_methods(self):
         """Test LeastSquares class methods."""
@@ -175,14 +156,9 @@ class TestAdditionalCoverage(unittest.TestCase):
         self.assertAlmostEqual(popt[0], 2.0, places=3)
 
         # Test with stability features if available
-        if hasattr(CurveFit, "__init__"):
-            try:
-                cf_stable = CurveFit(enable_stability=True)
-                popt, _pcov = cf_stable.curve_fit(model, x, y)
-                self.assertAlmostEqual(popt[0], 2.0, places=2)
-            except:
-                # Stability features might not be available
-                pass
+        cf_stable = CurveFit(enable_stability=True)
+        popt, _pcov = cf_stable.curve_fit(model, x, y)
+        self.assertAlmostEqual(popt[0], 2.0, places=2)
 
     def test_polynomial_fitting(self):
         """Test fitting polynomials of different orders."""

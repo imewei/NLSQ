@@ -189,12 +189,44 @@ class TestAtomicWrite:
             manager._do_autosave()
 
             final = tmp_path / "session_autosave.json"
-            tmp = tmp_path / "session_autosave.tmp"
 
             assert final.exists(), "Final autosave file must exist after save"
-            assert not tmp.exists(), ".tmp file must be cleaned up after atomic rename"
+            # mkstemp names the temp file session_autosave.<random>.tmp
+            assert list(tmp_path.glob("*.tmp")) == [], "temp file must be renamed away"
 
             # Verify the content is valid JSON
             with open(final) as f:
                 data = json.load(f)
             assert "timestamp" in data
+
+    def test_failure_mid_write_keeps_previous_file(self, tmp_path):
+        """A torn write must never replace the previous autosave."""
+        from nlsq.gui_qt.autosave import AutosaveManager
+
+        final = tmp_path / "session_autosave.json"
+        final.write_text('{"timestamp": "previous"}')
+        mock_state = MagicMock()
+        mock_state.state.xdata = np.array([1.0, 2.0])
+        mock_state.state.ydata = np.array([3.0, 4.0])
+        mock_state.state.sigma = mock_state.state.model_config = None
+        mock_state.state.p0 = mock_state.state.bounds = None
+        mock_state.state.auto_p0 = True
+
+        def torn_dump(obj, f, **kw):
+            f.write('{"timestamp": "torn')  # partial write, then crash
+            raise OSError("disk full")
+
+        with (
+            patch("nlsq.gui_qt.autosave.AUTOSAVE_DIR", tmp_path),
+            patch("nlsq.gui_qt.autosave.AUTOSAVE_FILE", final),
+            patch("nlsq.gui_qt.autosave.json.dump", torn_dump),
+        ):
+            manager = AutosaveManager.__new__(AutosaveManager)
+            manager._app_state = mock_state
+            manager._timer = MagicMock()
+            manager.autosave_completed = MagicMock()
+            manager._autosave_warned = False
+            manager._do_autosave()  # best-effort: OSError is swallowed and logged
+
+        assert json.loads(final.read_text()) == {"timestamp": "previous"}
+        assert list(tmp_path.glob("*.tmp")) == []

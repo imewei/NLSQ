@@ -135,6 +135,7 @@ Create an optimizer with default configuration:
 .. code-block:: python
 
     from nlsq import AdaptiveHybridStreamingOptimizer, HybridStreamingConfig
+    import jax
     import jax.numpy as jnp
 
     # Default configuration
@@ -149,14 +150,17 @@ Create an optimizer with default configuration:
 
     # Prepare data
     x_data = jnp.linspace(0, 10, 1000000)  # 1M points
-    y_data = 2.5 * jnp.exp(-0.3 * x_data) + 0.5 + 0.1 * jnp.random.normal(key, (1000000,))
+    y_data = (
+        2.5 * jnp.exp(-0.3 * x_data)
+        + 0.5
+        + 0.1 * jax.random.normal(jax.random.PRNGKey(0), (1000000,))
+    )
 
     # Fit (API for full implementation)
     result = optimizer.fit(
-        model=exponential,
-        x_data=x_data,
-        y_data=y_data,
-        p0=[2.0, 0.5, 0.3],
+        (x_data, y_data),
+        exponential,
+        p0=jnp.array([2.0, 0.5, 0.3]),
     )
 
 With Bounds-Based Normalization
@@ -176,10 +180,9 @@ Use parameter bounds for normalization:
     bounds = (jnp.array([1.0, 0.1, 0.0]), jnp.array([10.0, 1.0, 2.0]))
 
     result = optimizer.fit(
-        model=exponential,
-        x_data=x_data,
-        y_data=y_data,
-        p0=[2.0, 0.5, 0.3],
+        (x_data, y_data),
+        exponential,
+        p0=jnp.array([2.0, 0.5, 0.3]),
         bounds=bounds,
     )
 
@@ -194,7 +197,7 @@ Fast convergence with looser tolerances:
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
     # Faster warmup, larger chunks, earlier switching
-    result = optimizer.fit(model, x_data, y_data, p0)
+    result = optimizer.fit((x_data, y_data), model, p0)
 
 With Conservative Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -207,7 +210,7 @@ Higher quality with tighter tolerances:
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
     # Tighter tolerance, more Gauss-Newton iterations
-    result = optimizer.fit(model, x_data, y_data, p0)
+    result = optimizer.fit((x_data, y_data), model, p0)
 
 Memory-Optimized Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -220,7 +223,7 @@ Minimize memory footprint:
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
     # Smaller chunks, float32, frequent checkpoints
-    result = optimizer.fit(model, x_data, y_data, p0)
+    result = optimizer.fit((x_data, y_data), model, p0)
 
 Custom Switching Criteria
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -255,8 +258,7 @@ Enable checkpointing for long optimizations:
     )
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-    # Resume from checkpoint
-    config_resume = HybridStreamingConfig(resume_from_checkpoint="/path/to/checkpoint.pkl")
+    # Checkpoints are saved for diagnostics; resuming from one is not supported.
 
 Phase Tracking
 ~~~~~~~~~~~~~~
@@ -290,7 +292,7 @@ Track when defense layers trigger across multiple fits:
 
     # Run multiple fits
     for dataset in datasets:
-        result = optimizer.fit(model, x_data, y_data, p0)
+        result = optimizer.fit((x_data, y_data), model, p0)
 
     # Get telemetry summary
     telemetry = get_defense_telemetry()

@@ -39,7 +39,11 @@ from pathlib import Path
 from typing import Any
 
 from nlsq.cli.model_registry import ModelRegistry
-from nlsq.cli.model_validation import DangerousPatternVisitor
+from nlsq.cli.model_validation import (
+    AllowlistVisitor,
+    DangerousPatternVisitor,
+    strict_models_enabled,
+)
 
 # Global registry instance for caching
 _registry: ModelRegistry | None = None
@@ -618,6 +622,15 @@ def parse_custom_model_string(
     validator = _SafeASTValidator()
     validator.validate(code)
 
+    # NLSQ_STRICT_MODELS applies here exactly as in the CLI: allowlist on top.
+    if strict_models_enabled():
+        strict = AllowlistVisitor()
+        strict.visit(ast.parse(code))
+        if strict.violations:
+            raise SecurityError(
+                f"Unsafe code detected (strict mode): {'; '.join(strict.violations)}"
+            )
+
     # Execute the code in a namespace
     namespace: dict[str, Any] = {}
     _execute_code_safely(code, namespace)
@@ -812,6 +825,7 @@ def get_latex_equation(model_name: str) -> str:
         "exponential_decay": r"y = a \cdot e^{-bx} + c",
         "exponential_growth": r"y = a \cdot e^{bx} + c",
         "gaussian": r"y = A \exp\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)",
+        "lorentzian": r"y = \frac{A}{1 + \left(\frac{x - x_0}{\gamma}\right)^2}",
         "sigmoid": r"y = \frac{L}{1 + e^{-k(x - x_0)}} + b",
         "power_law": r"y = a \cdot x^b",
         "polynomial": r"y = c_0 x^n + c_1 x^{n-1} + \cdots + c_n",

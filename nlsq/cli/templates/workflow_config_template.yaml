@@ -127,7 +127,7 @@ validation:
 # │ gaussian           │ amp*exp(-(x-mu)²/(2σ²))     │ amp, mu, sigma           │
 # │ sigmoid            │ L/(1+exp(-k*(x-x0))) + b    │ L, x0, k, b              │
 # │ power_law          │ a*x^b                       │ a, b                     │
-# │ polynomial(N)      │ c0 + c1*x + ... + cN*x^N    │ c0, c1, ..., cN          │
+# │ polynomial(N)      │ cN*x^N + ... + c1*x + c0    │ cN, ..., c1, c0 (np.polyval order) │
 # └─────────────────────────────────────────────────────────────────────────────┘
 
 model:
@@ -162,7 +162,9 @@ fitting:
   p0: "auto"
 
   # Bounds: either {lower: [...], upper: [...]} or [[lower...], [upper...]].
-  # If omitted, falls back to the model's bounds() method if it defines one.
+  # If omitted, falls back to the model's bounds() method if it defines one
+  # (logged at INFO). The fallback is NOT applied when `method: lm`, which
+  # does not support bounds. Pass [-.inf, .inf] to disable it for other methods.
   # bounds:
   #   lower: [0.0, 0.001, -1.0]
   #   upper: [10.0, 1.0, 1.0]

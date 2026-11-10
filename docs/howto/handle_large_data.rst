@@ -52,7 +52,6 @@ The simplest approach is using ``curve_fit_large``, which automatically detects 
     print(f"Estimated memory: {stats.total_memory_estimate_gb:.2f} GB")
     print(f"Recommended chunks: {stats.n_chunks}")
     print(f"Chunk size: {stats.recommended_chunk_size:,}")
-    print(f"Processing strategy: {stats.processing_strategy}")
 
 **Example Output:**
 
@@ -62,7 +61,6 @@ The simplest approach is using ``curve_fit_large``, which automatically detects 
     Estimated memory: 1.34 GB
     Recommended chunks: 4
     Chunk size: 2,500,000
-    Processing strategy: chunked
 
 Now let's generate and fit this large dataset:
 
@@ -141,9 +139,10 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
 
     print("Processing Strategy Recommendations:")
     print(f"  Strategy: {recommendations['processing_strategy']}")
-    print(f"  Memory estimate: {recommendations['memory_estimate_gb']:.2f} GB")
-    print(f"  Recommended chunks: {recommendations['n_chunks']}")
-    print(f"  Chunk size: {recommendations['chunk_size']:,}")
+    rec = recommendations["recommendations"]
+    print(f"  Memory estimate: {rec['total_memory_estimate_gb']:.2f} GB")
+    print(f"  Recommended chunks: {rec['n_chunks']}")
+    print(f"  Chunk size: {rec['chunk_size']:,}")
 
     # Perform fit with detailed progress reporting
     result = fitter.fit_with_progress(
@@ -159,7 +158,8 @@ For more control over the fitting process, use the ``LargeDatasetFitter`` class:
     print(f"  Message: {result.message}")
     # Note: n_chunks only available for multi-chunk fits
     print(f"  Fitted parameters: {result.popt}")
-    print(f"  Total function evaluations: {result.nfev}")
+    # nfev is only reported for single-chunk fits
+    print(f"  Total function evaluations: {result.get('nfev', 'n/a')}")
 
 Adaptive Hybrid Streaming for Unlimited Datasets
 ------------------------------------------------

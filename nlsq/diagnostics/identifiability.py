@@ -315,7 +315,11 @@ class IdentifiabilityAnalyzer:
         try:
             if s.size == 0:
                 return None
-            safe_s = np.where(s > 0, s, 1.0)
+            # Correlation is invariant to a global scale of J; dividing by the
+            # largest singular value keeps 1/s**2 finite for tiny-scale Jacobians.
+            s_max = float(np.max(s))
+            s_n = s / s_max if s_max > 0 else s
+            safe_s = np.where(s_n > 0, s_n, 1.0)
             inv_s2 = np.where(s > tol, 1.0 / safe_s**2, 0.0)
             covariance = (v * inv_s2) @ v.T
             diag = np.diag(covariance)
@@ -583,7 +587,13 @@ class IdentifiabilityAnalyzer:
             # exactly in the ill-conditioned regime this diagnostic targets.
             # Use pinv: the FIM can be near-singular for poorly identifiable
             # models, where a plain inverse would raise/blow up.
-            covariance = np.linalg.pinv(fim)
+            # Equilibrate by diag(FIM) first: corr(inv(F)) == corr(inv(D^-1 F D^-1)),
+            # but pinv's rank cutoff no longer depends on the columns' units.
+            d = np.sqrt(np.abs(np.diag(fim)))
+            if np.all(d > 0) and np.all(np.isfinite(d)):
+                covariance = np.linalg.pinv(fim / np.outer(d, d))
+            else:
+                covariance = np.linalg.pinv(fim)
             diag = np.diag(covariance)
 
             # Handle zero or near-zero diagonal elements

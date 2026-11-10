@@ -60,7 +60,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [numpy, jax, types-setuptools, scipy, psutil, types-tqdm]
-        args: [--python-version=3.13, --check-untyped-defs]
+        args: [--python-version=3.12, --check-untyped-defs]
         files: ^nlsq/
         exclude: ^(tests/|examples/|benchmarks/)
 

@@ -34,7 +34,12 @@ def _build_env() -> dict[str, str]:
 
 
 def _get_output_log_path(script_path: Path) -> Path:
-    relative_path = script_path.relative_to("examples/scripts")
+    try:
+        relative_path = script_path.resolve().relative_to(
+            Path("examples/scripts").resolve()
+        )
+    except ValueError:  # script outside examples/scripts: log next to the others
+        relative_path = Path(script_path.name)
     output_dir = Path("examples/outputs/scripts") / relative_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir / (script_path.stem + ".log")

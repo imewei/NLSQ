@@ -5,8 +5,14 @@ extracted from the monolithic __post_init__ method to reduce complexity and
 improve testability.
 """
 
+import decimal
 import math
+import numbers
 from typing import Any
+
+import numpy as np
+
+from nlsq.core._option_checks import _unwrap_scalar, is_integral, is_integral_count
 
 
 class ConfigValidationError(ValueError):
@@ -62,25 +68,49 @@ def validate_positive(value: float, param_name: str) -> None:
         raise ConfigValidationError(f"{param_name} must be positive and finite")
 
 
+def coerce_integral_fields(obj: object, names: tuple[str, ...]) -> None:
+    """Replace integral-valued float fields (e.g. ``100.0``) by ``int``.
+
+    The integer validators accept integral floats; call this after validation so
+    downstream code (slicing, shapes, ``range``) receives a real ``int``. Uses
+    ``object.__setattr__`` so frozen and slotted dataclasses work. bool and
+    ``None`` are left untouched.
+    """
+    for name in names:
+        value = _unwrap_scalar(getattr(obj, name))
+        if is_integral(value):
+            object.__setattr__(obj, name, int(value))
+
+
 def validate_positive_int(value: float, param_name: str) -> None:
     """Validate that value is a strictly positive integer count/size.
 
     Accepts ints, numpy integers and integral floats (e.g. ``100.0``); rejects
-    bool, NaN/inf, non-integral values and values below 1.
+    bool, NaN/inf, non-integral values and values below 1. Validation only:
+    owners of the value convert it with :func:`coerce_integral_fields`.
 
     Raises
     ------
     ConfigValidationError
         If value is not a positive integer.
     """
-    if (
-        isinstance(value, bool)
-        or math.isnan(value)
-        or math.isinf(value)
-        or value != int(value)
-        or value < 1
-    ):
+    if not is_integral_count(value, 1):
         raise ConfigValidationError(f"{param_name} must be positive and an integer")
+
+
+def validate_non_negative_int(value: float, param_name: str) -> None:
+    """Validate that value is a non-negative integer count (rejects bool, NaN/inf, non-integral).
+
+    Integral floats such as ``5.0`` pass; owners convert them with
+    :func:`coerce_integral_fields`.
+
+    Raises
+    ------
+    ConfigValidationError
+        If value is not a non-negative integer.
+    """
+    if not is_integral_count(value, 0):
+        raise ConfigValidationError(f"{param_name} must be non-negative and an integer")
 
 
 def validate_non_negative(value: float, param_name: str) -> None:
@@ -98,8 +128,8 @@ def validate_non_negative(value: float, param_name: str) -> None:
     ConfigValidationError
         If value is negative.
     """
-    if math.isnan(value) or value < 0:
-        raise ConfigValidationError(f"{param_name} must be non-negative")
+    if math.isnan(value) or math.isinf(value) or value < 0:
+        raise ConfigValidationError(f"{param_name} must be non-negative and finite")
 
 
 def validate_range(
@@ -227,7 +257,7 @@ def validate_warmup_config(
     ConfigValidationError
         If any parameter is invalid.
     """
-    validate_non_negative(warmup_iterations, "warmup_iterations")
+    validate_non_negative_int(warmup_iterations, "warmup_iterations")
     validate_positive_int(max_warmup_iterations, "max_warmup_iterations")
     validate_positive(warmup_learning_rate, "warmup_learning_rate")
     validate_positive(loss_plateau_threshold, "loss_plateau_threshold")
@@ -335,7 +365,7 @@ def validate_cg_config(
     validate_positive_int(max_iterations, "cg_max_iterations")
     validate_positive(relative_tolerance, "cg_relative_tolerance")
     validate_positive(absolute_tolerance, "cg_absolute_tolerance")
-    validate_positive(param_threshold, "cg_param_threshold")
+    validate_positive_int(param_threshold, "cg_param_threshold")
 
 
 def validate_group_variance_config(
@@ -378,7 +408,10 @@ def validate_group_variance_config(
                 f"group_variance_indices[{idx}] must be a (start, end) tuple",
             )
         start, end = item
-        if not isinstance(start, int) or not isinstance(end, int):
+        if not all(
+            isinstance(v, (int, np.integer)) and not isinstance(v, (bool, np.bool_))
+            for v in (start, end)
+        ):
             raise ConfigValidationError(
                 f"group_variance_indices[{idx}] start/end must be integers",
             )
@@ -431,7 +464,7 @@ def validate_error_handling_config(
         If retries are negative, the success rate is outside [0, 1], or
         log_frequency is not a positive integer.
     """
-    validate_non_negative(max_retries_per_batch, "max_retries_per_batch")
+    validate_non_negative_int(max_retries_per_batch, "max_retries_per_batch")
     validate_range(min_success_rate, 0.0, 1.0, "min_success_rate")
     validate_positive_int(log_frequency, "log_frequency")
 
@@ -463,7 +496,7 @@ def validate_lr_schedule_config(
     if not enabled:
         return
 
-    validate_non_negative(warmup_steps, "lr_schedule_warmup_steps")
+    validate_non_negative_int(warmup_steps, "lr_schedule_warmup_steps")
     validate_positive(decay_steps, "lr_schedule_decay_steps")
     validate_positive(end_value, "lr_schedule_end_value")
 
@@ -658,13 +691,14 @@ def validate_multistart_config(
     Raises
     ------
     ConfigValidationError
-        If any parameter is invalid when enabled.
+        If any parameter is invalid. The fields are checked even when
+        multi-start is disabled (they can be enabled later and are coerced to
+        int); only then is ``n_starts=0`` accepted.
     """
-    if not enabled:
-        return
-
-    if n_starts < 1:
-        raise ConfigValidationError("n_starts must be >= 1 when enable_multistart=True")
+    if enabled:
+        validate_positive_int(n_starts, "n_starts")
+    else:
+        validate_non_negative_int(n_starts, "n_starts")
 
     validate_multistart_sampler(sampler)
     validate_range(
@@ -675,6 +709,6 @@ def validate_multistart_config(
         inclusive_min=False,
         inclusive_max=False,
     )
-    validate_non_negative(elimination_rounds, "elimination_rounds")
+    validate_non_negative_int(elimination_rounds, "elimination_rounds")
     validate_positive_int(batches_per_round, "batches_per_round")
     validate_positive(scale_factor, "scale_factor")

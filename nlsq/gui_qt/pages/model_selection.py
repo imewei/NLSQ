@@ -38,14 +38,14 @@ __all__ = ["ModelSelectionPage"]
 
 # Built-in model display names
 BUILTIN_MODELS = [
+    ("Linear", "linear"),
     ("Exponential Decay", "exponential_decay"),
+    ("Exponential Growth", "exponential_growth"),
     ("Gaussian", "gaussian"),
     ("Lorentzian", "lorentzian"),
-    ("Double Exponential", "double_exponential"),
-    ("Damped Oscillation", "damped_oscillation"),
     ("Power Law", "power_law"),
-    ("Logistic (Sigmoid)", "logistic"),
-]
+    ("Sigmoid", "sigmoid"),
+]  # every entry must exist in nlsq.core.functions (pinned by a test)
 
 
 class ModelSelectionPage(QWidget):
@@ -389,17 +389,20 @@ class ModelSelectionPage(QWidget):
 
             # Update description
             descriptions = {
+                "linear": "y = a * x + b",
                 "exponential_decay": "y = a * exp(-b * x) + c",
+                "exponential_growth": "y = a * exp(b * x) + c",
                 "gaussian": "y = A * exp(-(x-mu)^2 / (2*sigma^2))",
                 "lorentzian": "y = A / (1 + ((x-x0)/gamma)^2)",
-                "double_exponential": "y = a1*exp(-b1*x) + a2*exp(-b2*x) + c",
-                "damped_oscillation": "y = A * exp(-gamma*x) * cos(omega*x + phi)",
                 "power_law": "y = a * x^b",
-                "logistic": "y = L / (1 + exp(-k*(x-x0))) + b",
+                "sigmoid": "y = L / (1 + exp(-k*(x-x0))) + b",
             }
             self._builtin_desc.setText(descriptions.get(model_name, ""))
 
         except Exception as e:
+            # A failed lookup must not leave the previous model applicable
+            # under the new (invalid) config name.
+            self._current_model = None
             self._show_error("Model Error", str(e))
 
     def _on_degree_changed(self, degree: int) -> None:
@@ -574,3 +577,5 @@ class ModelSelectionPage(QWidget):
         self._degree_slider.setValue(2)
         self._code_editor.set_code("")
         self._function_combo.clear()
+        # the slider/editor setters above switch the model type: end on built-in
+        self._on_type_changed(0)

@@ -262,14 +262,9 @@ class TestComprehensiveCoverage(unittest.TestCase):
         initial_guesses = [[1.0, 1.0, 0.1], [3.0, 2.0, 0.2], [2.0, 1.5, 0.1]]
 
         for p0 in initial_guesses:
-            try:
-                popt, _pcov = curve_fit(difficult_model, x, y, p0=p0, maxfev=1000)
-                # Check if converged to reasonable values
-                self.assertGreater(popt[0], 0)
-                self.assertGreater(popt[1], 0)
-            except:
-                # Some initial guesses might fail - that's expected
-                pass
+            popt, _pcov = curve_fit(difficult_model, x, y, p0=p0, maxfev=1000)
+            # All three starts reach the generating parameters (2.0, 1.5, 0.1)
+            np.testing.assert_allclose(popt, [2.0, 1.5, 0.1], rtol=0.1)
 
 
 if __name__ == "__main__":

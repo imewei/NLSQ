@@ -46,14 +46,15 @@ Usage Example
    # Create telemetry instance
    telemetry = DefenseLayerTelemetry()
 
-   # Record layer activations during optimization
-   telemetry.record_layer1_activation(cost_reduction=0.05)
-   telemetry.record_layer3_rejection(cost_increase=0.02)
+   # Record layer events during optimization
+   telemetry.record_warmup_start()
+   telemetry.record_layer1_trigger(relative_loss=1e-4, threshold=1e-3)
+   telemetry.record_layer3_trigger(cost_ratio=1.02, tolerance=1.01, iteration=5)
 
    # Get summary report
    report = telemetry.get_summary()
-   print(f"Layer 1 activations: {report['layer1_count']}")
-   print(f"Layer 3 rejections: {report['layer3_count']}")
+   print(f"Layer 1 triggers: {report['layer1']['triggers']}")
+   print(f"Layer 3 triggers: {report['layer3']['triggers']}")
 
 See Also
 --------

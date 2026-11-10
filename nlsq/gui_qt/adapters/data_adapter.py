@@ -123,10 +123,10 @@ def load_from_file(
             config = {**config, "format": EXTENSION_FORMAT_MAP[suffix.lower()]}
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(file_obj.read())
             tmp_path = Path(tmp.name)
 
         try:
+            tmp_path.write_bytes(file_obj.read())
             # Reset file position for potential re-reads
             file_obj.seek(0)
             return loader.load(tmp_path, config)
@@ -242,6 +242,16 @@ def load_from_clipboard(
     return xdata, ydata, sigma
 
 
+def _to_float(cell: str, decimal_comma: bool) -> float:
+    cell = cell.strip()
+    if not cell:
+        return np.nan
+    # European exports: ';'-separated with ',' as the decimal mark ("1,5").
+    if decimal_comma and cell.count(",") == 1 and "." not in cell:
+        cell = cell.replace(",", ".")
+    return float(cell)
+
+
 def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[float]]:
     """Parse delimited text lines into rows of floats.
 
@@ -269,12 +279,46 @@ def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[flo
             else line.strip("\r\n").split(delimiter)
         )
         try:
-            rows.append([float(p.strip()) if p.strip() else np.nan for p in parts])
+            rows.append([_to_float(p, decimal_comma=delimiter == ";") for p in parts])
         except ValueError as e:
             raise ValueError(
                 f"Cannot parse line {line_num} as numeric data: '{stripped_line}'",
             ) from e
     return rows
+
+
+def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
+    """Parse delimited numeric text, sniffing an optional header row.
+
+    Shared by file loading and clipboard paste so they cannot drift. Strips a
+    leading UTF-8 BOM (otherwise the first cell is non-numeric and the first
+    data row would be mistaken for a header), ``#`` comments and blank lines.
+
+    Returns
+    -------
+    rows, header
+        ``header`` is the first line's cells if it is non-numeric, else None.
+
+    Raises
+    ------
+    ValueError
+        If a non-header line is not numeric.
+    """
+    lines = [ln.split("#")[0] for ln in text.lstrip("﻿").splitlines()]
+    lines = [ln for ln in lines if ln.strip()]
+    if not lines:
+        return [], None
+    delimiter = detect_delimiter("\n".join(lines))
+    header = None
+    try:
+        parse_numeric_rows(lines[:1], delimiter)
+    except ValueError:
+        header = [
+            h.strip()
+            for h in (lines[0].split(delimiter) if delimiter else lines[0].split())
+        ]
+        lines = lines[1:]
+    return parse_numeric_rows(lines, delimiter), header
 
 
 def detect_delimiter(text: str) -> str | None:
@@ -299,10 +343,21 @@ def detect_delimiter(text: str) -> str | None:
 
     tab_count = 0
     comma_count = 0
+    semicolon_count = 0
 
     for line in lines:
         tab_count += line.count("\t")
         comma_count += line.count(",")
+        semicolon_count += line.count(";")
+
+    # Semicolon CSV (European Excel exports); decimal commas make comma unreliable,
+    # so a constant per-line semicolon count wins even when commas are more common
+    sc_per_line = {ln.count(";") for ln in lines if ln.strip()}
+    if semicolon_count > 0 and (
+        semicolon_count >= max(tab_count, comma_count)
+        or (len(sc_per_line) == 1 and 0 not in sc_per_line)
+    ):
+        return ";"
 
     # If tabs are present and more common than commas, use tab
     if tab_count > 0 and tab_count >= comma_count:
@@ -496,6 +551,15 @@ def validate_data(
         return ValidationResult(
             is_valid=False,
             message=f"Data contains non-finite values: {', '.join(details)}",
+            nan_count=total_nan,
+            inf_count=total_inf,
+            point_count=n_points,
+        )
+
+    if sigma is not None and bool(np.any(np.asarray(sigma, dtype=float) <= 0)):
+        return ValidationResult(
+            is_valid=False,
+            message="sigma must be strictly positive (found zero or negative values)",
             nan_count=total_nan,
             inf_count=total_inf,
             point_count=n_points,

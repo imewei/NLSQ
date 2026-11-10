@@ -125,7 +125,7 @@ class ParameterNormalizer:
         strategy : str, default='auto'
             Normalization strategy
         """
-        self.p0 = jnp.asarray(p0, dtype=jnp.float64)
+        self.p0 = jnp.atleast_1d(jnp.asarray(p0, dtype=jnp.float64))
         self.n_params = len(self.p0)
         self.original_bounds = bounds
 
@@ -172,6 +172,8 @@ class ParameterNormalizer:
             lb, ub = self.original_bounds
             lb = jnp.asarray(lb, dtype=jnp.float64)
             ub = jnp.asarray(ub, dtype=jnp.float64)
+            if bool(jnp.any(lb > ub)):
+                raise ValueError("lower bounds must not exceed upper bounds")
 
             # Scale = (ub - lb), offset = lb
             # Normalized: (params - lb) / (ub - lb)

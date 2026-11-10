@@ -7,12 +7,25 @@ The adapter maps all fields from workflow_config_template.yaml to SessionState
 fields and vice versa.
 """
 
+import contextlib
 from typing import Any, TextIO
 
 import numpy as np
 import yaml
 
-from nlsq.gui_qt.session_state import SessionState, initialize_state
+from nlsq.gui_qt.session_state import (
+    VALID_WORKFLOWS,
+    SessionState,
+    initialize_state,
+)
+
+_SECTION_KEYS = (
+    "model",
+    "fitting",
+    "hybrid_streaming",
+    "batch",
+    "global_optimization",
+)
 
 
 def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
@@ -36,8 +49,28 @@ def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
         )
 
     if "custom" in model:
-        state.custom_file_path = model["custom"].get("file", None)
-        state.custom_function_name = model["custom"].get("function", "")
+        custom = model["custom"]
+        state.custom_file_path = custom.get("file") or None  # "" means unset
+        state.custom_function_name = custom.get("function", "")
+        state.custom_code = custom.get("code") or state.custom_code
+
+    # The model page reads model_config, not the dedicated fields: rebuild it.
+    if state.model_type == "polynomial":
+        state.model_config = {"degree": state.polynomial_degree}
+    elif state.model_type == "custom":
+        state.model_config = {
+            k: v
+            for k, v in (
+                ("code", state.custom_code),
+                # The model page Apply sends {code, function}; a path next to
+                # code would look like a config change and reset p0/bounds.
+                ("path", None if state.custom_code else state.custom_file_path),
+                ("function", state.custom_function_name),
+            )
+            if v
+        }
+    elif "name" in model:
+        state.model_config = {"name": state.model_name}
 
     if "parameters" in model:
         _parse_model_parameters(model["parameters"], state)
@@ -55,7 +88,9 @@ def _parse_model_parameters(
 
     for param in parameters:
         if "initial" in param:
-            p0_values.append(param["initial"])
+            p0_values.append(
+                _num(param["initial"], f"parameter {param.get('name', '?')!r} initial")
+            )
         bounds = param.get("bounds")
         if bounds is None:
             bounds = [None, None]
@@ -70,8 +105,9 @@ def _parse_model_parameters(
             )
         lower = bounds[0] if len(bounds) > 0 and bounds[0] is not None else None
         upper = bounds[1] if len(bounds) > 1 and bounds[1] is not None else None
-        lower_bounds.append(float("-inf") if lower is None else lower)
-        upper_bounds.append(float("inf") if upper is None else upper)
+        pname = f"parameter {param.get('name', '?')!r} bounds"
+        lower_bounds.append(float("-inf") if lower is None else _num(lower, pname))
+        upper_bounds.append(float("inf") if upper is None else _num(upper, pname))
         if "transform" in param and "name" in param:
             transforms[param["name"]] = param["transform"]
 
@@ -85,28 +121,68 @@ def _parse_model_parameters(
         state.transforms = transforms
 
 
+def _num(value: Any, name: str) -> float:
+    """Coerce a YAML scalar to float (PyYAML reads ``1e-3`` as a string)."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be numeric, got {value!r}") from None
+
+
+def _nfev(value: Any, name: str) -> int | None:
+    from nlsq.core._option_checks import is_integral_count
+
+    if value is None:  # explicit null: let curve_fit pick its default
+        return None
+
+    if isinstance(value, str):  # hand-edited YAML often quotes numbers
+        with contextlib.suppress(ValueError):
+            value = float(value)
+    if not is_integral_count(value, 1):
+        raise ValueError(f"{name} must be a positive integer, got {value!r}")
+    return int(value)
+
+
 def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
     """Parse fitting section of YAML config into state."""
+
+    def _term(options: dict[str, Any], key: str, default: Any) -> Any:
+        value = options.get(key)
+        return default if value is None else value
+
     if "fitting" not in config:
         return
 
     fitting = config["fitting"]
     state.method = fitting.get("method", state.method)
     state.workflow = fitting.get("workflow", state.workflow)
+    if state.workflow not in VALID_WORKFLOWS:
+        raise ValueError(
+            f"Unknown fitting.workflow {state.workflow!r}; "
+            f"expected one of {sorted(VALID_WORKFLOWS)}"
+        )
     state.loss = fitting.get("loss", state.loss)
     for name in ("gtol", "ftol", "xtol"):
-        if name in fitting:
-            setattr(state, name, float(fitting[name]))
-    state.max_function_evals = fitting.get("max_nfev", state.max_function_evals)
+        setattr(state, name, float(_term(fitting, name, getattr(state, name))))
+    state.max_function_evals = _nfev(
+        _term(fitting, "max_nfev", state.max_function_evals), "fitting.max_nfev"
+    )
     p0 = fitting.get("p0")
     if isinstance(p0, (list, tuple)):
-        state.p0 = list(p0)
+        state.p0 = [_num(v, "fitting.p0 entry") for v in p0]
         state.auto_p0 = False
     bounds = fitting.get("bounds")
     if isinstance(bounds, dict):
         bounds = (bounds.get("lower", -np.inf), bounds.get("upper", np.inf))
     if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
-        lower, upper = np.broadcast_arrays(bounds[0], bounds[1])
+        try:
+            lower, upper = np.broadcast_arrays(
+                np.asarray(bounds[0], dtype=float), np.asarray(bounds[1], dtype=float)
+            )
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"fitting.bounds must be numeric, got {bounds!r}"
+            ) from None
         if state.p0 is not None:
             lower = np.broadcast_to(lower, (len(state.p0),))
             upper = np.broadcast_to(upper, (len(state.p0),))
@@ -117,20 +193,22 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.n_starts = go.get("n_starts", state.n_starts)
         state.sampler = go.get("sampler", state.sampler)
         state.center_on_p0 = go.get("center_on_p0", state.center_on_p0)
-        state.scale_factor = go.get("scale_factor", state.scale_factor)
+        state.scale_factor = float(go.get("scale_factor", state.scale_factor))
 
     if "objective" in fitting:
         state.loss = fitting["objective"].get("robust_loss", state.loss)
 
     if "termination" in fitting:
-        term = fitting["termination"]
-        state.gtol = term.get("gtol", state.gtol)
-        state.ftol = term.get("ftol", state.ftol)
-        state.xtol = term.get("xtol", state.xtol)
-        state.max_iterations = term.get("max_iterations", state.max_iterations)
-        state.max_function_evals = term.get(
-            "max_function_evals",
-            state.max_function_evals,
+        term = fitting["termination"] or {}
+
+        # Coerce like the flat gtol/ftol/xtol branch: YAML reads `1e-10` as str.
+        state.gtol = float(_term(term, "gtol", state.gtol))
+        state.ftol = float(_term(term, "ftol", state.ftol))
+        state.xtol = float(_term(term, "xtol", state.xtol))
+        state.max_iterations = int(_term(term, "max_iterations", state.max_iterations))
+        state.max_function_evals = _nfev(
+            _term(term, "max_function_evals", state.max_function_evals),
+            "termination.max_function_evals",
         )
 
     if "multistart" in fitting:
@@ -140,7 +218,7 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.n_starts = ms.get("num_starts", state.n_starts)
         state.sampler = ms.get("sampler", state.sampler)
         state.center_on_p0 = ms.get("center_on_p0", state.center_on_p0)
-        state.scale_factor = ms.get("scale_factor", state.scale_factor)
+        state.scale_factor = float(ms.get("scale_factor", state.scale_factor))
 
 
 def _parse_hybrid_streaming_section(
@@ -220,7 +298,7 @@ def _parse_global_optimization_section(
         state.n_starts = go["n_starts"]
     state.sampler = go.get("sampler", state.sampler)
     state.center_on_p0 = go.get("center_on_p0", state.center_on_p0)
-    state.scale_factor = go.get("scale_factor", state.scale_factor)
+    state.scale_factor = float(go.get("scale_factor", state.scale_factor))
 
 
 def load_yaml_config(file: TextIO | str) -> SessionState:
@@ -270,19 +348,19 @@ def load_yaml_config(file: TextIO | str) -> SessionState:
             "Invalid YAML config: expected a mapping at the top level, "
             f"got {type(config).__name__}",
         )
-    for _section_key in (
-        "model",
-        "fitting",
-        "hybrid_streaming",
-        "batch",
-        "global_optimization",
-    ):
+    for _section_key in _SECTION_KEYS:
         _section_value = config.get(_section_key)
         if _section_value is not None and not isinstance(_section_value, dict):
             raise ValueError(
                 f"Invalid YAML config: '{_section_key}' section must be a "
                 f"mapping, got {type(_section_value).__name__}",
             )
+
+    # A heading whose children are all commented out parses as None; the CLI
+    # treats that as an empty section, so the parsers below must too.
+    config = {
+        k: ({} if v is None and k in _SECTION_KEYS else v) for k, v in config.items()
+    }
 
     state = initialize_state()
 
@@ -298,8 +376,10 @@ def load_yaml_config(file: TextIO | str) -> SessionState:
 def export_yaml_config(state: SessionState) -> str:
     """Export a SessionState as a YAML configuration string.
 
-    This function converts a SessionState into a YAML string compatible
-    with workflow_config_template.yaml format.
+    This function converts a SessionState into a YAML string in the GUI's own
+    session schema (see ``get_current_config``). It is not runnable with
+    ``nlsq fit``: it has no ``data`` section and uses nested fitting blocks
+    that the CLI schema does not read.
 
     Parameters
     ----------
@@ -323,8 +403,7 @@ def export_yaml_config(state: SessionState) -> str:
 
     config = get_current_config(state)
 
-    # Use yaml.dump with flow style for compact output
-    yaml_str = yaml.dump(
+    yaml_str = yaml.safe_dump(
         config,
         default_flow_style=False,
         sort_keys=False,

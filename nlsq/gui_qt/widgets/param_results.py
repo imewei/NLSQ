@@ -101,8 +101,10 @@ class ParamResultsWidget(QWidget):
             self._table.setItem(row, 1, value_item)
 
             # Uncertainty
-            uncert = uncertainties[row] if row < len(uncertainties) else 0.0
-            uncert_item = QTableWidgetItem(f"\u00b1 {uncert:.6g}")  # ± symbol
+            uncert = uncertainties[row] if row < len(uncertainties) else None
+            uncert_item = QTableWidgetItem(
+                f"\u00b1 {uncert:.6g}" if uncert is not None else "-"
+            )
             uncert_item.setTextAlignment(
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             )

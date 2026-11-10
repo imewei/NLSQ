@@ -50,6 +50,7 @@ Example Usage
    from nlsq.precision.algorithm_selector import auto_select_algorithm
    from nlsq import curve_fit
    import jax.numpy as jnp
+   import numpy as np
 
 
    # Define model
@@ -59,7 +60,7 @@ Example Usage
 
    # Generate data
    x = jnp.linspace(0, 10, 100)
-   y = 2.5 * jnp.exp(-0.5 * x) + 1.0 + 0.1 * jnp.random.randn(100)
+   y = 2.5 * jnp.exp(-0.5 * x) + 1.0 + 0.1 * np.random.randn(100)
 
    # Auto-select best algorithm
    recommendations = auto_select_algorithm(
@@ -91,8 +92,7 @@ Advanced Usage
 
    from nlsq.precision.algorithm_selector import AlgorithmSelector
 
-   # Create selector with custom settings
-   selector = AlgorithmSelector(enable_diagnostics=True, robustness_test=True)
+   selector = AlgorithmSelector()
 
    # Analyze problem
    analysis = selector.analyze_problem(
@@ -100,10 +100,9 @@ Advanced Usage
    )
 
    # Get detailed recommendations
-   recommendations = selector.recommend_algorithm(analysis)
-   print(f"Primary: {recommendations['primary']}")
-   print(f"Fallback: {recommendations['fallback']}")
-   print(f"Reasoning: {recommendations['reasoning']}")
+   recommendations = selector.select_algorithm(analysis)
+   print(f"Algorithm: {recommendations['algorithm']}")
+   print(selector.get_algorithm_explanation(recommendations))
 
 See Also
 --------

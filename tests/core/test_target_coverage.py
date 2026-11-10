@@ -73,20 +73,13 @@ class TestTargetCoverage(unittest.TestCase):
         y = np.array([1, 0.5, 0.33, 0.25, 0.2])
 
         # Test with initial guess that causes singularity
-        try:
-            popt, _pcov = curve_fit(
-                bad_model, x, y, p0=[1, 2]
-            )  # b=2 causes division by zero at x=2
-            # If it succeeds, should have moved away from singularity
-            self.assertNotEqual(popt[1], 2.0)
-        except:
-            # Expected to fail
-            pass
+        # b=2 causes division by zero at x=2 -> non-finite initial residuals
+        with self.assertRaisesRegex(ValueError, "not finite"):
+            curve_fit(bad_model, x, y, p0=[1, 2])
 
         # Test with bounds that are invalid
-        with contextlib.suppress(Exception):
-            _, _ = curve_fit(bad_model, x, y, p0=[1, 0], bounds=([2, 1], [1, 2]))
-            # Should handle invalid bounds
+        with self.assertRaisesRegex(ValueError, "strictly less"):
+            curve_fit(bad_model, x, y, p0=[1, 0], bounds=([2, 1], [1, 2]))
 
     @pytest.mark.filterwarnings(
         "ignore:Covariance of the parameters could not be estimated"

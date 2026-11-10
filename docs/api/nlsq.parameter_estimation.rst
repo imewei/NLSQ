@@ -33,6 +33,7 @@ Example Usage
 
    from nlsq.precision.parameter_estimation import estimate_initial_parameters
    import jax.numpy as jnp
+   import numpy as np
 
 
    # Define exponential model
@@ -42,10 +43,10 @@ Example Usage
 
    # Generate data
    x = jnp.linspace(0, 10, 100)
-   y = 2.5 * jnp.exp(-0.5 * x) + 0.1 * jnp.random.randn(100)
+   y = 2.5 * jnp.exp(-0.5 * x) + 0.1 * np.random.randn(100)
 
    # Automatically estimate initial parameters
-   p0 = estimate_initial_parameters(exponential, x, y, n_params=2)
+   p0 = estimate_initial_parameters(exponential, x, y)
    print(f"Estimated initial parameters: {p0}")
 
    # Use in curve fitting

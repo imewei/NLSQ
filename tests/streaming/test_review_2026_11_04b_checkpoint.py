@@ -79,7 +79,30 @@ def test_failed_save_keeps_previous_checkpoint(tmp_path):
     ld = mgr.load(path)
     assert ld.phase_history == [{"k": 1}]
     assert ld.multistart_candidates is not None
-    assert not list(tmp_path.glob("*.tmp"))
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_save_does_not_overwrite_file_linked_from_old_temp_path(tmp_path):
+    victim = tmp_path / "valuable"
+    victim.write_bytes(b"valuable")
+    path = tmp_path / "checkpoint.h5"
+    try:
+        path.with_name(path.name + ".tmp").symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks are unavailable")
+
+    CheckpointManager(HybridStreamingConfig()).save(path, _state())
+
+    assert victim.read_bytes() == b"valuable"
+    assert not path.is_symlink()
+
+
+def test_checkpoint_permissions_match_normal_file_creation(tmp_path):
+    reference = tmp_path / "reference"
+    reference.write_bytes(b"reference")
+    path = tmp_path / "checkpoint.h5"
+    CheckpointManager(HybridStreamingConfig()).save(path, _state())
+    assert path.stat().st_mode & 0o777 == reference.stat().st_mode & 0o777
 
 
 def test_torn_file_without_marker_is_rejected(tmp_path):

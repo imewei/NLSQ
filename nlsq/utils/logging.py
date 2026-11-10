@@ -90,6 +90,28 @@ def _format_kwargs(kwargs: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
+def _save_iterations_setting() -> str | None:
+    """Return NLSQ_SAVE_ITERATIONS, or None when unset or explicitly disabled."""
+    val = os.getenv("NLSQ_SAVE_ITERATIONS")
+    if val is None or val.strip().lower() in ("", "0", "false", "no", "off"):
+        return None
+    return val
+
+
+class _StderrUnlessRootConfigured(logging.StreamHandler):
+    """Console handler that stands down once the application configures logging.
+
+    Records propagate to the root logger, so an app calling
+    ``logging.basicConfig()`` after ``import nlsq`` would otherwise see every
+    line twice.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if logging.getLogger().handlers:
+            return
+        super().emit(record)
+
+
 class NLSQLogger:
     """Comprehensive logger for NLSQ optimization routines.
 
@@ -126,7 +148,7 @@ class NLSQLogger:
 
         # Library default is quiet: INFO records would otherwise reach any
         # root handler the application installs (e.g. logging.basicConfig()).
-        if os.getenv("NLSQ_DEBUG", "0") == "1":
+        if os.getenv("NLSQ_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}:
             level = LogLevel.DEBUG
         elif level is None:
             verbose = os.getenv("NLSQ_VERBOSE", "0") == "1"
@@ -159,10 +181,15 @@ class NLSQLogger:
         # (e.g. `nlsq fit --stdout` JSON). Skipped when the application has
         # configured the root logger, since records propagate there and would
         # otherwise print twice.
-        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler = _StderrUnlessRootConfigured(sys.stderr)
 
         # Check modes
-        debug_mode = os.getenv("NLSQ_DEBUG", "0") == "1"
+        debug_mode = os.getenv("NLSQ_DEBUG", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         verbose_mode = os.getenv("NLSQ_VERBOSE", "0") == "1"
 
         if debug_mode:
@@ -185,23 +212,26 @@ class NLSQLogger:
         # Optional file handler for debug mode
         if debug_mode:
             log_dir = Path(os.getenv("NLSQ_LOG_DIR", "."))
-            log_dir.mkdir(parents=True, exist_ok=True)
-
             # Use a more specific timestamp or process ID to avoid collisions
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file = log_dir / f"nlsq_debug_{timestamp}.log"
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                file_handler = logging.FileHandler(log_file)
+            except OSError as e:
+                # Import must not fail because the log dir is unwritable.
+                root_nlsq.warning(f"NLSQ_DEBUG file log disabled: {e}")
+            else:
+                file_handler.setLevel(logging.DEBUG)
+                file_formatter = logging.Formatter(
+                    "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+                file_handler.setFormatter(file_formatter)
+                root_nlsq.addHandler(file_handler)
 
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setLevel(logging.DEBUG)
-            file_formatter = logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-            file_handler.setFormatter(file_formatter)
-            root_nlsq.addHandler(file_handler)
-
-            # Log this only once
-            root_nlsq.info(f"Debug logging enabled (Session): {log_file}")
+                # Log this only once
+                root_nlsq.info(f"Debug logging enabled (Session): {log_file}")
 
         root_nlsq._nlsq_initialized = True  # type: ignore[attr-defined]
         root_nlsq.propagate = True
@@ -275,6 +305,10 @@ class NLSQLogger:
         ...     logger.info("Starting optimization")
         """
         op_id = uuid.uuid4().hex
+        # Per-thread stack: operations may interleave (e.g. generator-based),
+        # so on exit drop this id and fall back to the newest still-open one.
+        stack = _context.__dict__.setdefault("op_stack", [])
+        stack.append(op_id)
         _context.operation_id = op_id
         start_time = time.perf_counter()
 
@@ -299,9 +333,11 @@ class NLSQLogger:
                 # Remove oldest entries (first inserted)
                 keys = list(self.timers)
                 for k in keys[: len(keys) // 2]:
-                    del self.timers[k]
+                    self.timers.pop(k, None)  # another thread may have removed it
             self.info(f"END {name}", elapsed=f"{elapsed:.3f}s")
-            _context.operation_id = None
+            if op_id in stack:
+                stack.remove(op_id)
+            _context.operation_id = stack[-1] if stack else None
 
     def fit_start(
         self,
@@ -399,8 +435,7 @@ class NLSQLogger:
         # This avoids building metrics dict and history append when not logging
         # NLSQ_SAVE_ITERATIONS opts into history even at the quiet default level.
         if not (
-            self.logger.isEnabledFor(LogLevel.PERFORMANCE)
-            or os.getenv("NLSQ_SAVE_ITERATIONS")
+            self.logger.isEnabledFor(LogLevel.PERFORMANCE) or _save_iterations_setting()
         ):
             return
 
@@ -669,7 +704,7 @@ class NLSQLogger:
         if not self.optimization_history:
             return
 
-        save_dir = output_dir or os.getenv("NLSQ_SAVE_ITERATIONS")
+        save_dir = output_dir or _save_iterations_setting()
         if not save_dir:
             return
         # A boolean flag (as set by enable_performance_tracking) is not a path.
@@ -679,7 +714,8 @@ class NLSQLogger:
         save_path = Path(save_dir)
         save_path.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Microseconds + random suffix: same-second saves must not overwrite
+        timestamp = f"{datetime.now():%Y%m%d_%H%M%S_%f}_{uuid.uuid4().hex[:6]}"
         filename = save_path / f"optimization_history_{self.name}_{timestamp}.npz"
 
         # Convert history to arrays
@@ -774,7 +810,9 @@ def enable_debug_mode():
 
     # Recreate global handlers
     root_nlsq = logging.getLogger("nlsq")
-    root_nlsq.handlers.clear()
+    for handler in list(root_nlsq.handlers):
+        root_nlsq.removeHandler(handler)
+        handler.close()  # releases the debug log file
     root_nlsq._nlsq_initialized = False  # type: ignore[attr-defined]
 
     # Force setup on next logger access

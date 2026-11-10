@@ -24,16 +24,17 @@ Verify Installation
 .. code-block:: python
 
    import nlsq
+   from nlsq.device import get_device_info
 
    print(f"NLSQ version: {nlsq.__version__}")
-   print(f"Device: {nlsq.get_device()}")
+   print(f"Device: {get_device_info()['jax_backend']}")
 
 Expected output:
 
 .. code-block:: text
 
    NLSQ version: 0.7.6
-   Device: cpu  # or 'cuda:0' if GPU is available
+   Device: cpu  # or 'gpu' if GPU is available
 
 GPU Support (Optional)
 ----------------------

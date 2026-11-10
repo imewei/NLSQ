@@ -19,17 +19,66 @@ Example Usage
 >>> print(result["popt"])
 """
 
+import difflib
 import logging
 from typing import Any
 
 import numpy as np
 
 from nlsq.cli.data_loaders import DataLoader
-from nlsq.cli.errors import CLIError, ConfigError, DataLoadError, FitError, ModelError
+from nlsq.cli.errors import (
+    CLIError,
+    ConfigError,
+    DataLoadError,
+    FitError,
+    ModelError,
+    cfg_get,
+)
 from nlsq.cli.model_registry import ModelRegistry
 from nlsq.cli.result_exporter import ResultExporter
+from nlsq.core._option_checks import coerce_absolute_sigma
 
 logger = logging.getLogger("nlsq.cli.workflow_runner")
+
+_KNOWN_TOP_LEVEL_KEYS = (
+    "data",
+    "model",
+    "fitting",
+    "export",
+    "metadata",
+    "validation",
+    "visualization",
+    "hybrid_streaming",
+)
+
+_KNOWN_FITTING_KEYS = (
+    "p0",
+    "bounds",
+    "method",
+    "ftol",
+    "xtol",
+    "gtol",
+    "max_nfev",
+    "loss",
+    "absolute_sigma",
+    "check_finite",
+)
+
+
+def _bound_array(value: Any, which: str) -> np.ndarray:
+    """Bound as float array; PyYAML reads ``1e-3``/``inf`` (no dot/sign) as str."""
+    try:
+        arr = np.asarray(value, dtype=float)  # None -> nan
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(
+            f"fitting.bounds {which} must contain only numbers, got {value!r}"
+        ) from exc
+    if np.isnan(arr).any():
+        raise ConfigError(
+            f"fitting.bounds {which} must not contain null/NaN, got {value!r}",
+            suggestion="Use -inf / inf for an unbounded side.",
+        )
+    return arr
 
 
 class WorkflowRunner:
@@ -115,6 +164,24 @@ class WorkflowRunner:
         CLIError
             If any other workflow error occurs.
         """
+        for key in config:
+            if key not in _KNOWN_TOP_LEVEL_KEYS:
+                close = difflib.get_close_matches(
+                    str(key), _KNOWN_TOP_LEVEL_KEYS, n=1, cutoff=0.5
+                )
+                logger.warning(
+                    "Unknown top-level config key %r is ignored%s. Valid keys: %s",
+                    key,
+                    f" (did you mean {close[0]!r}?)" if close else "",
+                    ", ".join(_KNOWN_TOP_LEVEL_KEYS),
+                )
+
+        if config.get("hybrid_streaming"):
+            logger.warning(
+                "'hybrid_streaming' section is accepted but NOT applied by the CLI "
+                "(it is only read by the GUI); the fit runs with its defaults."
+            )
+
         # Step 1: Load data
         xdata, ydata, sigma = self._load_data(config)
         self.last_data = (xdata, ydata, sigma)
@@ -165,7 +232,7 @@ class WorkflowRunner:
         CLIError
             If data configuration is missing.
         """
-        data_config = config.get("data", {})
+        data_config = config.get("data") or {}
         input_file = data_config.get("input_file")
 
         if not input_file:
@@ -175,7 +242,7 @@ class WorkflowRunner:
             )
 
         # Extract validation config and merge into data_config
-        validation_config = config.get("validation", {})
+        validation_config = config.get("validation") or {}
         data_config_with_validation = {**data_config, "validation": validation_config}
 
         try:
@@ -213,7 +280,7 @@ class WorkflowRunner:
         CLIError
             If model configuration is missing.
         """
-        model_config = config.get("model", {})
+        model_config = config.get("model") or {}
 
         if not model_config:
             raise CLIError(
@@ -221,8 +288,8 @@ class WorkflowRunner:
                 suggestion="Add model section to workflow configuration",
             )
 
-        model_type = model_config.get("type", "builtin")
-        model_name = model_config.get("name", model_config.get("path", ""))
+        model_type = cfg_get(model_config, "type", "builtin")
+        model_name = cfg_get(model_config, "name", cfg_get(model_config, "path", ""))
 
         try:
             return self.model_registry.get_model(model_name, model_config)
@@ -264,11 +331,25 @@ class WorkflowRunner:
             - bounds: Bounds tuple or None
             - fit_kwargs: Additional kwargs for curve_fit
         """
-        fitting_config = config.get("fitting", {})
+        fitting_config = config.get("fitting") or {}
+
+        for key in fitting_config:
+            if key not in _KNOWN_FITTING_KEYS:
+                close = difflib.get_close_matches(
+                    str(key), _KNOWN_FITTING_KEYS, n=1, cutoff=0.5
+                )
+                logger.warning(
+                    "Unknown fitting key %r is ignored%s. Valid keys: %s",
+                    key,
+                    f" (did you mean {close[0]!r}?)" if close else "",
+                    ", ".join(_KNOWN_FITTING_KEYS),
+                )
 
         # Extract p0
-        p0 = fitting_config.get("p0")
-        if p0 == "auto" or p0 is None:
+        p0: Any = fitting_config.get("p0")
+        if isinstance(p0, str) and p0.strip().lower() == "auto":
+            p0 = "auto"
+        if (isinstance(p0, str) and p0 == "auto") or p0 is None:
             # Try to estimate from model's estimate_p0 method
             if hasattr(model, "estimate_p0"):
                 try:
@@ -285,7 +366,18 @@ class WorkflowRunner:
                     )
                     p0 = None
         elif isinstance(p0, (list, tuple)):
-            p0 = np.asarray(p0)
+            try:  # PyYAML reads `1e0` (no dot) as a string
+                p0 = np.asarray([float(v) for v in p0])
+            except (TypeError, ValueError) as exc:
+                raise ConfigError(
+                    f"fitting.p0 must contain only numbers, got {list(p0)!r}"
+                ) from exc
+        elif isinstance(p0, (str, bytes, dict)):
+            raise ConfigError(
+                f"fitting.p0 must be a list of numbers or 'auto', got {p0!r}"
+            )
+        else:  # YAML scalar or ndarray from Python callers
+            p0 = np.atleast_1d(np.asarray(p0))
 
         # Extract bounds
         bounds_config = fitting_config.get("bounds")
@@ -293,23 +385,33 @@ class WorkflowRunner:
 
         if bounds_config is not None:
             if isinstance(bounds_config, dict):
-                lower = bounds_config.get("lower", -np.inf)
-                upper = bounds_config.get("upper", np.inf)
-                bounds = (np.asarray(lower), np.asarray(upper))
+                lower = cfg_get(bounds_config, "lower", -np.inf)
+                upper = cfg_get(bounds_config, "upper", np.inf)
+                bounds = (_bound_array(lower, "lower"), _bound_array(upper, "upper"))
             elif isinstance(bounds_config, (list, tuple)) and len(bounds_config) == 2:
-                bounds = (np.asarray(bounds_config[0]), np.asarray(bounds_config[1]))
+                bounds = (
+                    _bound_array(bounds_config[0], "lower"),
+                    _bound_array(bounds_config[1], "upper"),
+                )
             else:
                 raise ConfigError(
                     "fitting.bounds must be {lower, upper} or [lower, upper], "
                     f"got {bounds_config!r}",
                     suggestion="Use `bounds: {lower: [...], upper: [...]}`.",
                 )
-        elif hasattr(model, "bounds"):
-            # Use model's default bounds if no bounds specified
+        elif hasattr(model, "bounds") and fitting_config.get("method") != "lm":
+            # Use model's default bounds if no bounds specified (not for
+            # method='lm', which cannot handle bounds)
             try:
                 model_bounds = model.bounds()
                 if model_bounds:
                     bounds = (np.asarray(model_bounds[0]), np.asarray(model_bounds[1]))
+                    logger.info(
+                        "No fitting.bounds given; applied the default bounds of "
+                        "model '%s'. Set fitting.bounds explicitly (e.g. "
+                        "[-.inf, .inf]) to override.",
+                        getattr(model, "__name__", "?"),
+                    )
             except Exception as e:
                 # A user-defined bounds() that fails is a user error; silently
                 # dropping it would run an unconstrained fit.
@@ -334,12 +436,27 @@ class WorkflowRunner:
             tol_val = fitting_config.get(tol_key)
             if tol_val is not None:
                 # YAML may parse scientific notation as strings (e.g., '1e-10')
-                fit_kwargs[tol_key] = float(tol_val)
+                try:
+                    fit_kwargs[tol_key] = float(tol_val)
+                except (TypeError, ValueError) as exc:
+                    raise ConfigError(
+                        f"fitting.{tol_key} must be a number, got {tol_val!r}"
+                    ) from exc
 
         # Max iterations
         max_nfev = fitting_config.get("max_nfev")
         if max_nfev is not None:
-            fit_kwargs["max_nfev"] = max_nfev
+            # YAML may deliver '100' (quoted) or 100.0; require a positive integer
+            try:
+                nfev = int(max_nfev)
+                if isinstance(max_nfev, bool) or nfev != float(max_nfev) or nfev <= 0:
+                    raise ValueError(max_nfev)
+            except (TypeError, ValueError, OverflowError) as e:
+                raise ConfigError(
+                    f"fitting.max_nfev must be a positive integer, got {max_nfev!r}",
+                    suggestion="Use e.g. max_nfev: 100",
+                ) from e
+            fit_kwargs["max_nfev"] = nfev
 
         # Loss function
         loss = fitting_config.get("loss")
@@ -347,16 +464,24 @@ class WorkflowRunner:
             fit_kwargs["loss"] = loss
 
         # Sigma handling
-        absolute_sigma = fitting_config.get("absolute_sigma", False)
-        if not isinstance(absolute_sigma, bool):
+        absolute_sigma = cfg_get(fitting_config, "absolute_sigma", False)
+        # Same rule as curve_fit: bool / np.bool_ / the integers 0 and 1 only.
+        try:
+            absolute_sigma = coerce_absolute_sigma(absolute_sigma)
+        except TypeError:
             raise ConfigError(
                 f"fitting.absolute_sigma must be true or false, got {absolute_sigma!r}",
                 suggestion="Use an unquoted YAML boolean: `absolute_sigma: true`.",
-            )
-        fit_kwargs["absolute_sigma"] = absolute_sigma
+            ) from None
+        fit_kwargs["absolute_sigma"] = bool(absolute_sigma)
 
         # Check finite
-        check_finite = fitting_config.get("check_finite", True)
+        check_finite = cfg_get(fitting_config, "check_finite", True)
+        if not isinstance(check_finite, bool):
+            raise ConfigError(
+                f"fitting.check_finite must be true or false, got {check_finite!r}",
+                suggestion="Use an unquoted YAML boolean: `check_finite: true`.",
+            )
         fit_kwargs["check_finite"] = check_finite
 
         return p0, bounds, fit_kwargs

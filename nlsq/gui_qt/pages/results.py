@@ -8,6 +8,7 @@ and interactive visualizations of the fit quality.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 from scipy import stats
 
+from nlsq.gui_qt.plots import decimation_note
 from nlsq.gui_qt.plots.fit_plot import FitPlotWidget
 from nlsq.gui_qt.plots.histogram_plot import HistogramPlotWidget
 from nlsq.gui_qt.plots.residuals_plot import ResidualsPlotWidget
@@ -41,6 +43,36 @@ if TYPE_CHECKING:
     from nlsq.gui_qt.theme import ThemeConfig
 
 __all__ = ["ResultsPage"]
+
+
+def _dense_grid(xdata: np.ndarray, n: int = 500) -> np.ndarray:
+    """Evaluation grid for the fit curve, confined to the data domain.
+
+    No padding: models such as power laws or logs are undefined just outside
+    ``[min(x), max(x)]`` and would produce NaN gaps / extrapolation.
+    """
+    return np.linspace(np.min(xdata), np.max(xdata), n)
+
+
+def _information_criteria(
+    result: Any, ss_res: float, n: int, k: int
+) -> tuple[float, float]:
+    """AIC / BIC, using ``CurveFitResult`` as the single source of truth.
+
+    Falls back to the same formulas (k parameters, no extra sigma^2 term):
+    ``AIC = 2k + n ln(RSS/n)``, ``BIC = k ln(n) + n ln(RSS/n)``; NaN when
+    RSS is non-finite or <= 0 (undefined), matching ``CurveFitResult``.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return float(result.aic), float(result.bic)
+    except (AttributeError, TypeError, ValueError):
+        pass
+    if not np.isfinite(ss_res) or ss_res <= 0 or n <= 0:
+        return float("nan"), float("nan")
+    base = n * np.log(ss_res / n)
+    return float(2 * k + base), float(k * np.log(n) + base)
 
 
 class ResultsPage(QWidget):
@@ -258,7 +290,7 @@ class ResultsPage(QWidget):
         # Update parameter results
         if popt is not None and param_names:
             values = list(popt)
-            uncertainties = list(perr) if perr is not None else [0.0] * len(values)
+            uncertainties = list(perr) if perr is not None else []
 
             # Compute confidence intervals using t-distribution (correct for small n)
             ci = None
@@ -309,6 +341,17 @@ class ResultsPage(QWidget):
                 f" — {n_nonfinite_residuals} non-finite residual(s) excluded from plots"
             )
             status_color = "#FF9800"
+
+        if xdata is not None and (
+            note := decimation_note(
+                n_points(xdata),
+                min(
+                    self._fit_plot.DOWNSAMPLE_THRESHOLD,
+                    self._residuals_plot.DOWNSAMPLE_THRESHOLD,
+                ),
+            )
+        ):
+            status_text += f" — {note}"
 
         if model_failed:
             status_text += " — model could not be evaluated; statistics unavailable"
@@ -478,7 +521,7 @@ class ResultsPage(QWidget):
         r_squared = (
             1.0 - (ss_res / ss_tot)
             if (np.isfinite(ss_tot) and ss_tot >= np.finfo(float).tiny)
-            else 0.0
+            else float("nan")  # undefined for constant y; never faked
         )
 
         # RMSE (root mean square error)
@@ -491,20 +534,7 @@ class ResultsPage(QWidget):
         n = len(ydata)
         k = len(popt)
 
-        # AIC (Akaike Information Criterion)
-        # Using concentrated Gaussian log-likelihood: k+1 counts sigma^2
-        # AIC = n * log(RSS/n) + 2*(k+1)
-        if ss_res > 0:
-            aic = n * np.log(ss_res / n) + 2 * (k + 1)
-        else:
-            aic = -np.inf
-
-        # BIC (Bayesian Information Criterion)
-        # BIC = n * log(RSS/n) + (k+1) * log(n)
-        if ss_res > 0:
-            bic = n * np.log(ss_res / n) + (k + 1) * np.log(n)
-        else:
-            bic = -np.inf
+        aic, bic = _information_criteria(result, ss_res, n, k)
 
         # Get iteration count
         n_iterations = getattr(result, "nfev", 0)
@@ -566,9 +596,7 @@ class ResultsPage(QWidget):
             return int(np.count_nonzero(~np.isfinite(residuals)))
 
         # Compute fitted curve on dense grid
-        x_min, x_max = np.min(xdata), np.max(xdata)
-        x_range = x_max - x_min
-        x_dense = np.linspace(x_min - 0.05 * x_range, x_max + 0.05 * x_range, 500)
+        x_dense = _dense_grid(xdata)
         y_dense = state.model_func(x_dense, *popt)
 
         # Compute residuals

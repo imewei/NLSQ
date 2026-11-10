@@ -181,7 +181,9 @@ class ParamConfigWidget(QWidget):
             self._table.setItem(row, 0, name_item)
 
             # Initial value spinbox
-            p0_spin = _FloatEdit(1.0)
+            p0_spin = _FloatEdit(
+                1.0, minimum=-1e308, maximum=1e308
+            )  # p0 must be finite
             p0_spin.valueChanged.connect(self._emit_config)
             self._table.setCellWidget(row, 1, p0_spin)
 

@@ -163,7 +163,7 @@ def test_bucket_consistency() -> dict[str, Any]:
 def compare_with_baseline() -> dict[str, Any]:
     """Compare current LargeDatasetFitter performance with baseline."""
     baseline_path = (
-        Path(__file__).parent.parent
+        Path(__file__).resolve().parents[2]
         / "specs"
         / "002-performance-optimizations"
         / "baseline.json"
@@ -237,7 +237,7 @@ def main() -> None:
 
     # Save results
     output_path = (
-        Path(__file__).parent.parent
+        Path(__file__).resolve().parents[2]
         / "specs"
         / "002-performance-optimizations"
         / "us1_benchmark.json"

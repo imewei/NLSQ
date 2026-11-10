@@ -42,20 +42,25 @@ Usage Example
 
 .. code-block:: python
 
+   import jax.numpy as jnp
    from nlsq.core.profiler import TRFProfiler, NullProfiler
-   from nlsq.core.trf import TrustRegionReflective
 
-   # Enable profiling
+   # TRFProfiler records one timing per synchronized JAX operation
    profiler = TRFProfiler()
-   optimizer = TrustRegionReflective(profiler=profiler)
+   J = jnp.ones((1000, 3))
+   profiler.time_operation("jac", J)
+   profiler.time_operation("svd", jnp.linalg.svd(J, full_matrices=False)[1])
 
-   # Run optimization
-   result = optimizer.optimize(...)
+   # Get timing data (lists of seconds, keyed by operation)
+   timings = profiler.get_timing_data()
+   print(f"Jacobian time: {sum(timings['jtimes']):.6f}s")
+   print(f"SVD time: {sum(timings['svd_times']):.6f}s")
 
-   # Get timing statistics
-   stats = profiler.get_stats()
-   print(f"Jacobian time: {stats['jacobian_time']:.3f}s")
-   print(f"SVD time: {stats['svd_time']:.3f}s")
+   # NullProfiler has the same interface and records nothing
+   assert NullProfiler().get_timing_data()["jtimes"] == []
+
+``TrustRegionReflective.trf_no_bounds`` accepts a ``profiler`` argument and
+defaults to ``NullProfiler``; ``curve_fit`` does not expose it.
 
 See Also
 --------

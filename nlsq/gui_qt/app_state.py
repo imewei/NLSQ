@@ -44,6 +44,9 @@ class AppState(QObject):
         super().__init__()
         self._state = SessionState()
         self._theme = "dark"
+        # Bumped whenever data or model change; a fit started under an older
+        # epoch must not attach its result to the new inputs.
+        self.input_epoch = 0
 
     @property
     def state(self) -> SessionState:
@@ -74,6 +77,7 @@ class AppState(QObject):
         self._state.ydata = ydata
         self._state.sigma = sigma
         self._state.data_file_name = file_name
+        self.input_epoch += 1
         self._clear_fit_result()
         self.data_changed.emit()
         self.page_access_changed.emit()
@@ -98,6 +102,7 @@ class AppState(QObject):
             config is not None and previous is not None and config != previous
         )
         self._state.model_type = model_type
+        self.input_epoch += 1
 
         # p0/bounds belong to the previous model's parameters; replaying them
         # positionally onto a different model silently mis-constrains the fit.
@@ -190,6 +195,7 @@ class AppState(QObject):
         """Reset state to initial values."""
         had_fit_result = self._state.fit_result is not None
         self._state = SessionState()
+        self.input_epoch += 1
         if had_fit_result:
             self.fit_completed.emit(None)
         self.data_changed.emit()

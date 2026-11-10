@@ -27,6 +27,21 @@ DEFAULT_SCALE_THRESHOLD = 1000.0
 MethodType = Literal["cmaes", "multi-start", "auto"] | None
 
 
+# Non-global names can reach select() from the shared curve_fit dispatch; they
+# mean "no explicit global preference".
+_KNOWN_METHODS = (
+    None,
+    "auto",
+    "cmaes",
+    "multi-start",
+    "trf",
+    "lm",
+    "dogbox",
+    "hybrid_streaming",
+    "exact_streaming",
+)
+
+
 class MethodSelector:
     """Select optimization method based on problem characteristics.
 
@@ -148,6 +163,12 @@ class MethodSelector:
            - If scale_ratio > threshold and evosax available -> 'cmaes'
            - Otherwise -> 'multi-start'
         """
+        if requested_method not in _KNOWN_METHODS:
+            raise ValueError(
+                f"Unknown global optimization method {requested_method!r}; "
+                "expected 'auto', 'cmaes', 'multi-start' or a local method "
+                "('trf', 'lm', 'dogbox', 'hybrid_streaming', 'exact_streaming')"
+            )
         evosax_available = is_evosax_available()
 
         # Explicit CMA-ES request

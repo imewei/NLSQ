@@ -46,8 +46,7 @@ def pcov_from_jacobian(
     singular-value cutoff ``eps * max(n_eff, J.shape[1]) * s[0]`` and the degrees of
     freedom ``n_eff - p``. Fallback messages go to ``logger`` (default: the
     ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is
-    attributed to the caller of the method that calls this function
-    (``stacklevel=3``), so call it directly from that method.
+    attributed to the first frame outside ``nlsq/``.
     """
     cost = 2 * cost  # cost is half the sum of squares!
 
@@ -72,6 +71,7 @@ def pcov_from_jacobian(
         VT = VT[valid_mask]
         singular = len(s) == 0
 
+    rank_deficient = not singular and len(s) < n_params
     warn_cov = False
     if singular:
         pcov = np.full((n_params, n_params), np.inf)
@@ -89,14 +89,27 @@ def pcov_from_jacobian(
                 warn_cov = True
                 reason = "insufficient_data"
 
+    if rank_deficient:
+        # Pseudo-inverse (SciPy-trf compatible) gives zero variance along the
+        # null space, so unidentifiable parameters would read as known exactly.
+        rank_msg = (
+            f"Jacobian is rank-deficient (rank {len(s)} < {n_params} parameters); "
+            "some parameters are not identifiable and their reported "
+            "uncertainty is not meaningful"
+        )
+        (_logger if logger is None else logger).warning(
+            rank_msg, reason="rank_deficient"
+        )
+        warnings.warn(rank_msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
+
     if warn_cov:
         (_logger if logger is None else logger).warning(
             "Covariance could not be estimated", reason=reason
         )
         warnings.warn(
             "Covariance of the parameters could not be estimated",
-            stacklevel=3,
-            category=OptimizeWarning,
+            OptimizeWarning,
+            skip_file_prefixes=_NLSQ_DIR,
         )
 
     return pcov, warn_cov

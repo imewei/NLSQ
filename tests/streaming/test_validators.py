@@ -788,17 +788,40 @@ class TestValidateDefenseLayerConfig:
 class TestValidateMultistartConfig:
     """Tests for validate_multistart_config function."""
 
-    def test_disabled(self):
-        """Test when disabled (no validation)."""
+    def test_disabled_accepts_zero_n_starts(self):
         validate_multistart_config(
             enabled=False,
-            n_starts=0,  # Invalid but ignored
-            sampler="invalid",  # Invalid but ignored
-            elimination_fraction=2.0,  # Invalid but ignored
-            elimination_rounds=-1,  # Invalid but ignored
-            batches_per_round=0,  # Invalid but ignored
-            scale_factor=-1,  # Invalid but ignored
+            n_starts=0,  # the "off" value
+            sampler="lhs",
+            elimination_fraction=0.5,
+            elimination_rounds=3,
+            batches_per_round=50,
+            scale_factor=1.0,
         )
+
+    @pytest.mark.parametrize(
+        ("field", "bad"),
+        [
+            ("n_starts", -3),
+            ("sampler", "invalid"),
+            ("elimination_fraction", 2.0),
+            ("elimination_rounds", -1),
+            ("batches_per_round", 0),
+            ("scale_factor", float("nan")),
+        ],
+    )
+    def test_disabled_still_rejects_invalid(self, field, bad):
+        kwargs = {
+            "n_starts": 10,
+            "sampler": "lhs",
+            "elimination_fraction": 0.5,
+            "elimination_rounds": 3,
+            "batches_per_round": 50,
+            "scale_factor": 1.0,
+            field: bad,
+        }
+        with pytest.raises(ConfigValidationError):
+            validate_multistart_config(enabled=False, **kwargs)
 
     def test_valid_config(self):
         """Test valid enabled config."""

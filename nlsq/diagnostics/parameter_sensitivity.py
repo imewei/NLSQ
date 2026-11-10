@@ -473,6 +473,10 @@ class ParameterSensitivityAnalyzer:
 
         # Ensure eigenvalues are non-negative (numerical precision may give tiny negatives)
         eigenvalues = np.maximum(eigenvalues, 0.0)
+        # Round-off noise on a formed FIM is ~ n * eps * max_eig.
+        eigenvalues[
+            eigenvalues <= eigenvalues[:1] * fim.shape[0] * np.finfo(float).eps
+        ] = 0.0
 
         return eigenvalues, eigenvectors
 
@@ -525,6 +529,12 @@ class ParameterSensitivityAnalyzer:
 
         # Ensure eigenvalues are non-negative (numerical precision may give tiny negatives)
         eigenvalues = np.maximum(eigenvalues, 0.0)
+        # Singular values <= s_max * eps are numerically zero: a rank-deficient J
+        # otherwise gives finite ~1e-33 eigenvalues and round-off-driven thresholds.
+        # (No max(m, n) factor: that would zero the 15 orders of range the
+        # analytic-SVD test resolves.)
+        tol = np.finfo(float).eps ** 2
+        eigenvalues[eigenvalues <= eigenvalues[:1] * tol] = 0.0
 
         return eigenvalues, eigenvectors
 
@@ -596,6 +606,16 @@ class ParameterSensitivityAnalyzer:
             # Use geometric mean of sqrt of ratio as threshold
             # For a 3-order range, sqrt = 1.5 orders, so threshold = 10^(-1.5) ~ 0.03
             eigenvalue_range = self._compute_eigenvalue_range(eigenvalues)
+            if eigenvalue_range == np.inf:
+                # Zeroed (null) directions are sloppy by ratio 0. Bound the range
+                # with the round-off floor (the best resolution a formed FIM has)
+                # so FIM and Jacobian paths pick comparable thresholds. Raise every
+                # eigenvalue below the floor, not just zeros: a sub-floor eigenvalue
+                # left as the minimum makes the threshold round-off dependent.
+                floor = max_eigenvalue * len(eigenvalues) * np.finfo(float).eps
+                eigenvalue_range = self._compute_eigenvalue_range(
+                    np.maximum(eigenvalues, floor)
+                )
             if 0 < eigenvalue_range < np.inf:
                 # Threshold based on eigenvalue range
                 # For 3-order range: poorly-determined < 10^(-1.5) * max ~ 3% of max

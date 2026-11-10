@@ -24,13 +24,14 @@ import io
 import json
 import math
 import os
-import tempfile
+import secrets
+import stat
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from nlsq.cli.errors import CLIError
+from nlsq.cli.errors import CLIError, cfg_get
 
 
 def _as_numpy(obj: Any) -> Any:
@@ -69,10 +70,15 @@ def _sanitize_nonfinite(obj: Any) -> Any:
 
 def _atomic_write(path: Path, text: str, newline: str | None = None) -> None:
     """Write ``text`` to a temp file beside ``path`` then ``os.replace`` it."""
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    # os.open(0o666) lets the kernel apply the umask; toggling os.umask is process-wide
+    # and races with other threads (batch ThreadPoolExecutor).
+    tmp = str(path.parent / f".{path.name}.{secrets.token_hex(8)}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline=newline) as f:
             f.write(text)
+        if path.exists():  # keep the mode of an existing file
+            os.chmod(tmp, stat.S_IMODE(path.stat().st_mode))
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
@@ -177,10 +183,15 @@ class ResultExporter:
         CLIError
             If export fails due to file or format issues.
         """
-        export_config = config.get("export", {})
-        output_format = export_config.get("format", "json").lower()
-        stdout_mode = export_config.get("stdout", False)
-        skip_file = export_config.get("skip_file_on_stdout", False)
+        export_config = config.get("export") or {}
+        fmt = export_config.get("format")
+        if fmt is None:
+            # No explicit format (absent or bare YAML key): infer from suffix
+            suffix = Path(str(export_config.get("results_file") or "")).suffix.lower()
+            fmt = "csv" if suffix == ".csv" else "json"
+        output_format = str(fmt).lower()
+        stdout_mode = cfg_get(export_config, "stdout", False)
+        skip_file = cfg_get(export_config, "skip_file_on_stdout", False)
 
         # Prepare export data
         export_data = self._prepare_export_data(result, config)
@@ -285,18 +296,22 @@ class ResultExporter:
             )
 
         # Extract metadata from config
-        metadata_config = config.get("metadata", {})
-        model_config = config.get("model", {})
+        metadata_config = config.get("metadata") or {}
+        model_config = config.get("model") or {}
 
         # YAML may yield dates etc.; stringify non-JSON scalars so export can't fail.
         def _scalar(v: Any) -> Any:
             return v if v is None or isinstance(v, (str, int, float, bool)) else str(v)
 
         metadata = {
-            "workflow_name": _scalar(metadata_config.get("workflow_name", "unknown")),
-            "dataset_id": _scalar(metadata_config.get("dataset_id", "unknown")),
+            "workflow_name": _scalar(
+                cfg_get(metadata_config, "workflow_name", "unknown")
+            ),
+            "dataset_id": _scalar(cfg_get(metadata_config, "dataset_id", "unknown")),
             "model_id": _scalar(
-                model_config.get("name", model_config.get("function", "custom"))
+                cfg_get(
+                    model_config, "name", cfg_get(model_config, "function", "custom")
+                )
             ),
         }
 
@@ -314,7 +329,7 @@ class ResultExporter:
             export_data["uncertainty_warnings"] = uncertainty_warnings
 
         # Include parameter names if available
-        param_names = config.get("model", {}).get("parameter_names")
+        param_names = (config.get("model") or {}).get("parameter_names")
         if param_names:
             export_data["parameter_names"] = param_names
 
@@ -434,7 +449,10 @@ class ResultExporter:
         # Copy to avoid mutating the caller's dict in-place
         uncertainties = list(data.get("uncertainties", []))
         statistics = data.get("statistics", {})
-        param_names = list(data.get("parameter_names", []))
+        param_names = data.get("parameter_names", [])
+        param_names = (
+            [param_names] if isinstance(param_names, str) else list(param_names)
+        )
 
         # Pad uncertainties to match popt length
         while len(uncertainties) < len(popt):

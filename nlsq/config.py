@@ -5,15 +5,35 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import math
+import numbers
 import os
 import threading
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+import numpy as np
+
 # Module logger: calling logging.info()/debug() on the root logger would run
 # logging.basicConfig() and attach a stderr handler to the application's root.
 _logger = logging.getLogger(__name__)
+
+
+def _is_positive_count(value) -> bool:
+    """True for a finite integral non-bool real ``>= 1`` (``3``, ``np.int64(3)``, ``3.0``).
+
+    Mirrors ``nlsq.core._option_checks.is_integral_count``, which this module
+    cannot import (nlsq.core imports nlsq.config at import time).
+    """
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, numbers.Real):
+        return False
+    # compare the value itself, not a float rounding (huge ints, Fraction)
+    if not isinstance(value, numbers.Integral) and not (
+        math.isfinite(value) and value == int(value)  # type: ignore[call-overload]
+    ):
+        return False
+    return value >= 1  # type: ignore[operator]
 
 
 @dataclass(slots=True)
@@ -56,6 +76,27 @@ class MemoryConfig:
 
     def __post_init__(self):
         """Validate configuration values."""
+        for name in ("memory_limit_gb", "gpu_memory_fraction", "safety_factor"):
+            if isinstance(getattr(self, name), (bool, np.bool_)):
+                raise ValueError(f"{name} must be a number, not bool")
+        if self.chunk_size_mb is not None:
+            if not _is_positive_count(self.chunk_size_mb):
+                raise ValueError(
+                    f"chunk_size_mb must be None or a positive integer, got {self.chunk_size_mb!r}",
+                )
+            self.chunk_size_mb = int(self.chunk_size_mb)
+        threshold = self.auto_chunk_threshold_gb
+        # +inf is the documented "chunking disabled" value (configure_for_large_datasets)
+        if isinstance(threshold, (bool, np.bool_)) or not threshold > 0:
+            raise ValueError(
+                f"auto_chunk_threshold_gb must be positive, got {threshold!r}",
+            )
+        for name in ("min_chunk_size", "max_chunk_size"):
+            value = getattr(self, name)
+            if not _is_positive_count(value):
+                raise ValueError(f"{name} must be a positive integer, got {value!r}")
+            setattr(self, name, int(value))
+
         if self.memory_limit_gb is not None and not 0.1 <= self.memory_limit_gb <= 1024:
             raise ValueError(
                 f"memory_limit_gb must be between 0.1 and 1024, got {self.memory_limit_gb}",
@@ -205,9 +246,31 @@ class JAXConfig:
         if os.getenv("NLSQ_DISABLE_PERSISTENT_CACHE") == "1":
             return
 
-        # Set cache directory. Honor the standard JAX_COMPILATION_CACHE_DIR
-        # if the user already set it, so NLSQ doesn't silently redirect a
-        # pre-existing JAX cache configuration to its own default location.
+        # Parse before touching jax.config so a bad value cannot leave the
+        # cache half-configured.
+        min_secs: float | None = None
+        raw_min_secs = os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS")
+        if raw_min_secs is not None:
+            try:
+                min_secs = float(raw_min_secs)
+                if not math.isfinite(min_secs) or min_secs < 0:
+                    raise ValueError(raw_min_secs)
+            except ValueError:
+                min_secs = None
+                _logger.warning(
+                    f"Invalid NLSQ_CACHE_MIN_COMPILE_TIME_SECS={raw_min_secs!r}; ignored"
+                )
+
+        # Keep a cache dir the user already configured (env var or jax.config).
+        # (JAX copies JAX_COMPILATION_CACHE_DIR into jax.config at import.)
+        # An explicit NLSQ_CACHE_MIN_COMPILE_TIME_SECS still applies.
+        if config.jax_compilation_cache_dir:
+            if min_secs is not None:
+                config.update("jax_persistent_cache_min_compile_time_secs", min_secs)
+            return
+
+        # Honor JAX_COMPILATION_CACHE_DIR set after jax was imported (jax.config
+        # did not pick it up), so NLSQ doesn't redirect it to its own default.
         cache_dir = os.getenv("JAX_COMPILATION_CACHE_DIR")
         if cache_dir:
             nlsq_cache_dir = os.getenv("NLSQ_JAX_CACHE_DIR")
@@ -230,10 +293,9 @@ class JAXConfig:
             config.update("jax_compilation_cache_dir", cache_dir)
 
             # Only cache compilations that take at least 1 second
-            min_compile_time = float(os.getenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS", "1"))
             config.update(
                 "jax_persistent_cache_min_compile_time_secs",
-                min_compile_time,
+                1.0 if min_secs is None else min_secs,
             )
 
             _logger.debug(f"JAX persistent cache enabled at {cache_dir}")

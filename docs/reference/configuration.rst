@@ -37,14 +37,16 @@ Environment Variables
        residual/Jacobian wrappers across calls (every fit re-traces)
      - unset (cache enabled)
    * - ``NLSQ_JAX_CACHE_DIR``
-     - JAX compilation cache directory
+     - JAX compilation cache directory. Ignored when a cache directory is
+       already configured (``JAX_COMPILATION_CACHE_DIR`` or ``jax.config``
+       set before NLSQ is imported); that directory is kept
      - ``~/.cache/nlsq/jax_cache``
    * - ``NLSQ_CACHE_MIN_COMPILE_TIME_SECS``
      - Minimum compile time (seconds) before caching
      - ``1``
    * - ``NLSQ_GPU_MEMORY_FRACTION``
      - Fraction of GPU memory XLA may claim (0.0-1.0)
-     - unset (grows as needed)
+     - ``0.8`` (NLSQ sets ``XLA_PYTHON_CLIENT_MEM_FRACTION`` unless already defined)
    * - ``NLSQ_MEMORY_LIMIT_GB``
      - ``MemoryConfig.memory_limit_gb``: memory limit in GB (0.1-1024) used by strategy selection; an out-of-range value is ignored with a warning
      - unset (detected system memory)
@@ -78,10 +80,45 @@ Environment Variables
      - unset (``WARNING``)
    * - ``NLSQ_SAVE_ITERATIONS``
      - Directory for saved optimization iteration history; setting it (any
-       non-empty value) also records per-iteration metrics at the default
+       value other than empty, ``0``, ``false``, ``no`` or ``off``, which
+       disable saving) also records per-iteration metrics at the default
        log level. A flag value
        (``1``/``true``/``yes``) saves into ``NLSQ_LOG_DIR`` (default: current
        directory) instead of a directory of that name
+     - unset
+   * - ``NLSQ_STRICT_MODELS``
+     - Enable strict allowlist validation for CLI custom models (same as
+       ``strict: true`` in the model config) and for GUI custom models:
+       only a short list of numeric modules may be imported. Values ``1``/``true``/``yes``/``on``
+       (case-insensitive) enable it; anything else leaves the default
+       denylist validation. See :doc:`cli`
+     - unset (denylist validation)
+   * - ``NLSQ_MAX_LOAD_ELEMENTS``
+     - CLI only: maximum number of elements per array accepted when
+       loading HDF5 or NPZ files (``nlsq fit``, ``nlsq batch``). Larger
+       arrays are rejected before allocation (decompression-bomb guard).
+       Must be a positive integer. ASCII/CSV loads are not capped
+     - ``2000000000``
+   * - ``NLSQ_DUMP_ENV``
+     - GUI only: any non-empty value prints the process environment to
+       stderr at startup for crash diagnosis (requires ``NLSQ_DEBUG``).
+       Only an allowlist of variables is printed and secret-looking values
+       are redacted
+     - unset
+   * - ``NLSQ_DISABLE_GPU_PREALLOCATION``
+     - Set to ``1`` to set ``XLA_PYTHON_CLIENT_PREALLOCATE=false`` so JAX does
+       not preallocate GPU memory
+     - unset
+   * - ``NLSQ_TRACE_JAX``
+     - Set to ``1`` to log JAX compilation events
+     - unset
+   * - ``NLSQ_SAFE_MODE``
+     - GUI only: any non-empty value skips the deferred recovery check and
+       autosave timers (crash isolation)
+     - unset
+   * - ``NLSQ_GUI_USE_OPENGL``
+     - GUI only: ``1``/``true``/``yes``/``on`` forces pyqtgraph OpenGL on,
+       any other non-empty value forces it off. Unset: on, except on macOS
      - unset
 
 **Example:**

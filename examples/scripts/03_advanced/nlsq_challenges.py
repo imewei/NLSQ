@@ -456,7 +456,7 @@ p0_bad = [10, 0.001, 100]  # Terrible initial guess!
 try:
     cf_broken = CurveFit()
     popt_broken, _ = cf_broken.curve_fit(
-        logistic, jnp.array(t_growth), jnp.array(y_growth), p0=p0_bad, maxiter=50
+        logistic, jnp.array(t_growth), jnp.array(y_growth), p0=p0_bad, max_nfev=50
     )
     print(
         f"Fitted (likely wrong): L={popt_broken[0]:.1f}, k={popt_broken[1]:.3f}, t0={popt_broken[2]:.1f}"
@@ -538,7 +538,7 @@ print("\nYour task: Fix the fit! Identify problems and provide working solution 
 #     jnp.array(y_growth),
 #     p0=p0_fixed,
 #     bounds=bounds_fixed,
-#     maxiter=1000
+#     max_nfev=1000
 # )
 #
 # print(f"\nFixed fit: L={popt_fixed[0]:.1f}, k={popt_fixed[1]:.3f}, t0={popt_fixed[2]:.1f}")

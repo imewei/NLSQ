@@ -213,30 +213,40 @@ Fitting multiple Gaussian peaks:
        print(f"Peak {i+1}: A={A:.3f}, center={mu:.3f}, width={sigma:.3f}")
    print(f"Baseline: {popt[-1]:.3f}")
 
-Using Presets for Robust Fitting
---------------------------------
+Global Optimization for Robust Fitting
+--------------------------------------
 
-For challenging multi-parameter fits, use the ``robust`` or ``global`` preset:
+For challenging multi-parameter fits, use ``workflow="auto_global"`` (requires
+bounds). The block below refits the damped oscillation from earlier:
 
 .. code-block:: python
 
    from nlsq import fit
 
+   # Restate the damped-oscillation guesses and bounds: the multi-peak
+   # example above rebinds ``p0`` and ``bounds``.
+   p0_damped = [A_guess, omega_guess, gamma_guess, phi_guess, offset_guess]
+   bounds_damped = (
+       [0, 0, 0, -np.pi, -10],  # Lower bounds
+       [10, 20, 2, np.pi, 10],  # Upper bounds
+   )
+
    # Global optimization with multiple starts
-   popt, pcov = fit(
+   result = fit(
        damped_oscillation,
        t,
        y,
-       p0=p0,
-       bounds=bounds,
-       preset="global",  # Multi-start optimization
+       p0=p0_damped,
+       bounds=bounds_damped,
+       workflow="auto_global",
+       n_starts=10,
    )
 
    print("Global optimization result:")
-   print(f"Parameters: {popt}")
+   print(f"Parameters: {result.popt}")
 
-The ``global`` preset runs multiple optimizations from different starting
-points and returns the best result.
+The ``auto_global`` workflow runs multiple optimizations from different
+starting points and returns the best result.
 
 Tips for Multi-Parameter Fitting
 --------------------------------

@@ -231,8 +231,7 @@ class TestVanishingGradientDetection:
 
         # Small gradients with small cost should not be flagged as vanishing
         grad_001_issues = [issue for issue in report.issues if issue.code == "GRAD-001"]
-        # At convergence, small gradients are expected
-        # The key is that cost is also small
+        assert grad_001_issues == []
 
 
 class TestGradientImbalanceDetection:

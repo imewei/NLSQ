@@ -189,6 +189,12 @@ def _assert_no_warnings(caught):
     assert [str(w.message) for w in caught] == []
 
 
+def _assert_rank_warning(caught):
+    """Partial rank loss: exactly one OptimizeWarning naming the rank (R4 SF-2)."""
+    _assert_single(caught, OptimizeWarning)
+    assert "rank-deficient" in str(caught[0].message)
+
+
 def _assert_single(caught, category):
     """Exactly one warning, of exactly ``category`` (OptimizeWarning vs UserWarning).
 
@@ -272,13 +278,13 @@ def test_standard_golden(j_wc):
 
 
 def test_standard_partial_rank_deficient_contract(j_dup):
-    """Duplicate column: finite pseudo-inverse, dropped direction zeroed, no warning."""
+    """Duplicate column: finite pseudo-inverse, dropped direction zeroed, one rank warning."""
     for absolute_sigma, golden in ((False, STD_DUP), (True, STD_DUP_ABS)):
         (pcov, warn_cov), caught = _record(
             _std_cov, j_dup, COST_DUP, N, P_DUP, absolute_sigma
         )
         assert warn_cov is False
-        _assert_no_warnings(caught)
+        _assert_rank_warning(caught)
         _assert_rank_deficient_pinv(pcov)
         _assert_golden(pcov, golden)
 
@@ -337,7 +343,10 @@ def _std_last_pcov(sv, ysize, rows=N, p=2):
     (pcov, _), caught = _record(
         _std_cov, _diag_jac(sv, rows, p), 1.0, ysize, np.zeros(p), True
     )
-    _assert_no_warnings(caught)  # a dropped direction alone is not "singular"
+    if pcov[p - 1, p - 1] == 0.0:  # a dropped direction: rank warning, not "singular"
+        _assert_rank_warning(caught)
+    else:
+        _assert_no_warnings(caught)
     return pcov[p - 1, p - 1]
 
 
@@ -743,7 +752,7 @@ def test_nan_jacobian_gives_inf_pcov_on_host_path(host_svd_forced, j_wc):
 def test_rank_deficient_pcov_unchanged(host_svd_forced, j_dup):
     (pcov, warn_cov), caught = _record(_std_cov, j_dup, COST_DUP, N, P_DUP, False)
     assert warn_cov is False
-    _assert_no_warnings(caught)
+    _assert_rank_warning(caught)
     _assert_rank_deficient_pinv(pcov)
     _assert_golden(pcov, STD_DUP)
     (pcov0, warn0), caught = _record(

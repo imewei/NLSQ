@@ -283,4 +283,6 @@ class TestKwargsLeftovers:
             PrepareContext(enable_stability=True),
         )
         assert kwargs["ftol"] == 1e-3  # caller-supplied value is kept
-        assert set(kwargs) == {"ftol", "xtol", "gtol", "max_nfev", "x_scale"}
+        # only the scaling is injected; iteration caps / relaxed tolerances would
+        # silently truncate fits that converge with the solver defaults
+        assert set(kwargs) == {"ftol", "x_scale"}

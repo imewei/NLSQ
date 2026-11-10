@@ -148,8 +148,8 @@ from nlsq import curve_fit
 
 ```python
 {
-    'feature_param1': {value},  # {Description}
-    'feature_param2': {value},  # {Description}
+    "feature_param1": {value},  # {Description}
+    "feature_param2": {value},  # {Description}
     # ... more options
 }
 ```

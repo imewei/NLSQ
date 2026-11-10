@@ -97,8 +97,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the precision-weighted chunk combination (see the `_update_parameters_convergence`
   docstring in `nlsq/streaming/large_dataset.py`) is exact only for linear models and an
   approximation for nonlinear ones. No numeric path changed.
+- `OptimizeWarning` when the Jacobian is rank-deficient (the pseudo-inverse covariance is
+  not meaningful for unidentifiable parameters).
+- `OptimizeWarning` when `enable_overflow_check` actually clipped the model output at the
+  solution.
+- Env vars: `NLSQ_MAX_LOAD_ELEMENTS` (CLI HDF5/NPZ per-array load cap);
+  `NLSQ_SAVE_ITERATIONS=0/false/no/off` now disables saving;
+  `NLSQ_CACHE_MIN_COMPILE_TIME_SECS` ignores an invalid value with a warning and also
+  applies when the JAX cache dir is preconfigured.
 
-### Changed (install footprint)
+### Changed
+
+#### Install footprint
+
 - `pip install nlsq` now installs the core library only. The Qt desktop GUI
   (PySide6, pyqtgraph) moved to the optional `gui` extra, and dev/docs/build
   tooling moved out of runtime `dependencies` into the `dev` dependency group
@@ -106,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Migration:** GUI users run `pip install "nlsq[gui]"`; contributors use
   `make dev` or `uv sync`.
 
-### Changed (behavior)
+#### Behavior
+
 - `curve_fit(..., method="hybrid_streaming")` now prepares its inputs through the same
   `prepare_problem` pipeline as the standard path. Cases that crashed or returned a
   silently wrong result now behave as follows:
@@ -148,8 +160,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overflows after the normalization scaling is now reported the same way (all-`inf`
   plus the warning) instead of silently; entries below ~1e-308 after scaling still
   underflow to zero, as before.
-
-### Changed (behavior, whole-codebase review rounds 3-4)
 - **Group-variance regularization** (`enable_group_variance_regularization=True`, hybrid
   streaming and the `phases/` Gauss-Newton path) now penalizes the variance of the
   *physical* (denormalized) parameters with the exact chain rule (`grad_q = D grad_p`,
@@ -172,8 +182,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `success` stays `True` and the best-so-far parameters are returned.
 - Custom CLI models: the validator also rejects `yaml.unsafe_load`/`pandas.read_pickle`
   style deserialization; `batch --no-continue-on-error` now lists skipped workflows.
-
-### Changed (behavior, whole-codebase review rounds 5-8)
 - Custom CLI model validator (still a denylist, not a sandbox; `trusted: true` is the escape
   hatch): attribute access is now checked like imports. Attributes named like blocked modules
   and any `_`-prefixed attribute (except `__name__`/`__doc__`/`__version__`) are rejected, so a
@@ -196,8 +204,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to the caller. Chunked `curve_fit_large` with 2-D `(k, M)` `x` now counts M points.
 - `nan_policy="omit"` drops the right rows for points-first `x`; negative `sigma` is accepted as
   in SciPy (only zero is rejected on the always-on path).
+- `curve_fit`, `fit`, `CurveFit.curve_fit`, `curve_fit_large` and the CMA-ES routes reject
+  invalid options up front with `ValueError`: unknown `method` (with a "did you mean"
+  hint), `stability` other than `False`/`None`/`'auto'`/`'check'` (including `True`), NaN
+  `ftol`/`xtol`/`gtol`, boolean `max_nfev`, unknown `tr_solver`, non-positive or
+  non-finite `f_scale`, and negative `n_starts` with multi-start.
+- `absolute_sigma` must be a bool (`bool`, `np.bool_`, or `0`/`1`); any other value raises
+  `TypeError` on the `curve_fit`/`fit`/`CurveFit.curve_fit`/`curve_fit_large` paths.
+- `ftol`/`xtol`/`gtol=inf` emit a warning (the solver stops at p0).
+  `curve_fit_large(method="exact_streaming")` rejects NaN, inf or negative tolerances and
+  a non-positive `memory_limit_gb`.
+- `curve_fit(..., method="hybrid_streaming")` raises when the initial residuals are not
+  finite instead of returning `success=True` at `p0`.
+- The CMA-ES path applies `nan_policy`/`check_finite` like TRF (`'omit'` drops non-finite
+  rows; `'raise'` raises). A 2-D `sigma` is treated as a covariance matrix (Cholesky
+  whitening). Data chunking supports the `(k, N)` xdata layout. CMA-ES `tol_fun` is
+  relative to the generation's best finite fitness (scale-invariant).
+- `CMAESConfig`: integer fields and `seed` reject bool, NaN and fractional values
+  (integral floats are coerced). `sigma`/`tol_fun`/`tol_x` must be finite.
+  `checkpoint_interval >= 1` is enforced always.
+- `HybridStreamingConfig`, `LDMemoryConfig`, `streaming.specs.{Multistart, Chunked,
+  Exact, Auto, InMemory}` and `DiagnosticsConfig` validate integer counts (bool, NaN and
+  fractional values are rejected; `100.0` is coerced to `100`). `DiagnosticsConfig.level`
+  accepts `"basic"`/`"full"` strings. `HybridStreamingConfig.verbose` must be 0, 1 or 2.
+  `AdaptiveHybridStreamingOptimizer.fit` re-validates a config mutated after construction.
+- `GlobalOptimizationConfig.from_dict` warns about and drops unknown keys;
+  `with_overrides` raises on them.
+- Multi-start start points centred on `p0` keep the window width near a bound (the window
+  shifts inward instead of being clipped), in both `center_samples_around_p0` and hybrid
+  `center_on_p0`.
+- Hybrid Gauss-Newton holds parameters that sit on an active bound fixed (projected
+  gradient), and `predicted_reduction` describes the clipped step.
+- Chunked `curve_fit_large`: chunks whose covariance is not numerically positive definite
+  (singular, indefinite or non-finite) are excluded from the precision-weighted
+  combination; the diagonal-precision fallback was removed. An `OptimizeWarning` reports
+  how many chunks were excluded.
+- Built-in `sigmoid` uses `jax.nn.sigmoid` (same values, no NaN Jacobian on saturation).
+- `ConvergenceMonitor(sensitivity=s)`: the oscillation threshold is `min(1, 0.7/s)`
+  (higher sensitivity now detects more, as documented).
+- CLI:
+  - A bare YAML key (`key:`) means "use the default" everywhere.
+  - Unknown `fitting.*` keys log a warning with a suggestion.
+  - `fitting.max_nfev` must be a positive integer and `fitting.check_finite` a YAML bool
+    (`ConfigError`).
+  - Model default bounds are not applied for `method: lm` and are logged when applied.
+  - `model: {name: polynomial, degree: N}` builds the polynomial.
+  - The export format is inferred from a `.csv` `results_file` suffix when `format` is not
+    given.
+  - Result files keep the file mode of an existing file; new files follow the process
+    umask (previously always 0600).
+- CLI data loading:
+  - HDF5 external links, virtual datasets and non-dataset paths are rejected.
+  - HDF5/NPZ arrays above `NLSQ_MAX_LOAD_ELEMENTS` (default 2,000,000,000 elements per
+    array) are rejected before allocation. ASCII/CSV loads are not capped.
+  - The ASCII `skip_footer` path raises on malformed cells like the default path.
+- GUI:
+  - AIC/BIC come from `CurveFitResult` (k parameters; NaN when RSS <= 0).
+  - The fit curve is drawn only over the data range, and plot decimation is reported in
+    the status line.
+  - Autosave restores data all-or-nothing and reports a skipped (over 100k-point) dataset.
+  - The YAML export uses the same schema as `load_yaml_config` (`yaml.safe_dump`).
+  - An unknown `workflow` raises `ValueError`. Clipboard paste detects a header row.
+  - `NLSQ_STRICT_MODELS` also applies to GUI custom models, and `NLSQ_DUMP_ENV` prints an
+    allowlisted, secret-redacted environment.
+- Config validation is stricter:
+  - `MemoryConfig` rejects non-positive or non-integral `min_chunk_size`/`max_chunk_size`
+    and `chunk_size_mb`, a NaN or non-positive `auto_chunk_threshold_gb` (`inf` still
+    disables chunking), and bool memory limits/fractions; integral floats become `int`.
+  - `GlobalOptimizationConfig` accepts NumPy integers and integral floats for
+    `elimination_rounds`/`batches_per_round` (coerced to `int`, as `n_starts` already was)
+    and raises `TypeError` for a non-string `sampler`, a non-bool `center_on_p0`, or a bool
+    `scale_factor`/`elimination_fraction`.
+  - `HybridStreamingConfig` validates its multi-start fields even when
+    `enable_multistart=False` (`n_starts=0` is still accepted then);
+    `group_variance_indices` rejects bool bounds and accepts NumPy integers.
 
-### Changed (internal)
+#### Internal
+
 - Internal: prepare_problem extracted from CurveFit; hybrid streaming now shares input
   preparation with curve_fit, and nan_policy is read once in the shared step.
 - Internal: shared NormalEquations module for streaming solvers; no behavior change.
@@ -212,59 +295,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on GPU); results agree to rounding (about 1e-16 relative), and `exact_lm` keeps
   re-exporting the moved helpers.
 
-### Fixed (whole-codebase audit loop, 2026-11-05)
+### Deprecated
+- `nlsq.PerformanceProfiler`, `nlsq.ProfileMetrics`, `nlsq.clear_profiling_data`,
+  `nlsq.get_global_profiler`, `nlsq.ProfilerVisualization` and
+  `nlsq.ProfilingDashboard`. Accessing them from the top-level package now
+  emits one `DeprecationWarning` per name and they will be removed from it in
+  the next minor release. Import them from `nlsq.utils.profiler` and
+  `nlsq.utils.profiler_visualization` instead.
+
+### Removed
+- `nlsq.facades` (`OptimizationFacade`, `StabilityFacade`, `DiagnosticsFacade`)
+  and `nlsq.utils.async_logger`. Nothing in the package imported either; the
+  tests that used them were removed with them (`async_logger` unit tests, and
+  the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
+
+### Fixed
 - `least_squares(..., data_mask=)` is now applied on the direct-residual and user-`jac` paths
   (it was ignored there); a mask that is not 1-D or does not match the residual shape raises
-  `ValueError`. (01)
+  `ValueError`.
 - `fit(workflow=...)` counts features on the SciPy `(k, M)` axis for memory selection, so a
-  `(k, M)` input no longer counts samples as features. (02)
+  `(k, M)` input no longer counts samples as features.
 - `fit(workflow=..., p0="auto")` resolves the guess before dispatch (it used to become a
-  0-D string array). (03)
+  0-D string array).
 - `fit(workflow=...)` with an explicit `LDMemoryConfig` no longer forwards the routing-only
-  `memory_limit_gb` to the chunk solver. (04)
+  `memory_limit_gb` to the chunk solver.
 - **Behavior change:** CMA-ES results (`method="cmaes"` and the `workflow` CMA-ES routes) keep
   `success`, `status` and `message` from the optimizer or its NLSQ refinement instead of always
   reporting success, and `full_output=True` returns `ier=5` (not `1`) for an unsuccessful run.
-  (05, 06)
 - A CMA-ES refinement no longer receives `full_output`/`return_eval`/`timeit`, which made it
-  discard its successful result. (12)
+  discard its successful result.
 - Fallback rescaling with `sigma` no longer rescales `f_scale` (whitened residuals are
-  unchanged by the rescale). (07)
+  unchanged by the rescale).
 - The `exact_streaming` factory probe keeps at least two points for singleton chunks, and chunk
-  buffers promote the x and y dtypes together (integer `x` with fractional `y` is accepted). (08, 09)
+  buffers promote the x and y dtypes together (integer `x` with fractional `y` is accepted).
 - **Behavior change:** standalone warmup group-variance regularization now penalizes the
   physical parameters instead of the normalized ones, so results of fits that use it can change
-  (see the group-variance regularization entry under "Changed (behavior)"). (10)
+  (see the group-variance regularization entry under "Changed > Behavior").
 - Gauss-Newton best-point tracking includes the initial point, so a rejected trial cannot win;
-  the standalone warmup cost guard no longer divides by an exact-zero initial loss. (11, 14)
+  the standalone warmup cost guard no longer divides by an exact-zero initial loss.
 - Hybrid multi-start with `multistart_sampler="sobol"` or `"halton"` works (it raised
-  `TypeError`). (13)
-- `fit(preset="streaming")` forwards `center_on_p0` and `scale_factor`. (15)
+  `TypeError`).
+- `fit(preset="streaming")` forwards `center_on_p0` and `scale_factor`.
 - **Behavior change:** `fit(preset="streaming")` now enforces `check_finite=True`, so
-  non-finite data raises instead of reaching the streaming engine. (27)
+  non-finite data raises instead of reaching the streaming engine.
 - CLI: an `estimate_p0()` that returns `None` is preserved instead of becoming an object
-  array. (16)
+  array.
 - GUI: scalar YAML bounds load without crashing the fit snapshot; crash recovery restores
   workflow settings and pre-fit edits (recovered custom model code still needs an explicit
-  Apply); automatic initial guesses no longer erase explicit bounds. (17, 18, 29)
+  Apply); automatic initial guesses no longer erase explicit bounds.
 - **Behavior change:** `MemoryManager.allocate_array` removes a pooled buffer while it is
   checked out and `free_array` returns it, so outstanding allocations no longer alias each
-  other; an array is not pooled until `free_array` is called. (19)
-- `safe_serialize` encodes and decodes complex values. (20)
-- A scalar `x0` no longer crashes `InputValidator` error collection. (21)
+  other; an array is not pooled until `free_array` is called.
+- `safe_serialize` encodes and decodes complex values.
+- A scalar `x0` no longer crashes `InputValidator` error collection.
 - `MemoryManager.estimate_chunking_strategy` raises `MemoryError` when the budget cannot hold
-  one data point (it produced zero-sized chunks and a division by zero). (22)
-- `JAXConfig` memory and large-dataset config getters/setters deep-copy their values. (23)
-- `OptimizationDiagnostics` resets convergence histories and peak memory between fits. (24)
+  one data point (it produced zero-sized chunks and a division by zero).
+- `JAXConfig` memory and large-dataset config getters/setters deep-copy their values.
+- `OptimizationDiagnostics` resets convergence histories and peak memory between fits.
 - `get_jacobian_mode()` falls back with a warning when the config file is valid JSON but not
-  an object. (25)
+  an object.
 - `InputValidator` rejects non-numeric `xdata`/`ydata`/`x0` dtypes and non-1-D `ydata`, reports
-  shape errors before dependent checks, and rejects NaN `ftol`/`xtol`/`gtol`. (28, 31)
+  shape errors before dependent checks, and rejects NaN `ftol`/`xtol`/`gtol`.
 - Post-review fixes: `FallbackResult` supports the `in` operator; a failed CMA-ES NLSQ
   refinement now reports `success=False`; `fit(workflow=HybridStreamingConfig(...))` raises
   for a non-linear `loss` and warns about ignored options.
-
-### Fixed
 - **Silent wrong answer in plain `curve_fit` for small-scale data:** the iterative
   (CG/`lsmr`) trust-region kernel used absolute tolerances and guards, so fits with
   `|y| ~ 1e-5` could stop far from the optimum (parameter error 0.216 vs 2.8e-7 now,
@@ -282,7 +376,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fits with cost above 1e10; custom-model validation blocks more code-execution modules
   (`cProfile`, `profile`, `trace`, `bdb`, `pdb`, ...) and a failing user `bounds()` is now an
   error instead of a silently unconstrained fit.
-- Differential testing against SciPy (round 7): `multistart=True` with `full_output`,
+- Differential testing against SciPy: `multistart=True` with `full_output`,
   `return_eval` or `timeit` returns the tuple instead of raising `TypeError`; multistart
   now evaluates the user's `p0` as its first start (so it is never worse than a single
   start, and `n_starts` is the total number of starts including `p0`; with a given `p0`,
@@ -297,8 +391,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   readers (`numpy.lib.format.read_array`, `NpzFile`) and serialized-executable loaders.
 - `detect_collinearity`/`check_problem_stability` no longer build an `N x N` matrix for
   `(N, k)` data; `AlgorithmSelector` counts points from `ydata` for 2-D `xdata`.
-- Whole-codebase review rounds 3-4: ~60 further fixes across core, streaming, stability,
-  CLI, GUI and utils.
 - `curve_fit_large(..., auto_size_detection=False)` no longer raises
   `ValueError: min_chunk_size (1000) cannot be larger than max_chunk_size` for inputs under
   10,000 points or an explicit `chunk_size` below 1000. The minimum chunk size is now
@@ -341,6 +433,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   defaulted to INFO. Config now logs through a module logger, and NLSQ
   loggers default to WARNING (INFO with `NLSQ_VERBOSE=1`, DEBUG with
   `NLSQ_DEBUG=1`); `NLSQ_SAVE_ITERATIONS` still records iteration history.
+- `import nlsq` no longer fails when `stderr` has no file descriptor (faulthandler) or
+  when the `NLSQ_DEBUG` log dir is unwritable.
+- macOS: `import nlsq` no longer overrides a user-set `OMP_NUM_THREADS`, `MPLBACKEND`,
+  `QT_API` or `PYQTGRAPH_QT_LIB`. A preconfigured JAX compilation cache dir is respected.
+- `profile_transfers_runtime` uses a private `mkdtemp` trace dir. Iteration-history saves
+  in the same second no longer overwrite each other.
+- `UnifiedCache` keeps different bound methods of one instance apart and rejects
+  `maxsize < 1`. `MemoryManager` measures the memory delta with fresh RSS reads.
+- `CurveFitResult[np.int64(0)]` indexes like `[0]`.
+- `nlsq batch` serialises logger setup and closes replaced handlers.
+- Multi-start `OptimizeWarning` suppression no longer leaks the filter across concurrent
+  calls.
 
 ### Performance
 - Faster small unbounded `curve_fit` fits on GPU: the trust-region step acceptance now
@@ -484,22 +588,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2.48 s and 3.00 s in the same pair of runs. That points to machine load
   (the "after" run was loaded), but a small regression cannot be excluded.
   `benchmarks/small_fit_overhead.py` prints the cProfile breakdown.
-
-### Removed
-
-- `nlsq.facades` (`OptimizationFacade`, `StabilityFacade`, `DiagnosticsFacade`)
-  and `nlsq.utils.async_logger`. Nothing in the package imported either; the
-  tests that used them were removed with them (`async_logger` unit tests, and
-  the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
-
-### Deprecated
-
-- `nlsq.PerformanceProfiler`, `nlsq.ProfileMetrics`, `nlsq.clear_profiling_data`,
-  `nlsq.get_global_profiler`, `nlsq.ProfilerVisualization` and
-  `nlsq.ProfilingDashboard`. Accessing them from the top-level package now
-  emits one `DeprecationWarning` per name and they will be removed from it in
-  the next minor release. Import them from `nlsq.utils.profiler` and
-  `nlsq.utils.profiler_visualization` instead.
 
 ## [0.7.6] - 2026-09-04
 

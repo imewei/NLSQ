@@ -10,6 +10,7 @@ and provide recovery from failures.
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -154,13 +155,10 @@ class CheckpointManager:
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         # Write to a temp file and rename so a failed save never clobbers
         # the previous good checkpoint.
-        tmp_path = checkpoint_path.with_name(checkpoint_path.name + ".tmp")
-
-        try:
+        with tempfile.TemporaryDirectory(dir=checkpoint_path.parent) as tmp_dir:
+            tmp_path = Path(tmp_dir) / checkpoint_path.name
             self._write_all(tmp_path, state)
             os.replace(tmp_path, checkpoint_path)
-        finally:
-            tmp_path.unlink(missing_ok=True)
 
     def _write_all(self, tmp_path: Path, state: CheckpointState) -> None:
         with h5py.File(tmp_path, "w") as f:

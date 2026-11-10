@@ -431,7 +431,9 @@ class GaussNewtonPhase:
 
             # Check convergence: cost change
             cost_change = abs(cost_before_step - new_cost)
-            relative_change = cost_change / (abs(cost_before_step) + 1e-10)
+            relative_change = cost_change / max(
+                abs(cost_before_step), float(jnp.finfo(jnp.float64).tiny)
+            )
 
             if relative_change < self.config.gauss_newton_tol:
                 phase_record = {

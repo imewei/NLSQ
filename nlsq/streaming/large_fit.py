@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 
+from nlsq.core._option_checks import coerce_absolute_sigma
 from nlsq.streaming.specs import (
     Auto,
     Chunked,
@@ -85,7 +86,7 @@ def fit_with_strategy(
     """
     common: dict[str, Any] = {
         "sigma": sigma,
-        "absolute_sigma": absolute_sigma,
+        "absolute_sigma": coerce_absolute_sigma(absolute_sigma),
         "bounds": bounds,
         "check_finite": check_finite,
     }

@@ -22,7 +22,7 @@ from typing import Any
 
 import yaml
 
-from nlsq.cli.errors import ConfigError, setup_logging
+from nlsq.cli.errors import ConfigError, cfg_get, setup_logging
 from nlsq.cli.result_exporter import ResultExporter
 from nlsq.cli.visualization import FitVisualizer
 from nlsq.cli.workflow_runner import WorkflowRunner
@@ -111,29 +111,26 @@ def run_fit(
             suggestion="Ensure the YAML file contains a valid configuration object",
         )
 
-    # Apply output override
+    # Apply output override (`or {}`: a bare YAML key parses as None)
     if output_override is not None:
-        if "export" not in config:
-            config["export"] = {}
+        config["export"] = config.get("export") or {}
         config["export"]["results_file"] = output_override
 
     # Apply style override
     if style_override is not None:
-        if "visualization" not in config:
-            config["visualization"] = {}
+        config["visualization"] = config.get("visualization") or {}
         config["visualization"]["style"] = style_override
         # Ensure enabled if style is explicitly set
         config["visualization"]["enabled"] = True
 
     # Apply stdout mode
     if stdout:
-        if "export" not in config:
-            config["export"] = {}
+        config["export"] = config.get("export") or {}
         config["export"]["stdout"] = True
         config["export"]["skip_file_on_stdout"] = True
 
     # Log start
-    workflow_name = config.get("metadata", {}).get("workflow_name", "unnamed")
+    workflow_name = (config.get("metadata") or {}).get("workflow_name", "unnamed")
     if verbose:
         logger.info(f"Starting workflow: {workflow_name}")
         logger.info(f"Configuration file: {workflow_path}")
@@ -141,15 +138,27 @@ def run_fit(
     if default_figure_prefix is not None and isinstance(
         config.get("visualization"), dict
     ):
-        config["visualization"].setdefault("filename_prefix", default_figure_prefix)
+        # A bare `filename_prefix:` is present-but-None; treat it as missing.
+        if config["visualization"].get("filename_prefix") is None:
+            config["visualization"]["filename_prefix"] = default_figure_prefix
+
+    # A relative data.input_file next to the YAML wins over a same-named file in
+    # the CWD (matches the GUI; `nlsq batch a/w.yaml b/w.yaml` would otherwise
+    # fit ./data.csv for every workflow). Fall back to the CWD-relative path.
+    _data_cfg = config.get("data")
+    if isinstance(_data_cfg, dict) and isinstance(_data_cfg.get("input_file"), str):
+        _in = Path(_data_cfg["input_file"])
+        _beside = Path(workflow_path).resolve().parent / _in
+        if not _in.is_absolute() and _beside.is_file():
+            _data_cfg["input_file"] = str(_beside)
 
     # Execute workflow
     runner = WorkflowRunner()
     result = runner.run(config)
 
     # Generate visualization if enabled
-    vis_config = config.get("visualization", {})
-    if vis_config.get("enabled", False):
+    vis_config = config.get("visualization") or {}
+    if cfg_get(vis_config, "enabled", False):
         _generate_visualization(result, config, runner, verbose, logger)
 
     if verbose:
@@ -186,9 +195,9 @@ def _generate_visualization(
         if runner.last_data is not None:
             xdata, ydata, sigma = runner.last_data
         else:
-            data_config = config.get("data", {})
+            data_config = config.get("data") or {}
             xdata, ydata, sigma = runner.data_loader.load(
-                data_config.get("input_file", ""),
+                cfg_get(data_config, "input_file", ""),
                 data_config,
             )
 
@@ -200,8 +209,8 @@ def _generate_visualization(
         }
 
         # Resolve model for visualization
-        model_config = config.get("model", {})
-        model_name = model_config.get("name", model_config.get("path", ""))
+        model_config = config.get("model") or {}
+        model_name = cfg_get(model_config, "name", cfg_get(model_config, "path", ""))
         model = runner.model_registry.get_model(model_name, model_config)
 
         # Generate visualization

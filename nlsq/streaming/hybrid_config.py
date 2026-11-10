@@ -8,9 +8,13 @@ exact covariance computation.
 from dataclasses import dataclass
 from typing import Literal
 
+import numpy as np
+
 from nlsq.streaming.validators import (
+    coerce_integral_fields,
     validate_cg_config,
     validate_defense_layer_config,
+    validate_enum_value,
     validate_error_handling_config,
     validate_gauss_newton_config,
     validate_gradient_clip,
@@ -20,9 +24,31 @@ from nlsq.streaming.validators import (
     validate_lr_schedule_config,
     validate_multistart_config,
     validate_normalization_strategy,
+    validate_positive_int,
     validate_residual_weighting_config,
     validate_streaming_config,
     validate_warmup_config,
+)
+
+_INT_FIELDS = (
+    "warmup_iterations",
+    "max_warmup_iterations",
+    "lbfgs_history_size",
+    "lr_schedule_warmup_steps",
+    "lr_schedule_decay_steps",
+    "gauss_newton_max_iterations",
+    "cg_max_iterations",
+    "cg_param_threshold",
+    "chunk_size",
+    "gc_chunk_interval",
+    "checkpoint_frequency",
+    "max_retries_per_batch",
+    "callback_frequency",
+    "verbose",
+    "log_frequency",
+    "n_starts",
+    "elimination_rounds",
+    "batches_per_round",
 )
 
 
@@ -197,7 +223,7 @@ class HybridStreamingConfig:
         Default of 10 balances memory reclamation with performance.
 
     enable_checkpoints : bool, default=True
-        Enable checkpoint save/resume for fault tolerance.
+        Save checkpoints for diagnostics (resume is not supported).
 
     checkpoint_frequency : int, default=100
         Save checkpoint every N iterations (across all phases).
@@ -526,14 +552,19 @@ class HybridStreamingConfig:
             )
 
             # Validate gc_chunk_interval (FR-007)
-            if self.gc_chunk_interval < 1:
-                raise ValueError(
-                    f"gc_chunk_interval must be >= 1, got {self.gc_chunk_interval}",
-                )
+            validate_positive_int(self.gc_chunk_interval, "gc_chunk_interval")
+
+            # `True in (0, 1, 2)` is True, so reject bool explicitly.
+            if isinstance(self.verbose, (bool, np.bool_)):
+                raise ConfigValidationError("verbose must be one of: (0, 1, 2)")
+            validate_enum_value(self.verbose, (0, 1, 2), "verbose")  # type: ignore[arg-type]
 
         except ConfigValidationError as e:
             # Re-raise as ValueError for backwards compatibility
             raise ValueError(str(e)) from e
+
+        # Validators accept integral floats (100.0); downstream code needs int.
+        coerce_integral_fields(self, _INT_FIELDS)
 
     @classmethod
     def aggressive(cls):

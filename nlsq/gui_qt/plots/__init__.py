@@ -30,12 +30,33 @@ _pg_state = {"configured": False}
 _log = logging.getLogger(__name__)
 
 
-def _downsample(x: NDArray, y: NDArray, threshold: int) -> tuple[NDArray, NDArray]:
-    """Keep paired plot data on the existing floor-division stride."""
+def _downsample(
+    x: NDArray, y: NDArray, threshold: int, *, log: bool = True
+) -> tuple[NDArray, NDArray]:
+    """Keep paired plot data on the existing floor-division stride.
+
+    Decimation is display-only (fits always use the full data) but is logged
+    so a thinned plot is never mistaken for the whole dataset.
+    """
     if len(x) <= threshold:
         return x, y
     stride = len(x) // threshold
+    if log:
+        _log.info(
+            "Plot shows every %d-th point (%d of %d)",
+            stride,
+            len(x[::stride]),
+            len(x),
+        )
     return x[::stride], y[::stride]
+
+
+def decimation_note(n: int, threshold: int) -> str:
+    """Status-line text describing plot decimation, or "" if none applies."""
+    if n <= threshold:
+        return ""
+    stride = n // threshold
+    return f"plots show {len(range(0, n, stride))} of {n} points"
 
 
 def _configure_pyqtgraph() -> None:

@@ -106,6 +106,7 @@ class TestEndToEndWorkflows:
         assert diagnostics.get("n_starts_configured") == 20
         assert not diagnostics.get("bypassed", True)
 
+    @pytest.mark.serial  # >100K-element arrays
     @pytest.mark.slow
     def test_curve_fit_large_multistart_on_2m_dataset(self):
         """End-to-end: curve_fit_large() with multistart=True on 2M point dataset.

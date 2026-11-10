@@ -36,6 +36,7 @@ import warnings
 from collections.abc import Callable
 from typing import Any, Protocol, Union, runtime_checkable
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -241,8 +242,13 @@ def estimate_p0_exponential_decay(
     y_max = np.max(ydata)
     y_min = np.min(ydata)
 
-    a = y_max - y_min
-    c = y_min
+    # Direction from the two ends of the data: a rising (charging) curve
+    # a*exp(-b x)+c has a < 0 and approaches c = y_max from below.
+    order = np.argsort(xdata, kind="stable")
+    rising = bool(ydata[order[-1]] > ydata[order[0]])
+    a = -(y_max - y_min) if rising else y_max - y_min
+    c = y_max if rising else y_min
+    start_idx = np.argmin(ydata) if rising else np.argmax(ydata)
 
     # Estimate decay rate from half-life
     # Find where y ≈ (y_max + y_min) / 2
@@ -251,10 +257,11 @@ def estimate_p0_exponential_decay(
     try:
         # Find closest point to half value
         half_idx = np.argmin(np.abs(ydata - half_val))
-        x_half = xdata[half_idx]
+        # half-life is measured from the start of the decay, not from x = 0
+        x_half = xdata[half_idx] - xdata[start_idx]
 
-        if x_half > 0:
-            b = np.log(2) / x_half
+        if x_half != 0:
+            b = np.log(2) / abs(x_half)
         else:
             # Fallback: estimate from x range
             x_range = np.max(xdata) - np.min(xdata)
@@ -262,8 +269,13 @@ def estimate_p0_exponential_decay(
     except (ValueError, IndexError):
         b = 0.1  # Safe default
 
-    # Ensure b is positive
-    b = max(b, 0.01)
+    # Ensure b is positive; the floor has units 1/x, so scale it with the x range
+    # (0.1/range equals 0.01 for the common range of 10).
+    x_span = float(np.ptp(xdata))
+    b = max(b, 0.1 / x_span if x_span > 0 else 0.01)
+
+    # The model's amplitude is its value at x = 0, not at the start of the data.
+    a = a * float(np.exp(np.clip(b * float(xdata[start_idx]), -50.0, 50.0)))
 
     return [float(a), float(b), float(c)]
 
@@ -354,19 +366,20 @@ def estimate_p0_exponential_growth(
     y_min = np.min(ydata)
     y_max = np.max(ydata)
 
-    a = y_min  # Initial value
-    c = 0.0  # Offset
-
-    # Estimate growth rate
     y_range = y_max - y_min
     x_range = np.max(xdata) - np.min(xdata)
 
+    if y_min > 0:
+        a = y_min  # Initial value
+        c = 0.0  # Offset
+    else:
+        # bounds() require a >= 0: put the offset just below the data instead
+        c = y_min - (0.1 * y_range if y_range > 0 else 1.0)
+        a = y_min - c
+
+    # Estimate growth rate: b ≈ ln((y_max - c) / a) / x_range
     if x_range > 0 and y_range > 0:
-        # Rough estimate: b ≈ ln(y_max/y_min) / x_range
-        if y_min > 0:
-            b = np.log(y_max / y_min) / x_range
-        else:
-            b = 0.1  # Default
+        b = np.log((y_max - c) / a) / x_range
     else:
         b = 0.1
 
@@ -451,6 +464,12 @@ def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
 
+    # No baseline term: a dip has |min| > |max| (negative amplitude). Estimate on
+    # the mirrored data so the peak location/width are those of the dip.
+    if np.min(ydata) < 0 and abs(np.min(ydata)) > abs(np.max(ydata)):
+        p0 = estimate_p0_gaussian(xdata, -ydata)
+        return [-p0[0], *p0[1:]]
+
     y_min = np.min(ydata)
     y_max = np.max(ydata)
 
@@ -470,7 +489,8 @@ def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
         sigma = (np.max(xdata) - np.min(xdata)) / 4
 
     # Ensure sigma is positive
-    sigma = max(sigma, 0.01)
+    x_span = float(np.ptp(xdata))
+    sigma = max(sigma, 1e-3 * x_span if x_span > 0 else 0.01)
 
     return [float(amp), float(mu), float(sigma)]
 
@@ -478,7 +498,7 @@ def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
 _attach_methods(
     gaussian,
     estimate_p0_gaussian,
-    lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf]),
+    lambda: ([-np.inf, -np.inf, 0], [np.inf, np.inf, np.inf]),  # dips: amp < 0
 )
 
 
@@ -555,6 +575,12 @@ def estimate_p0_lorentzian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterLis
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
 
+    # No baseline term: a dip has |min| > |max| (negative amplitude). Estimate on
+    # the mirrored data so the peak location/width are those of the dip.
+    if np.min(ydata) < 0 and abs(np.min(ydata)) > abs(np.max(ydata)):
+        p0 = estimate_p0_lorentzian(xdata, -ydata)
+        return [-p0[0], *p0[1:]]
+
     y_min = np.min(ydata)
     y_max = np.max(ydata)
 
@@ -574,7 +600,8 @@ def estimate_p0_lorentzian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterLis
         gamma = (np.max(xdata) - np.min(xdata)) / 4
 
     # Ensure gamma is positive
-    gamma = max(gamma, 0.01)
+    x_span = float(np.ptp(xdata))
+    gamma = max(gamma, 1e-3 * x_span if x_span > 0 else 0.01)
 
     return [float(amp), float(x0), float(gamma)]
 
@@ -582,7 +609,7 @@ def estimate_p0_lorentzian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterLis
 _attach_methods(
     lorentzian,
     estimate_p0_lorentzian,
-    lambda: ([0, -np.inf, 0], [np.inf, np.inf, np.inf]),
+    lambda: ([-np.inf, -np.inf, 0], [np.inf, np.inf, np.inf]),  # dips: amp < 0
 )
 
 
@@ -633,7 +660,8 @@ def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayRetur
     >>> popt, pcov = curve_fit(sigmoid, x, y, p0='auto')
     >>> print(f"EC50 (midpoint): {popt[1]:.2f}")
     """
-    return L / (1 + jnp.exp(-k * (x - x0))) + b
+    # jax.nn.sigmoid: same value, but no inf/inf NaN in the Jacobian when exp saturates
+    return L * jax.nn.sigmoid(k * (x - x0)) + b
 
 
 def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
@@ -684,7 +712,8 @@ def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
 _attach_methods(
     sigmoid,
     estimate_p0_sigmoid,
-    lambda: ([0, -np.inf, 0, -np.inf], [np.inf, np.inf, np.inf, np.inf]),
+    # k may be negative (falling curve); L >= 0 removes the (L,k,b)<->(-L,-k,b+L) symmetry
+    lambda: ([0, -np.inf, -np.inf, -np.inf], [np.inf, np.inf, np.inf, np.inf]),
 )
 
 
@@ -817,6 +846,17 @@ def polynomial(degree: int) -> Callable:
     >>> popt, pcov = curve_fit(quadratic, x, y, p0='auto')
     >>> print(f"Coefficients: {popt}")
     """
+
+    if (
+        isinstance(degree, (bool, str))
+        or not np.isfinite(degree)
+        or int(degree) != degree
+        or degree < 0
+    ):
+        raise ValueError(
+            f"polynomial degree must be a non-negative integer, got {degree!r}"
+        )
+    degree = int(degree)
 
     def poly(x, *coeffs):
         """Polynomial function with coefficients from highest to lowest degree."""

@@ -223,8 +223,11 @@ class PluginRegistry:
 
         Example
         -------
+        >>> PluginRegistry.register(MyPlugin())  # MyPlugin.name == "my-plugin"
         >>> PluginRegistry.unregister("my-plugin")
         True
+        >>> PluginRegistry.unregister("my-plugin")  # already removed
+        False
         """
         with cls._lock:
             if name in cls._plugins:

@@ -44,6 +44,7 @@ class TestSNRIndependentOfXOrder(unittest.TestCase):
 class TestNPointsMultiDimX(unittest.TestCase):
     """n_points counts observations, not variables, for (k, N) xdata."""
 
+    @pytest.mark.serial  # >100K-element arrays
     def test_k_by_n_xdata(self):
         def f(x, a, b):
             return a * x[0] + b * x[1]

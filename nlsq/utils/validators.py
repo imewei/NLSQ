@@ -302,7 +302,7 @@ class InputValidator:
             return errors, warnings_list
 
         try:
-            p0 = np.asarray(p0)
+            p0 = np.atleast_1d(np.asarray(p0))
             if len(p0) != n_params:
                 errors.append(
                     f"Initial guess p0 has {len(p0)} parameters, "
@@ -519,7 +519,7 @@ class InputValidator:
             logger.debug(f"Y-value uniformity check failed (non-critical): {e}")
 
         # Check for very small range
-        y_range = np.ptp(ydata)
+        y_range = np.ptp(ydata.astype(float)) if ydata.dtype == bool else np.ptp(ydata)
         if y_range < 1e-10 and y_range > 0:
             warnings.append(f"y data range is very small ({y_range:.2e})")
 
@@ -865,19 +865,14 @@ class InputValidator:
         errors: list[str] = []
         warnings: list[str] = []
 
-        # Check positive
-        if not ftol > 0:
-            errors.append(f"ftol must be positive, got {ftol}")
-        if not xtol > 0:
-            errors.append(f"xtol must be positive, got {xtol}")
-        if not gtol > 0:
-            errors.append(f"gtol must be positive, got {gtol}")
-
-        # Check very small values
-        if ftol < 1e-15:
-            warnings.append(f"ftol={ftol} is very small, may not converge")
-        if xtol < 1e-15:
-            warnings.append(f"xtol={xtol} is very small, may not converge")
+        # None disables a termination test (LeastSquares accepts it)
+        for name, tol in (("ftol", ftol), ("xtol", xtol), ("gtol", gtol)):
+            if tol is None:
+                continue
+            if not tol > 0:
+                errors.append(f"{name} must be positive, got {tol}")
+            elif name != "gtol" and tol < 1e-15:
+                warnings.append(f"{name}={tol} is very small, may not converge")
 
         return errors, warnings
 

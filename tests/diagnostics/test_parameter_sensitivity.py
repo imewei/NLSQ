@@ -1127,3 +1127,36 @@ def test_underdetermined_jacobian_matches_fim_analysis():
     assert from_jac.health_status == from_fim.health_status
     V = from_jac.eigenvectors
     np.testing.assert_allclose(V.T @ V, np.eye(3), atol=1e-12)
+
+
+class TestRankDeficientRotationInvariance:
+    """GD-2: numerical-zero eigenvalues must not depend on round-off."""
+
+    @staticmethod
+    def _jac(rotate):
+        rng = np.random.default_rng(0)
+        q, _ = np.linalg.qr(rng.normal(size=(300, 4)))
+        v, _ = np.linalg.qr(rng.normal(size=(4, 4)))
+        if not rotate:
+            v = np.eye(4)
+        return q @ np.diag([1.0, 1e-4, 1e-8, 0.0]) @ v.T
+
+    def test_rotated_matches_unrotated(self):
+        from nlsq.diagnostics.parameter_sensitivity import ParameterSensitivityAnalyzer
+
+        a = ParameterSensitivityAnalyzer()
+        r0, r1 = a.analyze(self._jac(False)), a.analyze(self._jac(True))
+        m0, m1 = r0, r1
+        assert m1.eigenvalue_range == float("inf")
+        assert m0.eigenvalue_range == m1.eigenvalue_range
+        assert m0.stiff_indices == m1.stiff_indices
+        assert m0.sloppy_indices == m1.sloppy_indices
+
+    @pytest.mark.parametrize("nudge", [1 - 1e-12, 1.0, 1 + 1e-12])
+    def test_sub_floor_eigenvalue_does_not_set_threshold(self, nudge):
+        """A sub-round-off eigenvalue must not put index 1 on a knife edge."""
+        from nlsq.diagnostics.parameter_sensitivity import ParameterSensitivityAnalyzer
+
+        eig = np.array([1.0, 1e-8, 1e-16 * nudge, 0.0])
+        _, sloppy = ParameterSensitivityAnalyzer()._classify_directions(eig, True)
+        assert sloppy == [1, 2, 3]
