@@ -116,7 +116,7 @@ class _ChunkedStrategy:
         run = self.engine.fit_with_progress if self._show_progress else self.engine.fit
         return run(f, x, y, p0=p0, **common)
 
-    def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
+    def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray | None]:
         # nonconverged: curve_fit already warned and returned its best point,
         # so only a hard failure raises here.
         if not getattr(native, "success", True) and not getattr(
@@ -147,7 +147,7 @@ class _ExactStrategy:
         """Call ``exact_lm_fit(f, x, y, p0, **common)``."""
         return self.engine(f, x, y, p0, **common)
 
-    def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
+    def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray | None]:
         if not native["success"]:
             from nlsq.streaming.exact_lm import ExactSolverError
 

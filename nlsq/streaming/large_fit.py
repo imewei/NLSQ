@@ -57,6 +57,7 @@ def fit_with_strategy(
     check_finite: bool,
     memory_limit_gb: float | None,
     show_progress: bool,
+    compute_covariance: bool = True,
     **kwargs: Any,
 ) -> Any:
     """Fit ``f`` to the data with ``strategy``.
@@ -69,6 +70,9 @@ def fit_with_strategy(
         As in ``curve_fit_large``.
     memory_limit_gb, show_progress
         Used by the chunked and exact paths; ignored by the others.
+    compute_covariance
+        False returns ``pcov=None``. Chunked: only the final ``pcov`` is dropped
+        (the GLS combiner still needs the chunk covariances). Hybrid: ``ValueError``.
     **kwargs
         Extra keyword arguments for the engine. In-memory and chunked: merged
         over the strategy's ``options``; a key the strategy owns (see
@@ -100,6 +104,7 @@ def fit_with_strategy(
             p0,
             memory_limit_gb=memory_limit_gb,
             show_progress=show_progress,
+            compute_covariance=compute_covariance,
             kwargs=kwargs,
             **common,
         )
@@ -132,11 +137,24 @@ def fit_with_strategy(
     n_points = n_x
 
     if isinstance(strategy, Hybrid):
+        if not compute_covariance:
+            raise ValueError(
+                "compute_covariance=False is not supported by hybrid_streaming"
+            )
         return _fit_hybrid(strategy, f, xdata, ydata, p0, kwargs=kwargs, **common)
     if isinstance(strategy, Auto):
         strategy = strategy.resolve(n_points)
     if isinstance(strategy, InMemory):
-        return _fit_in_memory(strategy, f, xdata, ydata, p0, kwargs=kwargs, **common)
+        return _fit_in_memory(
+            strategy,
+            f,
+            xdata,
+            ydata,
+            p0,
+            compute_covariance=compute_covariance,
+            kwargs=kwargs,
+            **common,
+        )
     if isinstance(strategy, Chunked):
         return _fit_chunked(
             strategy,
@@ -147,6 +165,7 @@ def fit_with_strategy(
             n_points=n_points,
             memory_limit_gb=memory_limit_gb,
             show_progress=show_progress,
+            compute_covariance=compute_covariance,
             kwargs=kwargs,
             **common,
         )
@@ -166,6 +185,7 @@ def _fit_exact(
     check_finite: bool,
     memory_limit_gb: float | None,
     show_progress: bool,
+    compute_covariance: bool,
     kwargs: dict[str, Any],
 ) -> Any:
     from nlsq.streaming import exact_lm
@@ -209,6 +229,7 @@ def _fit_exact(
         absolute_sigma=absolute_sigma,
         memory_limit_gb=memory_limit_gb,
         show_progress=show_progress,
+        compute_covariance=compute_covariance,
         **solver_kwargs,
     )
     return large_strategy.unpack(native)
@@ -284,12 +305,15 @@ def _fit_in_memory(
     absolute_sigma: bool,
     bounds: Any,
     check_finite: bool,
+    compute_covariance: bool,
     kwargs: dict[str, Any],
 ) -> Any:
     from nlsq.streaming.strategy import build_large_strategy
 
     reject_owned_kwargs(strategy, kwargs)
     fit_kwargs = {**strategy.options, **kwargs}
+    if not compute_covariance:
+        fit_kwargs["compute_covariance"] = False
     if sigma is not None:
         fit_kwargs["sigma"] = sigma
     _lb, _ub = bounds
@@ -325,6 +349,7 @@ def _fit_chunked(
     n_points: int,
     memory_limit_gb: float | None,
     show_progress: bool,
+    compute_covariance: bool,
     kwargs: dict[str, Any],
 ) -> Any:
     from nlsq.config import (
@@ -430,4 +455,6 @@ def _fit_chunked(
             **fit_kwargs,
         )
 
-        return large_strategy.unpack(native)
+        popt, pcov = large_strategy.unpack(native)
+        # The GLS combiner needed the chunk covariances; only the result drops
+        return popt, (pcov if compute_covariance else None)

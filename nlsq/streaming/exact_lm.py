@@ -526,6 +526,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     memory_limit_gb: float | None = None,
     show_progress: bool = False,
     n_points: int | None = None,
+    compute_covariance: bool = True,
 ) -> OptimizeResult:
     """Exact full-data Levenberg-Marquardt fit of ``y ~ model(x, *p)``.
 
@@ -714,7 +715,12 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     message = _MESSAGES[termination]
     if termination == "stalled" and _scaled_eig(g, H)[3]:
         message += "; rank cannot be certified from normal equations"
-    pcov = compute_covariance(H, cost, n, p, absolute_sigma)
+    # The parameter shadows the module function compute_covariance
+    if compute_covariance:
+        pcov = pcov_from_normal(H, cost, n, p, absolute_sigma)[0]
+    else:
+        pcov = None
+        logger.debug("covariance skipped", reason="compute_covariance=False")
     return OptimizeResult(
         x=theta,
         cost=cost,

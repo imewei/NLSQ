@@ -1007,6 +1007,7 @@ def curve_fit_large(
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
     strategy: "LargeStrategy | None" = None,
+    compute_covariance: bool = True,
     **kwargs: Any,
 ) -> "CurveFitResult | tuple[Any, ...]":
     """Curve fitting with automatic memory management for large datasets.
@@ -1112,6 +1113,12 @@ def curve_fit_large(
         ``multistart``, ``n_starts``, ``global_search``, ``sampler``,
         ``center_on_p0`` and ``scale_factor`` must stay at their defaults and
         no extra keyword arguments may be passed (``TypeError`` otherwise).
+    compute_covariance : bool, optional
+        If False, ``pcov`` is returned as None. In-memory path: ``curve_fit`` skips
+        the covariance. Exact path: the final covariance is skipped. Chunked path:
+        no saving, because the per-chunk covariances are still computed (the GLS
+        combiner needs them) and only the final ``pcov`` is dropped.
+        ``method="hybrid_streaming"`` raises ``ValueError``. Default: True.
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss). With
         ``method="exact_streaming"`` only ftol, xtol, gtol, max_nfev and n_points are
@@ -1121,7 +1128,8 @@ def curve_fit_large(
     -------
     popt, pcov : ndarray
         The chunked, ``hybrid_streaming`` and ``exact_streaming`` paths return
-        the tuple ``(popt, pcov)``: fitted parameters and their covariance.
+        the tuple ``(popt, pcov)``: fitted parameters and their covariance
+        (``pcov`` is None when ``compute_covariance=False``).
     result : CurveFitResult or tuple
         The in-memory path returns whatever ``curve_fit`` returns: a
         ``CurveFitResult`` (which unpacks as ``popt, pcov``), or the special-output
@@ -1265,6 +1273,7 @@ def curve_fit_large(
         check_finite=check_finite,
         memory_limit_gb=memory_limit_gb,
         show_progress=show_progress,
+        compute_covariance=compute_covariance,
     )
 
 

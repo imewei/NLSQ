@@ -44,6 +44,7 @@ _COMMON_RESERVED = frozenset(
         "center_on_p0",
         "scale_factor",
         "method",
+        "compute_covariance",
     }
 )
 _IN_MEMORY_RESERVED = _COMMON_RESERVED | {
