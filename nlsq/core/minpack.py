@@ -3622,7 +3622,7 @@ def _covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
     SVD of the QR R factor; same s and VT up to row signs.
     Results stay where they were computed: ``pcov_from_jacobian`` converts to NumPy.
     """
-    if device_policy.use_host_svd_for(jac):
+    if device_policy.use_host_svd_for(jac, device_policy.HOST_COV_SVD_MAX_ELEMENTS):
         jac = jax.device_put(jac, device_policy.host_device())
     return _covariance_svd_jit(jac)
 

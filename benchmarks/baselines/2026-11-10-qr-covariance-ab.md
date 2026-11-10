@@ -5,7 +5,7 @@ instead of the SVD of `J` (commit 73764629). Base for the A/B: `a8fac156` (workt
 Script: `benchmarks/studies/bench_cov_kernel.py` (`--crossover`, `--accuracy`; default = kernel).
 Raw A/B JSON: `benchmarks/results/2026-11-10-ab-qr-cov/` (gitignored).
 
-**Verdict: KEPT. Kernel, GPU A/B, CPU A/B and accuracy gates pass. `HOST_SVD_MAX_ELEMENTS` left at 30,000 (see Crossover).**
+**Verdict: KEPT. Kernel, GPU A/B, CPU A/B and accuracy gates pass. Covariance-only limit `HOST_COV_SVD_MAX_ELEMENTS = 150,000` applied; `HOST_SVD_MAX_ELEMENTS` (TRF) left at 30,000 (see Crossover).**
 
 ## Kernel microbenchmark (go/no-go)
 
@@ -74,12 +74,12 @@ The host path wins at every size in both sweeps, so the sweep does not bracket t
 right-censored at 150,000 elements, p = 6 is a near tie at 300,000). By the plan's rule (largest n*p where the
 host wins in every sweep) the figure is **150,000**, 5x the current 30,000.
 
-**Not applied.** `HOST_SVD_MAX_ELEMENTS` is shared with the per-iteration TRF full SVD
+**Applied as a covariance-only limit.** `HOST_SVD_MAX_ELEMENTS` is shared with the per-iteration TRF full SVD
 (`nlsq/core/trf_jit.py:409`), which still uses a full SVD and was measured at 30,000
-(`2026-11-06-perf-phase0.md` item (c)). This microbenchmark covers only the covariance kernel, so
-raising the shared constant would change unmeasured TRF behaviour for 30k < n*p <= 150k. Decision for the
-controller: either split the constant (covariance-specific limit of about 150,000, to be extended by a sweep
-past 50,000) or re-measure the TRF SVD crossover.
+(`2026-11-06-perf-phase0.md` item (c)), so the shared constant is unchanged. A separate
+`HOST_COV_SVD_MAX_ELEMENTS = 150_000` in `nlsq/core/device_policy.py` is used only by `minpack._covariance_svd`.
+The 150,000 figure is right-censored at p = 3 (the host still won at the largest n*p measured); extending the
+sweep past 50,000 rows could raise it further.
 
 ## Accuracy (`pcov_from_jacobian`, old body = SVD of J, new = `_covariance_svd_body`)
 

@@ -738,7 +738,9 @@ def test_package_import_enables_float64():
 def host_svd_forced(monkeypatch):
     from nlsq.core import device_policy
 
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda shape, b: True)
+    monkeypatch.setattr(
+        device_policy, "use_host_for_small_svd", lambda shape, b, **k: True
+    )
 
 
 def test_nan_jacobian_gives_inf_pcov_on_host_path(host_svd_forced, j_wc):
