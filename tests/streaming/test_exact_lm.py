@@ -1428,7 +1428,23 @@ def test_rank_deficient_original_input_regression():
     (b) the rank-deficiency OptimizeWarning is emitted, as for the full-J reference;
     (c) the retained singular-value count of the TSQR R equals that of the full-J
         reference, both with the production cutoff eps * max(n, p) * s[0];
-    (d) pcov is finite wherever the reference's is finite.
+    (d) pcov is finite wherever the reference's is finite;
+    (e) on the well-determined subspace ``V_k`` (reference right singular vectors with
+        ``s_i >= 1e-6 * s_0``) the covariance of the TSQR ``R`` agrees with the reference.
+        First order: either factorization is the exact one of ``J + dJ`` with
+        ``||dJ|| <= c * eps * s_0``, ``c = n * p`` (Householder QR backward error,
+        Higham Thm 19.4, worst case). A kept direction moves by ``dJ / s_i`` (relative
+        ``1/s_i^2`` change ``2 c eps s_0 / s_i``, bounded by ``c eps (s_0/s_k)^2``), and the
+        retained near-cutoff direction ``s_r`` (here 1.45e-6, just above the cutoff but
+        below ``1e-6 s_0``) rotates into ``V_k`` by ``~ c eps s_0 / s_k``, adding
+        ``(c eps s_0 / s_r)^2`` relative. Tolerance: the sum, scale-aware entrywise. Both
+        sides are formed from their factors (``s``, ``V``) so no cancellation enters;
+    (f) the stored ``pcov`` projected on ``V_k`` is positive definite (symmetric to the floor below) with each
+        diagonal entry within a factor 2 of the reference's (an all-zero or garbage pcov
+        fails). Its entrywise agreement is NOT asserted: the stored matrix is dominated by
+        ``sigma^2 / s_r^2``, so its rounding alone is ``~ p^2 eps (s_0/s_r)^2`` (2.2 here)
+        relative to the ``V_k`` block; the sensitivity of the near-cutoff direction is
+        tolerated, not tested. Measured: factored 3.7e-15 (tolerance 4.5e-9), stored 2.3e-2.
     """
     y = np.asarray(two_exp(x, 2.0, 1.0, 1.5, 1.0001)) + noise
     with pytest.warns(OptimizeWarning, match="rank-deficient"):
@@ -1441,6 +1457,36 @@ def test_rank_deficient_original_input_regression():
     R = lm.tsqr_r_factor(two_exp, res.x, src, 1000, weighted=w)
     assert _retained_svd(R, x.size) == _retained_svd(J, x.size) < 4
     assert np.isfinite(res.pcov[np.isfinite(ref)]).all()
+
+    n, p, eps = x.size, 4, np.finfo(float).eps
+    s, VT = (np.asarray(a) for a in _covariance_svd(J))
+    Vk = VT[s >= 1e-6 * s[0]].T
+    k = Vk.shape[1]
+    assert 1 <= k < 3  # the near-cutoff retained direction is outside V_k
+    s_r = s[s > eps * max(n, p) * s[0]][-1]
+    sig2 = 2 * res.cost / (n - p)
+
+    def projected(
+        A,
+    ):  # sig2 * Vk^T pinv(A^T A) Vk from A's factors, cutoff as production
+        sa, VTa = (np.asarray(a) for a in _covariance_svd(A))
+        keep = sa > eps * max(n, p) * sa[0]
+        W = Vk.T @ VTa[keep].T
+        return sig2 * (W / sa[keep] ** 2) @ W.T
+
+    got, want = projected(R), projected(J)
+    c = n * p
+    tol = c * eps * (s[0] / s[k - 1]) ** 2 + (c * eps * s[0] / s_r) ** 2
+    d = np.sqrt(np.outer(np.diag(want), np.diag(want)))
+    assert np.max(np.abs(got - want) / d) <= tol
+
+    stored, ref_k = Vk.T @ res.pcov @ Vk, Vk.T @ ref @ Vk
+    # symmetric up to the representation floor of the stored pcov (see (f))
+    floor = p**2 * eps * np.abs(res.pcov).max()
+    np.testing.assert_allclose(stored, stored.T, rtol=0, atol=floor)
+    assert np.linalg.eigvalsh((stored + stored.T) / 2)[0] > 0
+    ratio = np.diag(stored) / np.diag(ref_k)
+    assert np.all((ratio > 0.5) & (ratio < 2.0)), ratio
 
 
 def test_tsqr_warning_names_non_finite_hessian():
@@ -1455,3 +1501,28 @@ def test_tsqr_jacobian_kernel_cached_per_model_and_weighting():
     assert lm._chunk_jacobian(two_exp, False) is k
     assert lm._chunk_jacobian(two_exp, True) is not k
     assert lm._chunk_jacobian(exp_decay, True) is not lm._chunk_jacobian(two_exp, True)
+
+
+def test_tsqr_jacobian_kernel_cache_is_race_free(monkeypatch):
+    """Another thread replacing the slot between this call's store and its return must
+    not hand this call the other model's kernel (simulated deterministically)."""
+
+    def a(x, q):
+        return q * x
+
+    def b(x, q):
+        return 2.0 * q * x
+
+    b_entry = (b, False, lm.make_chunk_jacobian(b))
+
+    class Racy(list):
+        def __setitem__(self, i, v):  # store, then "another thread" stores b
+            super().__setitem__(i, v)
+            super().__setitem__(0, b_entry)
+
+    monkeypatch.setattr(lm, "_jac_kernel", Racy([None]))
+    xs, mask = jnp.linspace(0.0, 1.0, 8), jnp.ones(8, dtype=bool)
+    Ja = lm._chunk_jacobian(a, False)(jnp.array([3.0]), xs, mask)
+    np.testing.assert_array_equal(np.asarray(Ja)[:, 0], np.asarray(xs))
+    Jb = lm._chunk_jacobian(b, False)(jnp.array([3.0]), xs, mask)  # cache hit on b
+    np.testing.assert_array_equal(np.asarray(Jb)[:, 0], 2.0 * np.asarray(xs))

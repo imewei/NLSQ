@@ -495,8 +495,8 @@ def _open_source(
     ), sigma is not None
 
 
-# one slot: (model, weighted, kernel) of the last TSQR pass
-_jac_kernel: list[tuple[Any, bool, Callable[..., jax.Array]]] = []
+# one slot: (model, weighted, kernel) of the last TSQR pass; read and replaced whole
+_jac_kernel: list[tuple[Any, bool, Callable[..., jax.Array]] | None] = [None]
 
 
 def _chunk_jacobian(
@@ -505,17 +505,16 @@ def _chunk_jacobian(
     """:func:`make_chunk_jacobian` kernel, cached for the last ``(model, weighted)``.
 
     Rebuilt only when ``model`` is a different object or ``weighted`` changes, so repeated
-    fits of one model do not re-trace (the jitted kernel bakes ``model`` in).
+    fits of one model do not re-trace (the jitted kernel bakes ``model`` in). Thread-safe:
+    the slot is read once and the kernel returned is always the local one, so another
+    thread replacing the slot cannot hand this call a different model's kernel.
     """
-    if (
-        not _jac_kernel
-        or _jac_kernel[0][0] is not model
-        or _jac_kernel[0][1] != weighted
-    ):
-        _jac_kernel[:] = [
-            (model, weighted, make_chunk_jacobian(model, weighted=weighted))
-        ]
-    return _jac_kernel[0][2]
+    entry = _jac_kernel[0]
+    if entry is not None and entry[0] is model and entry[1] == weighted:
+        return entry[2]
+    kernel = make_chunk_jacobian(model, weighted=weighted)
+    _jac_kernel[0] = (model, weighted, kernel)
+    return kernel
 
 
 @jax.jit
