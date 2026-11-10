@@ -609,10 +609,12 @@ class ParameterSensitivityAnalyzer:
             if eigenvalue_range == np.inf:
                 # Zeroed (null) directions are sloppy by ratio 0. Bound the range
                 # with the round-off floor (the best resolution a formed FIM has)
-                # so FIM and Jacobian paths pick comparable thresholds.
+                # so FIM and Jacobian paths pick comparable thresholds. Raise every
+                # eigenvalue below the floor, not just zeros: a sub-floor eigenvalue
+                # left as the minimum makes the threshold round-off dependent.
                 floor = max_eigenvalue * len(eigenvalues) * np.finfo(float).eps
                 eigenvalue_range = self._compute_eigenvalue_range(
-                    np.where(eigenvalues > 0, eigenvalues, floor)
+                    np.maximum(eigenvalues, floor)
                 )
             if 0 < eigenvalue_range < np.inf:
                 # Threshold based on eigenvalue range

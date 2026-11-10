@@ -17,15 +17,16 @@ def test_public_streaming_forwards_explicit_sampling_window():
             "success": True,
             "message": "converged",
         }
-        nlsq.fit(
-            lambda x, a: a * x,
-            x,
-            2 * x,
-            p0=[1.0],
-            preset="streaming",
-            center_on_p0=False,
-            scale_factor=0.125,
-        )
+        with pytest.warns(FutureWarning, match="preset"):
+            nlsq.fit(
+                lambda x, a: a * x,
+                x,
+                2 * x,
+                p0=[1.0],
+                preset="streaming",
+                center_on_p0=False,
+                scale_factor=0.125,
+            )
     config = build.call_args.args[1]
     assert config.center_on_p0 is False
     assert config.scale_factor == 0.125
@@ -42,7 +43,10 @@ def test_public_streaming_checks_finite_before_engine(invalid_data):
             "pcov": np.eye(1),
             "success": True,
         }
-        with pytest.raises(ValueError, match=r"NaN|Inf|finite"):
+        with (
+            pytest.raises(ValueError, match=r"NaN|Inf|finite"),
+            pytest.warns(FutureWarning, match="preset"),
+        ):
             nlsq.fit(
                 lambda x, a: a * x,
                 x,
@@ -64,12 +68,13 @@ def test_public_streaming_can_disable_finite_check():
             "pcov": np.eye(1),
             "success": True,
         }
-        nlsq.fit(
-            lambda x, a: a * x,
-            x,
-            y,
-            p0=[1.0],
-            preset="streaming",
-            check_finite=False,
-        )
+        with pytest.warns(FutureWarning, match="preset"):
+            nlsq.fit(
+                lambda x, a: a * x,
+                x,
+                y,
+                p0=[1.0],
+                preset="streaming",
+                check_finite=False,
+            )
     build.return_value.fit.assert_called_once()

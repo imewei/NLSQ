@@ -19,4 +19,5 @@ def test_default_trace_dir_is_private_and_unpredictable(tmp_path, monkeypatch):
     d = stats.get("trace_dir")
     assert d is not None
     assert os.path.basename(d) != "jax-profiling"
-    assert stat.S_IMODE(os.stat(d).st_mode) == 0o700
+    if os.name != "nt":  # Windows reports ACL-protected dirs as 0o777
+        assert stat.S_IMODE(os.stat(d).st_mode) == 0o700

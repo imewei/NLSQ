@@ -2,6 +2,7 @@
 
 import os
 import stat
+import sys
 import zipfile
 
 import numpy as np
@@ -56,6 +57,7 @@ def test_npz_member_uncompressed_size_is_checked(monkeypatch, tmp_path):
         DataLoader().load(p, cfg)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
 def test_atomic_write_mode_follows_umask_without_toggling_it(monkeypatch, tmp_path):
     old = os.umask(0o022)
     try:

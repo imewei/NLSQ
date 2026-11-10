@@ -3,6 +3,7 @@
 import logging
 import os
 import stat
+import sys
 
 import numpy as np
 import pytest
@@ -14,6 +15,7 @@ from nlsq.cli.model_registry import ModelRegistry
 from nlsq.cli.result_exporter import _atomic_write
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
 def test_f4_atomic_write_respects_umask(tmp_path):
     old = os.umask(0o022)
     try:

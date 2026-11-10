@@ -155,6 +155,7 @@ dev = [
     "pytest-qt>=4.5.0",       # Qt widget testing (tested on 4.5.0)
     "hypothesis>=6.148.0",    # Property-based testing (tested on 6.170.13)
     "zarr>=3.0.0",            # Zarr data-source tests in tests/streaming/test_exact_lm_sources.py
+    "mpmath>=1.3.0",          # High-precision references in tests/benchmarks/test_conditioning_helpers.py
 
     # Lint / type-check / hooks
     "black>=25.0.0",          # Tested on 26.10.1 (CalVer)
@@ -194,7 +195,6 @@ dev = [
 bench = [
     "lmfit>=1.3.4",           # Tested on 1.3.4
     "jaxopt>=0.8.5",          # Tested on 0.8.5
-    "mpmath>=1.3.0",          # High-precision references in tests/benchmarks/test_conditioning_helpers.py
 ]
 
 [project.urls]
