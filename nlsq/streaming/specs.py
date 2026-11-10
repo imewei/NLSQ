@@ -257,34 +257,46 @@ class Exact:
 
 @dataclass(frozen=True)
 class Auto:
-    """Choose between in-memory and chunked fitting by dataset size.
+    """Choose the fit path by dataset size.
 
     Parameters
     ----------
     size_threshold : int
-        Point count at and above which the chunked strategy is used.
+        Point count at and above which the large path (``exact``, else ``chunked``)
+        is used.
     auto_size_detection : bool
-        If False, always use the chunked strategy.
+        If False, always use the large path.
     in_memory : InMemory
         Strategy used below the threshold.
     chunked : Chunked
-        Strategy used at or above the threshold.
+        Large-path strategy when ``exact`` is None, or when the input asks for a
+        chunked-engine feature (``method``, multistart, or options other than
+        ``ftol``, ``xtol``, ``gtol`` and ``max_nfev``): that falls back with a
+        ``UserWarning``. Its ``chunk_size`` and tolerance options also reach ``exact``
+        unless ``exact`` sets them.
+    exact : Exact or None
+        Large-path strategy (the default): the exact chunk-accumulated LM fit, which
+        is full-batch equivalent. Requires 1-D ``xdata`` and a pointwise model
+        (``f(x, *p)[i]`` depends only on ``x[i]`` and ``p``); otherwise
+        ``curve_fit_large`` raises ``ValueError`` naming ``strategy=Chunked()``.
+        None gives the chunked GLS fit, an approximation for nonlinear models.
     """
 
     size_threshold: int = 1_000_000
     auto_size_detection: bool = True
     in_memory: InMemory = field(default_factory=InMemory)
     chunked: Chunked = field(default_factory=Chunked)
+    exact: Exact | None = field(default_factory=Exact)
 
     def __post_init__(self) -> None:
         validate_non_negative_int(self.size_threshold, "size_threshold")
         coerce_integral_fields(self, ("size_threshold",))
 
-    def resolve(self, n_points: int) -> InMemory | Chunked:
-        """Return the concrete strategy for ``n_points`` data points."""
+    def resolve(self, n_points: int) -> InMemory | Chunked | Exact:
+        """Return the concrete strategy for ``n_points`` data points (count only)."""
         if self.auto_size_detection and n_points < self.size_threshold:
             return self.in_memory
-        return self.chunked
+        return self.exact if self.exact is not None else self.chunked
 
 
 LargeStrategy = Auto | InMemory | Chunked | Hybrid | Exact

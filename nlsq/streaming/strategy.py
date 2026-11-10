@@ -288,6 +288,8 @@ def check_exact_sources(
         if name == "sigma" and a is None:
             continue
         shape = a.shape if hasattr(a, "shape") else np.shape(a)
+        if name == "sigma" and len(shape) == 0:
+            continue  # a scalar sigma is broadcast per chunk
         if len(shape) != 1:
             why = (
                 "; multi-feature (2-D) xdata is not supported by exact_streaming"

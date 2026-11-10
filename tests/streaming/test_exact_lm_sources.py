@@ -618,7 +618,7 @@ def test_block_validation(data, i, block, pattern):
 
 @pytest.mark.parametrize(
     ("bad", "pattern"),
-    [(-1.0, r"^sigma must be positive"), (np.nan, r"^sigma must be finite")],
+    [(0.0, r"^sigma must be nonzero"), (np.nan, r"^sigma must be finite")],
 )
 def test_block_validation_sigma(data, bad, pattern):
     s = SIG.copy()

@@ -869,8 +869,7 @@ def test_cpu_sigma_chunks_are_views(data):
     ("make", "pattern"),
     [
         (lambda s: s[:-1], r"^sigma has length 2999, expected 3000"),
-        (lambda s: np.where(np.arange(N) == 5, 0.0, s), r"^sigma must be positive"),
-        (lambda s: np.where(np.arange(N) == 2999, -s, s), r"^sigma must be positive"),
+        (lambda s: np.where(np.arange(N) == 5, 0.0, s), r"^sigma must be nonzero"),
         (lambda s: np.where(np.arange(N) == 7, np.nan, s), r"^sigma must be finite"),
         (lambda s: np.where(np.arange(N) == 2999, np.inf, s), r"^sigma must be finite"),
         (np.diag, r"^sigma must be 1-D"),
@@ -881,6 +880,16 @@ def test_bad_sigma_raises(data, make, pattern, check_finite):
     s = make(np.full(N, 0.05))
     with pytest.raises(ValueError, match=pattern):
         run(exp_model, *data, EXP.p0, sigma=s, check_finite=check_finite)
+
+
+def test_negative_sigma_acts_as_magnitude(data):
+    """The objective depends on sigma^2 only: a negative sigma fits as |sigma|."""
+    s = np.full(N, 0.05)
+    neg = np.where(np.arange(N) % 3 == 0, -s, s)
+    got = run(exp_model, *data, EXP.p0, sigma=neg)
+    want = run(exp_model, *data, EXP.p0, sigma=s)
+    np.testing.assert_array_equal(got["x"], want["x"])
+    np.testing.assert_array_equal(got["pcov"], want["pcov"])
 
 
 # --- Task 9: box bounds by active set, KKT at the returned point ----------------------

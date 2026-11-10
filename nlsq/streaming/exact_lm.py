@@ -448,11 +448,11 @@ def _check_inputs(
     if not hasattr(x, "shape") or len(x.shape) != 1 or tuple(y.shape) != tuple(x.shape):
         raise ValueError("x and y must be 1-D arrays of equal length")
     n, p = _source_len(x), len(p0)
-    if sigma is not None:
+    if sigma is not None and len(sigma.shape) != 0:  # a scalar is broadcast per chunk
         if len(sigma.shape) != 1:
             raise ValueError(
-                f"sigma must be 1-D, got shape {sigma.shape} (correlated 2-D sigma is "
-                "not supported by exact_streaming)"
+                f"sigma must be 1-D (or a scalar), got shape {tuple(sigma.shape)} "
+                "(correlated 2-D sigma is not supported by exact_streaming)"
             )
         if sigma.shape[0] != n:
             raise ValueError(f"sigma has length {sigma.shape[0]}, expected {n}")
@@ -641,12 +641,14 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     the full Jacobian, one extra data pass not counted in ``nfev`` (``"tsqr"``);
     ``"skipped"`` with ``compute_covariance=False``.
 
-    ``sigma`` (optional, 1-D, length ``n``) gives per-point standard deviations: residuals
-    and Jacobian rows are divided by it, so ``cost = 0.5*sum(((y - f)/sigma)^2)`` and
-    ``pcov`` is scaled by ``2*cost/(n - p)`` unless ``absolute_sigma``, as in
-    ``nlsq.curve_fit``. Its length and dimension are checked from its shape; finiteness and
-    positivity are reduced on device during the first pass (always, regardless of
-    ``check_finite``, because a negative ``sigma`` would otherwise square away silently).
+    ``sigma`` (optional, a scalar or 1-D of length ``n``) gives per-point standard
+    deviations: residuals and Jacobian rows are divided by ``|sigma|`` (the objective
+    depends on ``sigma^2`` only, so a negative value acts as its magnitude), so
+    ``cost = 0.5*sum(((y - f)/sigma)^2)`` and ``pcov`` is scaled by ``2*cost/(n - p)``
+    unless ``absolute_sigma``, as in ``nlsq.curve_fit``. A scalar is broadcast per chunk,
+    never to an ``n``-length array. Its length and dimension are checked from its shape;
+    finiteness and nonzero-ness are reduced on device during the first pass (always,
+    regardless of ``check_finite``).
 
     ``bounds = (lb, ub)`` (scalars or length-``p`` arrays, ``lb < ub`` elementwise) are
     handled by an active set: ``p0`` is clipped into the box; each iteration holds the
@@ -682,7 +684,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     points; a factory yielding fewer than 2 points in total raises ``ValueError``.
 
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
-    that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
+    that is not a scalar or 1-D, of the wrong length, non-finite or zero, a non-finite cost,
     gradient or Hessian at ``p0``, and for ``bounds`` of the wrong shape or with
     ``lb >= ub`` anywhere (equal, inverted or NaN bounds).
     """
@@ -749,8 +751,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         raise ValueError("x and y must be finite (found NaN or inf)")
     if not st.sigma_finite:
         raise ValueError("sigma must be finite (found NaN or inf)")
-    if not st.sigma_positive:
-        raise ValueError("sigma must be positive (found a zero or negative value)")
+    if not st.sigma_nonzero:
+        raise ValueError("sigma must be nonzero (found a zero value)")
     if not _finite(st):
         raise ValueError("model cost, gradient or Hessian is not finite at p0")
     cost, g, H = st.cost, st.g, st.H

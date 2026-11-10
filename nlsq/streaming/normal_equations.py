@@ -34,8 +34,8 @@ class PassStats(NamedTuple):
     n_seen: int  # real (unpadded) points that contributed
     data_finite: bool  # all x, y finite (True when the check is off)
     sigma_finite: bool = True  # all sigma finite (True when unchecked or unweighted)
-    sigma_positive: bool = (
-        True  # all finite sigma > 0 (True when unchecked or unweighted)
+    sigma_nonzero: bool = (
+        True  # all finite sigma != 0 (True when unchecked or unweighted)
     )
 
 
@@ -88,6 +88,11 @@ def _gradient_and_gauss_newton_hessian(
     return contract(J, r)
 
 
+def _rows(w: jax.Array) -> jax.Array:
+    """Per-row weights as a column ``(n, 1)``; a scalar stays a scalar (it broadcasts)."""
+    return w[:, None] if w.ndim else w
+
+
 def make_chunk_stats(
     model: Callable[..., Any],
     weighted: bool = False,
@@ -97,7 +102,8 @@ def make_chunk_stats(
     """Jitted ``(theta, x, y, mask) -> (F, g, H)`` for one chunk; ``r = y - model``.
 
     With ``weighted=True`` the signature is ``(theta, x, y, sigma, mask)`` and residuals
-    and Jacobian rows are divided by ``sigma``. Rows where ``mask`` is False (the padded
+    and Jacobian rows are divided by ``|sigma|`` (the objective depends on ``sigma^2``
+    only); ``sigma`` is a per-row block or a scalar. Rows where ``mask`` is False (the padded
     tail) are removed with ``jnp.where`` after weighting, never by multiplication, so a
     non-finite model value or weight on a padded row cannot leak in.
 
@@ -118,8 +124,9 @@ def make_chunk_stats(
             def f(q: jax.Array) -> jax.Array:
                 return model(x, *q)
 
-            r = jnp.where(mask, (y - f(theta)) / s, 0.0)
-            J = jnp.where(mask[:, None], jac(f, theta, x) / s[:, None], 0.0)
+            w = jnp.abs(s)
+            r = jnp.where(mask, (y - f(theta)) / w, 0.0)
+            J = jnp.where(mask[:, None], jac(f, theta, x) / _rows(w), 0.0)
             return 0.5 * jnp.sum(r * r), *_gradient_and_gauss_newton_hessian(J, r)
 
         return jax.jit(wstats)
@@ -146,7 +153,7 @@ def make_chunk_jacobian(
     """Jitted ``(theta, x, mask) -> J`` for one chunk, the Jacobian of :func:`make_chunk_stats`.
 
     With ``weighted=True`` the signature is ``(theta, x, sigma, mask)`` and rows are
-    divided by ``sigma``. Masked rows are set to 0 with ``jnp.where`` after weighting, and
+    divided by ``|sigma|`` (a per-row block or a scalar). Masked rows are set to 0 with ``jnp.where`` after weighting, and
     ``jacobian`` replaces ``jax.jacfwd`` exactly as in :func:`make_chunk_stats`.
     """
 
@@ -160,7 +167,7 @@ def make_chunk_jacobian(
         def wjac(
             theta: jax.Array, x: jax.Array, s: jax.Array, mask: jax.Array
         ) -> jax.Array:
-            return jnp.where(mask[:, None], jac(theta, x) / s[:, None], 0.0)
+            return jnp.where(mask[:, None], jac(theta, x) / _rows(jnp.abs(s)), 0.0)
 
         return jax.jit(wjac)
 
@@ -179,8 +186,14 @@ def _block(a: Any, s: int, e: int) -> Any:
     """Float64 slice ``a[s:e]``: a host view if already float64, on device for JAX.
 
     Callers keep ``e <= len(a)``: a strict array-like may raise on a slice past the end.
+    A 0-d ``a`` (scalar sigma) is returned whole, never broadcast to ``e - s`` rows.
     """
-    return _as64(a[s:e])
+    return _as64(a if _is_scalar(a) else a[s:e])
+
+
+def _is_scalar(a: Any) -> bool:
+    """True for a 0-d array-like (a scalar ``sigma``)."""
+    return np.ndim(a) == 0 if not hasattr(a, "shape") else len(a.shape) == 0
 
 
 def iter_blocks(
@@ -193,7 +206,8 @@ def iter_blocks(
     chunk, and JAX arrays stay on their device. The tail
     is edge-padded (a padded row has the finiteness of a real row) and masked out; a
     ``sigma`` tail is padded with 1, which is valid, so the sigma checks need no mask.
-    ``sigma`` is ``None`` (unweighted) or a 1-D array of the same length.
+    ``sigma`` is ``None`` (unweighted), a scalar (yielded as is) or a 1-D array of the
+    same length.
     """
     n = _source_len(source_x)
     full = jnp.ones(chunk, dtype=bool)
@@ -203,7 +217,7 @@ def iter_blocks(
         sc = None if source_sigma is None else _block(source_sigma, s, e)
         m = xc.shape[0]
         got = {"x": m, "y": yc.shape[0]} | (
-            {} if sc is None else {"sigma": sc.shape[0]}
+            {} if sc is None or sc.ndim == 0 else {"sigma": sc.shape[0]}
         )
         if any(v != e - s for v in got.values()):  # a short slice would be edge-padded
             raise ValueError(
@@ -223,8 +237,8 @@ def _padded(xc: Any, yc: Any, sc: Any, chunk: int) -> tuple[Any, Any, Any, jax.A
     return (
         (jnp if isinstance(xc, jax.Array) else np).pad(xc, pad, mode="edge"),
         (jnp if isinstance(yc, jax.Array) else np).pad(yc, pad, mode="edge"),
-        None
-        if sc is None
+        sc
+        if sc is None or sc.ndim == 0
         else (jnp if isinstance(sc, jax.Array) else np).pad(
             sc, pad, constant_values=1.0
         ),
@@ -260,7 +274,8 @@ class FactorySource:
     arity (``sigma`` or not) fixes the kernel. Pass 1 then replays those blocks in order
     before reading on, so the probe costs no extra factory call.
     Each block is validated as it arrives: a tuple of 2 or 3 parts, the same number as
-    the first block, every part 1-D with equal lengths, ``0 < len <= chunk``. Short blocks
+    the first block, every part 1-D with equal lengths, ``0 < len <= chunk`` (a block's
+    ``sigma`` may instead be a scalar). Short blocks
     are padded to ``chunk`` and masked, so every block has the compiled shape. At the end
     of every pass the point count is checked against ``n`` (``n_points`` or the count of
     pass 1): a factory that replays different data raises ``ValueError``.
@@ -304,9 +319,9 @@ class FactorySource:
             )
         parts = tuple(_as64(a) for a in item)
         for name, a in zip(("x", "y", "sigma"), parts, strict=False):
-            if a.ndim != 1:
+            if a.ndim != 1 and not (name == "sigma" and a.ndim == 0):
                 raise ValueError(f"block {name} must be 1-D, got shape {a.shape}")
-        lengths = [a.shape[0] for a in parts]
+        lengths = [a.shape[0] for a in parts if a.ndim]
         if len(set(lengths)) != 1:
             raise ValueError(f"block parts must have equal lengths, got {lengths}")
         if lengths[0] == 0:
@@ -364,9 +379,12 @@ def _block_finite(x: jax.Array, y: jax.Array) -> jax.Array:
 
 @jax.jit
 def _sigma_ok(s: jax.Array) -> tuple[jax.Array, jax.Array]:
-    """``(all finite, all finite values > 0)``: NaN/inf is reported as non-finite only."""
+    """``(all finite, all finite values != 0)``: NaN/inf is reported as non-finite only.
+
+    A negative ``sigma`` is valid: the kernels weight by ``|sigma|``.
+    """
     fin = jnp.isfinite(s)
-    return jnp.all(fin), jnp.all(jnp.where(fin, s > 0, True))
+    return jnp.all(fin), jnp.all(jnp.where(fin, s != 0, True))
 
 
 def run_pass(
@@ -388,7 +406,7 @@ def run_pass(
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
     acc: tuple[jax.Array, ...] | None = None
-    finite = s_fin = s_pos = jnp.asarray(True)
+    finite = s_fin = s_nz = jnp.asarray(True)
     count = jnp.asarray(0)
     blocks = (
         source.blocks()
@@ -404,11 +422,11 @@ def run_pass(
         if check_finite:
             finite = finite & _block_finite(xc, yc)
         if check_sigma and sc is not None:
-            f_ok, p_ok = _sigma_ok(sc)
-            s_fin, s_pos = s_fin & f_ok, s_pos & p_ok
+            f_ok, nz_ok = _sigma_ok(sc)
+            s_fin, s_nz = s_fin & f_ok, s_nz & nz_ok
     if acc is None:
         raise ValueError("x and y must be non-empty")
-    c, g, H, ok, n_seen, sf, sp = jax.device_get((*acc, finite, count, s_fin, s_pos))
+    c, g, H, ok, n_seen, sf, sp = jax.device_get((*acc, finite, count, s_fin, s_nz))
     return PassStats(
         float(c),
         np.asarray(g),
