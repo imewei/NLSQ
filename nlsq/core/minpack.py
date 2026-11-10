@@ -3575,15 +3575,19 @@ def _sigma_transform2d(
     return transform
 
 
-@jit
-def _covariance_svd_jit(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
-    _, s, VT = jax_svd(jac, full_matrices=False)
+def _covariance_svd_body(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
+    R = jnp.linalg.qr(jac, mode="r")
+    _, s, VT = jax_svd(R, full_matrices=False)
     return s, VT
+
+
+_covariance_svd_jit = jit(_covariance_svd_body)
 
 
 def _covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
     """``(s, VT)`` of ``jac``, on the CPU device when the A3 policy says so.
 
+    SVD of the QR R factor; same s and VT up to row signs.
     Results stay where they were computed: ``pcov_from_jacobian`` converts to NumPy.
     """
     if device_policy.use_host_svd_for(jac):
