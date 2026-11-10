@@ -106,3 +106,71 @@ bodies return a truncated pseudo-inverse with a rank-deficient warning and still
 - GPU: NVIDIA GeForce RTX 4090 Laptop, driver 620.70.06, idle clocks at the time of query
   (graphics/SM 210 MHz, memory 405 MHz; boost clocks not pinned), 59.6 C, 11 W idle.
 - JAX 0.9.x CUDA in the project `.venv`; GPU runs were outside the sandbox and never concurrent.
+
+## Task 5: TSQR covariance on the exact default (2026-11-10)
+
+`exact_lm_fit` computes `pcov` from `H` when `kappa = normal_condition(H) <= TSQR_KAPPA`
+(`covariance_method="normal"`). Above it, one extra data pass at `popt` accumulates the TSQR factor
+`R <- qr(vstack(R, J_chunk), mode="r")`, and `pcov = pcov_from_jacobian(R, ..., _covariance_svd)`
+(`"tsqr"`).
+
+### Gate G-cov (`tests/streaming/test_exact_cov_accuracy.py`, CPU, float64)
+
+Each case compares the fit's `pcov` with `pcov_from_jacobian(full_jac(popt), ..., _covariance_svd)` at the
+same `popt`. Metric: `max_ij |dC_ij| / sqrt(C_ii C_jj)`, gate 1e-8, and the same rank decision (the rank of
+the correlation matrix). `chunk_size=700` gives a padded tail on every case except column scales, which uses
+`chunk_size=128`.
+
+Controlled cases use `B = U diag(geomspace(kappa, 1, 4)) V^T` with n = 2000. `svd(B)` reproduces `s` to 1e-12.
+
+| case | kappa (measured) | route | error |
+|---|---|---|---|
+| controlled kappa=1 | 1 | normal | 4.0e-16 |
+| controlled kappa=10 | 10 | normal | 5.7e-15 |
+| controlled kappa=100 | 100 | normal | 9.1e-13 |
+| controlled kappa=500 | 500 | normal | 2.1e-11 |
+| controlled kappa=900 | 900 | normal | 1.2e-10 |
+| controlled kappa=1100 | 1100 | tsqr | 2.7e-14 |
+| controlled kappa=2000 | 2000 | tsqr | 5.4e-14 |
+| two_exp (harness model, n=20k, noise 0.05) | 666 | normal | 4.2e-11 |
+| gaussian (harness model, n=20k) | 6.4 | normal | 6.3e-16 |
+| correlated: quadratic on t in [1, 2] | 158 | normal | 6.4e-12 |
+| column scales 1e-6..1e6 (n=300) | 7.5e11 | tsqr | 4.0e-9 |
+| sigma, kappa=100, absolute_sigma False / True | 100.3 | normal | 1.0e-12 / 1.0e-12 |
+| sigma, kappa=2000, absolute_sigma False / True | 2006 | tsqr | 8.1e-14 / 8.1e-14 |
+| active upper bound on theta_0 (kappa=100) | 100 | normal | 9.1e-13 |
+| rank-deficient, s = (10, 5, 1, 0) | 1.7e8 (H) | tsqr | 1.9e-14, rank 3 on both |
+
+The worst normal-route error is 1.2e-10, at kappa=900. That is below `eps * kappa^2` = 1.8e-10, and below
+the gate by 87x. No case fails, so `TSQR_KAPPA` stays at **1e3**. The column-scale case (cond 7.5e11) reaches
+4.0e-9. That error is the SVD floor, about `eps * cond(J)`, which the reference shares. A graded `J` with
+cond much above 1e12 would also miss 1e-8 against its reference, on either route.
+
+### Route at 10M and the TSQR pass cost (GPU)
+
+`benchmarks/studies/exact_cov_route.py` (`uv run python -m benchmarks.studies.exact_cov_route`) was run on an
+RTX 4090 Laptop GPU with JAX CUDA, outside the sandbox. It uses the harness data with `seed=0` and default
+`exact_lm_fit` options. kappa is `normal_condition(H)` at `popt`.
+
+| problem | covariance_method | kappa | nfev | fit wall (s) |
+|---|---|---|---|---|
+| exp_decay | normal | 6.33 | 5 | 1.17 (incl. compile) |
+| gaussian | normal | 6.45 | 15 | 0.60 |
+| two_exp | normal | 761.7 | 19 | 1.71 |
+| bounded_exp | normal | 6.65 | 22 | 0.37 |
+
+All four take the `"normal"` route at 10M. two_exp sits at 762, below 1e3, matching the spec's 762 at the
+true parameters.
+
+TSQR pass (`tsqr_r_factor`) against one LM data pass (`run_pass`), exp_decay at `p_true`. Data is on the
+device, chunk is 4,194,304, both are warmed up, and the times are wall clock to a NumPy result over 3 repeats.
+
+| n | tsqr min / median (s) | data pass min / median (s) | ratio |
+|---|---|---|---|
+| 10M | 0.151 / 0.153 | 0.011 / 0.013 | ~13x |
+| 100M | 0.821 / 0.823 | 0.060 / 0.061 | ~14x |
+
+The TSQR pass costs more than one LM iteration, which is one data pass: about 13-14x one pass, or 8.2 ms per
+1M rows. The spec estimated about 15 ms per 1M rows (about 1 s at 100M); the measurement is under that. The
+cost is reported, as the spec asks, and it does not block: the pass runs only when kappa > 1e3, and none of
+the four benchmark problems takes that route.

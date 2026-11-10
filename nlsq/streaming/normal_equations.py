@@ -137,6 +137,39 @@ def make_chunk_stats(
     return jax.jit(stats)
 
 
+def make_chunk_jacobian(
+    model: Callable[..., Any],
+    weighted: bool = False,
+    *,
+    jacobian: Callable[[Any, Any], Any] | None = None,
+) -> Callable[..., jax.Array]:
+    """Jitted ``(theta, x, mask) -> J`` for one chunk, the Jacobian of :func:`make_chunk_stats`.
+
+    With ``weighted=True`` the signature is ``(theta, x, sigma, mask)`` and rows are
+    divided by ``sigma``. Masked rows are set to 0 with ``jnp.where`` after weighting, and
+    ``jacobian`` replaces ``jax.jacfwd`` exactly as in :func:`make_chunk_stats`.
+    """
+
+    def jac(theta: jax.Array, x: jax.Array) -> Any:
+        if jacobian is not None:
+            return jacobian(theta, x)
+        return jax.jacfwd(lambda q: model(x, *q))(theta)
+
+    if weighted:
+
+        def wjac(
+            theta: jax.Array, x: jax.Array, s: jax.Array, mask: jax.Array
+        ) -> jax.Array:
+            return jnp.where(mask[:, None], jac(theta, x) / s[:, None], 0.0)
+
+        return jax.jit(wjac)
+
+    def ujac(theta: jax.Array, x: jax.Array, mask: jax.Array) -> jax.Array:
+        return jnp.where(mask[:, None], jac(theta, x), 0.0)
+
+    return jax.jit(ujac)
+
+
 def _source_len(a: Any) -> int:
     """Length of a 1-D source from ``shape`` (zarr v3 arrays have no ``__len__``)."""
     return int(a.shape[0]) if hasattr(a, "shape") else len(a)

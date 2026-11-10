@@ -1226,3 +1226,191 @@ def test_assert_kkt_rejects_undefined_objective():
     x = np.linspace(0.0, 1.0, 10)
     with pytest.raises(AssertionError, match="not finite"):
         assert_kkt({"x": np.array([-1.0])}, sqrt_model, x, np.ones(10), -2.0, 2.0)
+
+
+# ---- TSQR covariance for ill-conditioned exact fits -------------------------------------
+
+import types
+
+from nlsq.core.covariance import (
+    normal_condition,
+    pcov_from_jacobian,
+    pcov_from_normal,
+)
+from nlsq.core.minpack import _covariance_svd
+from nlsq.streaming import exact_lm
+from nlsq.streaming.exact_lm import exact_lm_fit
+
+two_exp = lambda x, a1, k1, a2, k2: a1 * jnp.exp(-k1 * x) + a2 * jnp.exp(-k2 * x)
+exp_decay = lambda x, a, b, c: a * jnp.exp(-b * x) + c
+x = np.linspace(0.0, 5.0, 3001)
+noise = 1e-3 * np.random.default_rng(0).standard_normal(x.size)
+y_exp = np.asarray(exp_decay(x, 2.5, 1.3, 0.5)) + noise
+# cond(J) ~ 8e6 here, ~2e5 at the fitted popt. The brief's 1.0001 gives cond ~ 6e13 and
+# the fit lands on k1 == k2 (cond ~ 2e15, rank 3), where pcov differs at the 1e-2 level
+# between any two backward-stable factorizations, the reference included.
+TRUE_ILL = (2.0, 1.0, 1.5, 1.02)
+y_ill = np.asarray(two_exp(x, *TRUE_ILL)) + noise
+P0_ILL = [2.0, 0.9, 1.5, 1.1]
+TIGHT = {"ftol": 1e-12, "xtol": 1e-12, "gtol": 1e-12}
+
+
+def full_jac(model, x, theta, sigma=None):
+    J = np.asarray(
+        jax.jacfwd(lambda q: model(jnp.asarray(x), *q))(jnp.asarray(theta, float))
+    )
+    return J if sigma is None else J / np.asarray(sigma)[:, None]
+
+
+def factory(xs, ys):
+    return lambda cs: ((xs[i : i + cs], ys[i : i + cs]) for i in range(0, xs.size, cs))
+
+
+@pytest.fixture
+def spy_tsqr(monkeypatch):
+    real = exact_lm.tsqr_r_factor
+    spy = types.SimpleNamespace(calls=0)
+
+    def wrapper(*a, **k):
+        spy.calls += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(exact_lm, "tsqr_r_factor", wrapper)
+    return spy
+
+
+def _sv(A):
+    return np.linalg.svd(np.asarray(A), compute_uv=False)
+
+
+@pytest.mark.parametrize("weighted", [False, True])
+def test_tsqr_r_factor_matches_full_jacobian(weighted):
+    sigma = 0.5 + np.random.default_rng(1).random(x.size) if weighted else None
+    theta = np.array(TRUE_ILL)
+    src, w = exact_lm._open_source(
+        x, y_ill, sigma, 700, 4, None, None
+    )  # 3001 = 4*700 + 201: padded tail
+    R = exact_lm.tsqr_r_factor(two_exp, theta, src, 700, weighted=w)
+    ref = _sv(full_jac(two_exp, x, theta, sigma))
+    # backward-stable QR and SVD fix each singular value to O(eps * s_max) absolutely
+    # (Weyl), so a relative 1e-12 holds only for s_i >~ 1e-4 * s_max
+    np.testing.assert_allclose(
+        _sv(R), ref, rtol=1e-12, atol=64 * np.finfo(float).eps * ref[0]
+    )
+
+
+def test_tsqr_r_factor_factory_replay():
+    theta = np.array(TRUE_ILL)
+    src_a, _ = exact_lm._open_source(x, y_ill, None, 700, 4, None, None)
+    src_f, _ = exact_lm._open_source(
+        factory(x, y_ill), None, None, 700, 4, None, x.size
+    )
+    R_a = exact_lm.tsqr_r_factor(two_exp, theta, src_a, 700, weighted=False)
+    R_f = exact_lm.tsqr_r_factor(two_exp, theta, src_f, 700, weighted=False)
+    np.testing.assert_allclose(_sv(R_f), _sv(R_a), rtol=1e-13)
+
+
+def test_tsqr_pass_detects_changed_replay_count():
+    state = {"short": False}  # flips the factory to n-1 points for later passes
+
+    def fac(cs):
+        m = x.size - 1 if state["short"] else x.size
+        return (
+            (x[i : min(i + cs, m)], y_ill[i : min(i + cs, m)]) for i in range(0, m, cs)
+        )
+
+    src, _ = exact_lm._open_source(fac, None, None, 700, 4, None, x.size)
+    exact_lm.tsqr_r_factor(
+        two_exp, np.array(TRUE_ILL), src, 700, weighted=False
+    )  # full count: ok
+    state["short"] = True
+    with pytest.raises(ValueError, match="points"):
+        exact_lm.tsqr_r_factor(two_exp, np.array(TRUE_ILL), src, 700, weighted=False)
+
+
+def test_declared_count_mismatch_raises():
+    with pytest.raises(ValueError, match="n_points"):
+        exact_lm_fit(
+            two_exp,
+            factory(x, y_ill),
+            None,
+            P0_ILL,
+            chunk_size=700,
+            n_points=x.size + 1,
+        )
+
+
+def test_tsqr_r_factor_rank_deficient():
+    dup = lambda x, a, b, k: (
+        a * jnp.exp(-k * x) + b * jnp.exp(-k * x)
+    )  # a, b not separable
+    theta = np.array([1.0, 1.0, 1.3])
+    src, _ = exact_lm._open_source(x, y_exp, None, 700, 3, None, None)
+    R = exact_lm.tsqr_r_factor(dup, theta, src, 700, weighted=False)
+    with pytest.warns(OptimizeWarning, match="rank-deficient"):
+        got, _ = pcov_from_jacobian(R, 0.5, x.size, 3, False, _covariance_svd)
+    with pytest.warns(OptimizeWarning, match="rank-deficient"):
+        ref, _ = pcov_from_jacobian(
+            full_jac(dup, x, theta), 0.5, x.size, 3, False, _covariance_svd
+        )
+    np.testing.assert_allclose(got, ref, rtol=1e-8, atol=1e-12 * np.abs(ref).max())
+
+
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
+def test_ill_conditioned_exact_uses_tsqr(spy_tsqr):
+    res = exact_lm_fit(two_exp, x, y_ill, P0_ILL, chunk_size=1000, **TIGHT)
+    assert res.success
+    ref, _ = pcov_from_jacobian(
+        full_jac(two_exp, x, res.x), res.cost, x.size, 4, False, _covariance_svd
+    )
+    d = np.sqrt(np.outer(np.diag(ref), np.diag(ref)))
+    assert res.covariance_method == "tsqr" and spy_tsqr.calls == 1
+    assert np.max(np.abs(res.pcov - ref) / d) <= 1e-8
+
+
+def test_well_conditioned_exact_skips_tsqr(spy_tsqr):
+    res = exact_lm_fit(exp_decay, x, y_exp, [1.0, 1.0, 0.0], chunk_size=1000)
+    assert res.covariance_method == "normal" and spy_tsqr.calls == 0
+
+
+def test_skip_never_calls_tsqr(spy_tsqr):
+    res = exact_lm_fit(
+        two_exp, x, y_ill, P0_ILL, chunk_size=1000, compute_covariance=False, **TIGHT
+    )
+    assert (
+        res.covariance_method == "skipped" and res.pcov is None and spy_tsqr.calls == 0
+    )
+
+
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
+def test_failed_fit_still_reports_route(spy_tsqr):
+    res = exact_lm_fit(two_exp, x, y_ill, P0_ILL, chunk_size=1000, max_nfev=2)
+    assert not res.success and res.covariance_method in ("normal", "tsqr")
+
+
+def test_tsqr_route_warns_when_kappa_above_cond_warn():
+    y2 = np.asarray(two_exp(x, 2.0, 1.0, 1.5, 1.00001)) + noise
+    with pytest.warns(UserWarning, match="computed by QR"):
+        exact_lm_fit(two_exp, x, y2, P0_ILL, chunk_size=1000, **TIGHT)
+
+
+def test_pcov_from_normal_warning_text_unchanged():
+    with pytest.warns(UserWarning, match="the covariance may be inaccurate"):
+        pcov_from_normal(np.diag([1.0, 1e-10]), 0.5, 10, 2, False)
+
+
+@pytest.mark.parametrize(
+    "H,expected",
+    [
+        (np.diag([1e300, 1e300]), 1.0),  # extreme but well-conditioned: no overflow
+        (np.diag([4.0, 1e-6]), 2000.0),
+        (np.diag([1.0, 0.0]), np.inf),
+        (np.array([[np.nan, 0.0], [0.0, 1.0]]), np.inf),
+    ],
+)
+def test_normal_condition(H, expected):
+    assert normal_condition(H) == pytest.approx(expected, rel=1e-12)
