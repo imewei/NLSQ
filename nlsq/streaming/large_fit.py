@@ -43,6 +43,11 @@ _CHUNKED_HINT = (
 )
 
 
+def _is_default(value: Any, default: Any) -> bool:
+    """``value`` is the field default, also by type: ``np.float32(1e-8) == 1e-8``."""
+    return value == default and type(value) is type(default)
+
+
 def _multistart_kwargs(ms: Multistart) -> dict[str, Any]:
     """The five multi-start keywords every in-memory and chunked fit receives."""
     return {
@@ -168,7 +173,7 @@ def fit_with_strategy(
             )
             if hit is None:
                 return _fit_exact(
-                    _effective_exact(auto, opts),
+                    _effective_exact(strategy, auto, opts),
                     f,
                     xdata,
                     ydata,
@@ -250,7 +255,18 @@ def _fit_exact(
     )
 
     reject_owned_kwargs(strategy, kwargs)
-    check_exact_sources(xdata, ydata, sigma, strategy.n_points)
+    try:
+        check_exact_sources(xdata, ydata, sigma, strategy.n_points)
+    except ValueError as err:
+        shape_msg = " must be 1-D for method='exact_streaming'"
+        if route == "default" and shape_msg in str(err):
+            # the user never chose method='exact_streaming'
+            reason = str(err).replace(shape_msg, " must be 1-D")
+            raise ValueError(
+                f"curve_fit_large: exact streaming cannot fit this input ({reason}). "
+                f"{_CHUNKED_HINT}"
+            ) from err
+        raise
     if p0 is not None:
         p0 = np.asarray(p0, dtype=float)  # a complex list p0 must raise TypeError
     p0_arr, exact_bounds = normalize_p0_bounds(f, p0, bounds)
@@ -264,10 +280,7 @@ def _fit_exact(
         fld.name: getattr(strategy, fld.name)
         for fld in dataclasses.fields(strategy)
         if fld.name != "chunk_size"
-        and (
-            getattr(strategy, fld.name) != fld.default
-            or type(getattr(strategy, fld.name)) is not type(fld.default)
-        )
+        and not _is_default(getattr(strategy, fld.name), fld.default)
     }
     solver_kwargs.update(kwargs)
     large_strategy = build_large_strategy("exact", None)
@@ -302,15 +315,13 @@ def _fit_exact(
         raise
 
 
-def _effective_exact(auto: Auto, opts: Mapping[str, Any]) -> Exact:
-    """``auto.exact`` with the large-path settings the caller gave elsewhere.
+def _effective_exact(exact: Exact, auto: Auto, opts: Mapping[str, Any]) -> Exact:
+    """``exact`` (``auto.exact``) with the large-path settings the caller gave elsewhere.
 
-    Per field, a non-default value on ``auto.exact`` wins; otherwise ``chunk_size``
+    Per field, a non-default value on ``exact`` wins; otherwise ``chunk_size``
     comes from ``auto.chunked`` and ``ftol``, ``xtol``, ``gtol``, ``max_nfev`` from
     ``opts`` (``auto.chunked.options`` merged with the call kwargs).
     """
-    exact = auto.exact
-    assert exact is not None  # only called when Auto.resolve returned it
     inherited = {"chunk_size": auto.chunked.chunk_size} | {
         k: opts[k] for k in _EXACT_OPTION_KEYS if k in opts
     }
@@ -318,8 +329,7 @@ def _effective_exact(auto: Auto, opts: Mapping[str, Any]) -> Exact:
     changes = {
         name: value
         for name, value in inherited.items()
-        if getattr(exact, name) == defaults[name]
-        and type(getattr(exact, name)) is type(defaults[name])
+        if _is_default(getattr(exact, name), defaults[name])
     }
     return dataclasses.replace(exact, **changes)
 
@@ -596,5 +606,8 @@ def _fit_chunked(
         )
 
         popt, pcov = large_strategy.unpack(native)
-        # The GLS combiner needed the chunk covariances; only the result drops
-        return popt, (pcov if compute_covariance else None)
+        if not compute_covariance:
+            # The GLS combiner needed the chunk covariances; only the result drops
+            _logger.debug("covariance dropped (compute_covariance=False)")
+            return popt, None
+        return popt, pcov

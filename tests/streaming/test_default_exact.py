@@ -221,7 +221,7 @@ def test_zero_sigma_raises(dispatch, data):
     x, y = data
     sigma = np.ones(N)
     sigma[3] = 0.0
-    with pytest.raises(ValueError, match="sigma"):
+    with pytest.raises(ValueError, match="nonzero"):
         curve_fit_large(m, x, y, p0=P0, sigma=sigma, size_threshold=TH)
 
 
@@ -233,6 +233,22 @@ def test_2d_sigma_raises(dispatch):
     # chunked's error names the shape too
     with pytest.raises(ValueError, match=r"shape \(2000, 2000\)"):
         curve_fit_large(m, x, y, p0=P0, sigma=np.eye(2_000), strategy=Chunked())
+
+
+def test_default_route_2d_sigma_error_is_neutral(dispatch):
+    """The user never chose method='exact_streaming': say so neutrally, name the hint."""
+    x, y = EXP.data(2_000)
+    with pytest.raises(ValueError) as exc:
+        curve_fit_large(m, x, y, p0=P0, sigma=np.eye(2_000), size_threshold=1_000)
+    msg = str(exc.value)
+    assert "exact_streaming" not in msg
+    assert "sigma must be 1-D" in msg and "(2000, 2000)" in msg
+    assert "strategy=Chunked()" in msg
+    # the explicit route keeps its text
+    with pytest.raises(
+        ValueError, match=r"sigma must be 1-D for method='exact_streaming'"
+    ):
+        curve_fit_large(m, x, y, p0=P0, sigma=np.eye(2_000), strategy=Exact())
 
 
 @pytest.mark.parametrize("absolute_sigma", [False, True])
@@ -455,4 +471,18 @@ def test_legacy_options_reach_the_default_exact():
     auto = _legacy_to_strategy(ftol=1e-10, chunk_size=500)
     assert isinstance(auto, Auto)
     assert auto.exact == Exact()
-    assert _effective_exact(auto, {"ftol": 1e-10}) == Exact(chunk_size=500, ftol=1e-10)
+    assert _effective_exact(auto.exact, auto, {"ftol": 1e-10}) == Exact(
+        chunk_size=500, ftol=1e-10
+    )
+
+
+def test_chunked_path_logs_when_it_drops_pcov(data, caplog):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="nlsq.streaming.large_fit")
+    x, y = data
+    _, pcov = curve_fit_large(
+        m, x, y, p0=P0, strategy=Chunked(chunk_size=5_000), compute_covariance=False
+    )
+    assert pcov is None
+    assert [r for r in caplog.records if "compute_covariance=False" in r.getMessage()]

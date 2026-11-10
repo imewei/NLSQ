@@ -350,7 +350,8 @@ def _place(
     free = _free_device_bytes()
     if free is None:
         return x, y, sigma
-    need = 8 * len(arrays) * _source_len(x)  # float64
+    # float64; a scalar sigma is broadcast per chunk and costs nothing per point
+    need = 8 * sum(1 for a in arrays if len(a.shape) != 0) * _source_len(x)
     if need > DEVICE_FRACTION * free:
         return x, y, sigma
     if (
