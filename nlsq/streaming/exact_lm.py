@@ -523,12 +523,8 @@ def _captured_bytes(closed: Any) -> int:
     """Bytes of every constant and literal in a closed jaxpr, nested jaxprs included."""
     from jax.extend import core as jex_core
 
-    seen: set[int] = set()
-
     def size(v: Any) -> int:
-        if id(v) in seen:
-            return 0
-        seen.add(id(v))
+        # every occurrence: the digest snapshots each one separately, even a shared array
         return int(getattr(v, "nbytes", 0) or 0)
 
     def walk(obj: Any) -> int:

@@ -176,3 +176,22 @@ def test_uninspectable_model_is_not_cached(monkeypatch):
     m = _model()
     got, _ = lm._cached_stats(m, BLOCK, 3, False)
     assert got is m and len(ls._wrapper_cache) == 0
+
+
+def test_one_table_in_several_nested_jaxprs_counts_each_copy(monkeypatch):
+    """The digest snapshots the table once per nested jaxpr: count every copy."""
+    table = np.linspace(0.0, 1.0, x.size)  # 16 kB
+    fns = [jax.jit(_lookup(table)) for _ in range(5)]
+
+    def model(xx, a, b):
+        return sum(f(xx, a, b) for f in fns) / 5.0
+
+    scalar = jax.ShapeDtypeStruct((), jnp.float64)
+    assert (
+        lm._captured_bytes(jax.make_jaxpr(model)(BLOCK, scalar, scalar)) >= 5 * 16_000
+    )
+    monkeypatch.setattr(
+        lm, "_CACHE_CONST_BYTES", 3 * 16_000
+    )  # above one copy, below five
+    got, _ = lm._cached_stats(model, BLOCK, 2, False)
+    assert got is model and len(ls._wrapper_cache) == 0
