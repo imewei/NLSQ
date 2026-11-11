@@ -6,6 +6,8 @@ Machine state: `uptime` load average was 8.05 / 6.98 / 7.54 before the A/B runs 
 
 API split as on 2026-11-09: `curve_fit` at 1k / 10k / 100k / 1M, `curve_fit_large` at 1M / 10M / 100M. `curve_fit_large` is now the **exact streaming** path (default above `size_threshold`); on 2026-11-09 it was the chunked GLS default. `exact_streaming` was not run separately (it is the same code).
 
+**Stale `curve_fit_large` timings.** On `ec9dd429` the exact path recompiled its chunk kernel on every call, and this harness disables the persistent JAX cache, so every `curve_fit_large` warm time below includes one compile: about 0.1-0.13 s for the 3-parameter problems and 0.74 s for two_exp on GPU. `4dcc65b6` removes it (see `2026-11-10-default-exact-ab.md`: GPU two_exp 10M 0.995 s -> 0.29 s). Costs are unaffected. The `curve_fit_large` GPU timings here are therefore upper bounds, as are the JAXopt comparisons drawn from them at <=10M.
+
 Invocations (one `--out` each, flags as on 2026-11-09):
 
 ```bash

@@ -2,17 +2,19 @@
 
 Change: `curve_fit_large` runs the exact full-data streaming LM (`Auto.exact`) by default at or above `size_threshold`,
 with the adaptive normal/TSQR covariance (Tasks 5-7 of the "close the JAXopt gap" plan).
-Base: `a8fac156` (branch point, worktree). Candidate: `ec9dd429` (branch `perf/close-jaxopt-gap`, which adds only the
-`--cost-gate` flag on top of the code change `3c91b009`).
-Raw A/B JSON: `benchmarks/results/2026-11-10-default-exact-ab/` (gitignored).
+Base: `a8fac156` (branch point, worktree). Candidate: `4dcc65b6` (branch `perf/close-jaxopt-gap`, with the exact
+chunk kernel reused across calls). The first run measured `ec9dd429`, whose exact path recompiled its chunk kernel on
+every call (see "Superseded: R16" below); every GPU cell and the CPU 1M/10M cells were re-measured on `4dcc65b6`.
+Raw A/B JSON: `benchmarks/results/2026-11-10-default-exact-ab-v2/` (re-run) and `.../2026-11-10-default-exact-ab/`
+(first run, CPU 100M), both gitignored.
 
 Machine: i9-13900H, RTX 4090 Laptop 16 GB, project `.venv` (jax/jaxlib 0.12.0.1 CUDA), CPU governor `powersave`,
 CPU runs use `JAX_PLATFORMS=cpu`. Laptop clock drift between sessions is up to ~50%, so only the interleaved ratios
 below mean anything. Runs were back to back, one at a time (never two on the GPU).
 
-**Verdict: Gate 1 (speed) FAILED at one cell, GPU two_exp 10M: the 5 x 3 run gave ratio 1.018 (inside the spread),
-and a 10 x 5 re-measurement (R16, below) gave 1.162, a real ~16% slowdown. Every other cell passes; Gate 2 (no
-slowdown beyond the spread) passes for the main table; Gate 3 (route) passes.**
+**Verdict: all gates PASS.** Gate 1: every GPU 10M/100M candidate is at or below base (ratio 0.06-0.33). Gate 2: no
+cell has a ratio above 1. Gate 3 (route) passes. The earlier gate-1 failure at GPU two_exp 10M (ratio 1.16) was the
+per-call kernel recompile, not the solver; it is fixed in `4dcc65b6` and that cell now measures 0.33.
 
 ## Command
 
@@ -34,33 +36,39 @@ slowdown beyond the spread) passes for the main table; Gate 3 (route) passes.**
 
 ## GPU
 
+Re-measured on `4dcc65b6`.
+
 | case | base_s | cand_s | ratio | spr_b | spr_c |
 |---|---|---|---|---|---|
-| exp_decay 1M | 0.2023 | 0.1435 | 0.709 | 0.345 | 0.212 |
-| gaussian 1M | 0.2187 | 0.2020 | 0.924 | 0.284 | 0.200 |
+| exp_decay 1M | 0.2131 | 0.0214 | 0.100 | 0.107 | 0.064 |
+| gaussian 1M | 0.2233 | 0.0513 | 0.230 | 0.091 | 0.175 |
 | two_exp 1M | skipped (base missed the optimum) | | | | |
-| bounded_exp 1M | 1.7337 | 0.1789 | 0.103 | 0.152 | 0.186 |
-| exp_decay 10M | 0.9393 | 0.1874 | 0.199 | 0.407 | 0.509 |
-| gaussian 10M | 0.9026 | 0.3512 | 0.389 | 0.504 | 0.432 |
-| two_exp 10M | 0.9977 | 1.0161 | **1.018** | 0.761 | 0.394 |
-| bounded_exp 10M | 2.3311 | 0.3744 | 0.161 | 0.793 | 0.210 |
-| exp_decay 100M | 9.6390 | 0.7163 | 0.074 | 0.525 | 0.623 |
-| gaussian 100M | 10.5634 | 1.7445 | 0.165 | 0.491 | 0.254 |
-| two_exp 100M | 10.2607 | 3.0106 | 0.293 | 0.205 | 0.438 |
-| bounded_exp 100M | 26.2533 | 1.7997 | 0.069 | 0.195 | 0.198 |
+| bounded_exp 1M | 1.7456 | 0.0569 | 0.033 | 0.059 | 0.109 |
+| exp_decay 10M | 1.1917 | 0.0804 | 0.067 | 0.370 | 0.105 |
+| gaussian 10M | 1.2314 | 0.2237 | 0.182 | 0.398 | 0.074 |
+| two_exp 10M | 1.2839 | 0.2979 | 0.232 | 0.507 | 0.078 |
+| two_exp 10M (10 x 5) | 0.8722 | 0.2887 | 0.331 | 0.411 | 0.055 |
+| bounded_exp 10M | 2.5053 | 0.2368 | 0.095 | 0.329 | 0.104 |
+| exp_decay 100M | 8.2388 | 0.5178 | 0.063 | 0.011 | 0.007 |
+| gaussian 100M | 8.2626 | 1.5544 | 0.188 | 0.024 | 0.005 |
+| two_exp 100M | 8.7589 | 2.1225 | 0.242 | 0.013 | 0.013 |
+| bounded_exp 100M | 19.0566 | 1.6420 | 0.086 | 0.026 | 0.014 |
 
 ## CPU
 
+1M and 10M re-measured on `4dcc65b6`; 100M is the first run (`ec9dd429`), where the per-call recompile (0.1-0.7 s)
+is under 3% of a 6-34 s candidate fit.
+
 | case | base_s | cand_s | ratio | spr_b | spr_c |
 |---|---|---|---|---|---|
-| exp_decay 1M | 0.3612 | 0.2278 | 0.631 | 0.187 | 0.827 |
-| gaussian 1M | 0.4382 | 0.4779 | 1.091 | 0.267 | 0.972 |
+| exp_decay 1M | 0.3466 | 0.1219 | 0.352 | 0.507 | 0.345 |
+| gaussian 1M | 0.4106 | 0.3564 | 0.868 | 0.226 | 0.306 |
 | two_exp 1M | skipped (base missed the optimum) | | | | |
-| bounded_exp 1M | 1.6847 | 0.5094 | 0.302 | 0.382 | 1.047 |
-| exp_decay 10M | 3.9519 | 1.4591 | 0.369 | 0.075 | 1.005 |
-| gaussian 10M | 4.8670 | 4.8233 | 0.991 | 0.059 | 0.199 |
-| two_exp 10M | 10.6486 | 5.7760 | 0.542 | 0.422 | 0.067 |
-| bounded_exp 10M | 7.7672 | 5.2811 | 0.680 | 0.299 | 0.130 |
+| bounded_exp 1M | 1.5462 | 0.3959 | 0.256 | 0.255 | 0.302 |
+| exp_decay 10M | 3.9042 | 1.2669 | 0.325 | 1.152 | 1.059 |
+| gaussian 10M | 4.9263 | 4.4632 | 0.906 | 1.180 | 0.335 |
+| two_exp 10M | 10.1171 | 6.2740 | 0.620 | 0.699 | 0.329 |
+| bounded_exp 10M | 7.3088 | 6.4729 | 0.886 | 0.646 | 0.804 |
 | exp_decay 100M | 25.4046 | 6.1652 | 0.243 | 0.553 | 0.079 |
 | gaussian 100M | 36.5939 | 25.6820 | 0.702 | 0.831 | 0.443 |
 | two_exp 100M | 65.3021 | 34.0322 | 0.521 | 0.772 | 0.624 |
@@ -68,13 +76,10 @@ slowdown beyond the spread) passes for the main table; Gate 3 (route) passes.**
 
 ## Gates
 
-1. **Every candidate median at or below base on GPU at 10M and 100M: FAILED at one cell.**
-   GPU two_exp 10M: base 0.9977 s, cand 1.0161 s, ratio 1.018 in the 5 x 3 run. The ratio was inside both arms'
-   spread (0.761 and 0.394), but the 10 x 5 re-measurement above gives 1.162 with spreads 0.038 / 0.016: a real slowdown. The other seven GPU
-   10M/100M cells are 0.07-0.39x. For the same problem, base and cand costs at 10M differ by 7.2e-7 (base higher),
-   which is inside `COST_RTOL` (1e-6), so the case was timed rather than skipped.
-2. **No other cell slower beyond the spread: PASS.** The only cell with ratio above 1 besides the one above is CPU
-   gaussian 1M (1.091, spread 0.267 / 0.972). No cell has `ratio > 1 + max(spread)`.
+1. **Every candidate median at or below base on GPU at 10M and 100M: PASS.** Ratios 0.06-0.33 (two_exp 10M 0.232 in
+   the 5 x 3 run, 0.331 in the 10 x 5 run). For two_exp, base and cand costs at 10M differ by 7.2e-7 (base higher),
+   inside `COST_RTOL` (1e-6), so the case was timed rather than skipped.
+2. **No cell slower beyond the spread: PASS.** No re-measured cell has a ratio above 1.
 3. **Task 5 Step 4b route table: PASS, all four problems `"normal"` (so no TSQR pass is paid).** Measured with
    `benchmarks/studies/exact_cov_route.py` at 10M on GPU (Task 5): exp_decay kappa 6.33, gaussian 6.45,
    two_exp 761.7 (narrow margin below `TSQR_KAPPA` = 1e3), bounded_exp 6.65. The TSQR pass would cost
@@ -82,18 +87,15 @@ slowdown beyond the spread) passes for the main table; Gate 3 (route) passes.**
    `(model, weighted)`; about 8x and 13x one LM data pass; see `2026-11-10-qr-covariance-ab.md`). The first
    measurement, 0.153 s / 0.823 s (about 14x), predates that fix.
 
-## Gate 1 re-measurement: GPU two_exp 10M (R16)
+## Superseded: R16 (GPU two_exp 10M, ratio 1.16)
 
-The 5 x 3 cell was inside its spread, so it was re-measured with 10 rounds x 5 repeats (raw JSON in
-`benchmarks/results/2026-11-10-default-exact-ab/gpu-10M-two_exp-r14`):
-
-| case | base_s | cand_s | ratio | spr_b | spr_c |
-|---|---|---|---|---|---|
-| two_exp 10M (10 x 5) | 0.856 | 0.995 | **1.162** | 0.038 | 0.016 |
-
-Median final cost: base 12487.60118, cand 12487.59225 (cand lower by 7.1e-7 relative). **Gate 1 FAILED at this
-cell.** The ratio exceeds both spreads, so it is a real ~16% slowdown, while exact reaches a lower cost. The opt-out
-is `strategy=Chunked()`.
+The first run's 10 x 5 re-measurement gave base 0.856 s, cand 0.995 s (ratio 1.162), recorded as a real slowdown. It
+was not the solver. `exact_lm_fit` built a new `jax.jit` chunk kernel per call, so every warm call recompiled it, and
+the harness disables the persistent JAX cache (`NLSQ_DISABLE_PERSISTENT_CACHE=1`), so the full compile was paid each
+time: 0.74 s for the 4-parameter two_exp, against 0.27 s for its 19 data passes (0.10-0.13 s for the 3-parameter
+problems, which is why only two_exp crossed 1). `4dcc65b6` keys the kernel by the exact jaxpr digest curve_fit already
+uses, so warm calls compile nothing; the cell now measures 0.289 s vs 0.872 s (ratio 0.331). Final costs are unchanged
+(cand 12487.59225).
 
 ## Cost gate (`--cost-gate no-worse`)
 
@@ -115,4 +117,4 @@ Every case was status `ok` in both arms in every round. No violation.
   ratios are not distinguishable from noise.
 - Base arm timing on CPU at 100M (25-65 s per fit) is of the same order as the 2026-11-09 default
   `curve_fit_large` CPU figures (23-45 s), within the machine's drift. Not investigated: why bounded_exp gains most on GPU
-  (0.07-0.16).
+  (0.03-0.10 after the re-run).

@@ -130,10 +130,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`curve_fit_large` is exact by default.** At or above `size_threshold` the default path is now
   the exact full-data streaming Levenberg-Marquardt fit (`Auto.exact`, default `Exact()`), not
   the chunked precision-weighted (GLS) fit. Measured against the old default in an interleaved
-  A/B (`benchmarks/baselines/2026-11-10-default-exact-ab.md`): GPU 100M 0.72-3.01 s against
-  9.6-26 s (ratio 0.07-0.29), CPU 100M ratio 0.24-0.70, GPU 10M ratio 0.16-0.39 except two_exp,
-  where a 10 x 5 re-measurement gave 1.16 (0.856 s to 0.995 s): gate 1 failed at that cell, a real
-  ~16% slowdown while exact reaches a lower cost (`strategy=Chunked()` opts out); the 1M two_exp fit that missed the optimum by 7.3e-5 now reaches it. In
+  A/B (`benchmarks/baselines/2026-11-10-default-exact-ab.md`): GPU 100M 0.52-2.12 s against
+  8.2-19 s (ratio 0.06-0.24), GPU 10M ratio 0.07-0.33, CPU 100M ratio 0.24-0.70; the 1M two_exp
+  fit that missed the optimum by 7.3e-5 now reaches it. The jitted chunk kernel is reused across
+  calls for models with an identical jaxpr digest (as `curve_fit`'s wrappers are), so warm calls do
+  not recompile it (that recompile, 0.74 s for a 4-parameter model, was a measured 16% GPU two_exp
+  10M slowdown before the fix). In
   the library comparison (`2026-11-10-library-comparison-1k-100M.md`) every NLSQ cell is within
   1e-6 of the best cost. **Opt out** with `strategy=Chunked()` or `strategy=Auto(exact=None)`.
   - The model must be pointwise: `f(x, *p)[i]` depends only on `x[i]` and `p`, deterministic.
