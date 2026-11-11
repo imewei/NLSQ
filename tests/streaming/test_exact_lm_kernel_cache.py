@@ -195,3 +195,28 @@ def test_one_table_in_several_nested_jaxprs_counts_each_copy(monkeypatch):
     )  # above one copy, below five
     got, _ = lm._cached_stats(model, BLOCK, 2, False)
     assert got is model and len(ls._wrapper_cache) == 0
+
+
+@pytest.mark.parametrize("cap,cached", [(10_000_000, True), (1_000, False)])
+def test_capture_only_in_a_custom_jvp_counts_toward_the_cap(monkeypatch, cap, cached):
+    """A table read only by a custom derivative rule is in the Jacobian trace the digest keeps."""
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", cap)
+    table = np.ones(10_000)  # 80 kB, used only in the JVP
+
+    @jax.custom_jvp
+    def model(xx, a):
+        return a * xx
+
+    @model.defjvp
+    def _jvp(primals, tangents):
+        xx, a = primals
+        _, da = tangents
+        i = jnp.zeros(xx.shape, jnp.int32)
+        return a * xx, jnp.asarray(table)[i] * xx * da
+
+    def m(xx, a):
+        return model(xx, a)
+
+    got, _ = lm._cached_stats(m, BLOCK, 1, False)
+    assert (got is not m) is cached
+    assert (len(ls._wrapper_cache) == 1) is cached

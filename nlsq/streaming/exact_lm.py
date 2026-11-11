@@ -565,8 +565,12 @@ def _cached_stats(
     try:
         # a fresh wrapper: make_jaxpr caches by function identity, so tracing ``model``
         # itself could return a stale trace for a closure whose capture has since grown
-        closed = jax.make_jaxpr(lambda *a: model(*a))(x_block, *[scalar] * p)  # noqa: PLW0108
-        too_big = _captured_bytes(closed) > _CACHE_CONST_BYTES
+        args = (x_block, *[scalar] * p)
+        primal = jax.make_jaxpr(lambda *a: model(*a))(*args)  # noqa: PLW0108
+        # the digest also snapshots the Jacobian trace (custom derivative rules live there)
+        argnums = tuple(range(1, p + 1))
+        jac = jax.make_jaxpr(lambda *a: jax.jacfwd(model, argnums=argnums)(*a))(*args)  # noqa: PLW0108
+        too_big = _captured_bytes(primal) + _captured_bytes(jac) > _CACHE_CONST_BYTES
     except Exception:
         too_big = True
     if too_big:
