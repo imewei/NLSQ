@@ -93,18 +93,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Cache Qt system packages (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/qt-debs
+          key: qt-debs-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ hashFiles('.github/scripts/install-qt-libs.sh') }}
+          restore-keys: qt-debs-${{ runner.arch }}-${{ env.ImageOS }}-
+
       - name: Install Qt system dependencies (Linux)
         if: runner.os == 'Linux'
-        run: |
-          # Runner DNS to the Ubuntu mirrors fails intermittently: retry with backoff.
-          for i in 1 2 3 4 5; do
-            sudo apt-get -o Acquire::Retries=3 update &&
-              sudo apt-get -o Acquire::Retries=3 install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3 &&
-              exit 0
-            echo "apt attempt $i failed; retrying in $((i * 30)) s"
-            sleep $((i * 30))
-          done
-          exit 1
+        run: .github/scripts/install-qt-libs.sh
 
       - uses: astral-sh/setup-uv@v7
         with:
