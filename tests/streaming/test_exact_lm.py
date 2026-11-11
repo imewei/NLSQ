@@ -1526,33 +1526,66 @@ def test_tsqr_warning_names_non_finite_hessian():
     assert not any("ill-conditioned" in str(r.message) for r in rec)
 
 
-def test_tsqr_jacobian_kernel_cached_per_model_and_weighting():
-    k = lm._chunk_jacobian(two_exp, False)
-    assert lm._chunk_jacobian(two_exp, False) is k
-    assert lm._chunk_jacobian(two_exp, True) is not k
-    assert lm._chunk_jacobian(exp_decay, True) is not lm._chunk_jacobian(two_exp, True)
+def test_tsqr_jacobian_reflects_the_models_current_state():
+    """No kernel outlives a call: a mutated rule is re-read on the next pass."""
+    state = np.array([2.0])
+
+    @jax.custom_jvp
+    def f(xx, a):
+        return a * xx
+
+    @f.defjvp
+    def _jvp(primals, tangents):
+        xx, a = primals
+        _, da = tangents
+        return a * xx, state[0] * xx * da
+
+    src, w = lm._open_source(np.ones(4), np.ones(4), None, 4, 1, None, None)
+    R1 = lm.tsqr_r_factor(f, np.array([1.0]), src, 4, weighted=w)
+    state[0] = 5.0
+    src, w = lm._open_source(np.ones(4), np.ones(4), None, 4, 1, None, None)
+    R2 = lm.tsqr_r_factor(f, np.array([1.0]), src, 4, weighted=w)
+    np.testing.assert_allclose(np.abs(R1), [[4.0]])  # sqrt(4 * 2^2)
+    np.testing.assert_allclose(np.abs(R2), [[10.0]])  # sqrt(4 * 5^2)
 
 
-def test_tsqr_jacobian_kernel_cache_is_race_free(monkeypatch):
-    """Another thread replacing the slot between this call's store and its return must
-    not hand this call the other model's kernel (simulated deterministically)."""
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
+def test_tsqr_covariance_of_a_refit_mutated_model_is_current(monkeypatch):
+    """Uncached (cache disabled) model, mutated between two ill-conditioned fits."""
+    monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
 
-    def a(x, q):
-        return q * x
+    def make(scale):
+        return lambda xx, a1, k1, a2, k2: scale[0] * two_exp(xx, a1, k1, a2, k2)
 
-    def b(x, q):
-        return 2.0 * q * x
+    scale = np.array([1.0])
+    model = make(scale)
+    lm.exact_lm_fit(model, x, y_ill, P0_ILL, chunk_size=1000, **TIGHT)
+    scale[0] = 2.0
+    res = lm.exact_lm_fit(model, x, y_ill, P0_ILL, chunk_size=1000, **TIGHT)
+    ref = lm.exact_lm_fit(
+        make(np.array([2.0])), x, y_ill, P0_ILL, chunk_size=1000, **TIGHT
+    )
+    assert res.covariance_method == ref.covariance_method == "tsqr"
+    np.testing.assert_allclose(res.pcov, ref.pcov, rtol=1e-10)
 
-    b_entry = (b, False, lm.make_chunk_jacobian(b))
 
-    class Racy(list):
-        def __setitem__(self, i, v):  # store, then "another thread" stores b
-            super().__setitem__(i, v)
-            super().__setitem__(0, b_entry)
+def test_tsqr_does_not_retain_an_uncached_model(monkeypatch):
+    import gc
+    import weakref
 
-    monkeypatch.setattr(lm, "_jac_kernel", Racy([None]))
-    xs, mask = jnp.linspace(0.0, 1.0, 8), jnp.ones(8, dtype=bool)
-    Ja = lm._chunk_jacobian(a, False)(jnp.array([3.0]), xs, mask)
-    np.testing.assert_array_equal(np.asarray(Ja)[:, 0], np.asarray(xs))
-    Jb = lm._chunk_jacobian(b, False)(jnp.array([3.0]), xs, mask)  # cache hit on b
-    np.testing.assert_array_equal(np.asarray(Jb)[:, 0], 2.0 * np.asarray(xs))
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", 1_000)  # the table is over the cap
+    table = np.ones(x.size)
+    ref = weakref.ref(table)
+
+    def model(xx, a):
+        i = jnp.round(xx * (table.size - 1) / 5.0).astype(jnp.int32)
+        return a * jnp.asarray(table)[i] * xx
+
+    src, w = lm._open_source(x, 2.0 * x, None, 1000, 1, None, None)
+    lm.tsqr_r_factor(model, np.array([1.0]), src, 1000, weighted=w)
+    del model, table, src
+    jax.clear_caches()
+    gc.collect()
+    assert ref() is None

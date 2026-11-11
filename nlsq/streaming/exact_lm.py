@@ -497,36 +497,14 @@ def _open_source(
     ), sigma is not None
 
 
-# one slot: (model, weighted, kernel) of the last TSQR pass; read and replaced whole
-_jac_kernel: list[tuple[Any, bool, Callable[..., jax.Array]] | None] = [None]
-
-
-def _chunk_jacobian(
-    model: Callable[..., Any], weighted: bool
-) -> Callable[..., jax.Array]:
-    """:func:`make_chunk_jacobian` kernel, cached for the last ``(model, weighted)``.
-
-    Rebuilt only when ``model`` is a different object or ``weighted`` changes, so repeated
-    fits of one model do not re-trace (the jitted kernel bakes ``model`` in). Thread-safe:
-    the slot is read once and the kernel returned is always the local one, so another
-    thread replacing the slot cannot hand this call a different model's kernel.
-    """
-    entry = _jac_kernel[0]
-    if entry is not None and entry[0] is model and entry[1] == weighted:
-        return entry[2]
-    kernel = make_chunk_jacobian(model, weighted=weighted)
-    _jac_kernel[0] = (model, weighted, kernel)
-    return kernel
-
-
 def _cached_stats(
     model: Callable[..., Any], x_block: jax.ShapeDtypeStruct, p: int, weighted: bool
-) -> tuple[Callable[..., Any], Callable[..., Any]]:
-    """``(model, stats kernel)`` reused across calls when ``model`` traces identically.
+) -> tuple[Callable[..., Any], Callable[..., Any], Callable[..., jax.Array]]:
+    """``(model, stats kernel, TSQR Jacobian kernel)``, reused when ``model`` traces identically.
 
     Keyed by curve_fit's exact jaxpr digest (``_trace_model``): on a hit the kernel
     evaluates the private jaxpr snapshot, never the caller's ``model``, so a closure whose
-    captured data changed misses. Returns ``(model, make_chunk_stats(model))`` uncached
+    captured data changed misses. Returns fresh kernels of the caller's ``model`` uncached
     when the model cannot be keyed exactly, ``NLSQ_DISABLE_WRAPPER_CACHE=1``, or its captured
     constants exceed ``_CACHE_CONST_BYTES`` (the digest copies and hashes them, and a cached
     copy would sit outside ``memory_limit_gb``).
@@ -543,7 +521,11 @@ def _cached_stats(
     finally:
         ls._snapshot_budget.reset(token)
     if traced is None:
-        return model, make_chunk_stats(model, weighted=weighted)
+        return (
+            model,
+            make_chunk_stats(model, weighted=weighted),
+            make_chunk_jacobian(model, weighted=weighted),
+        )
     key = ("exact_lm_stats", weighted, traced[0])
     with ls._wrapper_cache_lock:
         hit = ls._wrapper_cache.get(key)
@@ -551,7 +533,12 @@ def _cached_stats(
             ls._wrapper_cache.move_to_end(key)
             return hit
     m = ls._model_from_jaxpr(traced[1], traced[2])
-    entry = (m, make_chunk_stats(m, weighted=weighted))
+    # jax.jit is lazy: the TSQR Jacobian kernel compiles only if that route runs
+    entry = (
+        m,
+        make_chunk_stats(m, weighted=weighted),
+        make_chunk_jacobian(m, weighted=weighted),
+    )
     with ls._wrapper_cache_lock:
         entry = ls._wrapper_cache.setdefault(key, entry)
         while len(ls._wrapper_cache) > ls._WRAPPER_CACHE_SIZE:
@@ -571,6 +558,7 @@ def tsqr_r_factor(
     chunk: int,
     *,
     weighted: bool,
+    jac: Callable[..., jax.Array] | None = None,
 ) -> np.ndarray:
     """The ``min(n, p) x p`` R factor of the full weighted Jacobian at ``theta``, one pass.
 
@@ -580,7 +568,10 @@ def tsqr_r_factor(
     padded-tail mask are those of :func:`run_pass`; a factory source verifies its count.
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
-    jac = _chunk_jacobian(model, weighted)
+    if (
+        jac is None
+    ):  # built per call: a kernel kept across calls could bake in stale state
+        jac = make_chunk_jacobian(model, weighted=weighted)
     R = jnp.zeros((0, th.shape[0]), dtype=jnp.float64)
     blocks = (
         source.blocks()
@@ -786,7 +777,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     # blocks reach the kernel as float64 (chunk, ...) arrays: trace the model for exactly that
     tail = np.shape(source.first_x if isinstance(source, FactorySource) else x)[1:]
     x_block = jax.ShapeDtypeStruct((chunk, *tail), jnp.float64)
-    model, stats = _cached_stats(model, x_block, p, weighted)
+    model, stats, jac = _cached_stats(model, x_block, p, weighted)
     st = evaluate(theta, 1, first=True)
     if isinstance(source, FactorySource):
         n = source.n  # counted (or verified against n_points) during pass 1
@@ -872,7 +863,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         # normal equations lose cond(J)^2: one more pass for R at theta (not in nfev)
         from nlsq.core.minpack import _covariance_svd  # lazy: minpack is heavy
 
-        R = tsqr_r_factor(model, theta, source, chunk, weighted=weighted)
+        R = tsqr_r_factor(model, theta, source, chunk, weighted=weighted, jac=jac)
         pcov = pcov_from_jacobian(R, cost, n, p, absolute_sigma, _covariance_svd)[0]
         covariance_method = "tsqr"
         _warn_tsqr_route(H, kappa)
