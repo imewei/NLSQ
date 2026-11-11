@@ -12,13 +12,24 @@ def test_auto_resolves_below_threshold_to_in_memory():
     assert auto.resolve(auto.size_threshold - 1) is auto.in_memory
 
 
-def test_auto_resolves_at_threshold_to_chunked():
+def test_auto_resolves_at_threshold_to_exact():
     auto = Auto()
+    assert auto.resolve(auto.size_threshold) is auto.exact
+    assert isinstance(auto.exact, Exact)
+
+
+def test_auto_without_exact_resolves_at_threshold_to_chunked():
+    auto = Auto(exact=None)
     assert auto.resolve(auto.size_threshold) is auto.chunked
 
 
-def test_auto_without_size_detection_is_always_chunked():
+def test_auto_without_size_detection_is_always_exact():
     auto = Auto(auto_size_detection=False)
+    assert auto.resolve(10) is auto.exact
+
+
+def test_auto_without_size_detection_or_exact_is_always_chunked():
+    auto = Auto(auto_size_detection=False, exact=None)
     assert auto.resolve(10) is auto.chunked
 
 

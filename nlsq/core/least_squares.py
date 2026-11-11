@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import enum
 import functools
 import hashlib
@@ -480,14 +481,23 @@ class _Uncacheable(Exception):
     """Raised while digesting a jaxpr that cannot be keyed exactly."""
 
 
-# Params holding a custom_jvp rule. They are not digested directly; the rule is
-# traced (and memoised) with the Jacobian, so the digest of the traced Jacobian
-# covers it (see _trace_model). custom_vjp is refused instead: its `bwd`
-# callable is re-invoked at every recompile of a cached wrapper and would read
-# the owning model's *current* state while fitting another model.
-_RULE_PARAMS = {
-    "custom_jvp_call": frozenset({"jvp_jaxpr_fun", "jvp_jaxpr_thunk"}),
-}
+# Remaining bytes the digest may copy or hash ([int] or None = unlimited), charged before
+# each array is copied (_private) or read to host (_array_key). Set by callers that must
+# not hold data-sized snapshots, e.g. the exact streaming solver's kernel cache.
+_snapshot_budget: contextvars.ContextVar[list[int] | None] = contextvars.ContextVar(
+    "_snapshot_budget", default=None
+)
+
+
+def _charge(value: Any) -> None:
+    budget = _snapshot_budget.get()
+    if budget is None:
+        return
+    budget[0] -= int(getattr(value, "nbytes", 0) or 0)
+    if budget[0] < 0:
+        raise _Uncacheable("captured constants exceed the snapshot byte budget")
+
+
 _MESH_TYPES = (jax.sharding.Mesh, jax.sharding.AbstractMesh)
 _PRNG_IMPLS = frozenset({"threefry2x32", "rbg", "unsafe_rbg"})
 _JAX_DIRS = tuple(os.path.dirname(m.__file__) + os.sep for m in (jax, jaxlib))
@@ -516,15 +526,6 @@ def _is_jax_primitive(prim: Any) -> bool:
     return id(prim) in _jax_primitive_ids
 
 
-_RULE_MARK = ("custom derivative rule",)  # in a key: Jacobian trace needed
-
-
-def _has_rule_mark(key: Any) -> bool:
-    if key is _RULE_MARK:
-        return True
-    return isinstance(key, tuple) and any(_has_rule_mark(k) for k in key)
-
-
 def _aval_key(aval: Any) -> tuple:
     if not isinstance(aval, jax.core.ShapedArray):
         raise _Uncacheable(f"unsupported aval {type(aval).__name__}")
@@ -542,8 +543,14 @@ def _array_key(value: Any) -> tuple:
         name = getattr(impl, "name", None)
         if name not in _PRNG_IMPLS or _PRNG_REGISTRY.get(name) is not impl:
             raise _Uncacheable(f"PRNG implementation {name!r}")
-        data = np.asarray(jax.random.key_data(value))
+        raw = jax.random.key_data(value)
+        _charge(
+            raw
+        )  # before the host read; the ndarray below is then not charged again
+        data = np.asarray(raw)
         return ("prng_key", name, tuple(value.shape), _array_key(data))
+    if not isinstance(value, np.ndarray):  # ndarrays were charged by _private
+        _charge(value)
     arr = np.ascontiguousarray(np.asarray(value))
     if arr.dtype.hasobject:
         raise _Uncacheable("object array")
@@ -552,7 +559,10 @@ def _array_key(value: Any) -> tuple:
 
 def _private(value: Any) -> Any:
     """Snapshot of host-mutable data; immutable values are returned as is."""
-    return np.array(value, copy=True) if isinstance(value, np.ndarray) else value
+    if not isinstance(value, np.ndarray):
+        return value
+    _charge(value)
+    return np.array(value, copy=True)
 
 
 def _canon_param(value: Any) -> tuple[Any, Any]:
@@ -663,18 +673,17 @@ def _snapshot_jaxpr(jaxpr: Any) -> tuple[Any, tuple]:
         if (
             eqn.effects
             or "callback" in prim.name
-            or prim.name.startswith("custom_vjp")
+            # A custom derivative rule is a live Python callable that JAX
+            # re-invokes at (re)compile time: a cached entry would keep the
+            # owner's closure alive and could read its *current* state while
+            # fitting another model. Such models are not cached.
+            or prim.name.startswith(("custom_vjp", "custom_jvp"))
             or not _is_jax_primitive(prim)
         ):
             raise _Uncacheable(f"primitive {prim.name}")
         ins = [atom(a) for a in eqn.invars]
-        rule = _RULE_PARAMS.get(prim.name, frozenset())
         params, param_keys = {}, []
         for name in sorted(eqn.params):
-            if name in rule:
-                params[name] = eqn.params[name]
-                param_keys.append((name, _RULE_MARK))
-                continue
             params[name], key = _canon_param(eqn.params[name])
             param_keys.append((name, key))
         outs = tuple(atom(o)[1] for o in eqn.outvars)
@@ -698,12 +707,11 @@ def _trace_model(
     """(cache key, private jaxpr, input aval keys) of `fun`, or None.
 
     `fun` is traced as the residual wrappers call it (x as delivered by
-    _safe_coords, incl. weak_type; n scalar params of x0's dtype), and its
-    Jacobian is traced with the same AD mode the wrappers use, so custom
-    derivative rules (inlined there) are part of the key. None (uncached path)
-    when the cache is disabled, tracing fails, or anything in either jaxpr
-    cannot be keyed exactly (effects, callbacks, user primitives, unknown
-    params).
+    _safe_coords, incl. weak_type; n scalar params of x0's dtype). Its
+    Jacobian is then fixed by the jaxpr (JAX's own AD rules; custom derivative
+    rules and user primitives are refused). None (uncached path) when the
+    cache is disabled, tracing fails, or anything in the jaxpr cannot be keyed
+    exactly (effects, callbacks, custom rules, user primitives, unknown params).
     """
     if os.environ.get("NLSQ_DISABLE_WRAPPER_CACHE") == "1":
         return None
@@ -737,22 +745,8 @@ def _trace_model(
         if primal.effects or len(primal.outvars) != 1:
             raise _Uncacheable("effects or non-array output")
         private, primal_key = _snapshot_jaxpr(primal)
-        jac_key = None
-        if _has_rule_mark(primal_key):
-            # The rule bodies are not in the primal jaxpr; they are inlined in
-            # the traced Jacobian, so key on that too. Without custom rules the
-            # Jacobian is fully determined by the primal jaxpr (JAX's own AD
-            # rules; user primitives are refused).
-            ad = jacfwd if mode == "fwd" else jacrev
-            argnums = tuple(range(1, x0.size + 1))
-            jac = jax.make_jaxpr(
-                lambda *a: ad(lambda *b: fun(*b), argnums=argnums)(*a)  # noqa: PLW0108
-            )(*avals)
-            if jac.effects:
-                return None
-            _, jac_key = _snapshot_jaxpr(jac)
         in_keys = tuple(_aval_key(a) for a in primal.in_avals)
-        key = (primal_key, jac_key, in_keys, mode, _config_key())
+        key = (primal_key, in_keys, mode, _config_key())
         hash(key)
     except Exception as exc:  # _Uncacheable, trace failure, unhashable
         _logger.debug("wrapper cache: not cached: %s: %s", type(exc).__name__, exc)
@@ -1910,18 +1904,18 @@ class LeastSquares:
                     if bundle is not None:
                         _wrapper_cache.move_to_end(key)
                 if bundle is None:
-                    # size by THIS call's x0: another thread sharing the
-                    # instance may have overwritten self.n since least_squares set it
-                    self.n = int(np.size(x0))
-                    self.update_function(_model_from_jaxpr(private, in_keys))
-                    self.autdiff_jac(None, mode=mode)
+                    # Build from locals only: threads sharing this instance write
+                    # self.n and self.func_* outside _bind_lock, and a read-back
+                    # would cache one width's Jacobian under another model's key.
+                    n = int(np.size(x0))
+                    funcs = self.update_function(_model_from_jaxpr(private, in_keys))
+                    adjs = (self.adjn, self.adj1d, self.adj2d)
                     bundle = (
-                        self.func_none,
-                        self.func_1d,
-                        self.func_2d,
-                        self.jac_none,
-                        self.jac_1d,
-                        self.jac_2d,
+                        *funcs,
+                        *(
+                            ad.create_ad_jacobian(f, n, mode=mode)
+                            for ad, f in zip(adjs, funcs, strict=True)
+                        ),
                     )
                     with _wrapper_cache_lock:
                         _wrapper_cache[key] = bundle
@@ -1959,7 +1953,7 @@ class LeastSquares:
         # jac is
         self.jac = jac
 
-    def update_function(self, func: Callable) -> None:
+    def update_function(self, func: Callable) -> tuple[Callable, Callable, Callable]:
         """Wraps the given fit function to be a residual function using the
         data. The wrapped function is in a JAX JIT compatible format which
         is purely functional. This requires that both the data mask and the
@@ -1975,7 +1969,8 @@ class LeastSquares:
 
         Returns
         -------
-        None
+        tuple of Callable
+            The (no-transform, 1-D, 2-D) residual wrappers, also stored on self.
         """
 
         # Note: Uses @jit (not cached_jit) because this closure captures 'func'
@@ -2074,6 +2069,7 @@ class LeastSquares:
         self.func_1d = func_1d_transform
         self.func_2d = func_2d_transform
         self.f = func
+        return func_no_transform, func_1d_transform, func_2d_transform
 
     def wrap_jac(self, jac: Callable) -> None:
         """Wraps an user defined Jacobian function to allow for data masking

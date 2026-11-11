@@ -27,7 +27,9 @@ def force_host(monkeypatch):
         calls.append(1)
         return real()
 
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda shape, b: True)
+    monkeypatch.setattr(
+        device_policy, "use_host_for_small_svd", lambda shape, b, **k: True
+    )
     monkeypatch.setattr(device_policy, "host_device", spy)
     return calls
 
@@ -53,6 +55,32 @@ def test_policy_false_above_threshold():
     assert device_policy.use_host_for_small_svd((n - 1, 3), "gpu") is True
 
 
+def test_covariance_limit_is_separate_and_wider():
+    cov = device_policy.HOST_COV_SVD_MAX_ELEMENTS
+    assert cov == 150_000 > device_policy.HOST_SVD_MAX_ELEMENTS
+    n = cov // 3  # above the TRF limit, at the covariance limit
+    assert device_policy.use_host_for_small_svd((n, 3), "gpu") is False
+    assert device_policy.use_host_for_small_svd((n, 3), "gpu", max_elements=cov) is True
+    assert (
+        device_policy.use_host_for_small_svd((n + 1, 3), "gpu", max_elements=cov)
+        is False
+    )
+
+
+def test_covariance_svd_uses_covariance_limit_trf_keeps_its_own(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        device_policy,
+        "use_host_svd_for",
+        lambda J, max_elements=None: seen.append(max_elements) or False,
+    )
+    _covariance_svd(jnp.ones((10, 2)) + jnp.eye(10, 2))
+    J, f, d = _problem(False)
+    _svd_no_bounds(J, d, f)
+    assert seen[0] == device_policy.HOST_COV_SVD_MAX_ELEMENTS
+    assert seen[-1] is None  # TRF path stays on HOST_SVD_MAX_ELEMENTS
+
+
 @pytest.mark.parametrize("backend", ["gpu", "cuda", "rocm"])
 def test_policy_true_for_small_shape_on_gpu(backend):
     assert device_policy.use_host_for_small_svd((1000, 3), backend) is True
@@ -69,9 +97,11 @@ def test_host_device_is_cpu():
 @pytest.mark.parametrize("rank_deficient", [False, True])
 def test_host_svd_matches_device_svd(monkeypatch, rank_deficient):
     J, f, d = _problem(rank_deficient)
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: False)
+    monkeypatch.setattr(
+        device_policy, "use_host_for_small_svd", lambda s, b, **k: False
+    )
     ref = [np.asarray(a) for a in _svd_no_bounds(J, d, f)]
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: True)
+    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b, **k: True)
     _, U, s, V, uf = (np.asarray(a) for a in _svd_no_bounds(J, d, f))
     sr, Vr = ref[2], ref[3]
     n, p = J.shape
@@ -96,12 +126,14 @@ def test_host_svd_matches_device_svd(monkeypatch, rank_deficient):
 def test_pcov_equal_between_host_and_device(monkeypatch, rank_deficient):
     J, _, _ = _problem(rank_deficient)
     args = (0.5, J.shape[0], J.shape[1], False, _covariance_svd)
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: False)
+    monkeypatch.setattr(
+        device_policy, "use_host_for_small_svd", lambda s, b, **k: False
+    )
     ref, _ = pcov_from_jacobian(J, *args)
     calls = []
     real = device_policy.host_device
     monkeypatch.setattr(device_policy, "host_device", lambda: calls.append(1) or real())
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: True)
+    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b, **k: True)
     got, _ = pcov_from_jacobian(J, *args)
     assert calls
     np.testing.assert_allclose(got, ref, rtol=1e-10, atol=0)
@@ -170,7 +202,7 @@ _EMULATION_SCRIPT = textwrap.dedent(
     pref = curve_fit(model, x, y, p0=[1.5, 1.0])
 
     calls = []
-    device_policy.use_host_for_small_svd = lambda shape, backend: True
+    device_policy.use_host_for_small_svd = lambda shape, backend, **k: True
     device_policy.host_device = lambda: calls.append(1) or jax.devices("cpu")[1]
     out = _svd_no_bounds(J, d, f)
     assert calls
@@ -221,10 +253,12 @@ def test_host_svd_matches_device_svd_on_real_gpu(monkeypatch, rank_deficient):
         pytest.skip("needs a GPU backend")
     J, f, d = _problem(rank_deficient)
     n, p = J.shape
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: False)
+    monkeypatch.setattr(
+        device_policy, "use_host_for_small_svd", lambda s, b, **k: False
+    )
     _, _, sr, Vr, ufr = (np.asarray(a) for a in _svd_no_bounds(J, d, f))
     pref, _ = pcov_from_jacobian(J, 0.5, n, p, False, _covariance_svd)
-    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b: True)
+    monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b, **k: True)
     _, _, s, V, uf = _svd_no_bounds(J, d, f)
     dev = next(iter(J.devices()))
     assert s.devices() == V.devices() == uf.devices() == {dev}

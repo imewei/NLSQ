@@ -479,8 +479,8 @@ class CurveFitResult(OptimizeResult):
         """
         if self.pcov is None:
             raise AttributeError(
-                "Cannot compute confidence intervals: pcov not available. "
-                "Try setting full_output=True in curve_fit.",
+                "Cannot compute confidence intervals: pcov not available "
+                "(the fit was run with compute_covariance=False).",
             )
 
         from scipy import stats
@@ -569,7 +569,8 @@ class CurveFitResult(OptimizeResult):
             )
         if self.get("pcov") is None:
             raise AttributeError(
-                "Cannot compute prediction interval: pcov not available",
+                "Cannot compute prediction interval: pcov not available "
+                "(the fit was run with compute_covariance=False).",
             )
 
         from scipy import stats
@@ -680,7 +681,10 @@ class CurveFitResult(OptimizeResult):
         if not hasattr(self, "model"):
             raise AttributeError("Cannot compute confidence band: model not available")
         if not hasattr(self, "pcov") or self.pcov is None:
-            raise AttributeError("Cannot compute confidence band: pcov not available")
+            raise AttributeError(
+                "Cannot compute confidence band: pcov not available "
+                "(the fit was run with compute_covariance=False).",
+            )
 
         from scipy import stats
 

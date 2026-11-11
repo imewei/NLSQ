@@ -16,8 +16,9 @@ NLSQ provides three approaches for large datasets:
      - Best For
      - Memory Behavior
    * - ``curve_fit_large``
-     - Datasets up to ~100M points
-     - Automatic chunking, fits in memory
+     - Datasets up to ~100M points (and beyond, see :ref:`exact-streaming`)
+     - Exact full-data streaming above ``size_threshold``; the data is read
+       chunk by chunk and never needs to fit on the device whole
    * - ``LargeDatasetFitter``
      - Fine-grained control over chunking
      - Automatic memory management
@@ -31,7 +32,11 @@ curve_fit_large
 .. autofunction:: nlsq.curve_fit_large
    :no-index:
 
-Automatically chunks data to fit within GPU memory.
+At or above ``size_threshold`` (default 1M points) the default path is an
+exact full-data Levenberg-Marquardt fit that streams the data in chunks
+(:ref:`exact-streaming`); below it, ``curve_fit_large`` calls ``curve_fit``.
+The older chunked, precision-weighted (GLS) fit is still available with
+``strategy=Chunked()``.
 
 **Key Parameters:**
 
@@ -55,16 +60,38 @@ Automatically chunks data to fit within GPU memory.
 
 .. _exact-streaming:
 
-Exact streaming (``method="exact_streaming"``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Exact streaming (the default above ``size_threshold``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The default chunked path fits each chunk separately and combines the results,
-which is exact only for linear models. ``method="exact_streaming"`` (opt-in)
+The chunked path (``strategy=Chunked()``) fits each chunk separately and
+combines the results, which is exact only for linear models. The default path
 instead runs one Levenberg-Marquardt fit over the whole dataset: each trial
 point costs one pass that accumulates ``J^T J``, ``J^T r`` and the cost in
-float64 chunk by chunk, so the result does not depend on the chunk size (up to rounding). It
-runs at any dataset size (``size_threshold`` is not consulted) and returns
-``(popt, pcov)``.
+float64 chunk by chunk, so the result does not depend on the chunk size (up to rounding).
+It returns ``(popt, pcov)``.
+
+``method="exact_streaming"`` selects the same solver explicitly. It runs at any
+dataset size (``size_threshold`` is not consulted), accepts out-of-memory
+sources and chunk factories, and applies stricter argument checks (below).
+
+**Default-route dispatch.** At or above ``size_threshold`` the default path
+uses exact streaming when the call is eligible:
+
+- *Engine reasons* (``method`` other than the default, ``multistart``, or extra
+  keyword arguments other than ``ftol``, ``xtol``, ``gtol``, ``max_nfev``) fall
+  back to the chunked fit with a ``UserWarning`` that names the reason.
+- *Data reasons* raise ``ValueError`` naming ``strategy=Chunked()``: multi-feature
+  (2-D) ``xdata``, a model that is not pointwise, or a non-finite ``sigma``,
+  ``xdata`` or ``ydata`` under ``check_finite=False``.
+- ``max_nfev`` counts full-data passes (default ``100 * len(p0)``), not function
+  evaluations. A stalled fit or one that runs out of passes raises
+  ``ExactSolverError``; there is no silent retry on the chunked fit.
+- ``sigma`` may be a 1-D array, a scalar, or contain negative nonzero values
+  (``|sigma|`` is used, since the objective is ``(r / sigma)**2``).
+- ``compute_covariance=False`` returns ``pcov=None`` and skips the covariance
+  computation on the exact and in-memory paths. It saves nothing on the chunked
+  path, which needs the per-chunk covariances.
+- Opt out with ``strategy=Chunked()`` or ``strategy=Auto(exact=None)``.
 
 .. code-block:: python
 
@@ -107,7 +134,7 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   ``n_points`` is given) verifies the count and a mismatch raises
   ``ValueError``. Each block is validated as it arrives (1-D parts of equal,
   non-zero length, at most ``chunk_size`` points, finite on the first pass
-  unless ``check_finite=False``, ``sigma`` finite and positive); the model
+  unless ``check_finite=False``, ``sigma`` finite and nonzero); the model
   probe uses the leading blocks of the first pass, joined until they hold at
   least 2 points. ``sigma`` must then come from the blocks
   (``sigma=`` raises ``ValueError``), and ``n_points`` with an array source
@@ -118,15 +145,16 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   With neither ``n_points`` nor ``chunk_size``, every block is padded to the
   derived chunk (default 4,194,304 rows), so pass one of them for small
   factories. Fewer than 2 points in total raises ``ValueError``.
-- **Accepted arguments:** ``sigma`` (1-D only), ``bounds``, ``chunk_size``,
+- **Accepted arguments:** ``sigma`` (1-D or scalar), ``bounds``, ``chunk_size``,
   ``check_finite``, ``show_progress``, ``absolute_sigma``, ``memory_limit_gb``, and the keyword arguments ``ftol``,
   ``xtol``, ``gtol``, ``max_nfev`` (full-data passes, default
   ``100 * len(p0)``) and ``n_points`` (chunk factories only). Any other
   keyword argument raises ``TypeError``.
-- **Weights:** a 1-D ``sigma`` divides residuals and Jacobian rows, as in
-  ``curve_fit``. A ``sigma`` that is 2-D (correlated errors), of the wrong
-  length, non-finite or non-positive raises ``ValueError``; finiteness and
-  positivity are checked during the first pass, whatever ``check_finite`` says.
+- **Weights:** a 1-D or scalar ``sigma`` divides residuals and Jacobian rows, as
+  in ``curve_fit``; a negative nonzero value acts as its magnitude. A ``sigma``
+  that is 2-D (correlated errors), of the wrong length, non-finite or zero raises
+  ``ValueError``; finiteness and zeros are checked during the first pass,
+  whatever ``check_finite`` says.
 - **Bounds:** box ``bounds`` as in ``curve_fit`` (scalars or length-``p``
   arrays, ``lb < ub`` elementwise; equal, inverted or NaN bounds raise
   ``ValueError``). They are handled by an active set, not Coleman-Li TRF:
@@ -147,30 +175,24 @@ runs at any dataset size (``size_threshold`` is not consulted) and returns
   ``nlsq.streaming.ExactSolverError`` (a ``RuntimeError``) with the full
   result, including ``termination`` (``"stalled"`` or ``"max_nfev"``), as
   ``.result``.
-- **Covariance caveat:** ``pcov`` follows the ``curve_fit`` contract
-  (pseudo-inverse, scaled by the residual variance unless ``absolute_sigma``)
-  but is computed from the normal equations ``J^T J``, which squares
-  ``cond(J)``. The study has one row with ``cond(J) <= 1e4``
-  (``cond(J) = 8.5e3``): covariance agreement with the reference of 4.7e-6 at
-  ``tol = 1e-12`` and 5.8e-8 at ``1e-15``. Above that, the one row near ``1e6``
-  (poly8, ``cond(J) = 7e5``) gave 5e-6, so ``1e-3`` is a loose bound for
-  well-determined problems and is not established beyond these rows
-  (degenerate two_exp rows with ``cond(J)`` 6e4-9e4 showed covariance errors
-  of 1.0 and 0.33). A ``UserWarning`` is issued beyond
-  ``1e4``: there the fitted *parameters* can also stop short (poly12,
-  ``cond(J) = 7.5e8``: parameter error O(1) with ``success=True`` for both
-  candidates in the study), so check such results.
-  In a conditioning study against a 50-digit reference, the pre-registered rule
-  returns ``tsqr_default`` at tol 1e-12 (a stopping artifact shared by TSQR) and
-  ``normal_equations_stay`` at 1e-15; normal equations (no QR/TSQR accumulation)
-  were kept on that interpretation with thin evidence (1 of 40 rows), see
-  ``benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md``. At the
-  same parameters the accumulated ``J^T J`` step and covariance were accurate to
-  about 2e-12 and 2e-8 (one problem) for ``cond(J) <= 1e4``; beyond that the
-  covariance error grows with ``cond(J)``; ``cond(J)^2 * eps`` is the
-  worst-case bound (about 1e-4 at ``cond(J) = 7e5``; the poly8 study row at that
-  conditioning measured 5e-6). Treat the warning as the
-  guidance for ill-conditioned fits.
+- **Covariance:** ``pcov`` follows the ``curve_fit`` contract (pseudo-inverse,
+  scaled by the residual variance unless ``absolute_sigma``) and is chosen
+  adaptively at the solution. If ``sqrt(cond(J^T J)) <= TSQR_KAPPA`` (``1e3``),
+  it comes from the normal equations ``J^T J``, whose first-order error is
+  about ``eps * kappa**2`` (about 2e-10 at the threshold; measured worst case
+  1.2e-10 scale-aware, at ``kappa`` = 900). Above ``TSQR_KAPPA`` one extra pass
+  accumulates the ``R`` factor of ``J`` by TSQR and the covariance is its SVD,
+  with the rank cutoff of ``curve_fit``; this avoids squaring ``cond(J)`` (measured
+  worst case 4.0e-9 at ``cond(J)`` 7.5e11, the SVD floor). The route is reported
+  as ``covariance_method`` (``"normal"``, ``"tsqr"`` or ``"skipped"``) on the
+  result of ``exact_lm_fit``. The TSQR pass is not counted in ``nfev`` and
+  costs 8-10 ms per 1M rows on the benchmark GPU (10 at 10M, 8 at 100M). A ``UserWarning`` is
+  issued beyond ``1e4``: there the fitted *parameters* can also stop short,
+  because the LM step solve stays on the normal equations (poly12,
+  ``cond(J) = 7.5e8``: parameter error O(1) with ``success=True``), so check
+  such results. See
+  ``benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md`` for the
+  conditioning study behind keeping normal equations for the step.
 - **Scale:** the method has been run on one billion points (16 GB of ``x`` and
   ``y`` in an HDF5 file) with 1.8 GiB peak host memory; each pass reads the file once.
 

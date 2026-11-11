@@ -9,6 +9,7 @@ import pytest
 from nlsq import curve_fit_large
 from nlsq.result import OptimizeWarning
 from nlsq.streaming.large_dataset import LargeDatasetFitter
+from nlsq.streaming.specs import Chunked
 
 
 def _fitter() -> LargeDatasetFitter:
@@ -55,8 +56,7 @@ def test_all_chunks_unusable_warns_end_to_end():
             x,
             y,
             p0=[1.0, 1.0, 0.5],
-            size_threshold=1000,
-            chunk_size=5000,
+            strategy=Chunked(chunk_size=5000),
             show_progress=False,
         )
     msgs = [str(w.message) for w in rec if issubclass(w.category, OptimizeWarning)]

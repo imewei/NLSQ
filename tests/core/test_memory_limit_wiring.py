@@ -15,6 +15,7 @@ from nlsq.config import (
     set_memory_limits,
 )
 from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
+from nlsq.streaming import Chunked, exact_lm
 from nlsq.streaming.large_dataset import LargeDatasetFitter, LDMemoryConfig
 
 N, P = 1_000_000, 3
@@ -136,6 +137,30 @@ def test_tiny_global_limit_changes_the_selected_strategy():
 def test_curve_fit_large_leaves_the_users_global_limit_alone(monkeypatch):
     set_memory_limits(memory_limit_gb=32.0)
     seen = []
+    original = exact_lm.exact_lm_fit
+
+    def spy(*args, **kwargs):
+        seen.append(get_memory_config().memory_limit_gb)
+        return original(*args, **kwargs)
+
+    # The default large path is exact streaming, not LargeDatasetFitter
+    monkeypatch.setattr(exact_lm, "exact_lm_fit", spy)
+    x = np.linspace(0, 5, 20_000)
+    y = 2.0 * np.exp(-0.7 * x)
+    curve_fit_large(
+        lambda x, a, b: a * jnp.exp(-b * x),
+        x,
+        y,
+        p0=[1.0, 1.0],
+        auto_size_detection=False,
+    )
+    assert seen == [32.0]
+    assert get_memory_config().memory_limit_gb == 32.0
+
+
+def test_chunked_route_sees_the_users_global_limit_and_restores_it(monkeypatch):
+    set_memory_limits(memory_limit_gb=32.0)
+    seen = []
     original = LargeDatasetFitter.fit
 
     def spy(self, *args, **kwargs):
@@ -150,9 +175,9 @@ def test_curve_fit_large_leaves_the_users_global_limit_alone(monkeypatch):
         x,
         y,
         p0=[1.0, 1.0],
-        auto_size_detection=False,
+        strategy=Chunked(),
     )
-    assert seen == [32.0]
+    assert seen == [32.0]  # the chunked engine ran inside the memory context
     assert get_memory_config().memory_limit_gb == 32.0
 
 

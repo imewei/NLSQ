@@ -512,3 +512,46 @@ def test_normal_equations_kernel_is_reused_across_passes():
     ne = cached_kernel(opt)
     opt._accumulate_pass(p0_norm + 0.01, x, y)
     assert cached_kernel(opt) is ne
+
+
+def test_gauss_newton_kernel_is_rebuilt_per_run():
+    """A model whose captured state changed between runs must not reuse the old kernel."""
+    state = np.array([2.0])
+
+    def model(x, a):
+        return state[0] * a * x
+
+    x = jnp.linspace(0.5, 2.0, 64)
+    y = 3.0 * x
+
+    def run(phase):
+        out = phase.run((x, y), jnp.array([1.0]), [], {})
+        return np.asarray(out["JTJ_final"])
+
+    phase = GaussNewtonPhase(_config(), model)
+    run(phase)
+    state[0] = 5.0
+    got = run(phase)
+    ref = run(GaussNewtonPhase(_config(), model))
+    np.testing.assert_array_equal(got, ref)
+
+
+def test_hybrid_refit_of_a_mutated_model_matches_a_fresh_optimizer():
+    """Public path: fit() rebuilds every model-dependent kernel (Phase 0 setup)."""
+    state = np.array([2.0])
+
+    def scaled(x, a, b):
+        return state[0] * (a * jnp.exp(-b * x))
+
+    x = jnp.linspace(0.0, 4.0, 400)
+    y = 3.0 * jnp.exp(-1.2 * x)
+    p0 = jnp.array([1.0, 1.0])
+    opt = AdaptiveHybridStreamingOptimizer(config=_config())
+    opt.fit((x, y), scaled, p0, verbose=0)
+    state[0] = 5.0
+    got = opt.fit((x, y), scaled, p0, verbose=0)
+    ref = AdaptiveHybridStreamingOptimizer(config=_config()).fit(
+        (x, y), scaled, p0, verbose=0
+    )
+    np.testing.assert_allclose(got["x"], ref["x"], rtol=1e-12)
+    np.testing.assert_allclose(got["x"], [0.6, 1.2], rtol=1e-6)

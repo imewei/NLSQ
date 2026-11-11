@@ -512,7 +512,9 @@ def fit(
         tolerances passed explicitly in ``**kwargs`` take precedence. Unknown
         names raise ValueError.
     multistart : bool, optional
-        Override preset's multi-start setting.
+        Override preset's multi-start setting. Left unset at or above
+        ``size_threshold`` it is off (the exact streaming default does not support
+        multi-start); an explicit True warns and uses the chunked fit.
     n_starts : int, optional
         Override preset's n_starts setting.
     sampler : {'lhs', 'sobol', 'halton'}, optional
@@ -798,7 +800,11 @@ def fit(
         return result
 
     if use_large_dataset or n_points >= size_threshold:
-        # Use curve_fit_large for large datasets
+        # Use curve_fit_large for large datasets. At or above size_threshold the default
+        # is exact streaming, which rejects multistart: the "large" preset's multistart
+        # must not trigger the chunked fallback unless the caller asked for it.
+        if multistart is None and n_points >= size_threshold:
+            effective_multistart = False
         return curve_fit_large(
             f,
             xdata,
@@ -1007,24 +1013,39 @@ def curve_fit_large(
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
     strategy: "LargeStrategy | None" = None,
+    compute_covariance: bool = True,
     **kwargs: Any,
 ) -> "CurveFitResult | tuple[Any, ...]":
     """Curve fitting with automatic memory management for large datasets.
 
-    Automatically selects processing strategy based on dataset size:
+    Automatically selects the processing strategy by dataset size:
 
-    - Below ``size_threshold`` (default 1M points): standard ``curve_fit``
-    - At or above ``size_threshold``: chunked processing (each chunk is
-      fit independently and combined via precision-weighted GLS)
+    - Below ``size_threshold`` (default 1M points): standard ``curve_fit``.
+    - At or above ``size_threshold``: exact streaming Levenberg-Marquardt, the
+      full-data fit of ``method="exact_streaming"``. It solves the full-batch
+      least-squares problem, every iteration using the whole data set, and
+      stops at a stationary point within the tolerances. The result is
+      mathematically independent of the chunk size (up to floating-point
+      reduction order and the stopping tolerance) and is not a GLS
+      approximation.
 
-    There is currently no automatic escalation to a separate "streaming"
-    algorithm for very large datasets -- chunked processing is used
-    regardless of how far above ``size_threshold`` the dataset is. To use
-    the full-dataset streaming optimizer (``AdaptiveHybridStreamingOptimizer``,
-    which accumulates Gauss-Newton statistics across the whole dataset
-    instead of fitting each chunk independently) explicitly, pass
-    ``method="hybrid_streaming"``, or ``method="exact_streaming"`` for an exact,
-    chunk-independent Levenberg-Marquardt fit.
+    Pass ``strategy=Chunked()`` to get the chunked fit instead (each chunk is fit
+    independently and combined by precision-weighted GLS, an approximation for
+    nonlinear models). ``method="hybrid_streaming"`` selects the adaptive
+    hybrid optimizer explicitly.
+
+    The exact default needs 1-D ``xdata`` and a pointwise model (see Notes).
+    Input it cannot fit is handled in one of two ways:
+
+    - The call asks for a chunked-only feature (``method``, ``multistart`` or
+      ``global_search``, or an extra keyword other than ``ftol``, ``xtol``,
+      ``gtol`` and ``max_nfev``): a ``UserWarning`` is issued and the chunked
+      fit is used.
+    - The data cannot be fit exactly (multi-feature 2-D ``xdata``, a model that
+      is not pointwise, or non-finite ``sigma``, ``xdata`` or ``ydata`` with
+      ``check_finite=False``): ``ValueError`` naming ``strategy=Chunked()``. A 2-D
+      ``sigma`` also raises ``ValueError``, without that hint (chunked rejects it too). Nothing falls back silently,
+      so a result is never replaced by a GLS approximation without a notice.
 
     Parameters
     ----------
@@ -1049,8 +1070,8 @@ def curve_fit_large(
     method : str, optional
         Optimization algorithm ('trf', 'lm', or None for auto), or
         ``'hybrid_streaming'``, or ``'exact_streaming'`` (opt-in): an exact
-        full-data Levenberg-Marquardt fit whose result does not depend on
-        chunking, for any dataset size (``size_threshold`` is not consulted).
+        full-data Levenberg-Marquardt fit whose result is mathematically
+        independent of chunking, for any dataset size (``size_threshold`` is not consulted).
         It requires a pointwise, deterministic model written with
         ``jax.numpy``, 1-D ``xdata`` (multi-feature 2-D ``xdata`` raises
         ``ValueError``) and ``multistart=False``. ``xdata``, ``ydata`` and
@@ -1062,8 +1083,8 @@ def curve_fit_large(
         called once per full-data pass (same data, same order, at most
         ``chunk_size`` points per block), with ``ydata=None``; the optional
         keyword ``n_points`` (factories only) is verified, and the point
-        count is checked on every pass. 1-D ``sigma``
-        and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
+        count is checked on every pass. A scalar or 1-D ``sigma``
+        (nonzero; ``|sigma|`` is used) and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
         handled by an active set, not Coleman-Li TRF: the returned point is a
         KKT point of the box-constrained problem to within the stopping
         tolerances, reached by a different path
@@ -1074,17 +1095,20 @@ def curve_fit_large(
         ``ftol``, ``xtol``, ``gtol``, ``max_nfev`` (full-data passes,
         default ``100 * len(p0)``) and ``n_points``. A failed fit (stalled or out of passes)
         raises :class:`nlsq.streaming.ExactSolverError` with the full result
-        as ``.result``. ``pcov`` is computed from the normal equations
-        ``J^T J``, which squares ``cond(J)``: the conditioning study measured
-        covariance errors of 4.7e-6 (``tol=1e-12``) and 5.8e-8 (``1e-15``) at
-        ``cond(J) = 8.5e3`` and 5e-6 at ``7e5`` (one row each, so treat these as
-        indicative, not guaranteed), and a ``UserWarning`` is issued beyond
-        ``1e4``, where the fitted parameters can also stop short: check such
-        results.
+        as ``.result``. ``pcov`` is computed adaptively: from the normal
+        equations ``J^T J`` when ``sqrt(cond(J^T J)) <= 1e3`` (``TSQR_KAPPA``),
+        otherwise by one extra TSQR pass for the ``R`` factor of ``J`` at the
+        solution, which avoids squaring ``cond(J)``. A ``UserWarning`` is issued
+        on the TSQR route beyond ``1e4``, where the fitted parameters can also
+        stop short: check such results. ``compute_covariance=False`` skips
+        both routes (and their warnings).
     memory_limit_gb : float, optional
         Maximum memory usage in GB.
     auto_size_detection : bool, optional
-        Auto-detect dataset size for processing strategy.
+        If False, always take the large path: exact, except that engine-only
+        options fall back to chunked with a warning and other ineligible input
+        raises ``ValueError``.
+        Default: True (choose by ``size_threshold``).
     size_threshold : int, optional
         Point threshold for large dataset processing (default: 1M).
     show_progress : bool, optional
@@ -1112,6 +1136,12 @@ def curve_fit_large(
         ``multistart``, ``n_starts``, ``global_search``, ``sampler``,
         ``center_on_p0`` and ``scale_factor`` must stay at their defaults and
         no extra keyword arguments may be passed (``TypeError`` otherwise).
+    compute_covariance : bool, optional
+        If False, ``pcov`` is returned as None. In-memory path: ``curve_fit`` skips
+        the covariance. Exact path: the final covariance is skipped. Chunked path:
+        no saving, because the per-chunk covariances are still computed (the GLS
+        combiner needs them) and only the final ``pcov`` is dropped.
+        ``method="hybrid_streaming"`` raises ``ValueError``. Default: True.
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss). With
         ``method="exact_streaming"`` only ftol, xtol, gtol, max_nfev and n_points are
@@ -1121,7 +1151,8 @@ def curve_fit_large(
     -------
     popt, pcov : ndarray
         The chunked, ``hybrid_streaming`` and ``exact_streaming`` paths return
-        the tuple ``(popt, pcov)``: fitted parameters and their covariance.
+        the tuple ``(popt, pcov)``: fitted parameters and their covariance
+        (``pcov`` is None when ``compute_covariance=False``).
     result : CurveFitResult or tuple
         The in-memory path returns whatever ``curve_fit`` returns: a
         ``CurveFitResult`` (which unpacks as ``popt, pcov``), or the special-output
@@ -1131,29 +1162,52 @@ def curve_fit_large(
     -----
     All large datasets use streaming optimization for 100% data utilization.
 
+    **Exact default (at or above** ``size_threshold`` **)**
+
+    - ``sigma`` may be a 1-D array, a scalar, or contain negative nonzero values
+      (the objective uses ``(r / sigma)**2``, so ``|sigma|`` is used).
+    - ``bounds`` are handled by an active set, as for ``method="exact_streaming"``.
+    - ``max_nfev`` counts full-data passes (default ``100 * len(p0)``), not
+      function evaluations. ``ftol``, ``xtol`` and ``gtol`` are accepted, and
+      ``chunk_size`` sets the pass block size.
+    - A stalled fit or one that runs out of passes raises
+      :class:`nlsq.streaming.ExactSolverError` (the result is in ``.result``)
+      instead of returning an unconverged point. There is no retry on the
+      chunked fit; the message names ``strategy=Chunked()``.
+    - The model must be pointwise: ``f(x, *p)[i]`` depends only on ``x[i]`` and
+      ``p``. A probe on the first points raises ``ValueError`` for a model that
+      mixes points, but it is a guard, not a proof: a model that mixes points
+      beyond the probe is not detected and gives a wrong fit.
+    - ``strategy=Chunked()`` restores the previous chunked behaviour, including
+      ``method``. Chunked ignores ``multistart`` (see below).
+
     **Options ignored by chunked processing**
 
-    The chunked path (at or above ``size_threshold``, or whenever
-    ``auto_size_detection=False``) does not forward ``stability``,
-    ``rescale_data`` or ``max_jacobian_elements_for_svd`` to the per-chunk fits,
-    and the multi-start options (``multistart``, ``n_starts``, ``global_search``,
-    ``sampler``, ``center_on_p0``, ``scale_factor``) have no effect on them. These
-    options only take effect on the in-memory path (fewer than ``size_threshold``
+    The chunked path (selected with ``strategy=Chunked()`` or by the fallback
+    above) does not forward ``stability``, ``rescale_data`` or
+    ``max_jacobian_elements_for_svd`` to the per-chunk fits, and the multi-start
+    options (``multistart``, ``n_starts``, ``global_search``, ``sampler``,
+    ``center_on_p0``, ``scale_factor``) have no effect on them. These options
+    only take effect on the in-memory path (fewer than ``size_threshold``
     points).
 
     **Explicit strategies**
 
     Without ``strategy``, the options are translated into
     ``Auto(size_threshold, auto_size_detection, in_memory=InMemory(...),
-    chunked=Chunked(...))``, ``Hybrid(config, verbose)`` for
+    chunked=Chunked(...), exact=Exact())``, ``Hybrid(config, verbose)`` for
     ``method="hybrid_streaming"`` or ``Exact(...)`` for
-    ``method="exact_streaming"``. Passing the strategy directly gives the same
-    fit with the settings in one object.
+    ``method="exact_streaming"``. ``Auto.exact`` takes ``chunk_size`` from
+    ``Chunked`` and ``ftol``, ``xtol``, ``gtol`` and ``max_nfev`` from the call
+    unless ``Exact`` sets them. ``Auto(exact=None)`` restores the chunked fit
+    above the threshold. Passing the strategy directly gives the same fit with
+    the settings in one object.
 
     **Important: Model Function Requirements for Chunking**
 
-    When auto_size_detection triggers chunked processing (>1M points), your model
-    function MUST respect the size of xdata. Model output shape must match ydata shape.
+    When the large path is used (>=1M points by default), your model function
+    MUST respect the size of xdata and be pointwise. Model output shape must match
+    ydata shape.
 
     INCORRECT - Fixed-size output (causes shape errors):
 
@@ -1184,13 +1238,14 @@ def curve_fit_large(
     >>> popt, _pcov = curve_fit_large(model_func, big_xdata, big_ydata,
     ...                             show_progress=True, memory_limit_gb=8)
 
-    With multi-start optimization:
+    With multi-start optimization (below ``size_threshold``; at or above it,
+    ``multistart=True`` forces the chunked fallback with a ``UserWarning``):
 
     >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata,
     ...                             p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]),
     ...                             multistart=True, n_starts=10)
 
-    With an explicit strategy (always chunked, 500 points per chunk):
+    Opt out of the exact default and use the chunked fit, 500 points per chunk:
 
     >>> from nlsq.streaming import Chunked
     >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata, p0=[1, 2, 3],
@@ -1265,6 +1320,7 @@ def curve_fit_large(
         check_finite=check_finite,
         memory_limit_gb=memory_limit_gb,
         show_progress=show_progress,
+        compute_covariance=compute_covariance,
     )
 
 

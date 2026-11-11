@@ -3219,11 +3219,17 @@ class AdaptiveHybridStreamingOptimizer:
         initial_params: jnp.ndarray,
         verbose: int | None = None,
     ) -> dict[str, Any]:
-        """Run Phase 2 (see :meth:`_run_phase2_loop`); ``verbose`` caps ``config.verbose``."""
+        """Run Phase 2 (see :meth:`_run_phase2_loop`); ``verbose`` caps ``config.verbose``.
+
+        Requires Phase 0 (:meth:`_setup_normalization`) of the same fit: the compiled
+        Jacobian and cost functions bake in model state read when it ran, and
+        :meth:`fit` re-runs it on every call.
+        """
         try:
             return self._run_phase2_loop(data_source, initial_params, verbose)
         finally:
             self._pass_cache = None  # data-specific; never outlive the run
+            self._normal_eq = None  # bakes in model state read at trace time
 
     def _run_phase2_loop(
         self,

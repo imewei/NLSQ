@@ -63,6 +63,7 @@ Expected end state: parity or better at 100M, 2–4x of JAXopt at 10M, about 5x 
   explicit `method="exact_streaming"` keeps its current strict checks. One deliberate exception, decided as
   D1: inputs exact cannot fit and the caller did not choose an engine for now raise an actionable error.
   These are multi-feature `xdata`, a non-pointwise model, and non-finite `sigma` under `check_finite=False`.
+  Also non-finite `xdata`/`ydata` under `check_finite=False` (ruling R17: chunked would absorb NaN, silent data loss).
   This is a CHANGELOG breaking entry.
 
 ## Supersedes
@@ -236,6 +237,10 @@ nonlinear models, and says to pass `strategy=Chunked()` to accept that.
 3. `sigma` has a non-finite value under `check_finite=False`. Chunked admits it (`large_dataset.py:2577-2593`);
    exact rejects it (`exact_lm.py:647-654`). With `check_finite=True`, both paths raise their existing
    finite-value error.
+3b. `xdata` or `ydata` has a non-finite value under `check_finite=False` (ruling R17: chunked GLS would absorb
+   NaN into a chunk, silent data loss). Checked only when `check_finite=False`.
+3c. A 2-D `sigma` is a data reason checked before finiteness so the error names its shape, but it carries no
+   `strategy=Chunked()` hint (chunked rejects 2-D `sigma` too); the message asks for a 1-D `sigma`.
 4. The model fails `exact_lm.check_model_contract` on a probe of `min(n, 4096)` points at the normalized
    `p0`. The solver runs the same check on its first full chunk; that `ValueError` propagates unchanged, and
    on the default route the message gains the same `strategy=Chunked()` hint.
@@ -385,7 +390,7 @@ The return contract is unchanged:
   - `threshold - 1` points goes in-memory; `threshold` and `threshold + 1` go to exact (spy on the dispatch).
   - (D1) An engine reason (method, multistart, a TRF option), via both the legacy shim and a user-built
     `Auto`, falls back to chunked with the warning.
-  - (D1) A data reason raises the actionable error: multi-feature `xdata`, non-finite `sigma` under
+  - (D1) A data reason raises the actionable error: multi-feature `xdata`, non-finite `sigma` or `xdata`/`ydata` under
     `check_finite=False`, a non-pointwise model caught by the probe, and one caught by the solver's
     first-chunk check. The same input with `strategy=Chunked()` runs.
   - Scalar and signed `sigma` run on exact and match `curve_fit` on `|sigma|`. Zero and 2-D `sigma` raise as
@@ -456,8 +461,8 @@ exp_decay lead over JAXopt (0.60 vs 0.74 s) into a loss.
 - **D1, decided (c), 2 to 1 (Claude and Agy accept; Codex dissents).**
   - Exact gains scalar and signed `sigma` (all three agree).
   - Engine-feature requests (`method`, multistart, TRF options) use chunked with a `UserWarning`.
-  - Data and model incompatibilities (multi-feature `xdata`, a non-pointwise model, non-finite `sigma`
-    under `check_finite=False`) raise an actionable error naming `strategy=Chunked()`.
+  - Data and model incompatibilities (multi-feature `xdata`, a non-pointwise model, non-finite `sigma`,
+    `xdata` or `ydata` under `check_finite=False`) raise an actionable error naming `strategy=Chunked()`.
 
   Codex's dissent: a feature request does not authorize an approximate result, so those should raise too.
   To adopt it, change engine-kind reasons to raise; nothing else changes.
@@ -470,8 +475,8 @@ exp_decay lead over JAXopt (0.60 vs 0.74 s) into a loss.
 1. (D2) The default exact path computes the covariance by TSQR when `kappa > TSQR_KAPPA` (1e3, or lower if
    Gate G-cov requires it); otherwise it uses normal equations.
 2. A stalled exact fit under the default raises `ExactSolverError`; it does not fall back to GLS.
-3. (D1) Multi-feature `xdata`, a non-pointwise model, and non-finite `sigma` under `check_finite=False`
-   raise an actionable error. Scalar and signed `sigma` run on exact.
+3. (D1) Multi-feature `xdata`, a non-pointwise model, and non-finite `sigma`, `xdata` or `ydata` under
+   `check_finite=False` raise an actionable error. Scalar and signed `sigma` run on exact.
 4. (D1) An explicit `method=` (including `"trf"`), multistart, or any TRF-only option uses chunked with a
    `UserWarning`, whether it comes from the legacy keywords or a user-built `Auto(chunked=...)`.
 5. `auto_size_detection=False` means exact if eligible.

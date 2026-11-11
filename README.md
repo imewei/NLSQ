@@ -200,7 +200,7 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 |---------|-------------|
 | **Automatic Jacobians** | JAX's autodiff eliminates manual derivatives |
 | **Bounded optimization** | Trust Region Reflective and Levenberg-Marquardt |
-| **Large datasets** | Chunked and streaming optimizers for 100M+ points, including an exact full-data streaming fit (`curve_fit_large(..., method="exact_streaming")`) |
+| **Large datasets** | `curve_fit_large` runs an exact full-data streaming fit by default from 1M points (100M+ supported); chunked and hybrid streaming fits via `strategy=` |
 | **Multi-start** | Global optimization with LHS/Sobol sampling |
 | **Workflow system** | 3 smart workflows: `auto`, `auto_global`, `hpc` with memory-aware strategy |
 | **CLI interface** | YAML-based workflows with `nlsq fit` and `nlsq batch` |

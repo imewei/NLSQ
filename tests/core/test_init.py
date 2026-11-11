@@ -17,6 +17,7 @@ import nlsq
 from nlsq import (
     curve_fit_large,
 )
+from nlsq.streaming.specs import Chunked
 
 
 class TestModuleImports(unittest.TestCase):
@@ -167,9 +168,11 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, _pcov = curve_fit_large(
-            self.linear_func, xdata, ydata, method="trf", size_threshold=10
-        )
+        # method="trf" is an engine reason: the default exact path warns and uses chunked
+        with pytest.warns(UserWarning, match="exact streaming not used"):
+            popt, _pcov = curve_fit_large(
+                self.linear_func, xdata, ydata, method="trf", size_threshold=10
+            )
 
         self.assertIsInstance(popt, np.ndarray)
         self.assertEqual(len(popt), 2)
@@ -520,9 +523,8 @@ class TestScipyConvention2DXdata(unittest.TestCase):
 
     def test_curve_fit_large_streaming_path_2d(self):
         xy, z = self._data(50_000)
-        popt, _ = curve_fit_large(
-            self._plane, xy, z, p0=[1, 1, 1], auto_size_detection=False
-        )
+        # 2-D xdata is outside the exact route (1-D only): pin the chunked engine
+        popt, _ = curve_fit_large(self._plane, xy, z, p0=[1, 1, 1], strategy=Chunked())
         np.testing.assert_allclose(popt, [1, 2, 3], atol=0.05)
 
     def test_fit_preset_large_2d(self):

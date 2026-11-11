@@ -509,9 +509,8 @@ def _make_closure_const(k):
         _float64_model,
         _wrapped_model,
         _make_closure_const(1.0),
-        lambda x, a, b: a * jax.nn.relu(jnp.exp(-b * x)),
     ],
-    ids=["jnp", "module_const", "linalg_norm", "float64", "wraps", "closure", "relu"],
+    ids=["jnp", "module_const", "linalg_norm", "float64", "wraps", "closure"],
 )
 def test_unchanged_models_hit(model):
     clear_wrapper_cache()
@@ -523,6 +522,19 @@ def test_unchanged_models_hit(model):
     assert next(iter(ls_mod._wrapper_cache.values())) is bundle
     np.testing.assert_array_equal(popt1, popt2)
     np.testing.assert_allclose(popt1, [2.0, 0.5], rtol=1e-6)
+
+
+def test_jax_custom_jvp_function_is_not_cached_and_fits():
+    """jax.nn.relu carries a custom JVP rule: uncached, same answer."""
+    clear_wrapper_cache()
+
+    def model(x, a, b):
+        return a * jax.nn.relu(jnp.exp(-b * x))
+
+    assert not _cacheable(model)
+    popt, new = _counted_fit(model)
+    assert new == 0
+    np.testing.assert_allclose(popt, [2.0, 0.5], rtol=1e-6)
 
 
 def test_lambda_recreated_every_call_hits():
@@ -686,7 +698,7 @@ def test_f2_constants_are_private_snapshots(monkeypatch):
     np.testing.assert_allclose(cached, [3.0], rtol=1e-9)
 
 
-def test_f3_custom_jvp_rule_state_is_keyed(monkeypatch):
+def test_f3_custom_jvp_models_are_not_cached(monkeypatch):
     slope = {"zero": 1.0}
     relu = jax.custom_jvp(jax.nn.relu)
 
@@ -703,7 +715,7 @@ def test_f3_custom_jvp_rule_state_is_keyed(monkeypatch):
     _fit_xs(model, 3 * XS, p0=[0.0])
     slope["zero"] = 0.0
     cached, new, uncached = _cached_vs_uncached(model, 3 * XS, monkeypatch, p0=[0.0])
-    assert new == 1
+    assert new == 0  # custom_jvp is refused: the rule is live state
     np.testing.assert_array_equal(cached, uncached)
     np.testing.assert_allclose(cached, [0.0])
 
@@ -793,7 +805,7 @@ def test_d1_user_jvp_rule_reading_a_global(monkeypatch, variant):
     state["sc"] = 5.0
     before = len(ls_mod._wrapper_cache)
     cached = fit()
-    assert len(ls_mod._wrapper_cache) - before == 1  # rule state is in the key
+    assert len(ls_mod._wrapper_cache) == before == 0  # custom rules are not cached
     monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
     uncached = fit()
     np.testing.assert_array_equal(cached[0], uncached[0])
@@ -1226,3 +1238,24 @@ def test_cache_is_lru_bounded(monkeypatch):
     assert keys_after(m2) == k23  # hit: m2 is now the most recent
     k24 = keys_after(m4)
     assert key2 in k24 and len(k24) == 2  # m3, the LRU entry, was evicted
+
+
+def test_bind_ignores_concurrent_writes_to_shared_instance_state(monkeypatch):
+    """Another thread sharing the instance may rewrite self.n / self.func_*
+    mid-bind; the cached bundle must still be built for this model's width."""
+    orig = ls_mod.LeastSquares.update_function
+
+    def clobbering(self, func):
+        out = orig(self, func)
+        self.n = 7  # what an unlocked least_squares() in another thread does
+        self.func_none = self.func_1d = self.func_2d = None
+        return out
+
+    monkeypatch.setattr(ls_mod.LeastSquares, "update_function", clobbering)
+    x = np.linspace(0, 1, 30)
+    popt, _ = curve_fit(lambda x, a, b: a * x + b, x, 3 * x + 2, p0=[1.0, 0.0])
+    np.testing.assert_allclose(popt, [3.0, 2.0], atol=1e-8)
+    monkeypatch.undo()
+    # the cached entry is reused by a fresh, unclobbered fit
+    popt, _ = curve_fit(lambda x, a, b: a * x + b, x, 3 * x + 2, p0=[1.0, 0.0])
+    np.testing.assert_allclose(popt, [3.0, 2.0], atol=1e-8)

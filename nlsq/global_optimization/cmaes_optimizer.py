@@ -1451,7 +1451,10 @@ class CMAESOptimizer:
 
             # CurveFitResult has .x for parameters, .pcov for covariance
             popt = np.asarray(result.x)  # type: ignore[union-attr]
-            pcov = np.asarray(result.pcov)  # type: ignore[union-attr]
+            # None when compute_covariance=False reached this call via kwargs
+            pcov = (
+                None if result.pcov is None else np.asarray(result.pcov)  # type: ignore[union-attr]
+            )
 
             # TRF can stop at its first iteration after nudging a parameter off
             # a bound (absolute gtol at tiny y); never return a worse point.

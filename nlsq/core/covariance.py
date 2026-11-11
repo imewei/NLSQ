@@ -124,6 +124,30 @@ def warn_not_estimated() -> None:
     )
 
 
+def _power_of_two_scale(H: np.ndarray) -> float:
+    """A power of two ``s`` with ``max|H/s| < 2``: scaling is exact, and ``H + H.T`` of
+    ``H/s`` cannot overflow (it would for ``|H| > 1e308 / 2``)."""
+    top = np.max(np.abs(H))
+    return float(np.ldexp(1.0, int(np.frexp(top)[1]) - 1)) if top > 0 else 1.0
+
+
+def normal_condition(H: np.ndarray) -> float:
+    """``sqrt(lambda_max / lambda_min)`` of symmetric ``H = J^T J``, the ``cond(J)`` estimate.
+
+    Overflow-safe (eigenvalues of the power-of-two scaled ``H``). ``inf`` when ``H`` is
+    non-finite or ``lambda_min <= 0``.
+    """
+    H = np.asarray(H, dtype=np.float64)
+    if not np.isfinite(H).all():
+        return np.inf
+    Hs = H / _power_of_two_scale(H)
+    w = np.linalg.eigvalsh((Hs + Hs.T) / 2)  # ascending
+    if w[0] <= 0:
+        return np.inf
+    with np.errstate(over="ignore"):  # the ratio may overflow to inf
+        return float(np.sqrt(w[-1] / w[0]))
+
+
 def pcov_from_normal(
     H: np.ndarray,
     cost: float,
@@ -145,20 +169,12 @@ def pcov_from_normal(
     H = np.asarray(H, dtype=np.float64)
     pcov = np.full((p, p), np.inf)
     if np.isfinite(H).all():
-        # eigh on H/s with s a power of two (scaling is exact, entries < 2): H + H.T would
-        # overflow for |H| > 1e308 / 2
-        top = np.max(np.abs(H))
-        s = np.ldexp(1.0, int(np.frexp(top)[1]) - 1) if top > 0 else 1.0
+        s = _power_of_two_scale(H)
         Hs = H / s
         w, V = np.linalg.eigh((Hs + Hs.T) / 2)  # ascending
         keep = w > p * np.finfo(np.float64).eps * w[-1]
         if keep.any():
-            lam_min = w[0] if w[0] > 0 else 0.0
-            with np.errstate(
-                over="ignore", divide="ignore"
-            ):  # cond may overflow to inf
-                ill = lam_min == 0.0 or np.sqrt(w[-1] / lam_min) > COND_WARN
-            if ill and cond_warn:
+            if cond_warn and normal_condition(H) > COND_WARN:
                 warnings.warn(
                     f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
                     f"{COND_WARN:.0e}); the covariance may be inaccurate and the "

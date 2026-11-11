@@ -17,6 +17,10 @@ The harness's own cost gate is relative to the best library in the same run, so 
 library it is vacuous. The gate here is therefore explicit: per round, base and cand
 must both be ``ok``, report the same case set (nothing expected is missing) and agree on
 final ``cost`` within rtol 1e-6. Any violation returns exit code 1.
+
+``--cost-gate no-worse`` relaxes the cost rule for default-path changes that make the fit
+more accurate: the candidate may be cheaper, never costlier; a case where base is the
+costlier arm is listed separately and not timed.
 """
 
 import argparse
@@ -64,10 +68,21 @@ def median_per_case(paths: Sequence[Path]) -> dict[Case, float]:
 
 
 def check_correctness(
-    expected: Sequence[Case], base: dict[Case, dict], cand: dict[Case, dict]
-) -> list[str]:
-    """Violations between one base run and one candidate run of the same cases."""
-    bad = []
+    expected: Sequence[Case],
+    base: dict[Case, dict],
+    cand: dict[Case, dict],
+    cost_gate: str = "equal",
+) -> tuple[list[str], set[Case]]:
+    """Return ``(violations, skipped)`` between one base run and one candidate run.
+
+    ``cost_gate="equal"``: costs must agree within ``COST_RTOL``; ``skipped`` is empty.
+    ``cost_gate="no-worse"``: both arms must be ``ok`` with a finite cost; the candidate
+    may not be costlier than base beyond ``COST_RTOL``. When base is the costlier arm
+    (it stopped short of the optimum) the case is ``skipped``: timing it would compare
+    a less accurate fit against a more accurate one.
+    """
+    bad: list[str] = []
+    skipped: set[Case] = set()
     for case in expected:
         b, c = base.get(case), cand.get(case)
         if b is None or c is None:
@@ -80,9 +95,14 @@ def check_correctness(
             bad.append(f"{case}: missing cost on an ok record")
         elif not (math.isfinite(b["cost"]) and math.isfinite(c["cost"])):
             bad.append(f"{case}: non-finite cost base={b['cost']!r} cand={c['cost']!r}")
-        elif abs(c["cost"] - b["cost"]) > COST_RTOL * max(abs(b["cost"]), 1e-300):
-            bad.append(f"{case}: cost base={b['cost']!r} cand={c['cost']!r}")
-    return bad
+        elif cost_gate == "equal":
+            if abs(c["cost"] - b["cost"]) > COST_RTOL * max(abs(b["cost"]), 1e-300):
+                bad.append(f"{case}: cost base={b['cost']!r} cand={c['cost']!r}")
+        elif c["cost"] > b["cost"] * (1 + COST_RTOL):
+            bad.append(f"{case}: cand cost worse base={b['cost']!r} cand={c['cost']!r}")
+        elif b["cost"] > c["cost"] * (1 + COST_RTOL):
+            skipped.add(case)
+    return bad, skipped
 
 
 def _env(checkout: Path, platform: str = "") -> dict[str, str]:
@@ -153,6 +173,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--repeats", type=int, default=7)
     ap.add_argument("--platform", choices=["cpu", "gpu"], default="cpu")
     ap.add_argument("--out-root", type=Path, help="keep raw harness JSON here")
+    ap.add_argument(
+        "--cost-gate",
+        choices=["equal", "no-worse"],
+        default="equal",
+        help="equal: costs agree within rtol; no-worse: cand not costlier than base "
+        "(cases where base is costlier are listed and not timed)",
+    )
     args = ap.parse_args(argv)
 
     arms = {"base": args.base.resolve(), "cand": args.cand.resolve()}
@@ -170,23 +197,37 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     expected = list(itertools.product(args.libraries, args.problems, args.sizes))
     violations = []
+    skipped: set[Case] = set()
     for rnd, (pb, pc) in enumerate(zip(paths["base"], paths["cand"], strict=True)):
-        bad = check_correctness(expected, load_end_to_end(pb), load_end_to_end(pc))
+        bad, skip = check_correctness(
+            expected, load_end_to_end(pb), load_end_to_end(pc), args.cost_gate
+        )
         violations += [f"round {rnd}: {v}" for v in bad]
-    if violations:
-        print("CORRECTNESS GATE FAILED", *violations, sep="\n  ", file=sys.stderr)
-        return 1
-
+        skipped |= skip
+    timed = [case for case in expected if case not in skipped]
     series = {
         arm: [
             {c: r["warm_median_s"] for c, r in load_end_to_end(p).items()} for p in ps
         ]
         for arm, ps in paths.items()
     }
+    for case in timed:
+        for arm, rounds in series.items():
+            for rnd, values in enumerate(rounds):
+                t = values.get(case)
+                if not (isinstance(t, int | float) and math.isfinite(t)):
+                    violations.append(
+                        f"round {rnd}: {case}: missing/non-finite warm_median_s "
+                        f"in {arm} ({t!r})"
+                    )
+    if violations:
+        print("CORRECTNESS GATE FAILED", *violations, sep="\n  ", file=sys.stderr)
+        return 1
+
     print(
         f"{'case':<34}{'base_s':>10}{'cand_s':>10}{'ratio':>8}{'spr_b':>8}{'spr_c':>8}"
     )
-    for case in expected:
+    for case in timed:
         b = [rnd[case] for rnd in series["base"]]
         c = [rnd[case] for rnd in series["cand"]]
         print(
@@ -194,6 +235,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"{statistics.median(c):>10.4f}{ratio(b, c):>8.3f}"
             f"{spread(b):>8.3f}{spread(c):>8.3f}"
         )
+    if skipped:
+        print(
+            "SKIPPED (base cost worse than cand beyond rtol; not timed, not in verdict)"
+        )
+        for case in expected:
+            if case in skipped:
+                print(f"  {'/'.join(map(str, case))}")
     print(f"raw harness JSON: {root}")
     return 0
 

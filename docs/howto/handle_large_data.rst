@@ -414,7 +414,7 @@ Always check memory requirements before fitting:
 
 - **< 1M points**: Use standard ``curve_fit``
 - **1M - 10M points**: Use ``curve_fit_large`` with default settings
-- **10M - 100M points**: Use chunking with progress monitoring
+- **10M - 100M points**: Use ``curve_fit_large`` (exact streaming by default) with ``show_progress=True``
 - **> 100M points**: Use adaptive hybrid streaming (processes 100% of data)
 
 **3. Optimize for Your Hardware**

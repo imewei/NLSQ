@@ -215,6 +215,8 @@ class GaussNewtonPhase:
             - 'residual_sum_sq': Total residual sum of squares (for Phase 3)
             - 'gn_result': GNResult dataclass instance
         """
+        # the jitted chunk kernel bakes in model state read at trace time: one run only
+        self._normal_eq = None
         current_params = initial_params
         trust_radius = self.config.trust_region_initial
 

@@ -10,7 +10,9 @@ the functions, not at its own top level. Importing it still runs
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+import warnings
+from collections.abc import Mapping
+from typing import Any, Literal
 
 import numpy as np
 
@@ -25,8 +27,26 @@ from nlsq.streaming.specs import (
     Multistart,
     reject_owned_kwargs,
 )
+from nlsq.utils.logging import get_logger
 
 __all__ = ["fit_with_strategy"]
+
+_logger = get_logger(__name__)
+
+# Chunked options the exact solver honours; any other key keeps the chunked engine
+_EXACT_OPTION_KEYS = frozenset({"ftol", "xtol", "gtol", "max_nfev"})
+# Probe length of the pointwise-model check on the default route
+_PROBE_POINTS = 4096
+_CHUNKED_HINT = (
+    "Chunked GLS is an approximation, not full-batch equivalent for nonlinear "
+    "models; pass strategy=Chunked() to accept it."
+)
+_SIGMA_HINT = "Pass a 1-D sigma of per-point uncertainties."
+
+
+def _is_default(value: Any, default: Any) -> bool:
+    """``value`` is the field default, also by type: ``np.float32(1e-8) == 1e-8``."""
+    return value == default and type(value) is type(default)
 
 
 def _multistart_kwargs(ms: Multistart) -> dict[str, Any]:
@@ -57,6 +77,7 @@ def fit_with_strategy(
     check_finite: bool,
     memory_limit_gb: float | None,
     show_progress: bool,
+    compute_covariance: bool = True,
     **kwargs: Any,
 ) -> Any:
     """Fit ``f`` to the data with ``strategy``.
@@ -69,6 +90,9 @@ def fit_with_strategy(
         As in ``curve_fit_large``.
     memory_limit_gb, show_progress
         Used by the chunked and exact paths; ignored by the others.
+    compute_covariance
+        False returns ``pcov=None``. Chunked: only the final ``pcov`` is dropped
+        (the GLS combiner still needs the chunk covariances). Hybrid: ``ValueError``.
     **kwargs
         Extra keyword arguments for the engine. In-memory and chunked: merged
         over the strategy's ``options``; a key the strategy owns (see
@@ -100,6 +124,7 @@ def fit_with_strategy(
             p0,
             memory_limit_gb=memory_limit_gb,
             show_progress=show_progress,
+            compute_covariance=compute_covariance,
             kwargs=kwargs,
             **common,
         )
@@ -132,11 +157,62 @@ def fit_with_strategy(
     n_points = n_x
 
     if isinstance(strategy, Hybrid):
+        if not compute_covariance:
+            raise ValueError(
+                "compute_covariance=False is not supported by hybrid_streaming"
+            )
         return _fit_hybrid(strategy, f, xdata, ydata, p0, kwargs=kwargs, **common)
     if isinstance(strategy, Auto):
-        strategy = strategy.resolve(n_points)
+        auto = strategy
+        strategy = auto.resolve(n_points)
+        if isinstance(strategy, Exact):
+            # an owned key raises TypeError here, as on the chunked path, not after a fallback
+            reject_owned_kwargs(auto.chunked, kwargs)
+            opts = {**auto.chunked.options, **kwargs}  # what chunked would have used
+            hit = _exact_ineligible(
+                auto, opts, f, xdata, ydata, n_points, sigma, p0, bounds, check_finite
+            )
+            if hit is None:
+                return _fit_exact(
+                    _effective_exact(strategy, auto, opts),
+                    f,
+                    xdata,
+                    ydata,
+                    p0,
+                    memory_limit_gb=memory_limit_gb,
+                    show_progress=show_progress,
+                    compute_covariance=compute_covariance,
+                    kwargs={},
+                    route="default",
+                    **common,
+                )
+            kind, reason = hit
+            if kind != "engine":
+                # chunked rejects 2-D sigma too, so that reason gets no Chunked() hint
+                hint = _SIGMA_HINT if kind == "sigma" else _CHUNKED_HINT
+                raise ValueError(
+                    f"curve_fit_large: exact streaming cannot fit this input "
+                    f"({reason}). {hint}"
+                )
+            msg = (
+                f"curve_fit_large: exact streaming not used ({reason}); using chunked "
+                "GLS, which is not full-batch equivalent for nonlinear models. Pass "
+                "strategy=Chunked() to choose it explicitly."
+            )
+            warnings.warn(msg, UserWarning, stacklevel=3)
+            _logger.info(msg)
+            strategy = auto.chunked
     if isinstance(strategy, InMemory):
-        return _fit_in_memory(strategy, f, xdata, ydata, p0, kwargs=kwargs, **common)
+        return _fit_in_memory(
+            strategy,
+            f,
+            xdata,
+            ydata,
+            p0,
+            compute_covariance=compute_covariance,
+            kwargs=kwargs,
+            **common,
+        )
     if isinstance(strategy, Chunked):
         return _fit_chunked(
             strategy,
@@ -147,6 +223,7 @@ def fit_with_strategy(
             n_points=n_points,
             memory_limit_gb=memory_limit_gb,
             show_progress=show_progress,
+            compute_covariance=compute_covariance,
             kwargs=kwargs,
             **common,
         )
@@ -166,8 +243,13 @@ def _fit_exact(
     check_finite: bool,
     memory_limit_gb: float | None,
     show_progress: bool,
+    compute_covariance: bool,
     kwargs: dict[str, Any],
+    route: Literal["explicit", "default"] = "explicit",
 ) -> Any:
+    """Exact streaming fit. ``route="default"`` (reached through ``Auto``) appends the
+    ``strategy=Chunked()`` hint to a pointwise-contract ``ValueError`` and to
+    ``ExactSolverError``; the explicit route raises them unchanged."""
     from nlsq.streaming import exact_lm
     from nlsq.streaming.strategy import (
         build_large_strategy,
@@ -176,7 +258,18 @@ def _fit_exact(
     )
 
     reject_owned_kwargs(strategy, kwargs)
-    check_exact_sources(xdata, ydata, sigma, strategy.n_points)
+    try:
+        check_exact_sources(xdata, ydata, sigma, strategy.n_points)
+    except ValueError as err:
+        shape_msg = " must be 1-D for method='exact_streaming'"
+        if route == "default" and shape_msg in str(err):
+            # the user never chose method='exact_streaming'
+            reason = str(err).replace(shape_msg, " must be 1-D")
+            raise ValueError(
+                f"curve_fit_large: exact streaming cannot fit this input ({reason}). "
+                f"{_CHUNKED_HINT}"
+            ) from err
+        raise
     if p0 is not None:
         p0 = np.asarray(p0, dtype=float)  # a complex list p0 must raise TypeError
     p0_arr, exact_bounds = normalize_p0_bounds(f, p0, bounds)
@@ -190,28 +283,117 @@ def _fit_exact(
         fld.name: getattr(strategy, fld.name)
         for fld in dataclasses.fields(strategy)
         if fld.name != "chunk_size"
-        and (
-            getattr(strategy, fld.name) != fld.default
-            or type(getattr(strategy, fld.name)) is not type(fld.default)
-        )
+        and not _is_default(getattr(strategy, fld.name), fld.default)
     }
     solver_kwargs.update(kwargs)
     large_strategy = build_large_strategy("exact", None)
-    native = large_strategy.fit(
-        f,
-        xdata,
-        ydata,
-        p0_arr,
-        bounds=(lb, ub),
-        chunk_size=strategy.chunk_size,
-        check_finite=check_finite,
-        sigma=sigma,
-        absolute_sigma=absolute_sigma,
-        memory_limit_gb=memory_limit_gb,
-        show_progress=show_progress,
-        **solver_kwargs,
-    )
-    return large_strategy.unpack(native)
+    try:
+        native = large_strategy.fit(
+            f,
+            xdata,
+            ydata,
+            p0_arr,
+            bounds=(lb, ub),
+            chunk_size=strategy.chunk_size,
+            check_finite=check_finite,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            memory_limit_gb=memory_limit_gb,
+            show_progress=show_progress,
+            compute_covariance=compute_covariance,
+            **solver_kwargs,
+        )
+        return large_strategy.unpack(native)
+    except ValueError as err:
+        if route == "default" and str(err).startswith("model is not pointwise"):
+            raise ValueError(f"{err}. {_CHUNKED_HINT}") from err
+        raise
+    except exact_lm.ExactSolverError as err:
+        if route == "default":
+            raise exact_lm.ExactSolverError(
+                f"{err} (default exact path; strategy=Chunked() restores the chunked "
+                "GLS fit)",
+                err.result,
+            ) from err
+        raise
+
+
+def _effective_exact(exact: Exact, auto: Auto, opts: Mapping[str, Any]) -> Exact:
+    """``exact`` (``auto.exact``) with the large-path settings the caller gave elsewhere.
+
+    Per field, a non-default value on ``exact`` wins; otherwise ``chunk_size``
+    comes from ``auto.chunked`` and ``ftol``, ``xtol``, ``gtol``, ``max_nfev`` from
+    ``opts`` (``auto.chunked.options`` merged with the call kwargs).
+    """
+    inherited = {"chunk_size": auto.chunked.chunk_size} | {
+        k: opts[k] for k in _EXACT_OPTION_KEYS if k in opts
+    }
+    defaults = {fld.name: fld.default for fld in dataclasses.fields(Exact)}
+    changes = {
+        name: value
+        for name, value in inherited.items()
+        if _is_default(getattr(exact, name), defaults[name])
+    }
+    return dataclasses.replace(exact, **changes)
+
+
+def _exact_ineligible(
+    auto: Auto,
+    opts: Mapping[str, Any],
+    f: Any,
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    n_points: int,
+    sigma: Any,
+    p0: Any,
+    bounds: Any,
+    check_finite: bool,
+) -> tuple[Literal["engine", "data", "sigma"], str] | None:
+    """Why the ``Auto`` default cannot use exact, or None.
+
+    ``"engine"``: ``auto.chunked`` asks for a chunked-engine feature (fall back with a
+    warning). ``"data"``: exact cannot fit this input (raise with the
+    ``strategy=Chunked()`` hint). ``"sigma"``: a 2-D ``sigma``, which chunked rejects too
+    (raise without the hint; checked before finiteness so the error names its shape).
+    Scalar and signed ``sigma`` are not reasons. Non-finite ``xdata``/``ydata`` under
+    ``check_finite=False`` is a data reason (chunked would absorb the NaN silently).
+    """
+    from nlsq.streaming.exact_lm import check_model_contract
+    from nlsq.streaming.strategy import normalize_p0_bounds
+
+    chunked = auto.chunked
+    if chunked.method is not None:
+        return "engine", "Auto.chunked sets method"
+    if chunked.multistart.enabled:
+        return "engine", "Auto.chunked enables multistart"
+    extra = sorted(set(opts) - _EXACT_OPTION_KEYS)
+    if extra:
+        return (
+            "engine",
+            f"Auto.chunked option(s) {extra} are not supported by exact",
+        )
+    if xdata.ndim != 1:
+        return "data", "multi-feature xdata"
+    if sigma is not None and np.ndim(sigma) > 1:
+        return "sigma", f"sigma must be 1-D (or a scalar), got shape {np.shape(sigma)}"
+    if (
+        sigma is not None
+        and not check_finite
+        and not np.isfinite(np.asarray(sigma)).all()
+    ):
+        return "data", "sigma has non-finite values (check_finite=False)"
+    if not check_finite and not (np.isfinite(xdata).all() and np.isfinite(ydata).all()):
+        return "data", "xdata or ydata has non-finite values (check_finite=False)"
+    if p0 is not None:
+        p0 = np.asarray(p0, dtype=float)
+    p0_arr, _ = normalize_p0_bounds(f, p0, bounds)
+    try:
+        check_model_contract(f, p0_arr, xdata[: min(n_points, _PROBE_POINTS)])
+    except ValueError as err:
+        if not str(err).startswith("model is not pointwise"):
+            raise
+        return "data", str(err)
+    return None
 
 
 def _fit_hybrid(
@@ -284,12 +466,15 @@ def _fit_in_memory(
     absolute_sigma: bool,
     bounds: Any,
     check_finite: bool,
+    compute_covariance: bool,
     kwargs: dict[str, Any],
 ) -> Any:
     from nlsq.streaming.strategy import build_large_strategy
 
     reject_owned_kwargs(strategy, kwargs)
     fit_kwargs = {**strategy.options, **kwargs}
+    if not compute_covariance:
+        fit_kwargs["compute_covariance"] = False
     if sigma is not None:
         fit_kwargs["sigma"] = sigma
     _lb, _ub = bounds
@@ -325,6 +510,7 @@ def _fit_chunked(
     n_points: int,
     memory_limit_gb: float | None,
     show_progress: bool,
+    compute_covariance: bool,
     kwargs: dict[str, Any],
 ) -> Any:
     from nlsq.config import (
@@ -430,4 +616,9 @@ def _fit_chunked(
             **fit_kwargs,
         )
 
-        return large_strategy.unpack(native)
+        popt, pcov = large_strategy.unpack(native)
+        if not compute_covariance:
+            # The GLS combiner needed the chunk covariances; only the result drops
+            _logger.debug("covariance dropped (compute_covariance=False)")
+            return popt, None
+        return popt, pcov

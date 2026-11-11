@@ -6,19 +6,19 @@ fit (up to rounding and the stopping tolerances) regardless of how the data is c
 next iterate's, so no pass is spent re-evaluating an accepted point.
 
 Ported from ``benchmarks/prototypes/exact_accumulated_lm.py`` (Stage 0, kept frozen as the
-independent baseline). Stage 2a adds 1-D ``sigma`` (weights ``1/sigma`` on residuals and
-Jacobian rows); Stage 2b adds box ``bounds`` by an active set (not Coleman-Li TRF): the
+independent baseline). Stage 2a adds a scalar or 1-D ``sigma`` (nonzero; ``|sigma|`` is used; weights
+``1/|sigma|`` on residuals and Jacobian rows); Stage 2b adds box ``bounds`` by an active set (not Coleman-Li TRF): the
 result is a KKT point of the box-constrained problem to within the stopping tolerances,
 reached by a different path than TRF.
 
-shortcut: normal equations square cond(J). The Stage 3 conditioning study kept them
-(benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md); the COND_WARN
-warning (in nlsq.core.covariance) is the mitigation. Revisit with TSQR if accurate covariances at cond(J) > 1e5 are needed.
+shortcut: covariance: TSQR when kappa > 1e3; step solve stays on normal equations
+(conditioning study, benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md).
 """
 
 from __future__ import annotations
 
 import sys
+import warnings
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
@@ -35,7 +35,13 @@ from nlsq.core._option_checks import (
     validate_max_nfev,
     validate_tolerance,
 )
-from nlsq.core.covariance import pcov_from_normal
+from nlsq.core.covariance import (
+    _NLSQ_DIR,
+    COND_WARN,
+    normal_condition,
+    pcov_from_jacobian,
+    pcov_from_normal,
+)
 from nlsq.result import OptimizeResult
 
 # Moved to normal_equations; re-exported here (tests and benchmarks import and patch them).
@@ -46,6 +52,7 @@ from nlsq.streaming.normal_equations import (
     _source_len,
     is_chunk_factory,
     iter_blocks,
+    make_chunk_jacobian,
     make_chunk_stats,
     run_pass,
 )
@@ -65,6 +72,8 @@ LAMBDA_MAX = 1e14  # damping ceiling
 ATTEMPT_CAP = 20  # solve attempts per iteration
 DAMPING_FLOOR = 1e-10  # D_ii >= DAMPING_FLOOR * max_j D_jj
 LAM0 = 1e-3  # initial damping; read at call time (tests move it near a limit)
+_CACHE_CONST_BYTES = 1 << 26  # 64 MiB: larger captured constants skip the kernel cache
+TSQR_KAPPA = 1e3  # covariance by TSQR above this sqrt(cond(H)); set by Gate G-cov
 
 Termination = Literal["gtol", "ftol", "xtol", "max_nfev", "stalled"]
 _SUCCESS: frozenset[Termination] = frozenset({"gtol", "ftol", "xtol"})
@@ -342,7 +351,8 @@ def _place(
     free = _free_device_bytes()
     if free is None:
         return x, y, sigma
-    need = 8 * len(arrays) * _source_len(x)  # float64
+    # float64; a scalar sigma is broadcast per chunk and costs nothing per point
+    need = 8 * sum(1 for a in arrays if len(a.shape) != 0) * _source_len(x)
     if need > DEVICE_FRACTION * free:
         return x, y, sigma
     if (
@@ -440,11 +450,11 @@ def _check_inputs(
     if not hasattr(x, "shape") or len(x.shape) != 1 or tuple(y.shape) != tuple(x.shape):
         raise ValueError("x and y must be 1-D arrays of equal length")
     n, p = _source_len(x), len(p0)
-    if sigma is not None:
+    if sigma is not None and len(sigma.shape) != 0:  # a scalar is broadcast per chunk
         if len(sigma.shape) != 1:
             raise ValueError(
-                f"sigma must be 1-D, got shape {sigma.shape} (correlated 2-D sigma is "
-                "not supported by exact_streaming)"
+                f"sigma must be 1-D (or a scalar), got shape {tuple(sigma.shape)} "
+                "(correlated 2-D sigma is not supported by exact_streaming)"
             )
         if sigma.shape[0] != n:
             raise ValueError(f"sigma has length {sigma.shape[0]}, expected {n}")
@@ -465,6 +475,129 @@ def compute_covariance(
     ``pcov`` (``cost = 0.5*sum(r^2)``).
     """
     return pcov_from_normal(H, cost, n, p, absolute_sigma)[0]
+
+
+def _open_source(
+    x: Any,
+    y: Any,
+    sigma: Any,
+    chunk: int,
+    p: int,
+    memory_limit_gb: float | None,
+    n_points: int | None,
+) -> tuple[tuple[Any, Any, Any] | FactorySource, bool]:
+    """``(source, weighted)`` for :func:`run_pass`: a :class:`FactorySource` that opens
+    pass 1 (``n_points`` the validated declared count, or None) or the placed arrays."""
+    if is_chunk_factory(x):
+        # opens pass 1 and reads its leading blocks
+        source = FactorySource(x, chunk, n_points)
+        return source, source.weighted
+    return _place(
+        x, y, sigma, chunk * p * 8 * WORKSPACE_FACTOR, memory_limit_gb
+    ), sigma is not None
+
+
+def _cached_stats(
+    model: Callable[..., Any], x_block: jax.ShapeDtypeStruct, p: int, weighted: bool
+) -> tuple[Callable[..., Any], Callable[..., Any], Callable[..., jax.Array]]:
+    """``(model, stats kernel, TSQR Jacobian kernel)``, reused when ``model`` traces identically.
+
+    Keyed by curve_fit's exact jaxpr digest (``_trace_model``): on a hit the kernel
+    evaluates the private jaxpr snapshot, never the caller's ``model``, so a closure whose
+    captured data changed misses. Returns fresh kernels of the caller's ``model`` uncached
+    when the model cannot be keyed exactly, ``NLSQ_DISABLE_WRAPPER_CACHE=1``, or its captured
+    constants exceed ``_CACHE_CONST_BYTES`` (the digest copies and hashes them, and a cached
+    copy would sit outside ``memory_limit_gb``).
+    """
+    from nlsq.core import least_squares as ls  # lazy: heavy module
+
+    y_block = jax.ShapeDtypeStruct(
+        x_block.shape[:1], jnp.float64
+    )  # only its shape is read
+    # the digest charges every array it copies or hashes; over budget it gives up (None)
+    token = ls._snapshot_budget.set([_CACHE_CONST_BYTES])
+    try:
+        traced = ls._trace_model(model, x_block, y_block, np.zeros(p), "fwd")
+    finally:
+        ls._snapshot_budget.reset(token)
+    if traced is None:
+        return (
+            model,
+            make_chunk_stats(model, weighted=weighted),
+            make_chunk_jacobian(model, weighted=weighted),
+        )
+    key = ("exact_lm_stats", weighted, traced[0])
+    with ls._wrapper_cache_lock:
+        hit = ls._wrapper_cache.get(key)
+        if hit is not None:
+            ls._wrapper_cache.move_to_end(key)
+            return hit
+    m = ls._model_from_jaxpr(traced[1], traced[2])
+    # jax.jit is lazy: the TSQR Jacobian kernel compiles only if that route runs
+    entry = (
+        m,
+        make_chunk_stats(m, weighted=weighted),
+        make_chunk_jacobian(m, weighted=weighted),
+    )
+    with ls._wrapper_cache_lock:
+        entry = ls._wrapper_cache.setdefault(key, entry)
+        while len(ls._wrapper_cache) > ls._WRAPPER_CACHE_SIZE:
+            ls._wrapper_cache.popitem(last=False)
+    return entry
+
+
+@jax.jit
+def _qr_append(R: jax.Array, J: jax.Array) -> jax.Array:
+    return jnp.linalg.qr(jnp.vstack([R, J]), mode="r")
+
+
+def tsqr_r_factor(
+    model: Callable[..., Any],
+    theta: Any,
+    source: tuple[Any, Any, Any] | FactorySource,
+    chunk: int,
+    *,
+    weighted: bool,
+    jac: Callable[..., jax.Array] | None = None,
+) -> np.ndarray:
+    """The ``min(n, p) x p`` R factor of the full weighted Jacobian at ``theta``, one pass.
+
+    TSQR: ``R <- qr(vstack(R, J_chunk), mode="r")`` per chunk, in float64 on the chunk's
+    device, so the state is ``O(p^2)`` and the workspace ``O(chunk * p)``. ``J^T J = R^T R``
+    without forming ``J^T J``, so ``R`` carries ``cond(J)``, not its square. Chunks and the
+    padded-tail mask are those of :func:`run_pass`; a factory source verifies its count.
+    """
+    th = jnp.asarray(theta, dtype=jnp.float64)
+    if (
+        jac is None
+    ):  # built per call: a kernel kept across calls could bake in stale state
+        jac = make_chunk_jacobian(model, weighted=weighted)
+    R = jnp.zeros((0, th.shape[0]), dtype=jnp.float64)
+    blocks = (
+        source.blocks()
+        if isinstance(source, FactorySource)
+        else iter_blocks(*source, chunk)
+    )
+    for xc, _, sc, mask in blocks:  # exhausted: a factory checks its count at the end
+        Jc = jac(th, xc, mask) if sc is None else jac(th, xc, sc, mask)
+        R = _qr_append(R, Jc)
+    return np.asarray(R)
+
+
+def _warn_tsqr_route(H: np.ndarray, kappa: float) -> None:
+    """The TSQR-route ``UserWarning`` above ``COND_WARN`` (non-finite ``H`` named as such)."""
+    if not np.isfinite(H).all():
+        state = "is non-finite"
+    elif kappa > COND_WARN:
+        state = f"is ill-conditioned (sqrt(cond(H)) > {COND_WARN:.0e})"
+    else:
+        return
+    warnings.warn(
+        f"normal-equation Hessian {state}; covariance computed by QR; the parameters "
+        "may stop short of the optimum: check the result",
+        UserWarning,
+        skip_file_prefixes=_NLSQ_DIR,
+    )
 
 
 def _check_factory_inputs(
@@ -526,6 +659,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     memory_limit_gb: float | None = None,
     show_progress: bool = False,
     n_points: int | None = None,
+    compute_covariance: bool = True,
 ) -> OptimizeResult:
     """Exact full-data Levenberg-Marquardt fit of ``y ~ model(x, *p)``.
 
@@ -535,12 +669,19 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     "stalled"``; success only for the first three), ``n_points`` and
     ``equivalent_to_full_batch=True``. A failed fit is returned, not raised.
 
-    ``sigma`` (optional, 1-D, length ``n``) gives per-point standard deviations: residuals
-    and Jacobian rows are divided by it, so ``cost = 0.5*sum(((y - f)/sigma)^2)`` and
-    ``pcov`` is scaled by ``2*cost/(n - p)`` unless ``absolute_sigma``, as in
-    ``nlsq.curve_fit``. Its length and dimension are checked from its shape; finiteness and
-    positivity are reduced on device during the first pass (always, regardless of
-    ``check_finite``, because a negative ``sigma`` would otherwise square away silently).
+    ``pcov`` comes from ``H`` at the final ``x`` when ``sqrt(cond(H)) <= TSQR_KAPPA``
+    (``covariance_method="normal"``); above it, from the SVD of the TSQR ``R`` factor of
+    the full Jacobian, one extra data pass not counted in ``nfev`` (``"tsqr"``);
+    ``"skipped"`` with ``compute_covariance=False``.
+
+    ``sigma`` (optional, a scalar or 1-D of length ``n``) gives per-point standard
+    deviations: residuals and Jacobian rows are divided by ``|sigma|`` (the objective
+    depends on ``sigma^2`` only, so a negative value acts as its magnitude), so
+    ``cost = 0.5*sum(((y - f)/sigma)^2)`` and ``pcov`` is scaled by ``2*cost/(n - p)``
+    unless ``absolute_sigma``, as in ``nlsq.curve_fit``. A scalar is broadcast per chunk,
+    never to an ``n``-length array. Its length and dimension are checked from its shape;
+    finiteness and nonzero-ness are reduced on device during the first pass (always,
+    regardless of ``check_finite``).
 
     ``bounds = (lb, ub)`` (scalars or length-``p`` arrays, ``lb < ub`` elementwise) are
     handled by an active set: ``p0`` is clipped into the box; each iteration holds the
@@ -576,7 +717,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     points; a factory yielding fewer than 2 points in total raises ``ValueError``.
 
     Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
-    that is not 1-D, of the wrong length, non-finite or non-positive, a non-finite cost,
+    that is not a scalar or 1-D, of the wrong length, non-finite or zero, a non-finite cost,
     gradient or Hessian at ``p0``, and for ``bounds`` of the wrong shape or with
     ``lb >= ub`` anywhere (equal, inverted or NaN bounds).
     """
@@ -627,16 +768,16 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         return st
 
     theta = np.clip(np.asarray(p0, np.float64), lo, hi)
-    if factory:
-        source = FactorySource(x, chunk, n)  # opens pass 1, reads its leading blocks
+    source, weighted = _open_source(x, y, sigma, chunk, p, memory_limit_gb, n)
+    if isinstance(source, FactorySource):
         check_model_contract(model, theta, source.first_x)
-        weighted = source.weighted
     else:
-        source = _place(x, y, sigma, chunk * p * 8 * WORKSPACE_FACTOR, memory_limit_gb)
         # at least 2 points even for chunk_size=1: a 1-point probe proves nothing
         check_model_contract(model, theta, _block(x, 0, min(n, max(chunk, 2))))
-        weighted = sigma is not None
-    stats = make_chunk_stats(model, weighted=weighted)
+    # blocks reach the kernel as float64 (chunk, ...) arrays: trace the model for exactly that
+    tail = np.shape(source.first_x if isinstance(source, FactorySource) else x)[1:]
+    x_block = jax.ShapeDtypeStruct((chunk, *tail), jnp.float64)
+    model, stats, jac = _cached_stats(model, x_block, p, weighted)
     st = evaluate(theta, 1, first=True)
     if isinstance(source, FactorySource):
         n = source.n  # counted (or verified against n_points) during pass 1
@@ -646,8 +787,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         raise ValueError("x and y must be finite (found NaN or inf)")
     if not st.sigma_finite:
         raise ValueError("sigma must be finite (found NaN or inf)")
-    if not st.sigma_positive:
-        raise ValueError("sigma must be positive (found a zero or negative value)")
+    if not st.sigma_nonzero:
+        raise ValueError("sigma must be nonzero (found a zero value)")
     if not _finite(st):
         raise ValueError("model cost, gradient or Hessian is not finite at p0")
     cost, g, H = st.cost, st.g, st.H
@@ -714,7 +855,21 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     message = _MESSAGES[termination]
     if termination == "stalled" and _scaled_eig(g, H)[3]:
         message += "; rank cannot be certified from normal equations"
-    pcov = compute_covariance(H, cost, n, p, absolute_sigma)
+    # The parameter shadows the module function compute_covariance
+    if not compute_covariance:
+        pcov, covariance_method = None, "skipped"
+        logger.debug("covariance skipped", reason="compute_covariance=False")
+    elif (kappa := normal_condition(H)) > TSQR_KAPPA:
+        # normal equations lose cond(J)^2: one more pass for R at theta (not in nfev)
+        from nlsq.core.minpack import _covariance_svd  # lazy: minpack is heavy
+
+        R = tsqr_r_factor(model, theta, source, chunk, weighted=weighted, jac=jac)
+        pcov = pcov_from_jacobian(R, cost, n, p, absolute_sigma, _covariance_svd)[0]
+        covariance_method = "tsqr"
+        _warn_tsqr_route(H, kappa)
+    else:
+        pcov = pcov_from_normal(H, cost, n, p, absolute_sigma)[0]
+        covariance_method = "normal"
     return OptimizeResult(
         x=theta,
         cost=cost,
@@ -725,4 +880,5 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         termination=termination,
         n_points=n,
         equivalent_to_full_batch=True,
+        covariance_method=covariance_method,
     )

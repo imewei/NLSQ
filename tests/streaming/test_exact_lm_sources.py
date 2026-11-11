@@ -365,6 +365,31 @@ def test_place_honours_memory_limit(gpu):
     assert over[0] is x
 
 
+def test_place_budgets_scalar_sigma_as_a_scalar(gpu):
+    """Item 2: 16 bytes/point (x, y) with a scalar sigma, 24 with an n-length one."""
+    n, x = 1000, np.ones(1000)
+    scalar, vec = np.asarray(2.0), np.full(n, 2.0)
+    for sigma, per_point in [(scalar, 16), (vec, 24)]:
+        fits = lm._place(x, x, sigma, memory_limit_gb=per_point * n / 2**30)
+        over = lm._place(x, x, sigma, memory_limit_gb=(per_point * n - 1) / 2**30)
+        assert isinstance(fits[0], jax.Array) and over[0] is x
+    assert lm._place(x, x, scalar)[2].shape == ()  # stays 0-d once placed
+
+
+def test_scalar_sigma_never_materializes_n_length(data, gpu, passes, monkeypatch):
+    """Item 12: the scalar reaches the passes as a 0-d value, not an n-length array."""
+    seen = []
+    real = lm.run_pass
+
+    def spy(stats, theta, source, chunk, **k):
+        seen.append(source[2].shape)
+        return real(stats, theta, source, chunk, **k)
+
+    monkeypatch.setattr(lm, "run_pass", spy)
+    lm.exact_lm_fit(exp_model, *data, EXP.p0, sigma=np.asarray(2.0))
+    assert seen and set(seen) == {()}
+
+
 def test_place_respects_device_fraction(monkeypatch):
     x = np.ones(1000)
     monkeypatch.setattr(lm, "_free_device_bytes", lambda: 2 * 16000)  # 50% = data size
@@ -618,7 +643,7 @@ def test_block_validation(data, i, block, pattern):
 
 @pytest.mark.parametrize(
     ("bad", "pattern"),
-    [(-1.0, r"^sigma must be positive"), (np.nan, r"^sigma must be finite")],
+    [(0.0, r"^sigma must be nonzero"), (np.nan, r"^sigma must be finite")],
 )
 def test_block_validation_sigma(data, bad, pattern):
     s = SIG.copy()

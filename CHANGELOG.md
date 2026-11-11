@@ -8,14 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `compute_covariance: bool = True` on `curve_fit`, `CurveFit.curve_fit` and `curve_fit_large`.
+  With `False`, `pcov` is `None` in the tuple, `CurveFitResult` and `full_output` variants and
+  the final covariance is not computed (no final-covariance warning; `CurveFitResult` members
+  that need it raise `AttributeError` naming the flag). The chunked path still computes
+  per-chunk covariances for its GLS combiner, so it saves nothing there; `method="hybrid_streaming"`
+  raises `ValueError`.
+- Adaptive exact-path covariance: `exact_lm_fit` takes `pcov` from the normal equations `J^T J`
+  when `sqrt(cond(J^T J)) <= TSQR_KAPPA` (1e3), otherwise from one extra TSQR pass for the
+  `R` factor of `J` at the solution, fed to the `curve_fit` SVD covariance. Gate G-cov: worst
+  scale-aware error 1.2e-10 on the normal route (kappa 900) and 4.0e-9 on the TSQR route (cond
+  7.5e11, the SVD floor). The result gains `covariance_method` (`"normal"`, `"tsqr"` or
+  `"skipped"`). On the benchmark problems the route is `"normal"` (two_exp kappa 762).
 - Opt-in strict allowlist mode for CLI custom models (`strict: true` in the model
   config, or `NLSQ_STRICT_MODELS=1`; `validate_model(..., strict=True)`): an
   `AllowlistVisitor` that subclasses the existing denylist visitor and also requires
   imports and full attribute chains to fall under a short numeric-module allowlist
   (`ALLOWLIST_MODULES`, `ALLOWLIST_BLOCKED_ATTRS`). The default denylist behaviour is
   unchanged; strict mode is planned to become the default after one release.
-- `curve_fit_large(..., method="exact_streaming")` (opt-in; the default path is
-  unchanged): an exact full-data Levenberg-Marquardt fit (`nlsq/streaming/exact_lm.py`)
+- `curve_fit_large(..., method="exact_streaming")` (explicit selection; it is also the
+  default above `size_threshold`, see Changed): an exact full-data Levenberg-Marquardt fit (`nlsq/streaming/exact_lm.py`)
   that accumulates `J^T J`, `J^T r` and the cost over chunks in float64, so the result
   does not depend on chunking (up to rounding) and equals a full-batch fit (unlike the default chunked
   path's precision-weighted combination). It runs at any dataset size, regardless of
@@ -41,11 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     pass verifies the point count and raises `ValueError` on a mismatch. Blocks are
     validated as they arrive (1-D, equal non-zero lengths, at most `chunk_size`, finite
     on the first pass unless `check_finite=False`) and padded to one compiled shape.
-  - **Weights:** 1-D `sigma` (per-point standard deviations, residuals `(y - f)/sigma`
-    as in `curve_fit`) is supported; `absolute_sigma` selects whether `pcov` is scaled
-    by the weighted residual variance. A `sigma` that is not 1-D (correlated 2-D
-    `sigma` included), of the wrong length, non-finite or non-positive raises
-    `ValueError`; finiteness and positivity are checked during the first pass.
+  - **Weights:** scalar or 1-D `sigma` (per-point standard deviations, residuals
+    `(y - f)/sigma` as in `curve_fit`) is supported; a scalar or negative nonzero `sigma`
+    is weighted by `|sigma|`. `absolute_sigma` selects whether `pcov` is scaled
+    by the weighted residual variance. A 2-D `sigma` (correlated included), a `sigma` of
+    the wrong length, a non-finite `sigma` or a zero `sigma` raises `ValueError`;
+    finiteness and zeros are checked during the first pass.
   - **Bounds:** box `bounds` (scalars or length-`p` arrays, `lb < ub` elementwise;
     equal, inverted or NaN bounds raise `ValueError`) by an active set, not Coleman-Li
     TRF: `p0` is clipped into the box, parameters on a bound with an outward gradient
@@ -64,8 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `nlsq.streaming.ExactSolverError` (a `RuntimeError`) carrying the full result as
     `.result` (`termination`, `nfev`, `cost`, `x`, ...). Non-finite data raises
     `ValueError` after the first pass when `check_finite=True`.
-  - **Covariance caveat:** `pcov` follows the `curve_fit` contract but is computed from
-    the normal equations `J^T J`, which squares `cond(J)`. Agreement with `curve_fit` is
+  - **Covariance caveat (the former normal-equations-only implementation; `pcov` is now
+    normal-equations or TSQR, see "Adaptive exact-path covariance" above, and the TSQR route
+    removes the squaring of `cond(J)` for `sqrt(cond(H)) > 1e3`):** `pcov` followed the
+    `curve_fit` contract but was computed from the normal equations `J^T J`, which squares
+    `cond(J)`. Agreement with `curve_fit` was
     about `1e-6` relative for `cond(J) <= 1e4` and, for well-determined problems, `1e-3`
     for `cond(J) <= 1e6` (degenerate two_exp rows with `cond(J)` 6e4-9e4 showed covariance
     errors of 1.0 and 0.33). Beyond `1e4` a `UserWarning` is emitted: the fitted parameters
@@ -80,7 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     streaming NumPy cost to 2e-16, shifts under a 1,000-point sentinel offset by the predicted amount,
     and peaks at 1.8 GiB host RSS; a pass takes 4-10 s depending on the page cache
     (`benchmarks/baselines/2026-10-31-exact-streaming-1b.md`).
-  - **Conditioning study (normal equations vs TSQR):** the pre-registered rule returns `tsqr_default` at tol 1e-12 (a stopping artifact shared by TSQR) and `normal_equations_stay` at 1e-15;
+  - **Conditioning study (normal equations vs TSQR), applying to the step solve and to the
+    former covariance implementation:** the pre-registered rule returns `tsqr_default` at tol 1e-12 (a stopping artifact shared by TSQR) and `normal_equations_stay` at 1e-15;
     normal equations were kept on that interpretation with thin evidence (1 of 40 rows);
     the `cond(J) > 1e4` covariance warning stays and the covariance caveat above is the user-facing
     guidance
@@ -107,6 +124,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   applies when the JAX cache dir is preconfigured.
 
 ### Changed
+
+#### Breaking
+
+- **`curve_fit_large` is exact by default.** At or above `size_threshold` the default path is now
+  the exact full-data streaming Levenberg-Marquardt fit (`Auto.exact`, default `Exact()`), not
+  the chunked precision-weighted (GLS) fit. Measured against the old default in an interleaved
+  A/B (`benchmarks/baselines/2026-11-10-default-exact-ab.md`): GPU 100M 0.52-2.12 s against
+  8.2-19 s (ratio 0.06-0.24), GPU 10M ratio 0.07-0.33, CPU 100M ratio 0.26-0.95; the 1M two_exp
+  fit that missed the optimum by 7.3e-5 now reaches it. The jitted chunk kernel is reused across
+  calls for models with an identical jaxpr digest (as `curve_fit`'s wrappers are), so warm calls do
+  not recompile it (that recompile, 0.74 s for a 4-parameter model, was a measured 16% GPU two_exp
+  10M slowdown before the fix). In
+  the library comparison (`2026-11-10-library-comparison-1k-100M.md`) every NLSQ cell is within
+  1e-6 of the best cost. **Opt out** with `strategy=Chunked()` or `strategy=Auto(exact=None)`.
+  - The model must be pointwise: `f(x, *p)[i]` depends only on `x[i]` and `p`, deterministic.
+    A probe on 4096 points catches obvious violations; it is a guard, not a proof.
+  - *Engine reasons* (a non-default `method`, `multistart`, or extra keywords other than
+    `ftol`, `xtol`, `gtol`, `max_nfev`) fall back to the chunked fit with a `UserWarning`
+    (also logged at INFO) that names the reason.
+  - *Data reasons* raise `ValueError` naming `strategy=Chunked()`: multi-feature (2-D) `xdata`,
+    a model that is not pointwise, a non-finite `sigma` or non-finite `xdata`/`ydata` under
+    `check_finite=False` (chunked would absorb the NaN: silent data loss). Before, these inputs
+    silently took the chunked approximation. A 2-D `sigma` also raises `ValueError`, without the
+    `strategy=Chunked()` hint (chunked rejects it too).
+  - `max_nfev` counts full-data passes (default `100 * len(p0)`), not function evaluations.
+  - A stalled fit or one that runs out of passes raises `nlsq.streaming.ExactSolverError`
+    (carrying `.result`); there is no silent retry on the chunked fit.
+  - `sigma` may now also be a scalar or contain negative nonzero values (`|sigma|` is used,
+    the objective is `(r / sigma)**2`); this applies to `method="exact_streaming"` too. Zero
+    and 2-D `sigma` still raise `ValueError`.
+  - The return is unchanged: `(popt, pcov)`.
 
 #### Install footprint
 
@@ -447,6 +495,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   calls.
 
 ### Performance
+- Covariance kernel: the SVD is taken of the `R` factor of `qr(J, mode="r")` instead of `J`
+  (1M x 3 kernel 12.8 -> 8.2 ms on GPU; `curve_fit` 1M ratios 0.86-0.99), and a covariance-only host-SVD
+  limit `HOST_COV_SVD_MAX_ELEMENTS = 150_000` is used (TRF keeps 30,000). See
+  `benchmarks/baselines/2026-11-10-qr-covariance-ab.md`.
 - Faster small unbounded `curve_fit` fits on GPU: the trust-region step acceptance now
   reads its scalar results back from the device in one transfer instead of several.
   Interleaved A/B against `main` at n=1000 on an RTX 4090 laptop: warm time 0.83-0.85x
@@ -489,10 +541,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       equation's primitive object; its parameters (floats by bits, arrays
       and literals by dtype, shape and bytes); nested jaxprs and their
       constants, recursively; and the variable wiring and types.
-    - If the model uses `custom_jvp` rules, its Jacobian is traced as well
-      (with the AD mode in use), so the rule is part of the key. Models that
-      use `custom_vjp` are not cached: the `bwd` callable runs again at every
-      recompile and would read another model's current state.
+    - Models with a custom derivative rule (`custom_jvp`, including JAX
+      functions such as `jax.nn.relu`, or `custom_vjp`) are not cached: the
+      rule is a live callable JAX runs again at compile time, so a shared
+      entry would keep the owner's closure alive and could read its current
+      state while fitting another model.
     - The effective JAX config of the calling thread (every `jax.config`
       value, including context-manager overrides such as
       `jax.threefry_partitionable`) is part of the key, since opaque
@@ -500,7 +553,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       a config change is a miss.
     - Model state read at trace time is part of the key, however it is
       read: globals, closures, attributes, imports, `os.environ`, files,
-      NumPy state, derivative rules. Changed state is therefore a miss and
+      NumPy state. Changed state is therefore a miss and
       a rebuild, exactly as before; an identical computation is a hit.
     - Constants are copied privately before hashing, and cached wrappers
       evaluate those copies, never the user function, so mutating a user
