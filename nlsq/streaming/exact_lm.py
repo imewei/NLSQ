@@ -518,6 +518,39 @@ def _chunk_jacobian(
     return kernel
 
 
+def _cached_stats(
+    model: Callable[..., Any], x_block: jax.ShapeDtypeStruct, p: int, weighted: bool
+) -> tuple[Callable[..., Any], Callable[..., Any]]:
+    """``(model, stats kernel)`` reused across calls when ``model`` traces identically.
+
+    Keyed by curve_fit's exact jaxpr digest (``_trace_model``): on a hit the kernel
+    evaluates the private jaxpr snapshot, never the caller's ``model``, so a closure whose
+    captured data changed misses. Returns ``(model, make_chunk_stats(model))`` uncached
+    when the model cannot be keyed exactly or ``NLSQ_DISABLE_WRAPPER_CACHE=1``.
+    """
+    from nlsq.core import least_squares as ls  # lazy: heavy module
+
+    y_block = jax.ShapeDtypeStruct(
+        x_block.shape[:1], jnp.float64
+    )  # only its shape is read
+    traced = ls._trace_model(model, x_block, y_block, np.zeros(p), "fwd")
+    if traced is None:
+        return model, make_chunk_stats(model, weighted=weighted)
+    key = ("exact_lm_stats", weighted, traced[0])
+    with ls._wrapper_cache_lock:
+        hit = ls._wrapper_cache.get(key)
+        if hit is not None:
+            ls._wrapper_cache.move_to_end(key)
+            return hit
+    m = ls._model_from_jaxpr(traced[1], traced[2])
+    entry = (m, make_chunk_stats(m, weighted=weighted))
+    with ls._wrapper_cache_lock:
+        entry = ls._wrapper_cache.setdefault(key, entry)
+        while len(ls._wrapper_cache) > ls._WRAPPER_CACHE_SIZE:
+            ls._wrapper_cache.popitem(last=False)
+    return entry
+
+
 @jax.jit
 def _qr_append(R: jax.Array, J: jax.Array) -> jax.Array:
     return jnp.linalg.qr(jnp.vstack([R, J]), mode="r")
@@ -742,7 +775,10 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     else:
         # at least 2 points even for chunk_size=1: a 1-point probe proves nothing
         check_model_contract(model, theta, _block(x, 0, min(n, max(chunk, 2))))
-    stats = make_chunk_stats(model, weighted=weighted)
+    # blocks reach the kernel as float64 (chunk, ...) arrays: trace the model for exactly that
+    tail = np.shape(source.first_x if isinstance(source, FactorySource) else x)[1:]
+    x_block = jax.ShapeDtypeStruct((chunk, *tail), jnp.float64)
+    model, stats = _cached_stats(model, x_block, p, weighted)
     st = evaluate(theta, 1, first=True)
     if isinstance(source, FactorySource):
         n = source.n  # counted (or verified against n_points) during pass 1
