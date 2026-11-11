@@ -122,18 +122,19 @@ class TestEndToEndWorkflows:
         ydata = true_params[0] * np.exp(-true_params[1] * xdata) + true_params[2]
         ydata += 0.1 * np.random.normal(size=n_points)
 
-        # Run curve_fit_large with multistart
-        result = curve_fit_large(
-            exponential_model,
-            xdata,
-            ydata,
-            p0=[1.0, 0.1, 0.0],
-            bounds=([0.1, 0.01, 0.1], [10.0, 2.0, 5.0]),
-            multistart=True,
-            n_starts=5,
-            sampler="lhs",
-            memory_limit_gb=0.5,  # Limit memory to force chunking
-        )
+        # Run curve_fit_large with multistart (an engine reason: falls back to chunked)
+        with pytest.warns(UserWarning, match="exact streaming not used"):
+            result = curve_fit_large(
+                exponential_model,
+                xdata,
+                ydata,
+                p0=[1.0, 0.1, 0.0],
+                bounds=([0.1, 0.01, 0.1], [10.0, 2.0, 5.0]),
+                multistart=True,
+                n_starts=5,
+                sampler="lhs",
+                memory_limit_gb=0.5,  # Limit memory to force chunking
+            )
 
         # Verify result
         popt = (
