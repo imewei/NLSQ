@@ -81,8 +81,8 @@ uses exact streaming when the call is eligible:
   keyword arguments other than ``ftol``, ``xtol``, ``gtol``, ``max_nfev``) fall
   back to the chunked fit with a ``UserWarning`` that names the reason.
 - *Data reasons* raise ``ValueError`` naming ``strategy=Chunked()``: multi-feature
-  (2-D) ``xdata``, a model that is not pointwise, or a non-finite ``sigma`` under
-  ``check_finite=False``.
+  (2-D) ``xdata``, a model that is not pointwise, or a non-finite ``sigma``,
+  ``xdata`` or ``ydata`` under ``check_finite=False``.
 - ``max_nfev`` counts full-data passes (default ``100 * len(p0)``), not function
   evaluations. A stalled fit or one that runs out of passes raises
   ``ExactSolverError``; there is no silent retry on the chunked fit.
@@ -134,7 +134,7 @@ uses exact streaming when the call is eligible:
   ``n_points`` is given) verifies the count and a mismatch raises
   ``ValueError``. Each block is validated as it arrives (1-D parts of equal,
   non-zero length, at most ``chunk_size`` points, finite on the first pass
-  unless ``check_finite=False``, ``sigma`` finite and positive); the model
+  unless ``check_finite=False``, ``sigma`` finite and nonzero); the model
   probe uses the leading blocks of the first pass, joined until they hold at
   least 2 points. ``sigma`` must then come from the blocks
   (``sigma=`` raises ``ValueError``), and ``n_points`` with an array source

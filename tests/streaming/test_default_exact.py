@@ -527,3 +527,10 @@ def test_chunked_path_logs_when_it_drops_pcov(data, caplog):
     )
     assert pcov is None
     assert [r for r in caplog.records if "compute_covariance=False" in r.getMessage()]
+
+
+@pytest.mark.parametrize("bad", [Chunked(), True])
+def test_auto_exact_rejects_non_exact(bad):
+    """A non-Exact value would otherwise skip eligibility and run chunked silently."""
+    with pytest.raises(TypeError, match=r"Auto\.exact must be Exact or None"):
+        Auto(exact=bad)

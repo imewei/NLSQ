@@ -265,7 +265,9 @@ class Auto:
         Point count at and above which the large path (``exact``, else ``chunked``)
         is used.
     auto_size_detection : bool
-        If False, always take the large path: exact if eligible, else chunked.
+        If False, always take the large path: exact, except that engine-only
+        options fall back to chunked with a warning and other ineligible input
+        raises ``ValueError``.
     in_memory : InMemory
         Strategy used below the threshold.
     chunked : Chunked
@@ -273,7 +275,7 @@ class Auto:
         chunked-engine feature (``method``, multistart, or options other than
         ``ftol``, ``xtol``, ``gtol`` and ``max_nfev``): that falls back with a
         ``UserWarning``. Its ``chunk_size`` and tolerance options also reach ``exact``
-        unless ``exact`` sets them.
+        for each field ``exact`` leaves at its default value.
     exact : Exact or None
         Large-path strategy (the default): the exact chunk-accumulated LM fit, which
         is full-batch equivalent. Requires 1-D ``xdata`` and a pointwise model
@@ -291,6 +293,8 @@ class Auto:
     def __post_init__(self) -> None:
         validate_non_negative_int(self.size_threshold, "size_threshold")
         coerce_integral_fields(self, ("size_threshold",))
+        if self.exact is not None and not isinstance(self.exact, Exact):
+            raise TypeError(f"Auto.exact must be Exact or None, got {self.exact!r}")
 
     def resolve(self, n_points: int) -> InMemory | Chunked | Exact:
         """Return the concrete strategy for ``n_points`` data points (count only)."""

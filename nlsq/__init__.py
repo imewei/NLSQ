@@ -1105,7 +1105,9 @@ def curve_fit_large(
     memory_limit_gb : float, optional
         Maximum memory usage in GB.
     auto_size_detection : bool, optional
-        If False, always take the large path: exact if eligible, else chunked.
+        If False, always take the large path: exact, except that engine-only
+        options fall back to chunked with a warning and other ineligible input
+        raises ``ValueError``.
         Default: True (choose by ``size_threshold``).
     size_threshold : int, optional
         Point threshold for large dataset processing (default: 1M).
