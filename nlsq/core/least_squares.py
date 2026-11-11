@@ -1904,18 +1904,18 @@ class LeastSquares:
                     if bundle is not None:
                         _wrapper_cache.move_to_end(key)
                 if bundle is None:
-                    # size by THIS call's x0: another thread sharing the
-                    # instance may have overwritten self.n since least_squares set it
-                    self.n = int(np.size(x0))
-                    self.update_function(_model_from_jaxpr(private, in_keys))
-                    self.autdiff_jac(None, mode=mode)
+                    # Build from locals only: threads sharing this instance write
+                    # self.n and self.func_* outside _bind_lock, and a read-back
+                    # would cache one width's Jacobian under another model's key.
+                    n = int(np.size(x0))
+                    funcs = self.update_function(_model_from_jaxpr(private, in_keys))
+                    adjs = (self.adjn, self.adj1d, self.adj2d)
                     bundle = (
-                        self.func_none,
-                        self.func_1d,
-                        self.func_2d,
-                        self.jac_none,
-                        self.jac_1d,
-                        self.jac_2d,
+                        *funcs,
+                        *(
+                            ad.create_ad_jacobian(f, n, mode=mode)
+                            for ad, f in zip(adjs, funcs, strict=True)
+                        ),
                     )
                     with _wrapper_cache_lock:
                         _wrapper_cache[key] = bundle
@@ -1953,7 +1953,7 @@ class LeastSquares:
         # jac is
         self.jac = jac
 
-    def update_function(self, func: Callable) -> None:
+    def update_function(self, func: Callable) -> tuple[Callable, Callable, Callable]:
         """Wraps the given fit function to be a residual function using the
         data. The wrapped function is in a JAX JIT compatible format which
         is purely functional. This requires that both the data mask and the
@@ -1969,7 +1969,8 @@ class LeastSquares:
 
         Returns
         -------
-        None
+        tuple of Callable
+            The (no-transform, 1-D, 2-D) residual wrappers, also stored on self.
         """
 
         # Note: Uses @jit (not cached_jit) because this closure captures 'func'
@@ -2068,6 +2069,7 @@ class LeastSquares:
         self.func_1d = func_1d_transform
         self.func_2d = func_2d_transform
         self.f = func
+        return func_no_transform, func_1d_transform, func_2d_transform
 
     def wrap_jac(self, jac: Callable) -> None:
         """Wraps an user defined Jacobian function to allow for data masking

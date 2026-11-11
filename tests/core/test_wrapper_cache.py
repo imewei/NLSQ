@@ -1238,3 +1238,24 @@ def test_cache_is_lru_bounded(monkeypatch):
     assert keys_after(m2) == k23  # hit: m2 is now the most recent
     k24 = keys_after(m4)
     assert key2 in k24 and len(k24) == 2  # m3, the LRU entry, was evicted
+
+
+def test_bind_ignores_concurrent_writes_to_shared_instance_state(monkeypatch):
+    """Another thread sharing the instance may rewrite self.n / self.func_*
+    mid-bind; the cached bundle must still be built for this model's width."""
+    orig = ls_mod.LeastSquares.update_function
+
+    def clobbering(self, func):
+        out = orig(self, func)
+        self.n = 7  # what an unlocked least_squares() in another thread does
+        self.func_none = self.func_1d = self.func_2d = None
+        return out
+
+    monkeypatch.setattr(ls_mod.LeastSquares, "update_function", clobbering)
+    x = np.linspace(0, 1, 30)
+    popt, _ = curve_fit(lambda x, a, b: a * x + b, x, 3 * x + 2, p0=[1.0, 0.0])
+    np.testing.assert_allclose(popt, [3.0, 2.0], atol=1e-8)
+    monkeypatch.undo()
+    # the cached entry is reused by a fresh, unclobbered fit
+    popt, _ = curve_fit(lambda x, a, b: a * x + b, x, 3 * x + 2, p0=[1.0, 0.0])
+    np.testing.assert_allclose(popt, [3.0, 2.0], atol=1e-8)
