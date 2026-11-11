@@ -63,6 +63,7 @@ Expected end state: parity or better at 100M, 2–4x of JAXopt at 10M, about 5x 
   explicit `method="exact_streaming"` keeps its current strict checks. One deliberate exception, decided as
   D1: inputs exact cannot fit and the caller did not choose an engine for now raise an actionable error.
   These are multi-feature `xdata`, a non-pointwise model, and non-finite `sigma` under `check_finite=False`.
+  Also non-finite `xdata`/`ydata` under `check_finite=False` (ruling R17: chunked would absorb NaN, silent data loss).
   This is a CHANGELOG breaking entry.
 
 ## Supersedes

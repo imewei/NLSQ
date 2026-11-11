@@ -186,7 +186,7 @@ uses exact streaming when the call is eligible:
   worst case 4.0e-9 at ``cond(J)`` 7.5e11, the SVD floor). The route is reported
   as ``covariance_method`` (``"normal"``, ``"tsqr"`` or ``"skipped"``) on the
   result of ``exact_lm_fit``. The TSQR pass is not counted in ``nfev`` and
-  costs about 8 ms per 1M rows on the benchmark GPU. A ``UserWarning`` is
+  costs 8-10 ms per 1M rows on the benchmark GPU (10 at 10M, 8 at 100M). A ``UserWarning`` is
   issued beyond ``1e4``: there the fitted *parameters* can also stop short,
   because the LM step solve stays on the normal equations (poly12,
   ``cond(J) = 7.5e8``: parameter error O(1) with ``success=True``), so check

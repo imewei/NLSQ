@@ -53,11 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     pass verifies the point count and raises `ValueError` on a mismatch. Blocks are
     validated as they arrive (1-D, equal non-zero lengths, at most `chunk_size`, finite
     on the first pass unless `check_finite=False`) and padded to one compiled shape.
-  - **Weights:** 1-D `sigma` (per-point standard deviations, residuals `(y - f)/sigma`
-    as in `curve_fit`) is supported; `absolute_sigma` selects whether `pcov` is scaled
-    by the weighted residual variance. A `sigma` that is not 1-D (correlated 2-D
-    `sigma` included), of the wrong length, non-finite or non-positive raises
-    `ValueError`; finiteness and positivity are checked during the first pass.
+  - **Weights:** scalar or 1-D `sigma` (per-point standard deviations, residuals
+    `(y - f)/sigma` as in `curve_fit`) is supported; a scalar or negative nonzero `sigma`
+    is weighted by `|sigma|`. `absolute_sigma` selects whether `pcov` is scaled
+    by the weighted residual variance. A 2-D `sigma` (correlated included), a `sigma` of
+    the wrong length, a non-finite `sigma` or a zero `sigma` raises `ValueError`;
+    finiteness and zeros are checked during the first pass.
   - **Bounds:** box `bounds` (scalars or length-`p` arrays, `lb < ub` elementwise;
     equal, inverted or NaN bounds raise `ValueError`) by an active set, not Coleman-Li
     TRF: `p0` is clipped into the box, parameters on a bound with an outward gradient
@@ -76,8 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `nlsq.streaming.ExactSolverError` (a `RuntimeError`) carrying the full result as
     `.result` (`termination`, `nfev`, `cost`, `x`, ...). Non-finite data raises
     `ValueError` after the first pass when `check_finite=True`.
-  - **Covariance caveat:** `pcov` follows the `curve_fit` contract but is computed from
-    the normal equations `J^T J`, which squares `cond(J)`. Agreement with `curve_fit` is
+  - **Covariance caveat (the former normal-equations-only implementation; `pcov` is now
+    normal-equations or TSQR, see "Adaptive exact-path covariance" above, and the TSQR route
+    removes the squaring of `cond(J)` for `sqrt(cond(H)) > 1e3`):** `pcov` followed the
+    `curve_fit` contract but was computed from the normal equations `J^T J`, which squares
+    `cond(J)`. Agreement with `curve_fit` was
     about `1e-6` relative for `cond(J) <= 1e4` and, for well-determined problems, `1e-3`
     for `cond(J) <= 1e6` (degenerate two_exp rows with `cond(J)` 6e4-9e4 showed covariance
     errors of 1.0 and 0.33). Beyond `1e4` a `UserWarning` is emitted: the fitted parameters
@@ -92,7 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     streaming NumPy cost to 2e-16, shifts under a 1,000-point sentinel offset by the predicted amount,
     and peaks at 1.8 GiB host RSS; a pass takes 4-10 s depending on the page cache
     (`benchmarks/baselines/2026-10-31-exact-streaming-1b.md`).
-  - **Conditioning study (normal equations vs TSQR):** the pre-registered rule returns `tsqr_default` at tol 1e-12 (a stopping artifact shared by TSQR) and `normal_equations_stay` at 1e-15;
+  - **Conditioning study (normal equations vs TSQR), applying to the step solve and to the
+    former covariance implementation:** the pre-registered rule returns `tsqr_default` at tol 1e-12 (a stopping artifact shared by TSQR) and `normal_equations_stay` at 1e-15;
     normal equations were kept on that interpretation with thin evidence (1 of 40 rows);
     the `cond(J) > 1e4` covariance warning stays and the covariance caveat above is the user-facing
     guidance
@@ -125,9 +130,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`curve_fit_large` is exact by default.** At or above `size_threshold` the default path is now
   the exact full-data streaming Levenberg-Marquardt fit (`Auto.exact`, default `Exact()`), not
   the chunked precision-weighted (GLS) fit. Measured against the old default in an interleaved
-  A/B (`benchmarks/baselines/2026-11-10-default-exact-ab.md`): GPU 100M 1.1-3.3 s against
-  9.6-26 s (ratio 0.07-0.29), CPU 100M ratio 0.24-0.70, GPU 10M ratio 0.2-1.0 (two_exp 1.02,
-  inside the spread); the 1M two_exp fit that missed the optimum by 7.3e-5 now reaches it. In
+  A/B (`benchmarks/baselines/2026-11-10-default-exact-ab.md`): GPU 100M 0.72-3.01 s against
+  9.6-26 s (ratio 0.07-0.29), CPU 100M ratio 0.24-0.70, GPU 10M ratio 0.16-0.39 except two_exp,
+  where a 10 x 5 re-measurement gave 1.16 (0.856 s to 0.995 s): gate 1 failed at that cell, a real
+  ~16% slowdown while exact reaches a lower cost (`strategy=Chunked()` opts out); the 1M two_exp fit that missed the optimum by 7.3e-5 now reaches it. In
   the library comparison (`2026-11-10-library-comparison-1k-100M.md`) every NLSQ cell is within
   1e-6 of the best cost. **Opt out** with `strategy=Chunked()` or `strategy=Auto(exact=None)`.
   - The model must be pointwise: `f(x, *p)[i]` depends only on `x[i]` and `p`, deterministic.
@@ -136,8 +142,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `ftol`, `xtol`, `gtol`, `max_nfev`) fall back to the chunked fit with a `UserWarning`
     (also logged at INFO) that names the reason.
   - *Data reasons* raise `ValueError` naming `strategy=Chunked()`: multi-feature (2-D) `xdata`,
-    a model that is not pointwise, a non-finite `sigma` under `check_finite=False`. Before,
-    these inputs silently took the chunked approximation.
+    a model that is not pointwise, a non-finite `sigma` or non-finite `xdata`/`ydata` under
+    `check_finite=False` (chunked would absorb the NaN: silent data loss). Before, these inputs
+    silently took the chunked approximation. A 2-D `sigma` also raises `ValueError`, without the
+    `strategy=Chunked()` hint (chunked rejects it too).
   - `max_nfev` counts full-data passes (default `100 * len(p0)`), not function evaluations.
   - A stalled fit or one that runs out of passes raises `nlsq.streaming.ExactSolverError`
     (carrying `.result`); there is no silent retry on the chunked fit.

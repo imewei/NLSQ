@@ -10,8 +10,9 @@ Machine: i9-13900H, RTX 4090 Laptop 16 GB, project `.venv` (jax/jaxlib 0.12.0.1 
 CPU runs use `JAX_PLATFORMS=cpu`. Laptop clock drift between sessions is up to ~50%, so only the interleaved ratios
 below mean anything. Runs were back to back, one at a time (never two on the GPU).
 
-**Verdict: Gate 1 (speed) FAILED on its literal wording at one cell, GPU two_exp 10M (ratio 1.018, inside the
-spread). Every other cell passes; Gate 2 (no slowdown beyond the spread) passes; Gate 3 (route) passes.**
+**Verdict: Gate 1 (speed) FAILED at one cell, GPU two_exp 10M: the 5 x 3 run gave ratio 1.018 (inside the spread),
+and a 10 x 5 re-measurement (R16, below) gave 1.162, a real ~16% slowdown. Every other cell passes; Gate 2 (no
+slowdown beyond the spread) passes for the main table; Gate 3 (route) passes.**
 
 ## Command
 
@@ -68,8 +69,8 @@ spread). Every other cell passes; Gate 2 (no slowdown beyond the spread) passes;
 ## Gates
 
 1. **Every candidate median at or below base on GPU at 10M and 100M: FAILED at one cell.**
-   GPU two_exp 10M: base 0.9977 s, cand 1.0161 s, ratio 1.018. The ratio is inside both arms' spread (0.761 and
-   0.394), so the data does not show a slowdown, but the wording "at or below" is not met. The other seven GPU
+   GPU two_exp 10M: base 0.9977 s, cand 1.0161 s, ratio 1.018 in the 5 x 3 run. The ratio was inside both arms'
+   spread (0.761 and 0.394), but the 10 x 5 re-measurement above gives 1.162 with spreads 0.038 / 0.016: a real slowdown. The other seven GPU
    10M/100M cells are 0.07-0.39x. For the same problem, base and cand costs at 10M differ by 7.2e-7 (base higher),
    which is inside `COST_RTOL` (1e-6), so the case was timed rather than skipped.
 2. **No other cell slower beyond the spread: PASS.** The only cell with ratio above 1 besides the one above is CPU
@@ -77,7 +78,22 @@ spread). Every other cell passes; Gate 2 (no slowdown beyond the spread) passes;
 3. **Task 5 Step 4b route table: PASS, all four problems `"normal"` (so no TSQR pass is paid).** Measured with
    `benchmarks/studies/exact_cov_route.py` at 10M on GPU (Task 5): exp_decay kappa 6.33, gaussian 6.45,
    two_exp 761.7 (narrow margin below `TSQR_KAPPA` = 1e3), bounded_exp 6.65. The TSQR pass would cost
-   0.153 s at 10M and 0.823 s at 100M (exp_decay data), about 14x one LM data pass.
+   0.098 s at 10M and 0.768 s at 100M (exp_decay data, after the Jacobian kernel was cached per
+   `(model, weighted)`; about 8x and 13x one LM data pass; see `2026-11-10-qr-covariance-ab.md`). The first
+   measurement, 0.153 s / 0.823 s (about 14x), predates that fix.
+
+## Gate 1 re-measurement: GPU two_exp 10M (R16)
+
+The 5 x 3 cell was inside its spread, so it was re-measured with 10 rounds x 5 repeats (raw JSON in
+`benchmarks/results/2026-11-10-default-exact-ab/gpu-10M-two_exp-r14`):
+
+| case | base_s | cand_s | ratio | spr_b | spr_c |
+|---|---|---|---|---|---|
+| two_exp 10M (10 x 5) | 0.856 | 0.995 | **1.162** | 0.038 | 0.016 |
+
+Median final cost: base 12487.60118, cand 12487.59225 (cand lower by 7.1e-7 relative). **Gate 1 FAILED at this
+cell.** The ratio exceeds both spreads, so it is a real ~16% slowdown, while exact reaches a lower cost. The opt-out
+is `strategy=Chunked()`.
 
 ## Cost gate (`--cost-gate no-worse`)
 

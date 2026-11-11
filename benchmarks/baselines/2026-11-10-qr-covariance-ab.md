@@ -51,6 +51,9 @@ CPU (`JAX_PLATFORMS=cpu`), `curve_fit`, 5 rounds x 7 repeats:
 | bounded_exp/100k | 0.3537 | 0.3448 | 0.975 | 0.076 | 0.105 |
 | bounded_exp/1M | 1.8075 | 1.7648 | 0.976 | 0.103 | 0.066 |
 
+The 10M bounded_exp saving (ratio 0.907, about 0.26 s) is larger than the other 10M cases (0.954-0.969) and is
+unexplained.
+
 Most ratios are within the spread, so these are "no regression" results, not speedup claims; the ratios lie
 below 1 in every case, consistent with the kernel result.
 The A/B harness's own correctness gate (same case set, `ok`, cost agreement to rtol 1e-6) passed in all rounds.
@@ -94,6 +97,9 @@ float64, cost = 1.0, `absolute_sigma=False`. Metric: `max_ij |new-old| / sqrt(ol
 | bounded_exp | 6.3e0 | 9.29e-16 | 1e-12 | PASS |
 | two_exp, rates 1.0 / 1.05 | 5.0e5 | 3.79e-14 | 1e-9 | PASS |
 | two_exp, rates 1.0 / 1.0001 | 6.0e13 | 2.67e-12 | 1e-9 | PASS |
+
+The bounded_exp row equals exp_decay by construction: same model and Jacobian at the true parameters, bounds
+inactive.
 
 Rates 1.0 / 1.0001 give cond(J) = 6e13, not the plan's "around 1e6". The rate pair 1.0 / 1.05 gives about 5e5,
 so both are recorded. At 6e13 `J` is past the rank cutoff (`eps * n * s[0]`, about cond 5e9), so both

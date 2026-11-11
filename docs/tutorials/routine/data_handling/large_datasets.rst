@@ -136,7 +136,8 @@ Performance Benchmarks
 
 Measured on an i9-13900H (20 logical cores, 62 GB RAM) and an RTX 4090 Laptop GPU (16 GB),
 3-parameter ``exp_decay`` model, warm median (2026-11-01, JAX 0.12.0.1). The
-``exact_streaming`` columns are now what ``curve_fit_large`` runs by default. Timings on a laptop
+``exact_streaming`` columns are what ``curve_fit_large`` runs by default only at or above
+``size_threshold`` (1M points); the 1K row runs in-memory ``curve_fit``. Timings on a laptop
 vary by up to about 50% between sessions.
 
 .. list-table::
