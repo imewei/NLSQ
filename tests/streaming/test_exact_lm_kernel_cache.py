@@ -187,29 +187,64 @@ def test_one_table_in_several_nested_jaxprs_counts_each_copy(monkeypatch, cap, c
     assert (got is not model) is cached
 
 
-@pytest.mark.parametrize("cap,cached", [(10_000_000, True), (1_000, False)])
-def test_capture_only_in_a_custom_jvp_counts_toward_the_cap(monkeypatch, cap, cached):
-    """A table read only by a custom derivative rule is in the Jacobian trace the digest keeps."""
-    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", cap)
-    table = np.ones(10_000)  # 80 kB, used only in the JVP
+def _rule_model(state):
+    """`a*x` whose custom JVP reads live Python state (a 1-element array)."""
 
     @jax.custom_jvp
-    def model(xx, a):
+    def f(xx, a):
         return a * xx
 
-    @model.defjvp
+    @f.defjvp
     def _jvp(primals, tangents):
         xx, a = primals
         _, da = tangents
-        i = jnp.zeros(xx.shape, jnp.int32)
-        return a * xx, jnp.asarray(table)[i] * xx * da
+        return a * xx, state[0] * xx * da
 
-    def m(xx, a):
-        return model(xx, a)
+    return f
 
-    got, _ = lm._cached_stats(m, BLOCK, 1, False)
-    assert (got is not m) is cached
-    assert (len(ls._wrapper_cache) == 1) is cached
+
+def test_custom_jvp_models_are_not_cached():
+    """The rule is a live callable JAX re-invokes at compile time: never shared."""
+    owner_state, victim_state = np.array([2.0]), np.array([2.0])
+    owner, victim = _rule_model(owner_state), _rule_model(victim_state)
+    got, s_owner = lm._cached_stats(owner, BLOCK, 1, False)
+    assert got is owner and len(ls._wrapper_cache) == 0
+    _, s_victim = lm._cached_stats(victim, BLOCK, 1, False)
+    owner_state[0] = 5.0  # before either kernel compiles
+    ones, mask = jnp.ones(x.size), jnp.ones(x.size, bool)
+    *_, h_victim = s_victim(jnp.ones(1), ones, ones, mask)
+    *_, h_owner = s_owner(jnp.ones(1), ones, ones, mask)
+    np.testing.assert_allclose(h_victim[0, 0], 4.0 * x.size)  # (2*1)^2 per row
+    np.testing.assert_allclose(h_owner[0, 0], 25.0 * x.size)
+
+
+def test_rule_closure_is_not_retained_after_the_fit():
+    import gc
+    import weakref
+
+    table = np.ones(1000)
+    ref = weakref.ref(table)
+    state = np.array([1.0])
+
+    @jax.custom_jvp
+    def f(xx, a):
+        return a * xx
+
+    @f.defjvp
+    def _jvp(primals, tangents):
+        xx, a = primals
+        _, da = tangents
+        return a * xx, (1.0 if len(table) else 2.0) * state[0] * xx * da
+
+    def model(xx, a):
+        return f(xx, a)
+
+    r = lm.exact_lm_fit(model, x, 3.0 * x, [1.0])
+    np.testing.assert_allclose(r.x, [3.0], rtol=1e-8)
+    del model, f, _jvp, table, r
+    jax.clear_caches()
+    gc.collect()
+    assert ref() is None
 
 
 @pytest.mark.parametrize("cap,cached", [(10_000_000, True), (1_000, False)])

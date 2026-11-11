@@ -541,10 +541,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       equation's primitive object; its parameters (floats by bits, arrays
       and literals by dtype, shape and bytes); nested jaxprs and their
       constants, recursively; and the variable wiring and types.
-    - If the model uses `custom_jvp` rules, its Jacobian is traced as well
-      (with the AD mode in use), so the rule is part of the key. Models that
-      use `custom_vjp` are not cached: the `bwd` callable runs again at every
-      recompile and would read another model's current state.
+    - Models with a custom derivative rule (`custom_jvp`, including JAX
+      functions such as `jax.nn.relu`, or `custom_vjp`) are not cached: the
+      rule is a live callable JAX runs again at compile time, so a shared
+      entry would keep the owner's closure alive and could read its current
+      state while fitting another model.
     - The effective JAX config of the calling thread (every `jax.config`
       value, including context-manager overrides such as
       `jax.threefry_partitionable`) is part of the key, since opaque
@@ -552,7 +553,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       a config change is a miss.
     - Model state read at trace time is part of the key, however it is
       read: globals, closures, attributes, imports, `os.environ`, files,
-      NumPy state, derivative rules. Changed state is therefore a miss and
+      NumPy state. Changed state is therefore a miss and
       a rebuild, exactly as before; an identical computation is a hit.
     - Constants are copied privately before hashing, and cached wrappers
       evaluate those copies, never the user function, so mutating a user

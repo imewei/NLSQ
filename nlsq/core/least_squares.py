@@ -498,14 +498,6 @@ def _charge(value: Any) -> None:
         raise _Uncacheable("captured constants exceed the snapshot byte budget")
 
 
-# Params holding a custom_jvp rule. They are not digested directly; the rule is
-# traced (and memoised) with the Jacobian, so the digest of the traced Jacobian
-# covers it (see _trace_model). custom_vjp is refused instead: its `bwd`
-# callable is re-invoked at every recompile of a cached wrapper and would read
-# the owning model's *current* state while fitting another model.
-_RULE_PARAMS = {
-    "custom_jvp_call": frozenset({"jvp_jaxpr_fun", "jvp_jaxpr_thunk"}),
-}
 _MESH_TYPES = (jax.sharding.Mesh, jax.sharding.AbstractMesh)
 _PRNG_IMPLS = frozenset({"threefry2x32", "rbg", "unsafe_rbg"})
 _JAX_DIRS = tuple(os.path.dirname(m.__file__) + os.sep for m in (jax, jaxlib))
@@ -532,15 +524,6 @@ def _is_jax_primitive(prim: Any) -> bool:
                 if isinstance(value, jex_core.Primitive):
                     _jax_primitive_ids.add(id(value))
     return id(prim) in _jax_primitive_ids
-
-
-_RULE_MARK = ("custom derivative rule",)  # in a key: Jacobian trace needed
-
-
-def _has_rule_mark(key: Any) -> bool:
-    if key is _RULE_MARK:
-        return True
-    return isinstance(key, tuple) and any(_has_rule_mark(k) for k in key)
 
 
 def _aval_key(aval: Any) -> tuple:
@@ -690,18 +673,17 @@ def _snapshot_jaxpr(jaxpr: Any) -> tuple[Any, tuple]:
         if (
             eqn.effects
             or "callback" in prim.name
-            or prim.name.startswith("custom_vjp")
+            # A custom derivative rule is a live Python callable that JAX
+            # re-invokes at (re)compile time: a cached entry would keep the
+            # owner's closure alive and could read its *current* state while
+            # fitting another model. Such models are not cached.
+            or prim.name.startswith(("custom_vjp", "custom_jvp"))
             or not _is_jax_primitive(prim)
         ):
             raise _Uncacheable(f"primitive {prim.name}")
         ins = [atom(a) for a in eqn.invars]
-        rule = _RULE_PARAMS.get(prim.name, frozenset())
         params, param_keys = {}, []
         for name in sorted(eqn.params):
-            if name in rule:
-                params[name] = eqn.params[name]
-                param_keys.append((name, _RULE_MARK))
-                continue
             params[name], key = _canon_param(eqn.params[name])
             param_keys.append((name, key))
         outs = tuple(atom(o)[1] for o in eqn.outvars)
@@ -725,12 +707,11 @@ def _trace_model(
     """(cache key, private jaxpr, input aval keys) of `fun`, or None.
 
     `fun` is traced as the residual wrappers call it (x as delivered by
-    _safe_coords, incl. weak_type; n scalar params of x0's dtype), and its
-    Jacobian is traced with the same AD mode the wrappers use, so custom
-    derivative rules (inlined there) are part of the key. None (uncached path)
-    when the cache is disabled, tracing fails, or anything in either jaxpr
-    cannot be keyed exactly (effects, callbacks, user primitives, unknown
-    params).
+    _safe_coords, incl. weak_type; n scalar params of x0's dtype). Its
+    Jacobian is then fixed by the jaxpr (JAX's own AD rules; custom derivative
+    rules and user primitives are refused). None (uncached path) when the
+    cache is disabled, tracing fails, or anything in the jaxpr cannot be keyed
+    exactly (effects, callbacks, custom rules, user primitives, unknown params).
     """
     if os.environ.get("NLSQ_DISABLE_WRAPPER_CACHE") == "1":
         return None
@@ -764,22 +745,8 @@ def _trace_model(
         if primal.effects or len(primal.outvars) != 1:
             raise _Uncacheable("effects or non-array output")
         private, primal_key = _snapshot_jaxpr(primal)
-        jac_key = None
-        if _has_rule_mark(primal_key):
-            # The rule bodies are not in the primal jaxpr; they are inlined in
-            # the traced Jacobian, so key on that too. Without custom rules the
-            # Jacobian is fully determined by the primal jaxpr (JAX's own AD
-            # rules; user primitives are refused).
-            ad = jacfwd if mode == "fwd" else jacrev
-            argnums = tuple(range(1, x0.size + 1))
-            jac = jax.make_jaxpr(
-                lambda *a: ad(lambda *b: fun(*b), argnums=argnums)(*a)  # noqa: PLW0108
-            )(*avals)
-            if jac.effects:
-                return None
-            _, jac_key = _snapshot_jaxpr(jac)
         in_keys = tuple(_aval_key(a) for a in primal.in_avals)
-        key = (primal_key, jac_key, in_keys, mode, _config_key())
+        key = (primal_key, in_keys, mode, _config_key())
         hash(key)
     except Exception as exc:  # _Uncacheable, trace failure, unhashable
         _logger.debug("wrapper cache: not cached: %s: %s", type(exc).__name__, exc)
