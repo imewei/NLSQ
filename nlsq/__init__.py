@@ -512,7 +512,9 @@ def fit(
         tolerances passed explicitly in ``**kwargs`` take precedence. Unknown
         names raise ValueError.
     multistart : bool, optional
-        Override preset's multi-start setting.
+        Override preset's multi-start setting. Left unset at or above
+        ``size_threshold`` it is off (the exact streaming default does not support
+        multi-start); an explicit True warns and uses the chunked fit.
     n_starts : int, optional
         Override preset's n_starts setting.
     sampler : {'lhs', 'sobol', 'halton'}, optional
@@ -798,7 +800,11 @@ def fit(
         return result
 
     if use_large_dataset or n_points >= size_threshold:
-        # Use curve_fit_large for large datasets
+        # Use curve_fit_large for large datasets. At or above size_threshold the default
+        # is exact streaming, which rejects multistart: the "large" preset's multistart
+        # must not trigger the chunked fallback unless the caller asked for it.
+        if multistart is None and n_points >= size_threshold:
+            effective_multistart = False
         return curve_fit_large(
             f,
             xdata,
@@ -1036,8 +1042,9 @@ def curve_fit_large(
       ``gtol`` and ``max_nfev``): a ``UserWarning`` is issued and the chunked
       fit is used.
     - The data cannot be fit exactly (multi-feature 2-D ``xdata``, a model that
-      is not pointwise, or a non-finite ``sigma`` with ``check_finite=False``):
-      ``ValueError`` naming ``strategy=Chunked()``. Nothing falls back silently,
+      is not pointwise, or non-finite ``sigma``, ``xdata`` or ``ydata`` with
+      ``check_finite=False``): ``ValueError`` naming ``strategy=Chunked()``. A 2-D
+      ``sigma`` also raises ``ValueError``, without that hint (chunked rejects it too). Nothing falls back silently,
       so a result is never replaced by a GLS approximation without a notice.
 
     Parameters
@@ -1076,8 +1083,8 @@ def curve_fit_large(
         called once per full-data pass (same data, same order, at most
         ``chunk_size`` points per block), with ``ydata=None``; the optional
         keyword ``n_points`` (factories only) is verified, and the point
-        count is checked on every pass. 1-D ``sigma``
-        and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
+        count is checked on every pass. A scalar or 1-D ``sigma``
+        (nonzero; ``|sigma|`` is used) and box ``bounds`` (``lb < ub`` elementwise) are supported; bounds are
         handled by an active set, not Coleman-Li TRF: the returned point is a
         KKT point of the box-constrained problem to within the stopping
         tolerances, reached by a different path
@@ -1229,7 +1236,8 @@ def curve_fit_large(
     >>> popt, _pcov = curve_fit_large(model_func, big_xdata, big_ydata,
     ...                             show_progress=True, memory_limit_gb=8)
 
-    With multi-start optimization:
+    With multi-start optimization (below ``size_threshold``; at or above it,
+    ``multistart=True`` forces the chunked fallback with a ``UserWarning``):
 
     >>> popt, _pcov = curve_fit_large(model_func, xdata, ydata,
     ...                             p0=[1, 2, 3], bounds=([0, 0, 0], [10, 10, 10]),

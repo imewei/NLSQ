@@ -15,7 +15,7 @@ import pytest
 
 import nlsq.streaming.exact_lm as lm
 from benchmarks.compare.problems import PROBLEMS
-from nlsq import curve_fit, curve_fit_large
+from nlsq import curve_fit, curve_fit_large, fit
 from nlsq.streaming import large_fit
 from nlsq.streaming.exact_lm import ExactSolverError
 from nlsq.streaming.large_fit import fit_with_strategy
@@ -145,6 +145,22 @@ def test_engine_fallback_warning_text(data):
     msg = next(str(w.message) for w in rec if "exact streaming" in str(w.message))
     assert "not full-batch equivalent" in msg
     assert "strategy=Chunked()" in msg
+
+
+def test_fit_large_preset_default_takes_exact(dispatch):
+    """fit() above size_threshold: the 'large' preset's multistart must not force chunked."""
+    x, y = EXP.data(5_000)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        fit(m, x, y, p0=P0, size_threshold=1_000)
+    assert dispatch == ["exact"]
+
+
+def test_fit_explicit_multistart_still_falls_back(dispatch):
+    x, y = EXP.data(5_000)
+    with pytest.warns(UserWarning, match="multistart"):
+        fit(m, x, y, p0=P0, size_threshold=1_000, multistart=True)
+    assert dispatch == ["chunked"]
 
 
 # --- data reasons: raise ------------------------------------------------------
