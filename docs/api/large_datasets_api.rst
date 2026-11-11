@@ -68,9 +68,13 @@ Convenience Functions
 For complete API documentation, see :func:`nlsq.curve_fit_large` in the :doc:`nlsq.large_dataset` module.
 
 This function provides a drop-in replacement for ``curve_fit`` with automatic
-detection and handling of large datasets. For small datasets (< 1M points),
-it behaves identically to ``curve_fit``. For larger datasets, it automatically
-switches to memory-efficient processing with chunking and progress reporting.
+detection of large datasets. Below ``size_threshold`` (1M points) it behaves
+identically to ``curve_fit``. At or above it, it runs exact streaming
+Levenberg-Marquardt: every iteration uses all the data, so the result solves the
+full-batch problem and does not depend on the chunk size. The covariance comes from
+the normal equations, or from one extra TSQR pass when they are ill-conditioned.
+Pass ``strategy=Chunked()`` (or ``Auto(exact=None)``) for the chunked fit. Data the
+exact solver cannot fit (2-D ``xdata``, a non-pointwise model) raises ``ValueError``.
 
 Parameters:
     - ``func``: Model function f(x, \\*params) -> y
@@ -81,6 +85,8 @@ Parameters:
     - ``auto_size_detection``: Automatically detect dataset size (default: True)
     - ``size_threshold``: Threshold for switching to large dataset processing (default: 1M)
     - ``show_progress``: Show progress bar for large datasets (default: False)
+    - ``strategy``: ``Auto``, ``InMemory``, ``Chunked``, ``Hybrid`` or ``Exact`` (default: ``Auto()``)
+    - ``compute_covariance``: ``False`` returns ``pcov=None`` and skips the covariance (default: True)
     - ``**kwargs``: Additional fitting options
 
 Returns:
@@ -94,7 +100,7 @@ Example::
     # Automatic handling - uses standard curve_fit for small datasets
     popt, pcov = curve_fit_large(func, x_small, y_small, p0=[1, 0.5])
 
-    # Automatic chunking for large datasets
+    # Exact full-data streaming for large datasets (>= size_threshold)
     popt, pcov = curve_fit_large(
         func, x_large, y_large,
         p0=[1, 0.5],
@@ -290,10 +296,9 @@ Best Practices
 
 4. **Use streaming for very large datasets**::
 
-    # For datasets >100M points, streaming optimization processes
-    # all data in chunks with zero accuracy loss
+    # curve_fit_large streams every iteration over all the data in chunks
+    # (exact full-batch result) from size_threshold (1M points) upward
     if n_points > 100_000_000:
-        # Streaming is automatic in curve_fit_large
         popt, pcov = curve_fit_large(func, xdata, ydata, p0=p0,
                                       memory_limit_gb=8.0, show_progress=True)
 

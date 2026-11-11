@@ -19,7 +19,7 @@ Main Functions
 
 - :func:`nlsq.fit` - **Unified curve fitting with preset-based configuration** (recommended)
 - :func:`nlsq.curve_fit` - High-level curve fitting interface (SciPy-compatible)
-- :func:`nlsq.curve_fit_large` - Automatic chunking for large datasets
+- :func:`nlsq.curve_fit_large` - Exact streaming fit for large datasets (chunked on request)
 - :class:`nlsq.LeastSquares` - Low-level least squares solver class
 - :class:`nlsq.CurveFit` - Reusable curve fitting class (JIT-compiled)
 
@@ -30,7 +30,7 @@ Large Dataset API
 
 Specialized functions for large-scale fitting:
 
-- :func:`nlsq.curve_fit_large` - Automatic chunking and memory management
+- :func:`nlsq.curve_fit_large` - Exact full-data streaming by default; chunked and hybrid fits via ``strategy=``
 - :class:`nlsq.LargeDatasetFitter` - Advanced dataset management
 
 See :doc:`large_datasets_api` for detailed documentation.

@@ -1,6 +1,12 @@
 # Documentation Changelog
 
 ## Unreleased
+- `/dev-suite:docs update --full` pass for the exact default in `curve_fit_large`: README
+  feature table, `api/index.rst` and the `curve_fit_large` section of
+  `api/large_datasets_api.rst` describe exact full-data streaming as the default at or above
+  `size_threshold` (chunked via `strategy=Chunked()`), the adaptive normal-equations/TSQR
+  covariance, and the `strategy` and `compute_covariance` parameters. Sphinx build: no
+  warnings.
 - Large-fit strategy: new `api/nlsq.streaming.large_fit.rst` documents the five strategy
   types (`Auto`, `InMemory`, `Chunked`, `Hybrid`, `Exact`), the `Multistart` settings object
   nested in `InMemory`/`Chunked`, and `fit_with_strategy`, linked from `api/modules.rst`. Code changes the page describes:
