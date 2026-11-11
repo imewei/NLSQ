@@ -519,6 +519,38 @@ def _chunk_jacobian(
     return kernel
 
 
+def _captured_bytes(closed: Any) -> int:
+    """Bytes of every constant and literal in a closed jaxpr, nested jaxprs included."""
+    from jax.extend import core as jex_core
+
+    seen: set[int] = set()
+
+    def size(v: Any) -> int:
+        if id(v) in seen:
+            return 0
+        seen.add(id(v))
+        return int(getattr(v, "nbytes", 0) or 0)
+
+    def walk(obj: Any) -> int:
+        if isinstance(obj, (jex_core.ClosedJaxpr, jex_core.Jaxpr)):
+            # one type in recent JAX (``.jaxpr`` is itself): read consts and eqns directly
+            inner = obj if hasattr(obj, "eqns") else obj.jaxpr
+            total = sum(size(c) for c in getattr(obj, "consts", ()) or ())
+            if inner is not obj:
+                total += sum(size(c) for c in getattr(inner, "consts", ()) or ())
+            for eqn in inner.eqns:
+                total += sum(
+                    size(v.val) for v in eqn.invars if isinstance(v, jex_core.Literal)
+                )
+                total += sum(walk(v) for v in eqn.params.values())
+            return total
+        if isinstance(obj, (tuple, list)):
+            return sum(walk(v) for v in obj)
+        return 0
+
+    return walk(closed)
+
+
 def _cached_stats(
     model: Callable[..., Any], x_block: jax.ShapeDtypeStruct, p: int, weighted: bool
 ) -> tuple[Callable[..., Any], Callable[..., Any]]:
@@ -535,11 +567,13 @@ def _cached_stats(
 
     scalar = jax.ShapeDtypeStruct((), jnp.float64)
     try:
-        consts = jax.make_jaxpr(model)(x_block, *[scalar] * p).consts
-        const_bytes = sum(int(getattr(c, "nbytes", 0)) for c in consts)
+        # a fresh wrapper: make_jaxpr caches by function identity, so tracing ``model``
+        # itself could return a stale trace for a closure whose capture has since grown
+        closed = jax.make_jaxpr(lambda *a: model(*a))(x_block, *[scalar] * p)  # noqa: PLW0108
+        too_big = _captured_bytes(closed) > _CACHE_CONST_BYTES
     except Exception:
-        const_bytes = 0
-    if const_bytes > _CACHE_CONST_BYTES:
+        too_big = True
+    if too_big:
         return model, make_chunk_stats(model, weighted=weighted)
     y_block = jax.ShapeDtypeStruct(
         x_block.shape[:1], jnp.float64

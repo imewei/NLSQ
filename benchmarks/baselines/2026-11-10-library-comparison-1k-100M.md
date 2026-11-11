@@ -10,20 +10,20 @@ API split as on 2026-11-09: `curve_fit` at 1k / 10k / 100k / 1M, `curve_fit_larg
 
 | Case | NLSQ `curve_fit` | NLSQ `curve_fit_large` | JAXopt | Optimistix |
 |---|---|---|---|---|
-| exp_decay 1M | 425 ms \| 50 ms | 95 ms \| 20 ms | 301 ms \| 9 ms | 643 ms \| 58 ms |
-| gaussian 1M | 1.61 s \| 87 ms | 294 ms \| 42 ms | 500 ms \| 38 ms | 1.25 s \| 193 ms |
-| two_exp 1M | 1.02 s \| 62 ms | 340 ms \| 50 ms | 1.83 s \| 51 ms | 4.50 s \| 406 ms |
+| exp_decay 1M | 425 ms \| 50 ms | 95 ms \| 20 ms | 289 ms \| 13 ms | 698 ms \| 62 ms |
+| gaussian 1M | 1.61 s \| 87 ms | 294 ms \| 42 ms | 492 ms \| 40 ms | 1.17 s \| 184 ms |
+| two_exp 1M | 1.02 s \| 62 ms | 340 ms \| 50 ms | 1.75 s \| 50 ms | 4.38 s \| 411 ms |
 | bounded_exp 1M | 1.63 s \| 676 ms | 311 ms \| 53 ms | n/a | n/a |
-| exp_decay 10M | — | 1.27 s \| 80 ms | 2.29 s \| 66 ms | 6.48 s \| 643 ms |
-| gaussian 10M | — | 3.71 s \| 221 ms | 8.55 s \| 298 ms | 19.30 s \| 2.09 s |
-| two_exp 10M | — | 4.30 s \| 314 ms | 10.20 s \| 345 ms | 26.48 s \| 4.35 s |
+| exp_decay 10M | — | 1.27 s \| 80 ms | 2.96 s \| 97 ms | 6.58 s \| 1.50 s |
+| gaussian 10M | — | 3.71 s \| 221 ms | 5.52 s \| 342 ms | 11.67 s \| 2.13 s |
+| two_exp 10M | — | 4.30 s \| 314 ms | 6.76 s \| 378 ms | 21.47 s \| 4.38 s |
 | bounded_exp 10M | — | 4.04 s \| 273 ms | n/a | n/a |
-| exp_decay 100M | — | 6.14 s \| 549 ms | 14.19 s \| 586 ms | 34.20 s \| — |
-| gaussian 100M | — | 23.61 s \| 1.62 s | 43.00 s \| 2.77 s | 70.43 s \| — |
-| two_exp 100M | — | 28.53 s \| 2.27 s | 46.86 s \| 4.77 s | 82.25 s \| — |
+| exp_decay 100M | — | 6.14 s \| 549 ms | 16.71 s \| 1.09 s | 41.74 s \| FAIL |
+| gaussian 100M | — | 23.61 s \| 1.62 s | 45.56 s \| 3.29 s | 107.80 s \| FAIL |
+| two_exp 100M | — | 28.53 s \| 2.27 s | 45.84 s \| 4.20 s | 82.26 s \| FAIL |
 | bounded_exp 100M | — | 29.10 s \| 1.73 s | n/a | n/a |
 
-Cells are `CPU | GPU`; JAXopt and Optimistix are the 2026-11-10 records (different session, so cross-library ratios carry the session drift noted in Caveats). On GPU, `curve_fit_large` is now level with or ahead of JAXopt at 1M-100M except exp_decay at 1M (20 vs 9 ms) and 10M (80 vs 66 ms).
+Cells are `CPU | GPU`, all end-to-end warm medians (as in the main table); JAXopt and Optimistix are the 2026-11-10 `end_to_end` records (different session, so cross-library ratios carry the session drift noted in Caveats; Optimistix GPU 100M failed with cuSolver/out-of-memory errors as in the main table). On GPU, `curve_fit_large` is ahead of JAXopt at 10M and 100M on every problem (0.65-0.83x at 10M, 0.49-0.54x at 100M), level at 1M on gaussian and two_exp (42 vs 40 ms, 50 vs 50 ms), and behind only on exp_decay at 1M (20 vs 13 ms).
 
 Invocations (one `--out` each, flags as on 2026-11-09):
 

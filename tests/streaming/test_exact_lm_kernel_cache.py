@@ -124,3 +124,55 @@ def test_large_captured_constants_skip_the_cache(monkeypatch, cap, cached):
     assert (len(ls._wrapper_cache) == 1) is cached
     r = lm.exact_lm_fit(model, x, 2.0 * table + 1.0, [1.0, 0.0])
     np.testing.assert_allclose(r.x, [2.0, 1.0], rtol=1e-8)
+
+
+def _lookup(table):
+    def inner(xx, a, b):
+        i = jnp.round(xx * (table.size - 1) / 4.0).astype(jnp.int32)
+        return a * jnp.asarray(table)[i] + b
+
+    return inner
+
+
+def test_capture_inside_nested_jit_counts_toward_the_cap(monkeypatch):
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", 1_000)
+    inner = jax.jit(
+        _lookup(np.linspace(0.0, 1.0, x.size))
+    )  # 16 kB inside a nested jaxpr
+
+    def model(xx, a, b):
+        return inner(xx, a, b)
+
+    scalar = jax.ShapeDtypeStruct((), jnp.float64)
+    closed = jax.make_jaxpr(model)(BLOCK, scalar, scalar)
+    assert sum(c.nbytes for c in closed.consts) < 16_000  # not visible at the top level
+    assert lm._captured_bytes(closed) >= 16_000  # found inside the nested jaxpr
+    got, _ = lm._cached_stats(model, BLOCK, 2, False)
+    assert got is model and len(ls._wrapper_cache) == 0
+
+
+def test_growing_capture_is_measured_on_a_fresh_trace(monkeypatch):
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", 1_000)
+    state = {"t": np.linspace(0.0, 1.0, 10)}  # 80 B: under the cap
+
+    def model(xx, a, b):
+        return _lookup(state["t"])(xx, a, b)
+
+    got, _ = lm._cached_stats(model, BLOCK, 2, False)
+    assert got is not model  # small capture: cached
+    ls.clear_wrapper_cache()
+    state["t"] = np.linspace(
+        0.0, 1.0, x.size
+    )  # 16 kB: over the cap, same function object
+    got, _ = lm._cached_stats(model, BLOCK, 2, False)
+    assert got is model and len(ls._wrapper_cache) == 0
+
+
+def test_uninspectable_model_is_not_cached(monkeypatch):
+    def boom(*_a, **_k):
+        raise RuntimeError("inspection failed")
+
+    monkeypatch.setattr(lm, "_captured_bytes", boom)
+    m = _model()
+    got, _ = lm._cached_stats(m, BLOCK, 3, False)
+    assert got is m and len(ls._wrapper_cache) == 0
