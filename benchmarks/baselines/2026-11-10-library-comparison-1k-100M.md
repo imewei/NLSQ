@@ -6,7 +6,24 @@ Machine state: `uptime` load average was 8.05 / 6.98 / 7.54 before the A/B runs 
 
 API split as on 2026-11-09: `curve_fit` at 1k / 10k / 100k / 1M, `curve_fit_large` at 1M / 10M / 100M. `curve_fit_large` is now the **exact streaming** path (default above `size_threshold`); on 2026-11-09 it was the chunked GLS default. `exact_streaming` was not run separately (it is the same code).
 
-**Stale `curve_fit_large` timings.** On `ec9dd429` the exact path recompiled its chunk kernel on every call, and this harness disables the persistent JAX cache, so every `curve_fit_large` warm time below includes one compile: about 0.1-0.13 s for the 3-parameter problems and 0.74 s for two_exp on GPU. `4dcc65b6` removes it (see `2026-11-10-default-exact-ab.md`: GPU two_exp 10M 0.995 s -> 0.29 s). Costs are unaffected. The `curve_fit_large` GPU timings here are therefore upper bounds, as are the JAXopt comparisons drawn from them at <=10M.
+**NLSQ cells re-run on the final code (`501fbe2f`, 2026-11-11).** On `ec9dd429` the exact path recompiled its chunk kernel on every call, and this harness disables the persistent JAX cache, so the `curve_fit_large` times in the main table below each include one compile (0.1-0.13 s for 3 parameters, 0.74 s for two_exp on GPU). `4dcc65b6` removed it. Every NLSQ cell (`nlsq` 1k-1M, `nlsq_large` 1M-100M, both devices) was re-run with the same invocations into `benchmarks/results/2026-11-11/`; the other libraries do not run NLSQ code and keep their 2026-11-10 records. Best-cost gate on the merged records: **every NLSQ cell within 6.9e-9 of the best (worst: two_exp 100M), no violation.** The main table below is the 2026-11-10 run; the re-run large-size cells are:
+
+| Case | NLSQ `curve_fit` | NLSQ `curve_fit_large` | JAXopt | Optimistix |
+|---|---|---|---|---|
+| exp_decay 1M | 425 ms \| 50 ms | 95 ms \| 20 ms | 301 ms \| 9 ms | 643 ms \| 58 ms |
+| gaussian 1M | 1.61 s \| 87 ms | 294 ms \| 42 ms | 500 ms \| 38 ms | 1.25 s \| 193 ms |
+| two_exp 1M | 1.02 s \| 62 ms | 340 ms \| 50 ms | 1.83 s \| 51 ms | 4.50 s \| 406 ms |
+| bounded_exp 1M | 1.63 s \| 676 ms | 311 ms \| 53 ms | n/a | n/a |
+| exp_decay 10M | — | 1.27 s \| 80 ms | 2.29 s \| 66 ms | 6.48 s \| 643 ms |
+| gaussian 10M | — | 3.71 s \| 221 ms | 8.55 s \| 298 ms | 19.30 s \| 2.09 s |
+| two_exp 10M | — | 4.30 s \| 314 ms | 10.20 s \| 345 ms | 26.48 s \| 4.35 s |
+| bounded_exp 10M | — | 4.04 s \| 273 ms | n/a | n/a |
+| exp_decay 100M | — | 6.14 s \| 549 ms | 14.19 s \| 586 ms | 34.20 s \| — |
+| gaussian 100M | — | 23.61 s \| 1.62 s | 43.00 s \| 2.77 s | 70.43 s \| — |
+| two_exp 100M | — | 28.53 s \| 2.27 s | 46.86 s \| 4.77 s | 82.25 s \| — |
+| bounded_exp 100M | — | 29.10 s \| 1.73 s | n/a | n/a |
+
+Cells are `CPU | GPU`; JAXopt and Optimistix are the 2026-11-10 records (different session, so cross-library ratios carry the session drift noted in Caveats). On GPU, `curve_fit_large` is now level with or ahead of JAXopt at 1M-100M except exp_decay at 1M (20 vs 9 ms) and 10M (80 vs 66 ms).
 
 Invocations (one `--out` each, flags as on 2026-11-09):
 

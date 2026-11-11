@@ -6,7 +6,8 @@ Base: `a8fac156` (branch point, worktree). Candidate: `4dcc65b6` (branch `perf/c
 chunk kernel reused across calls). The first run measured `ec9dd429`, whose exact path recompiled its chunk kernel on
 every call (see "Superseded: R16" below); every GPU cell and the CPU 1M/10M cells were re-measured on `4dcc65b6`.
 Raw A/B JSON: `benchmarks/results/2026-11-10-default-exact-ab-v2/` (re-run) and `.../2026-11-10-default-exact-ab/`
-(first run, CPU 100M), both gitignored.
+(first run), both gitignored. CPU 100M was re-measured on `501fbe2f` (adds only a 64 MiB captured-constant cap
+to the kernel cache).
 
 Machine: i9-13900H, RTX 4090 Laptop 16 GB, project `.venv` (jax/jaxlib 0.12.0.1 CUDA), CPU governor `powersave`,
 CPU runs use `JAX_PLATFORMS=cpu`. Laptop clock drift between sessions is up to ~50%, so only the interleaved ratios
@@ -56,8 +57,7 @@ Re-measured on `4dcc65b6`.
 
 ## CPU
 
-1M and 10M re-measured on `4dcc65b6`; 100M is the first run (`ec9dd429`), where the per-call recompile (0.1-0.7 s)
-is under 3% of a 6-34 s candidate fit.
+1M and 10M re-measured on `4dcc65b6`, 100M on `501fbe2f`.
 
 | case | base_s | cand_s | ratio | spr_b | spr_c |
 |---|---|---|---|---|---|
@@ -69,10 +69,10 @@ is under 3% of a 6-34 s candidate fit.
 | gaussian 10M | 4.9263 | 4.4632 | 0.906 | 1.180 | 0.335 |
 | two_exp 10M | 10.1171 | 6.2740 | 0.620 | 0.699 | 0.329 |
 | bounded_exp 10M | 7.3088 | 6.4729 | 0.886 | 0.646 | 0.804 |
-| exp_decay 100M | 25.4046 | 6.1652 | 0.243 | 0.553 | 0.079 |
-| gaussian 100M | 36.5939 | 25.6820 | 0.702 | 0.831 | 0.443 |
-| two_exp 100M | 65.3021 | 34.0322 | 0.521 | 0.772 | 0.624 |
-| bounded_exp 100M | 45.0796 | 27.8561 | 0.618 | 0.036 | 0.148 |
+| exp_decay 100M | 22.2989 | 5.8168 | 0.261 | 0.521 | 0.048 |
+| gaussian 100M | 23.4143 | 22.2778 | 0.951 | 0.494 | 0.120 |
+| two_exp 100M | 51.8469 | 26.7447 | 0.516 | 0.155 | 0.129 |
+| bounded_exp 100M | 39.9230 | 25.4554 | 0.638 | 0.230 | 0.669 |
 
 ## Gates
 

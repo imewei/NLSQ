@@ -131,7 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the exact full-data streaming Levenberg-Marquardt fit (`Auto.exact`, default `Exact()`), not
   the chunked precision-weighted (GLS) fit. Measured against the old default in an interleaved
   A/B (`benchmarks/baselines/2026-11-10-default-exact-ab.md`): GPU 100M 0.52-2.12 s against
-  8.2-19 s (ratio 0.06-0.24), GPU 10M ratio 0.07-0.33, CPU 100M ratio 0.24-0.70; the 1M two_exp
+  8.2-19 s (ratio 0.06-0.24), GPU 10M ratio 0.07-0.33, CPU 100M ratio 0.26-0.95; the 1M two_exp
   fit that missed the optimum by 7.3e-5 now reaches it. The jitted chunk kernel is reused across
   calls for models with an identical jaxpr digest (as `curve_fit`'s wrappers are), so warm calls do
   not recompile it (that recompile, 0.74 s for a 4-parameter model, was a measured 16% GPU two_exp
