@@ -14,7 +14,11 @@ import numpy as np
 from benchmarks.compare.problems import PROBLEMS
 from nlsq.core.covariance import normal_condition
 from nlsq.streaming import exact_lm
-from nlsq.streaming.normal_equations import make_chunk_stats, run_pass
+from nlsq.streaming.normal_equations import (
+    make_chunk_jacobian,
+    make_chunk_stats,
+    run_pass,
+)
 
 
 def jmodel(prob):
@@ -50,15 +54,18 @@ def time_tsqr(n: int, reps: int = 3) -> None:
     del x, y
     theta = np.asarray(prob.p_true)
     stats = make_chunk_stats(model, weighted=w)
+    jac = make_chunk_jacobian(
+        model, weighted=w
+    )  # one kernel: warmed once, reused below
     run_pass(stats, theta, src, chunk)  # warm-up (compile)
-    exact_lm.tsqr_r_factor(model, theta, src, chunk, weighted=w)
+    exact_lm.tsqr_r_factor(model, theta, src, chunk, weighted=w, jac=jac)
     t_pass, t_qr = [], []
     for _ in range(reps):  # both return NumPy: host-synchronized
         t0 = time.perf_counter()
         run_pass(stats, theta, src, chunk)
         t_pass.append(time.perf_counter() - t0)
         t0 = time.perf_counter()
-        exact_lm.tsqr_r_factor(model, theta, src, chunk, weighted=w)
+        exact_lm.tsqr_r_factor(model, theta, src, chunk, weighted=w, jac=jac)
         t_qr.append(time.perf_counter() - t0)
     on_device = isinstance(src[0], jax.Array)
     print(
