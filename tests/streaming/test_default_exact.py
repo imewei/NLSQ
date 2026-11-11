@@ -177,6 +177,20 @@ def test_inf_sigma_unchecked_raises(dispatch, data):
     assert dispatch == []
 
 
+def test_nonfinite_data_unchecked_raises(dispatch, data):
+    """Ruling R17: chunked would absorb NaN (silent data loss), so exact refuses."""
+    x, y = data
+    y_bad = y.copy()
+    y_bad[7] = np.nan
+    with pytest.raises(ValueError, match=HINT):
+        curve_fit_large(m, x, y_bad, p0=P0, check_finite=False, size_threshold=TH)
+    x_bad = x.copy()
+    x_bad[9] = np.inf
+    with pytest.raises(ValueError, match=HINT):
+        curve_fit_large(m, x_bad, y, p0=P0, check_finite=False, size_threshold=TH)
+    assert dispatch == []
+
+
 def test_2d_xdata_raises(dispatch, data):
     x, y = data
     X = np.vstack([x, x])
@@ -259,7 +273,9 @@ def test_default_route_2d_sigma_error_is_neutral(dispatch):
     msg = str(exc.value)
     assert "exact_streaming" not in msg
     assert "sigma must be 1-D" in msg and "(2000, 2000)" in msg
-    assert "strategy=Chunked()" in msg
+    # chunked rejects 2-D sigma too, so pointing at it would mislead
+    assert "strategy=Chunked()" not in msg
+    assert "Pass a 1-D sigma of per-point uncertainties" in msg
     # non-finite 2-D sigma unchecked: the shape is reported, not just non-finiteness
     bad = np.eye(2_000)
     bad[0, 0] = np.inf
@@ -268,7 +284,7 @@ def test_default_route_2d_sigma_error_is_neutral(dispatch):
             m, x, y, p0=P0, sigma=bad, check_finite=False, size_threshold=1_000
         )
     assert "(2000, 2000)" in str(exc.value)
-    assert "strategy=Chunked()" in str(exc.value)
+    assert "strategy=Chunked()" not in str(exc.value)
     # the explicit route keeps its text
     with pytest.raises(
         ValueError, match=r"sigma must be 1-D for method='exact_streaming'"

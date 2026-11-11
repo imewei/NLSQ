@@ -41,6 +41,7 @@ _CHUNKED_HINT = (
     "Chunked GLS is an approximation, not full-batch equivalent for nonlinear "
     "models; pass strategy=Chunked() to accept it."
 )
+_SIGMA_HINT = "Pass a 1-D sigma of per-point uncertainties."
 
 
 def _is_default(value: Any, default: Any) -> bool:
@@ -169,7 +170,7 @@ def fit_with_strategy(
             reject_owned_kwargs(auto.chunked, kwargs)
             opts = {**auto.chunked.options, **kwargs}  # what chunked would have used
             hit = _exact_ineligible(
-                auto, opts, f, xdata, n_points, sigma, p0, bounds, check_finite
+                auto, opts, f, xdata, ydata, n_points, sigma, p0, bounds, check_finite
             )
             if hit is None:
                 return _fit_exact(
@@ -186,10 +187,12 @@ def fit_with_strategy(
                     **common,
                 )
             kind, reason = hit
-            if kind == "data":
+            if kind != "engine":
+                # chunked rejects 2-D sigma too, so that reason gets no Chunked() hint
+                hint = _SIGMA_HINT if kind == "sigma" else _CHUNKED_HINT
                 raise ValueError(
                     f"curve_fit_large: exact streaming cannot fit this input "
-                    f"({reason}). {_CHUNKED_HINT}"
+                    f"({reason}). {hint}"
                 )
             msg = (
                 f"curve_fit_large: exact streaming not used ({reason}); using chunked "
@@ -339,17 +342,21 @@ def _exact_ineligible(
     opts: Mapping[str, Any],
     f: Any,
     xdata: np.ndarray,
+    ydata: np.ndarray,
     n_points: int,
     sigma: Any,
     p0: Any,
     bounds: Any,
     check_finite: bool,
-) -> tuple[Literal["engine", "data"], str] | None:
+) -> tuple[Literal["engine", "data", "sigma"], str] | None:
     """Why the ``Auto`` default cannot use exact, or None.
 
     ``"engine"``: ``auto.chunked`` asks for a chunked-engine feature (fall back with a
-    warning). ``"data"``: exact cannot fit this input (raise). Scalar and signed
-    ``sigma`` are not reasons; a 2-D ``sigma`` is a data reason (checked before finiteness so the error names its shape).
+    warning). ``"data"``: exact cannot fit this input (raise with the
+    ``strategy=Chunked()`` hint). ``"sigma"``: a 2-D ``sigma``, which chunked rejects too
+    (raise without the hint; checked before finiteness so the error names its shape).
+    Scalar and signed ``sigma`` are not reasons. Non-finite ``xdata``/``ydata`` under
+    ``check_finite=False`` is a data reason (chunked would absorb the NaN silently).
     """
     from nlsq.streaming.exact_lm import check_model_contract
     from nlsq.streaming.strategy import normalize_p0_bounds
@@ -368,13 +375,15 @@ def _exact_ineligible(
     if xdata.ndim != 1:
         return "data", "multi-feature xdata"
     if sigma is not None and np.ndim(sigma) > 1:
-        return "data", f"sigma must be 1-D (or a scalar), got shape {np.shape(sigma)}"
+        return "sigma", f"sigma must be 1-D (or a scalar), got shape {np.shape(sigma)}"
     if (
         sigma is not None
         and not check_finite
         and not np.isfinite(np.asarray(sigma)).all()
     ):
         return "data", "sigma has non-finite values (check_finite=False)"
+    if not check_finite and not (np.isfinite(xdata).all() and np.isfinite(ydata).all()):
+        return "data", "xdata or ydata has non-finite values (check_finite=False)"
     if p0 is not None:
         p0 = np.asarray(p0, dtype=float)
     p0_arr, _ = normalize_p0_bounds(f, p0, bounds)

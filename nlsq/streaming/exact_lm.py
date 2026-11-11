@@ -6,8 +6,8 @@ fit (up to rounding and the stopping tolerances) regardless of how the data is c
 next iterate's, so no pass is spent re-evaluating an accepted point.
 
 Ported from ``benchmarks/prototypes/exact_accumulated_lm.py`` (Stage 0, kept frozen as the
-independent baseline). Stage 2a adds 1-D ``sigma`` (weights ``1/sigma`` on residuals and
-Jacobian rows); Stage 2b adds box ``bounds`` by an active set (not Coleman-Li TRF): the
+independent baseline). Stage 2a adds a scalar or 1-D ``sigma`` (nonzero; ``|sigma|`` is used; weights
+``1/|sigma|`` on residuals and Jacobian rows); Stage 2b adds box ``bounds`` by an active set (not Coleman-Li TRF): the
 result is a KKT point of the box-constrained problem to within the stopping tolerances,
 reached by a different path than TRF.
 
