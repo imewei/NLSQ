@@ -3224,6 +3224,7 @@ class AdaptiveHybridStreamingOptimizer:
             return self._run_phase2_loop(data_source, initial_params, verbose)
         finally:
             self._pass_cache = None  # data-specific; never outlive the run
+            self._normal_eq = None  # bakes in model state read at trace time
 
     def _run_phase2_loop(
         self,

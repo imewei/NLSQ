@@ -512,3 +512,25 @@ def test_normal_equations_kernel_is_reused_across_passes():
     ne = cached_kernel(opt)
     opt._accumulate_pass(p0_norm + 0.01, x, y)
     assert cached_kernel(opt) is ne
+
+
+def test_gauss_newton_kernel_is_rebuilt_per_run():
+    """A model whose captured state changed between runs must not reuse the old kernel."""
+    state = np.array([2.0])
+
+    def model(x, a):
+        return state[0] * a * x
+
+    x = jnp.linspace(0.5, 2.0, 64)
+    y = 3.0 * x
+
+    def run(phase):
+        out = phase.run((x, y), jnp.array([1.0]), [], {})
+        return np.asarray(out["JTJ_final"])
+
+    phase = GaussNewtonPhase(_config(), model)
+    run(phase)
+    state[0] = 5.0
+    got = run(phase)
+    ref = run(GaussNewtonPhase(_config(), model))
+    np.testing.assert_array_equal(got, ref)
