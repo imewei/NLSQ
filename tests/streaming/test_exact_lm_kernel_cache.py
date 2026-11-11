@@ -106,3 +106,21 @@ def test_second_fit_does_not_recompile():
         finally:
             logging.getLogger("jax").removeHandler(h)
     assert seen == []
+
+
+@pytest.mark.parametrize("cap,cached", [(10_000_000, True), (1_000, False)])
+def test_large_captured_constants_skip_the_cache(monkeypatch, cap, cached):
+    """A captured table above the byte cap is neither copied into the cache nor kept."""
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", cap)
+    table = np.linspace(0.0, 1.0, x.size)  # 16 kB float64, captured by the model
+
+    def model(xx, a, b):
+        # pointwise lookup: x is linspace(0, 4, n), so this index is the row number
+        i = jnp.round(xx * (table.size - 1) / 4.0).astype(jnp.int32)
+        return a * jnp.asarray(table)[i] + b
+
+    got, _ = lm._cached_stats(model, BLOCK, 2, False)
+    assert (got is not model) is cached
+    assert (len(ls._wrapper_cache) == 1) is cached
+    r = lm.exact_lm_fit(model, x, 2.0 * table + 1.0, [1.0, 0.0])
+    np.testing.assert_allclose(r.x, [2.0, 1.0], rtol=1e-8)

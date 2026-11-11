@@ -72,6 +72,7 @@ LAMBDA_MAX = 1e14  # damping ceiling
 ATTEMPT_CAP = 20  # solve attempts per iteration
 DAMPING_FLOOR = 1e-10  # D_ii >= DAMPING_FLOOR * max_j D_jj
 LAM0 = 1e-3  # initial damping; read at call time (tests move it near a limit)
+_CACHE_CONST_BYTES = 1 << 26  # 64 MiB: larger captured constants skip the kernel cache
 TSQR_KAPPA = 1e3  # covariance by TSQR above this sqrt(cond(H)); set by Gate G-cov
 
 Termination = Literal["gtol", "ftol", "xtol", "max_nfev", "stalled"]
@@ -526,10 +527,20 @@ def _cached_stats(
     Keyed by curve_fit's exact jaxpr digest (``_trace_model``): on a hit the kernel
     evaluates the private jaxpr snapshot, never the caller's ``model``, so a closure whose
     captured data changed misses. Returns ``(model, make_chunk_stats(model))`` uncached
-    when the model cannot be keyed exactly or ``NLSQ_DISABLE_WRAPPER_CACHE=1``.
+    when the model cannot be keyed exactly, ``NLSQ_DISABLE_WRAPPER_CACHE=1``, or its captured
+    constants exceed ``_CACHE_CONST_BYTES`` (the digest copies and hashes them, and a cached
+    copy would sit outside ``memory_limit_gb``).
     """
     from nlsq.core import least_squares as ls  # lazy: heavy module
 
+    scalar = jax.ShapeDtypeStruct((), jnp.float64)
+    try:
+        consts = jax.make_jaxpr(model)(x_block, *[scalar] * p).consts
+        const_bytes = sum(int(getattr(c, "nbytes", 0)) for c in consts)
+    except Exception:
+        const_bytes = 0
+    if const_bytes > _CACHE_CONST_BYTES:
+        return model, make_chunk_stats(model, weighted=weighted)
     y_block = jax.ShapeDtypeStruct(
         x_block.shape[:1], jnp.float64
     )  # only its shape is read
