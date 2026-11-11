@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import enum
 import functools
 import hashlib
@@ -480,6 +481,23 @@ class _Uncacheable(Exception):
     """Raised while digesting a jaxpr that cannot be keyed exactly."""
 
 
+# Remaining bytes the digest may copy or hash ([int] or None = unlimited), charged before
+# each array is copied (_private) or read to host (_array_key). Set by callers that must
+# not hold data-sized snapshots, e.g. the exact streaming solver's kernel cache.
+_snapshot_budget: contextvars.ContextVar[list[int] | None] = contextvars.ContextVar(
+    "_snapshot_budget", default=None
+)
+
+
+def _charge(value: Any) -> None:
+    budget = _snapshot_budget.get()
+    if budget is None:
+        return
+    budget[0] -= int(getattr(value, "nbytes", 0) or 0)
+    if budget[0] < 0:
+        raise _Uncacheable("captured constants exceed the snapshot byte budget")
+
+
 # Params holding a custom_jvp rule. They are not digested directly; the rule is
 # traced (and memoised) with the Jacobian, so the digest of the traced Jacobian
 # covers it (see _trace_model). custom_vjp is refused instead: its `bwd`
@@ -544,6 +562,8 @@ def _array_key(value: Any) -> tuple:
             raise _Uncacheable(f"PRNG implementation {name!r}")
         data = np.asarray(jax.random.key_data(value))
         return ("prng_key", name, tuple(value.shape), _array_key(data))
+    if not isinstance(value, np.ndarray):  # ndarrays were charged by _private
+        _charge(value)
     arr = np.ascontiguousarray(np.asarray(value))
     if arr.dtype.hasobject:
         raise _Uncacheable("object array")
@@ -552,7 +572,10 @@ def _array_key(value: Any) -> tuple:
 
 def _private(value: Any) -> Any:
     """Snapshot of host-mutable data; immutable values are returned as is."""
-    return np.array(value, copy=True) if isinstance(value, np.ndarray) else value
+    if not isinstance(value, np.ndarray):
+        return value
+    _charge(value)
+    return np.array(value, copy=True)
 
 
 def _canon_param(value: Any) -> tuple[Any, Any]:

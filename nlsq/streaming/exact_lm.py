@@ -519,34 +519,6 @@ def _chunk_jacobian(
     return kernel
 
 
-def _captured_bytes(closed: Any) -> int:
-    """Bytes of every constant and literal in a closed jaxpr, nested jaxprs included."""
-    from jax.extend import core as jex_core
-
-    def size(v: Any) -> int:
-        # every occurrence: the digest snapshots each one separately, even a shared array
-        return int(getattr(v, "nbytes", 0) or 0)
-
-    def walk(obj: Any) -> int:
-        if isinstance(obj, (jex_core.ClosedJaxpr, jex_core.Jaxpr)):
-            # one type in recent JAX (``.jaxpr`` is itself): read consts and eqns directly
-            inner = obj if hasattr(obj, "eqns") else obj.jaxpr
-            total = sum(size(c) for c in getattr(obj, "consts", ()) or ())
-            if inner is not obj:
-                total += sum(size(c) for c in getattr(inner, "consts", ()) or ())
-            for eqn in inner.eqns:
-                total += sum(
-                    size(v.val) for v in eqn.invars if isinstance(v, jex_core.Literal)
-                )
-                total += sum(walk(v) for v in eqn.params.values())
-            return total
-        if isinstance(obj, (tuple, list)):
-            return sum(walk(v) for v in obj)
-        return 0
-
-    return walk(closed)
-
-
 def _cached_stats(
     model: Callable[..., Any], x_block: jax.ShapeDtypeStruct, p: int, weighted: bool
 ) -> tuple[Callable[..., Any], Callable[..., Any]]:
@@ -561,24 +533,15 @@ def _cached_stats(
     """
     from nlsq.core import least_squares as ls  # lazy: heavy module
 
-    scalar = jax.ShapeDtypeStruct((), jnp.float64)
-    try:
-        # a fresh wrapper: make_jaxpr caches by function identity, so tracing ``model``
-        # itself could return a stale trace for a closure whose capture has since grown
-        args = (x_block, *[scalar] * p)
-        primal = jax.make_jaxpr(lambda *a: model(*a))(*args)  # noqa: PLW0108
-        # the digest also snapshots the Jacobian trace (custom derivative rules live there)
-        argnums = tuple(range(1, p + 1))
-        jac = jax.make_jaxpr(lambda *a: jax.jacfwd(model, argnums=argnums)(*a))(*args)  # noqa: PLW0108
-        too_big = _captured_bytes(primal) + _captured_bytes(jac) > _CACHE_CONST_BYTES
-    except Exception:
-        too_big = True
-    if too_big:
-        return model, make_chunk_stats(model, weighted=weighted)
     y_block = jax.ShapeDtypeStruct(
         x_block.shape[:1], jnp.float64
     )  # only its shape is read
-    traced = ls._trace_model(model, x_block, y_block, np.zeros(p), "fwd")
+    # the digest charges every array it copies or hashes; over budget it gives up (None)
+    token = ls._snapshot_budget.set([_CACHE_CONST_BYTES])
+    try:
+        traced = ls._trace_model(model, x_block, y_block, np.zeros(p), "fwd")
+    finally:
+        ls._snapshot_budget.reset(token)
     if traced is None:
         return model, make_chunk_stats(model, weighted=weighted)
     key = ("exact_lm_stats", weighted, traced[0])

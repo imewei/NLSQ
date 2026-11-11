@@ -134,21 +134,20 @@ def _lookup(table):
     return inner
 
 
-def test_capture_inside_nested_jit_counts_toward_the_cap(monkeypatch):
-    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", 1_000)
-    inner = jax.jit(
-        _lookup(np.linspace(0.0, 1.0, x.size))
-    )  # 16 kB inside a nested jaxpr
+@pytest.mark.parametrize("cap,cached", [(10_000_000, True), (1_000, False)])
+def test_capture_inside_nested_jit_counts_toward_the_cap(monkeypatch, cap, cached):
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", cap)
+    inner = jax.jit(_lookup(np.linspace(0.0, 1.0, x.size)))  # 16 kB in a nested jaxpr
 
     def model(xx, a, b):
         return inner(xx, a, b)
 
     scalar = jax.ShapeDtypeStruct((), jnp.float64)
     closed = jax.make_jaxpr(model)(BLOCK, scalar, scalar)
-    assert sum(c.nbytes for c in closed.consts) < 16_000  # not visible at the top level
-    assert lm._captured_bytes(closed) >= 16_000  # found inside the nested jaxpr
+    assert sum(c.nbytes for c in closed.consts) < 1_000  # invisible at the top level
     got, _ = lm._cached_stats(model, BLOCK, 2, False)
-    assert got is model and len(ls._wrapper_cache) == 0
+    assert (got is not model) is cached
+    assert (len(ls._wrapper_cache) == 1) is cached
 
 
 def test_growing_capture_is_measured_on_a_fresh_trace(monkeypatch):
@@ -168,33 +167,24 @@ def test_growing_capture_is_measured_on_a_fresh_trace(monkeypatch):
     assert got is model and len(ls._wrapper_cache) == 0
 
 
-def test_uninspectable_model_is_not_cached(monkeypatch):
-    def boom(*_a, **_k):
-        raise RuntimeError("inspection failed")
-
-    monkeypatch.setattr(lm, "_captured_bytes", boom)
-    m = _model()
-    got, _ = lm._cached_stats(m, BLOCK, 3, False)
-    assert got is m and len(ls._wrapper_cache) == 0
+def test_budget_is_scoped_to_the_exact_cache():
+    """The byte budget is set only around the exact kernel digest, never left behind."""
+    lm._cached_stats(_model(), BLOCK, 3, False)
+    assert ls._snapshot_budget.get() is None
 
 
-def test_one_table_in_several_nested_jaxprs_counts_each_copy(monkeypatch):
-    """The digest snapshots the table once per nested jaxpr: count every copy."""
+@pytest.mark.parametrize("cap,cached", [(10 * 16_000, True), (3 * 16_000, False)])
+def test_one_table_in_several_nested_jaxprs_counts_each_copy(monkeypatch, cap, cached):
+    """The digest snapshots the table once per nested jaxpr: five copies, not one."""
     table = np.linspace(0.0, 1.0, x.size)  # 16 kB
     fns = [jax.jit(_lookup(table)) for _ in range(5)]
 
     def model(xx, a, b):
         return sum(f(xx, a, b) for f in fns) / 5.0
 
-    scalar = jax.ShapeDtypeStruct((), jnp.float64)
-    assert (
-        lm._captured_bytes(jax.make_jaxpr(model)(BLOCK, scalar, scalar)) >= 5 * 16_000
-    )
-    monkeypatch.setattr(
-        lm, "_CACHE_CONST_BYTES", 3 * 16_000
-    )  # above one copy, below five
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", cap)
     got, _ = lm._cached_stats(model, BLOCK, 2, False)
-    assert got is model and len(ls._wrapper_cache) == 0
+    assert (got is not model) is cached
 
 
 @pytest.mark.parametrize("cap,cached", [(10_000_000, True), (1_000, False)])
