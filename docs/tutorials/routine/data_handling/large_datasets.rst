@@ -88,17 +88,22 @@ Large Dataset Tips
    from nlsq import curve_fit_large
 
    popt, pcov = curve_fit_large(model, x, y, p0=p0)
-   # Memory-efficient chunked processing
+   # At or above size_threshold (default 1M points): exact full-data streaming
 
-The default path fits each chunk and combines the results; for a nonlinear model
-that is not the full-batch answer. Pass ``method="exact_streaming"`` for an exact
-full-data fit that accumulates ``J^T J`` and ``J^T r`` over chunks (any size,
-memmap/HDF5/Zarr sources, ``sigma``, ``bounds``). It was the fastest NLSQ path at
-100M points in the benchmarks below; see :ref:`exact-streaming`.
+At or above ``size_threshold`` the default path is an exact full-data fit that
+accumulates ``J^T J`` and ``J^T r`` over chunks, so the result does not depend on the
+chunking. It needs a pointwise model written with ``jax.numpy`` and 1-D ``xdata``;
+other inputs fall back to, or raise an error naming, the chunked fit (see
+:ref:`exact-streaming`). The older chunked fit, which fits each chunk and combines
+the results and is not the full-batch answer for a nonlinear model, is available with
+``strategy=Chunked()``. ``method="exact_streaming"`` selects the exact fit explicitly at
+any size and also accepts memmap/HDF5/Zarr sources.
 
 .. code-block:: python
 
-   popt, pcov = curve_fit_large(model, x, y, p0=p0, method="exact_streaming")
+   from nlsq.streaming import Chunked
+
+   popt, pcov = curve_fit_large(model, x, y, p0=p0, strategy=Chunked())
 
 **2. Start with a subset:**
 
@@ -130,7 +135,8 @@ Performance Benchmarks
 ----------------------
 
 Measured on an i9-13900H (20 logical cores, 62 GB RAM) and an RTX 4090 Laptop GPU (16 GB),
-3-parameter ``exp_decay`` model, warm median (2026-11-01, JAX 0.12.0.1). Timings on a laptop
+3-parameter ``exp_decay`` model, warm median (2026-11-01, JAX 0.12.0.1). The
+``exact_streaming`` columns are now what ``curve_fit_large`` runs by default. Timings on a laptop
 vary by up to about 50% between sessions.
 
 .. list-table::
@@ -138,7 +144,7 @@ vary by up to about 50% between sessions.
    :widths: 16 28 28 28
 
    * - Points
-     - ``curve_fit_large`` default, CPU
+     - ``strategy=Chunked()`` (former default), CPU
      - ``exact_streaming``, CPU
      - ``exact_streaming``, GPU
    * - 1K

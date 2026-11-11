@@ -5,6 +5,10 @@ of size; below ``HOST_SVD_MAX_ELEMENTS`` the same SVD on the CPU device, includi
 the device-to-host copy of ``J`` and the copy of the results back, is faster
 (benchmarks/baselines/2026-11-06-perf-phase0.md item (c)). The host path costs one
 temporary n x p host copy of the Jacobian.
+
+Two limits: ``HOST_SVD_MAX_ELEMENTS`` (30_000) for the per-iteration TRF full SVD, and
+``HOST_COV_SVD_MAX_ELEMENTS`` (150_000) for the covariance SVD only
+(``minpack._covariance_svd``, benchmarks/baselines/2026-11-10-qr-covariance-ab.md).
 """
 
 from __future__ import annotations
