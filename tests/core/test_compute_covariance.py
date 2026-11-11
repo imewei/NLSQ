@@ -208,6 +208,28 @@ def test_cmaes_without_refinement_logs_covariance_skipped(caplog):
     assert "covariance skipped" in caplog.text
 
 
+def test_cmaes_with_refinement_does_not_log_twice(monkeypatch):
+    """Refinement logs inside _final_covariance; the CMA-ES wrapper must not log again."""
+    import nlsq.core.minpack as minpack_mod
+
+    wrapper_msgs = []
+    monkeypatch.setattr(
+        minpack_mod._logger, "debug", lambda msg, **kw: wrapper_msgs.append(msg)
+    )
+    res = curve_fit(
+        model,
+        x,
+        y,
+        p0=p0,
+        bounds=([0, 0], [10, 10]),
+        method="cmaes",
+        cmaes_config=CMAESConfig(max_generations=5, refine_with_nlsq=True, seed=0),
+        compute_covariance=False,
+    )
+    assert res.pcov is None
+    assert "covariance skipped" not in wrapper_msgs
+
+
 def test_default_true_is_explicit_noop():
     _, pcov = curve_fit(model, x, y, p0=p0, compute_covariance=True)
     assert pcov.shape == (2, 2)

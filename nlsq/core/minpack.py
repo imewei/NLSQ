@@ -2715,7 +2715,8 @@ def _run_cmaes_optimization(
     # None when the refinement skipped it (compute_covariance=False); the
     # unrefined fallbacks return an inf placeholder, which is dropped here.
     pcov = result_dict["pcov"] if compute_covariance else None
-    if not compute_covariance:
+    if not compute_covariance and result_dict["pcov"] is not None:
+        # refinement already logged it when it returned None; log only the dropped placeholder
         _logger.debug("covariance skipped", reason="compute_covariance=False")
 
     # Create a CurveFitResult-compatible object
