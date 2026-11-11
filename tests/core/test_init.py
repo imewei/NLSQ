@@ -168,9 +168,11 @@ class TestCurveFitLargeBasic(unittest.TestCase):
         xdata = np.linspace(0, 10, 15000)  # Large dataset
         ydata = 2.0 * xdata + 1.0
 
-        popt, _pcov = curve_fit_large(
-            self.linear_func, xdata, ydata, method="trf", size_threshold=10
-        )
+        # method="trf" is an engine reason: the default exact path warns and uses chunked
+        with pytest.warns(UserWarning, match="exact streaming not used"):
+            popt, _pcov = curve_fit_large(
+                self.linear_func, xdata, ydata, method="trf", size_threshold=10
+            )
 
         self.assertIsInstance(popt, np.ndarray)
         self.assertEqual(len(popt), 2)
