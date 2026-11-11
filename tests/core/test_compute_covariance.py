@@ -192,6 +192,22 @@ def test_honouring_cmaes_without_refinement():
     assert res.pcov is None
 
 
+def test_cmaes_without_refinement_logs_covariance_skipped(caplog):
+    """CMA-ES drops pcov outside _final_covariance; it logs the same DEBUG line."""
+    with caplog.at_level("DEBUG", logger="nlsq.core.minpack"):
+        curve_fit(
+            model,
+            x,
+            y,
+            p0=p0,
+            bounds=([0, 0], [10, 10]),
+            method="cmaes",
+            cmaes_config=CMAESConfig(max_generations=5, refine_with_nlsq=False, seed=0),
+            compute_covariance=False,
+        )
+    assert "covariance skipped" in caplog.text
+
+
 def test_default_true_is_explicit_noop():
     _, pcov = curve_fit(model, x, y, p0=p0, compute_covariance=True)
     assert pcov.shape == (2, 2)

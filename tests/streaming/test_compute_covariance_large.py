@@ -6,7 +6,7 @@ import pytest
 
 from benchmarks.compare.problems import PROBLEMS
 from nlsq import curve_fit_large
-from nlsq.streaming import Auto, Chunked, Exact, InMemory
+from nlsq.streaming import Auto, Chunked, Exact, Hybrid, InMemory
 from nlsq.streaming.large_dataset import LargeDatasetFitter
 
 EXP = PROBLEMS["exp_decay"]
@@ -74,15 +74,14 @@ def test_options_cannot_carry_compute_covariance(strategy_cls):
         strategy_cls(options={"compute_covariance": False})
 
 
-def test_hybrid_rejects_false(data):
+@pytest.mark.parametrize(
+    "route",
+    [{"method": "hybrid_streaming"}, {"strategy": Hybrid()}],
+    ids=["method", "strategy"],
+)
+def test_hybrid_rejects_false(data, route):
     with pytest.raises(ValueError, match="compute_covariance=False is not supported"):
-        curve_fit_large(
-            model,
-            *data,
-            p0=EXP.p0,
-            method="hybrid_streaming",
-            compute_covariance=False,
-        )
+        curve_fit_large(model, *data, p0=EXP.p0, compute_covariance=False, **route)
 
 
 def test_in_memory_hybrid_method_rejects_false(data):
