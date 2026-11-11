@@ -560,7 +560,11 @@ def _array_key(value: Any) -> tuple:
         name = getattr(impl, "name", None)
         if name not in _PRNG_IMPLS or _PRNG_REGISTRY.get(name) is not impl:
             raise _Uncacheable(f"PRNG implementation {name!r}")
-        data = np.asarray(jax.random.key_data(value))
+        raw = jax.random.key_data(value)
+        _charge(
+            raw
+        )  # before the host read; the ndarray below is then not charged again
+        data = np.asarray(raw)
         return ("prng_key", name, tuple(value.shape), _array_key(data))
     if not isinstance(value, np.ndarray):  # ndarrays were charged by _private
         _charge(value)

@@ -210,3 +210,24 @@ def test_capture_only_in_a_custom_jvp_counts_toward_the_cap(monkeypatch, cap, ca
     got, _ = lm._cached_stats(m, BLOCK, 1, False)
     assert (got is not m) is cached
     assert (len(ls._wrapper_cache) == 1) is cached
+
+
+@pytest.mark.parametrize("cap,cached", [(10_000_000, True), (1_000, False)])
+@pytest.mark.parametrize("nested", [False, True])
+def test_captured_typed_prng_keys_count_toward_the_cap(
+    monkeypatch, cap, cached, nested
+):
+    monkeypatch.setattr(lm, "_CACHE_CONST_BYTES", cap)
+    keys = jax.random.split(jax.random.key(7), 20_000)  # 160 kB of key data
+
+    def noise():
+        return jax.random.uniform(keys[0])
+
+    inner = jax.jit(noise) if nested else noise
+
+    def model(xx, a):
+        return a * xx + inner()
+
+    got, _ = lm._cached_stats(model, BLOCK, 1, False)
+    assert (got is not model) is cached
+    assert (len(ls._wrapper_cache) == 1) is cached
