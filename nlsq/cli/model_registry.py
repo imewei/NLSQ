@@ -62,6 +62,34 @@ logger = logging.getLogger("nlsq.cli.model_registry")
 ModelFunction = Callable[..., Any]
 
 
+def fit_param_range(model: Any) -> tuple[int, int] | None:
+    """(required, total) fit-parameter counts of ``f(x, *params)``.
+
+    Only positional parameters after ``x`` count; defaulted ones may be omitted
+    (curve_fit sizes the fit from p0). None for ``*args`` models or when the
+    signature cannot be inspected.
+    """
+    try:
+        params = list(inspect.signature(model).parameters.values())
+    except (TypeError, ValueError):
+        return None
+    if any(p.kind == p.VAR_POSITIONAL for p in params):
+        return None
+    positional = [
+        p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    ]
+    if not positional:  # no x parameter: nothing to check against
+        return None
+    positional = positional[1:]
+    required = sum(p.default is p.empty for p in positional)
+    return required, len(positional)
+
+
+def _describe_range(n_range: tuple[int, int]) -> str:
+    lo, hi = n_range
+    return str(hi) if lo == hi else f"{lo} to {hi}"
+
+
 class ModelRegistry:
     """Registry for model functions used in curve fitting.
 
@@ -631,10 +659,7 @@ class ModelRegistry:
             fn_names = getattr(module, "parameter_names", None)
 
         # Never hand the optimiser a p0/bounds sized for a different model.
-        params = list(inspect.signature(model).parameters.values())
-        n_params = (
-            None if any(p.kind == p.VAR_POSITIONAL for p in params) else len(params) - 1
-        )
+        n_range = fit_param_range(model)
 
         def checked(function: Any, what: str, size: Any) -> Any:
             @functools.wraps(function)
@@ -644,15 +669,16 @@ class ModelRegistry:
                     return value
                 n = size(value)
                 if (
-                    n_params is not None
-                    and n != n_params
+                    n_range is not None
+                    and not n_range[0] <= n <= n_range[1]
                     and not (
                         what == "bounds" and n == 1  # scalar bound broadcasts
                     )
                 ):
                     raise ValueError(
                         f"{function.__name__}() returned {what} of length {n}, but "
-                        f"model '{name}' has {n_params} parameter(s)"
+                        f"model '{name}' takes {_describe_range(n_range)} "
+                        "parameter(s)"
                     )
                 return value
 

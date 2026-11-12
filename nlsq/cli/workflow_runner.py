@@ -20,7 +20,6 @@ Example Usage
 """
 
 import difflib
-import inspect
 import logging
 from typing import Any
 
@@ -35,7 +34,7 @@ from nlsq.cli.errors import (
     ModelError,
     cfg_get,
 )
-from nlsq.cli.model_registry import ModelRegistry
+from nlsq.cli.model_registry import ModelRegistry, _describe_range, fit_param_range
 from nlsq.cli.result_exporter import ResultExporter
 from nlsq.core._option_checks import coerce_absolute_sigma
 
@@ -89,19 +88,6 @@ _KNOWN_FITTING_KEYS = (
     "absolute_sigma",
     "check_finite",
 )
-
-
-def _model_param_count(model: Any) -> int | None:
-    """Number of fit parameters of ``f(x, *params)``; None if not determinable."""
-    try:
-        params = list(inspect.signature(model).parameters.values())
-    except (TypeError, ValueError):
-        return None
-    if not params or any(p.kind == p.VAR_POSITIONAL for p in params):
-        return None
-    return (
-        sum(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params) - 1
-    )
 
 
 def _bound_array(value: Any, which: str) -> np.ndarray:
@@ -454,13 +440,15 @@ class WorkflowRunner:
         else:  # YAML scalar or ndarray from Python callers
             p0 = np.atleast_1d(np.asarray(p0))
 
-        n_params = _model_param_count(model)
-        if p0 is not None and not isinstance(p0, str) and n_params is not None:
-            if np.size(p0) != n_params:
+        n_range = fit_param_range(model)
+        if p0 is not None and not isinstance(p0, str) and n_range is not None:
+            if not n_range[0] <= np.size(p0) <= n_range[1]:
+                expected = _describe_range(n_range)
                 raise ConfigError(
                     f"fitting.p0 has {np.size(p0)} value(s) but model "
-                    f"'{getattr(model, '__name__', '?')}' has {n_params} parameter(s)",
-                    suggestion=f"Give exactly {n_params} initial values in "
+                    f"'{getattr(model, '__name__', '?')}' takes {expected} "
+                    "parameter(s)",
+                    suggestion=f"Give {expected} initial values in "
                     "fitting.p0, or use `p0: auto`.",
                 )
 

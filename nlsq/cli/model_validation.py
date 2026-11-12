@@ -124,6 +124,7 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "savetxt",
         "tofile",
         "dump",
+        "dump_stats",  # pstats.Stats / cProfile.Profile: writes to a path
         "memmap",
         "open_memmap",
         "write_array",
@@ -427,6 +428,33 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "ray",
         "annotationlib",
         "string",
+        # Implicit file writes / URL fetches / terminal or OS-state changes:
+        # xml.etree .write(path), xml.sax.parse(url) and xml.dom.pulldom fetch
+        # through urllib; pstats .dump_stats(path); audio/mailbox writers;
+        # readline history files; cgitb log files; pipes runs shell commands
+        "xml",
+        "pstats",
+        "mailbox",
+        "wave",
+        "aifc",
+        "sunau",
+        "ossaudiodev",
+        "termios",
+        "tty",
+        "curses",
+        "readline",
+        "rlcompleter",
+        "netrc",
+        "syslog",
+        "cgi",
+        "cgitb",
+        "pipes",
+        "winreg",
+        "msvcrt",
+        "lib2to3",
+        "asyncore",
+        "asynchat",
+        "smtpd",
     },
 )
 
@@ -462,7 +490,7 @@ _NUMERIC_ROOTS: frozenset[str] = frozenset({"numpy", "scipy", "jax"})
 # Dunders that legitimate models read and that expose nothing dangerous.
 _VETTED_DUNDERS: frozenset[str] = frozenset({"__name__", "__doc__", "__version__"})
 _COLLIDING_SYMBOLS: frozenset[str] = frozenset(
-    {"signal", "trace", "profile", "gc", "resource", "logging"}
+    {"signal", "trace", "profile", "gc", "resource", "logging", "readline"}
 )
 
 
@@ -779,8 +807,10 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         # numpy.load(..., allow_pickle=...) executes pickle payloads
         if any(k.arg == "allow_pickle" for k in node.keywords):
             self.violations.append("Dangerous keyword argument: allow_pickle")
-        # np.load's allow_pickle is its THIRD POSITIONAL parameter; fail closed
-        # on any call shape that can supply it (or hide arguments).
+        # np.load(file, mmap_mode, allow_pickle, ...): mmap_mode "r+"/"w+"
+        # writes or truncates the file, allow_pickle unpickles. Fail closed on
+        # any call shape that can supply either (or hide arguments); only a
+        # literal read-only mmap_mode (None, "r", "c") is accepted.
         callee = (
             node.func.id
             if isinstance(node.func, ast.Name)
@@ -788,14 +818,23 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             if isinstance(node.func, ast.Attribute)
             else None
         )
-        if callee == "load" and (
-            len(node.args) >= 3
-            or any(isinstance(a, ast.Starred) for a in node.args)
-            or any(k.arg is None for k in node.keywords)
-        ):
-            self.violations.append(
-                "Dangerous call: load() with allow_pickle-capable arguments"
-            )
+        if callee == "load":
+            mmap_modes = node.args[1:2] + [
+                k.value for k in node.keywords if k.arg == "mmap_mode"
+            ]
+            if (
+                len(node.args) >= 3
+                or any(isinstance(a, ast.Starred) for a in node.args)
+                or any(k.arg is None for k in node.keywords)
+                or any(
+                    not (isinstance(m, ast.Constant) and m.value in (None, "r", "c"))
+                    for m in mmap_modes
+                )
+            ):
+                self.violations.append(
+                    "Dangerous call: load() with writable mmap_mode or "
+                    "allow_pickle-capable arguments"
+                )
         # Check direct function calls
         if isinstance(node.func, ast.Name):
             if node.func.id in DANGEROUS_PATTERNS:
