@@ -1608,6 +1608,22 @@ def _fit_global_cmaes(
     model_id = kwargs.pop("_hpc_model_id", None)
     seed = kwargs.pop("seed", None)
 
+    # fit(workflow="auto_global") forwards the multistart sampler options; only
+    # the multi-start route uses them, so say so here instead of dropping them.
+    unused = sorted(
+        k for k in ("sampler", "center_on_p0", "scale_factor") if k in kwargs
+    )
+    for k in unused:
+        kwargs.pop(k)
+    if unused:
+        warnings.warn(
+            f"{unused} are not used when `workflow` is given and are "
+            "ignored; configure them through the workflow config or use "
+            "curve_fit()/curve_fit_large().",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # seed applies whenever provided, independent of checkpoint_dir -- it's
     # the general CMA-ES reproducibility knob, not a checkpoint-only concern.
     if seed is not None:

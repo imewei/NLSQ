@@ -431,7 +431,8 @@ def make_strictly_feasible(x, lb, ub, rstep=1e-10):
         # SciPy floors the margin scale at 1 (absolute 1e-10), which moves a
         # parameter living at ~1e-11 inside [1e-12, 1e-8] to ~1e-10. Floor at
         # min(1, ub - lb) instead: identical whenever the bound width is >= 1.
-        floor = np.minimum(1.0, ub - lb)
+        with np.errstate(over="ignore"):  # ub - lb -> inf for +/-finfo.max: floor is 1
+            floor = np.minimum(1.0, ub - lb)
         lower_step = rstep * np.maximum(floor, np.abs(lb))
         upper_step = rstep * np.maximum(floor, np.abs(ub))
         lower_dist = x_new - lb

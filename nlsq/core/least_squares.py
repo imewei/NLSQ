@@ -1744,11 +1744,14 @@ class LeastSquares:
 
         m = f0.size
 
-        if method == "lm" and m < n:
-            raise TypeError(
-                f"Improper input: func input vector length N={n} must not exceed "
-                f"func output vector length M={m}"
-            )
+        if method == "lm":
+            # f0 is padded to flength; count only the real (unmasked) points.
+            m_eff = m if data_mask is None else int(jnp.sum(data_mask))
+            if m_eff < n:
+                raise TypeError(
+                    f"Improper input: func input vector length N={n} must not "
+                    f"exceed func output vector length M={m_eff}"
+                )
 
         # Step 6: Check and fix initial Jacobian
         J0 = self._check_and_fix_initial_jacobian(J0, m, n)
