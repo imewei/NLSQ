@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Targeted tests for low-coverage modules to reach 74%."""
 
-import contextlib
 import unittest
 
 import jax.numpy as jnp
@@ -140,18 +139,19 @@ class TestTargetCoverage(unittest.TestCase):
         for func_name in ["huber", "soft_l1", "cauchy", "arctan"]:
             if hasattr(loss, func_name):
                 func = getattr(loss, func_name)
-                with contextlib.suppress(Exception):
-                    func(z, 1.0)
-                    # Should handle zeros gracefully
+                # Should handle zeros gracefully
+                rho = np.asarray(func(z, False))
+                assert rho.shape == (3, 3)
+                assert np.all(np.isfinite(rho)), func_name
 
         # Test with very large values
         z = jnp.array([1e10, 1e10, 1e10])
         for func_name in ["huber", "soft_l1", "cauchy"]:
             if hasattr(loss, func_name):
                 func = getattr(loss, func_name)
-                with contextlib.suppress(Exception):
-                    func(z, 1.0)
-                    # Should handle large values without overflow
+                # Should handle large values without overflow
+                rho = np.asarray(func(z, False))
+                assert np.all(np.isfinite(rho)), func_name
 
     def test_curve_fit_class_methods(self):
         """Test CurveFit class methods."""

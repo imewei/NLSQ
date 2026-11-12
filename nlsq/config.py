@@ -20,6 +20,11 @@ import numpy as np
 _logger = logging.getLogger(__name__)
 
 
+def _env_flag(name: str) -> bool:
+    """True when env var ``name`` is 1/true/yes/on (case-insensitive), as NLSQ_DEBUG."""
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _is_positive_count(value) -> bool:
     """True for a finite integral non-bool real ``>= 1`` (``3``, ``np.int64(3)``, ``3.0``).
 
@@ -219,14 +224,11 @@ class JAXConfig:
         from jax import config
 
         # Force CPU backend if requested (useful for testing)
-        if (
-            os.getenv("NLSQ_FORCE_CPU", "0") == "1"
-            or os.getenv("JAX_PLATFORM_NAME") == "cpu"
-        ):
+        if _env_flag("NLSQ_FORCE_CPU") or os.getenv("JAX_PLATFORM_NAME") == "cpu":
             config.update("jax_platform_name", "cpu")
 
         # Enable 64-bit precision by default for NLSQ
-        if not self._x64_enabled and os.getenv("NLSQ_DISABLE_X64") != "1":
+        if not self._x64_enabled and not _env_flag("NLSQ_DISABLE_X64"):
             config.update("jax_enable_x64", True)
             self._x64_enabled = True
 
@@ -243,7 +245,7 @@ class JAXConfig:
         eliminating cold-start overhead of 2-10 seconds.
         """
         # Skip if explicitly disabled
-        if os.getenv("NLSQ_DISABLE_PERSISTENT_CACHE") == "1":
+        if _env_flag("NLSQ_DISABLE_PERSISTENT_CACHE"):
             return
 
         # Parse before touching jax.config so a bad value cannot leave the
@@ -280,9 +282,9 @@ class JAXConfig:
                     f"(NLSQ_JAX_CACHE_DIR={nlsq_cache_dir} ignored)",
                 )
         else:
-            cache_dir = os.getenv(
-                "NLSQ_JAX_CACHE_DIR",
-                os.path.expanduser("~/.cache/nlsq/jax_cache"),
+            # Empty NLSQ_JAX_CACHE_DIR means unset (os.makedirs("") would fail).
+            cache_dir = os.getenv("NLSQ_JAX_CACHE_DIR") or os.path.expanduser(
+                "~/.cache/nlsq/jax_cache"
             )
 
         try:
@@ -350,7 +352,7 @@ class JAXConfig:
         # documented config key for this — only the XLA_PYTHON_CLIENT_PREALLOCATE
         # env var actually works — so set it directly, overriding any prior
         # XLA_PYTHON_CLIENT_PREALLOCATE=true.
-        if os.getenv("NLSQ_DISABLE_GPU_PREALLOCATION") == "1":
+        if _env_flag("NLSQ_DISABLE_GPU_PREALLOCATION"):
             os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
             _logger.info("Disabled GPU memory preallocation via XLA env var")
 
@@ -409,7 +411,7 @@ class JAXConfig:
                     stacklevel=2,
                 )
 
-        if os.getenv("NLSQ_DISABLE_PROGRESS_REPORTING") == "1":
+        if _env_flag("NLSQ_DISABLE_PROGRESS_REPORTING"):
             overrides["progress_reporting"] = False
 
         # An out-of-range value must not make every later fit raise from this
@@ -442,7 +444,7 @@ class JAXConfig:
         large_dataset_config = LargeDatasetConfig()
 
         # Override from environment variables
-        if os.getenv("NLSQ_DISABLE_AUTO_SOLVER_SELECTION") == "1":
+        if _env_flag("NLSQ_DISABLE_AUTO_SOLVER_SELECTION"):
             large_dataset_config.enable_automatic_solver_selection = False
 
         self._large_dataset_config = large_dataset_config

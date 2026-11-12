@@ -8,8 +8,11 @@ Callbacks are called after each optimization iteration with information about
 the current state: iteration number, cost, parameters, gradient norm, etc.
 """
 
+import inspect
+import threading
 import time
 import warnings
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -26,6 +29,45 @@ __all__ = [
 
 class StopOptimization(Exception):
     """Exception raised by callbacks to request early termination."""
+
+
+_CALLBACK_ARGS = ("iteration", "cost", "params", "info")
+
+
+def call_user_callback(
+    callback: Callable[..., Any],
+    iteration: int,
+    cost: float,
+    params: np.ndarray,
+    info: dict[str, Any],
+) -> Any:
+    """Call ``callback(iteration, cost, params, info)`` honouring its signature.
+
+    Keyword dispatch is used when the four keywords bind to the signature
+    (``Signature.bind`` never invokes the callable) and either the positional
+    call would not bind (required keyword-only parameters, ``**kwargs`` with
+    fewer than four positionals) or the signature names any of the four
+    arguments (so ``(params, cost, iteration, info)`` receives the right
+    values). Otherwise the arguments are passed positionally (arbitrary names,
+    ``*args``, builtins, callables whose signature cannot be inspected).
+    """
+    try:
+        # follow_wrapped=False: a functools.wraps decorator must not hide the real call shape
+        sig = inspect.signature(callback, follow_wrapped=False)
+    except (TypeError, ValueError):
+        return callback(iteration, cost, params, info)
+    try:
+        sig.bind(iteration=iteration, cost=cost, params=params, info=info)
+    except TypeError:
+        return callback(iteration, cost, params, info)
+    try:
+        sig.bind(iteration, cost, params, info)
+        positional_ok = True
+    except TypeError:
+        positional_ok = False
+    if not positional_ok or any(n in sig.parameters for n in _CALLBACK_ARGS):
+        return callback(iteration=iteration, cost=cost, params=params, info=info)
+    return callback(iteration, cost, params, info)
 
 
 class CallbackBase:
@@ -204,6 +246,24 @@ class IterationLogger(CallbackBase):
         self._file = file  # Use provided file object if given
         self._file_provided = file is not None  # Track if file was provided externally
         self._start_time = None
+        self._lock = threading.RLock()
+
+    def __deepcopy__(self, memo: dict) -> "IterationLogger":
+        # Write-only sink: copies would reopen (and truncate) the same file.
+        return self
+
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        state.pop("_lock", None)
+        state["_file"] = None  # handles are not picklable; reopened lazily
+        state["_start_time"] = None
+        if self.filename is not None and state["mode"].startswith("w"):
+            state["mode"] = "a"  # an unpickled copy must not truncate the log
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._lock = threading.RLock()
 
     def __call__(
         self,
@@ -213,6 +273,10 @@ class IterationLogger(CallbackBase):
         info: dict[str, Any],
     ) -> None:
         """Log iteration information."""
+        with self._lock:
+            self._log(iteration, cost, params, info)
+
+    def _log(self, iteration, cost, params, info) -> None:
         if self._start_time is None:
             self._start_time = time.time()
             self._open_file()
@@ -394,7 +458,7 @@ class CallbackChain(CallbackBase):
     ) -> None:
         """Call all callbacks in sequence."""
         for callback in self.callbacks:
-            callback(iteration, cost, params, info)
+            call_user_callback(callback, iteration, cost, params, info)
 
     def close(self):
         """Close all callbacks that have a close method."""

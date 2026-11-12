@@ -433,13 +433,18 @@ class MemoryManager:
         )
 
     @contextmanager
-    def memory_guard(self, bytes_needed: int):
+    def memory_guard(self, bytes_needed: int, record_telemetry: bool = True):
         """Context manager to ensure memory availability.
 
         Parameters
         ----------
         bytes_needed : int
-            Required memory in bytes
+            Required memory in bytes, including the safety factor (as returned
+            by ``predict_memory_usage``)
+        record_telemetry : bool
+            Feed the measured RSS delta to the adaptive safety-factor telemetry.
+            Pass False when ``bytes_needed`` is a raw size or the RSS delta is
+            not meaningful (e.g. lazily-committed ``np.zeros`` pages).
 
         Raises
         ------
@@ -484,9 +489,10 @@ class MemoryManager:
 
             # Track telemetry for adaptive safety factor (Task 5.2)
             # RSS can drop when memory is freed; clamp so a negative delta counts as "used nothing".
-            self._record_safety_telemetry(
-                bytes_needed, max(0, current_memory - initial_memory)
-            )
+            if record_telemetry:
+                self._record_safety_telemetry(
+                    bytes_needed, max(0, current_memory - initial_memory)
+                )
 
     def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: float):
         """Record telemetry for adaptive safety factor calculation.
@@ -652,8 +658,9 @@ class MemoryManager:
         # Calculate memory needed
         bytes_needed = int(np.prod(shape) * np.dtype(dtype).itemsize)
 
-        # Allocate with memory guard
-        with self.memory_guard(bytes_needed):
+        # Raw size (no safety factor) and untouched calloc pages: the RSS delta
+        # says nothing about the safety factor, so keep it out of telemetry.
+        with self.memory_guard(bytes_needed, record_telemetry=False):
             if zero:
                 arr = np.zeros(shape, dtype=dtype)
             else:

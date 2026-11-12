@@ -85,6 +85,19 @@ def test_safe_dumps_rejects_lossy_longdouble_scalar():
     assert safe_dumps({"x": np.longdouble(1.5)})  # exactly representable
 
 
+def test_safe_dumps_rejects_lossy_longdouble_dict_key():
+    import pytest
+
+    from nlsq.utils.safe_serialize import SafeSerializationError, safe_dumps, safe_loads
+
+    if np.finfo(np.longdouble).bits <= 64:
+        pytest.skip("longdouble is float64 on this platform")
+    lossy = np.longdouble(1) + np.finfo(np.longdouble).eps
+    with pytest.raises(SafeSerializationError, match="losing precision"):
+        safe_dumps({lossy: "value"})
+    assert safe_loads(safe_dumps({np.longdouble(1.5): "value"})) == {1.5: "value"}
+
+
 def test_dip_fit_keeps_negative_amplitude_with_default_bounds():
     import warnings
 

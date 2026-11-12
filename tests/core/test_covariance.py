@@ -56,6 +56,45 @@ def test_jacobian_and_normal_agree_when_well_conditioned():
         assert not fb
 
 
+def test_jacobian_covariance_handles_extreme_singular_values():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pcov, fired = _J_pcov(np.array([[1e160], [2e160]]), 1, 2, 1, True)
+    assert not fired
+    assert pcov[0, 0] > 0
+    assert pcov[0, 0] == pytest.approx(2e-321, rel=0.01, abs=0)
+
+    with pytest.warns(OptimizeWarning):
+        pcov, fired = _J_pcov(np.array([[1e-200], [2e-200]]), 1, 2, 1, True)
+    assert fired
+    assert np.isinf(pcov).all()
+
+
+def test_float32_jacobian_covariance_does_not_overflow_float64():
+    J = np.array([[1e-20], [2e-20]], dtype=np.float32)
+    fit = CurveFit()
+    pcov, fired = fit._compute_covariance(
+        SimpleNamespace(jac=J, cost=1.0), 2, np.zeros(1), True
+    )
+    assert not fired
+    assert pcov[0, 0] == pytest.approx(2e39, rel=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("jac_scale", "cost", "expected"),
+    [
+        (1e200, 5e199, 2e-201),
+        (1e-200, 5e-201, 2e199),
+        (1e-200, 0, 0),
+        (1.0, 1.5e308, 6e307),
+    ],
+)
+def test_relative_covariance_preserves_extreme_scale(jac_scale, cost, expected):
+    pcov, fired = _J_pcov(np.array([[jac_scale], [2 * jac_scale]]), cost, 2, 1, False)
+    assert not fired
+    assert pcov[0, 0] == pytest.approx(expected, rel=1e-12, abs=0)
+
+
 @pytest.mark.parametrize("fn", FUNCS)
 def test_duplicate_column_returns_finite_pseudoinverse(fn):
     J = _jac()
@@ -140,7 +179,10 @@ def test_compute_covariance_uses_instance_svd_hook():
     res = SimpleNamespace(jac=J, cost=COST)
     pcov, warn_cov = fit._compute_covariance(res, N, np.zeros(2), True)
     assert len(calls) == 1
-    assert calls[0] is J
+    # the hook now sees the column-equilibrated Jacobian
+    np.testing.assert_allclose(
+        calls[0], np.asarray(J) / np.linalg.norm(np.asarray(J), axis=0)
+    )
     assert not warn_cov
     np.testing.assert_allclose(pcov, _J_pcov(J, COST, N, 2, True)[0] / 4.0, rtol=1e-10)
 

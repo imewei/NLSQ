@@ -1304,5 +1304,19 @@ class TestBugFixRegressions(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(popt)))
 
 
+class TestLmUnderdetermined(unittest.TestCase):
+    def test_lm_fewer_residuals_than_params_raises(self):
+        x = jnp.linspace(0.0, 1.0, 5)
+        y = jnp.exp(-x)
+        with self.assertRaisesRegex(TypeError, "Improper input.*N=2.*M=1"):
+            curve_fit(
+                lambda x, a, b: a * jnp.exp(-b * x),
+                x[:1],
+                y[:1],
+                p0=[1.0, 1.0],
+                method="lm",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

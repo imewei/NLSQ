@@ -412,30 +412,41 @@ def find_active_constraints(x, lb, ub, rtol=1e-10):
 
 def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     """Shift a point to the interior of a feasible region.
-    Each element of the returned vector is at least at a relative distance
-    `rstep` from the closest bound. If ``rstep=0`` then `np.nextafter` is used.
+    Each element of the returned vector is at least at a distance
+    ``rstep * max(|bound|, min(1, ub - lb))`` from the closest bound. If
+    ``rstep=0`` then `np.nextafter` is used.
     """
     # Convert to NumPy array to ensure mutability (JAX arrays are immutable)
     x_new = np.array(x, copy=True)
     lb = np.asarray(lb)
     ub = np.asarray(ub)
 
-    active = find_active_constraints(x, lb, ub, rstep)
-    lower_mask = np.equal(active, -1)
-    upper_mask = np.equal(active, 1)
-
     if rstep == 0:
+        active = find_active_constraints(x, lb, ub, rstep)
+        lower_mask = np.equal(active, -1)
+        upper_mask = np.equal(active, 1)
         x_new[lower_mask] = np.nextafter(lb[lower_mask], ub[lower_mask])
         x_new[upper_mask] = np.nextafter(ub[upper_mask], lb[upper_mask])
     else:
-        x_new[lower_mask] = lb[lower_mask] + rstep * np.maximum(
-            1,
-            np.abs(lb[lower_mask]),
+        # SciPy floors the margin scale at 1 (absolute 1e-10), which moves a
+        # parameter living at ~1e-11 inside [1e-12, 1e-8] to ~1e-10. Floor at
+        # min(1, ub - lb) instead: identical whenever the bound width is >= 1.
+        floor = np.minimum(1.0, ub - lb)
+        lower_step = rstep * np.maximum(floor, np.abs(lb))
+        upper_step = rstep * np.maximum(floor, np.abs(ub))
+        lower_dist = x_new - lb
+        upper_dist = ub - x_new
+        # Upper wins a tie, as in find_active_constraints.
+        upper_mask = np.isfinite(ub) & (
+            upper_dist <= np.minimum(lower_dist, upper_step)
         )
-        x_new[upper_mask] = ub[upper_mask] - rstep * np.maximum(
-            1,
-            np.abs(ub[upper_mask]),
+        lower_mask = (
+            np.isfinite(lb)
+            & ~upper_mask
+            & (lower_dist <= np.minimum(upper_dist, lower_step))
         )
+        x_new[lower_mask] = lb[lower_mask] + lower_step[lower_mask]
+        x_new[upper_mask] = ub[upper_mask] - upper_step[upper_mask]
 
     tight_bounds = (x_new < lb) | (x_new > ub)
     x_new[tight_bounds] = 0.5 * (lb[tight_bounds] + ub[tight_bounds])

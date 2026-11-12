@@ -825,7 +825,7 @@ def _fit_with_config(
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
             callback=kwargs.get("callback"),
-            verbose=kwargs.get("verbose", 1),
+            verbose=kwargs.get("verbose", 0),
         )
 
         # Convert to CurveFitResult
@@ -1137,7 +1137,7 @@ def _fit_with_preset(  # noqa: C901
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
             callback=kwargs.get("callback"),
-            verbose=kwargs.get("verbose", 1),
+            verbose=kwargs.get("verbose", 0),
         )
 
         result = CurveFitResult(result_dict)
@@ -1890,7 +1890,7 @@ def _fit_global_multistart(
         sigma=np.asarray(sigma) if sigma is not None else None,
         absolute_sigma=absolute_sigma,
         callback=kwargs.get("callback"),
-        verbose=kwargs.get("verbose", 1),
+        verbose=kwargs.get("verbose", 0),
     )
 
     result = CurveFitResult(result_dict)
@@ -4162,7 +4162,7 @@ class CurveFit:
         )
 
         # Extract verbosity from kwargs
-        verbose = kwargs.pop("verbose", 1)
+        verbose = kwargs.pop("verbose", 0)
 
         # Handle config: either a complete HybridStreamingConfig object or individual overrides
         config = kwargs.pop("config", None)

@@ -58,6 +58,7 @@ def _serialize_dict_key(key: Any) -> str:
     if isinstance(key, (int, np.integer)):
         return f"__int_key__{int(key)}"
     if isinstance(key, (float, np.floating)):
+        _float_to_serializable(key)
         return f"__float_key__{float(key)}"
     # Any other key type cannot be restored on deserialization — fail loud
     # rather than silently producing a mangled, unrestorable string key.
@@ -252,6 +253,12 @@ def _convert_to_serializable(obj: Any) -> Any:
     # Handle dicts
     if isinstance(obj, dict):
         return _convert_dict_to_serializable(obj)
+
+    # MaskedArray is an ndarray subclass; tolist() would drop the mask silently
+    if isinstance(obj, np.ma.MaskedArray):
+        raise SafeSerializationError(
+            "masked arrays are not supported; pass np.ma.filled(...) / the mask separately",
+        )
 
     # Handle numpy arrays (small ones only - large arrays should use HDF5)
     if isinstance(obj, np.ndarray):

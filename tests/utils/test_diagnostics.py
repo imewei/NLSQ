@@ -497,6 +497,12 @@ class TestRecordEvent(unittest.TestCase):
         # Event should track that we're at iteration 3
         diag.record_event("checkpoint", {"iteration_count": 3})
 
+        # record_event does not itself track iterations; record_iteration does,
+        # and a non-failure event adds no warnings.
+        self.assertEqual(len(diag.iteration_data), 3)
+        self.assertEqual([d["iteration"] for d in diag.iteration_data], [0, 1, 2])
+        self.assertEqual(diag.warnings_issued, [])
+
 
 class TestCheckConvergenceHealth(unittest.TestCase):
     """Tests for OptimizationDiagnostics._check_convergence_health method."""

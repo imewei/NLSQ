@@ -102,7 +102,7 @@ def _conjugate_gradient_solve(
     d: jnp.ndarray,
     alpha: float = 0.0,
     tol: float = DEFAULT_TOLERANCE,
-) -> tuple[jnp.ndarray, jnp.ndarray, int]:
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Solve (J^T J + alpha*I) p = -J^T f using CG.
 
     Uses jax.lax.while_loop for 3-8x GPU acceleration.
@@ -126,8 +126,8 @@ def _conjugate_gradient_solve(
         Solution vector (n,)
     residual_norm : jnp.ndarray
         Final residual norm
-    n_iter : int
-        Number of CG iterations
+    n_iter : jnp.ndarray
+        Number of CG iterations (traced scalar)
 
     Notes
     -----
@@ -135,10 +135,15 @@ def _conjugate_gradient_solve(
     recompilation. The while_loop convergence check exits early for
     small problems (n < 100).
     """
-    _m, n = J.shape
-
     J_scaled = J * d[None, :]
-    b = -J_scaled.T @ f
+    return _cg_core(J_scaled, -J_scaled.T @ f, alpha, tol)
+
+
+def _cg_core(
+    J_scaled: jnp.ndarray, b: jnp.ndarray, alpha: float | jnp.ndarray, tol: float
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """CG for (J_scaled^T J_scaled + alpha*I) x = b (traced inside callers' jit)."""
+    n = J_scaled.shape[1]
 
     # Solve for a normalized RHS: otherwise the CG curvature p^T A p
     # squares the magnitude of b as well as J and can underflow even when
@@ -148,9 +153,17 @@ def _conjugate_gradient_solve(
     b_scale = jnp.where(b_scale > 0, b_scale, 1.0)
     b = b / b_scale
 
+    # Jacobi preconditioner diag(A)^-1: Jacobian columns of very different
+    # magnitude (e.g. y scaled by 1e8 with x_scale=1) square into cond(J^T J)
+    # far beyond 1/eps, where unpreconditioned CG returns a garbage step.
+    diag_A = jnp.sum(J_scaled * J_scaled, axis=0) + alpha
+    m_inv = jnp.where(diag_A > 0, 1.0 / jnp.where(diag_A > 0, diag_A, 1.0), 1.0)
+
     x0 = jnp.zeros(n, dtype=b.dtype)
     r0 = b
-    p0 = r0
+    z0 = m_inv * r0
+    p0 = z0
+    rz0 = jnp.dot(r0, z0)
     rsold0 = jnp.dot(r0, r0)
     # The float64 floor underflows to zero for float32 inputs. Keep a
     # representable positive divisor without changing the float64 guard.
@@ -158,14 +171,14 @@ def _conjugate_gradient_solve(
     # Relative to ||J^T f||^2 so the stopping rule is invariant to the scale of f
     tol_sq = tol * tol * rsold0
 
-    init_state = (x0, r0, p0, rsold0, 0)
+    init_state = (x0, r0, p0, rz0, rsold0, 0)
 
-    def cond_fn(state: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, int]):
-        _x, _r, _p, rsold, i = state
+    def cond_fn(state):
+        _x, _r, _p, _rz, rsold, i = state
         return (i < CG_MAX_ITERATIONS) & (rsold > tol_sq)
 
-    def body_fn(state: tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, int]):
-        x, r, p, rsold, i = state
+    def body_fn(state):
+        x, r, p, rz, _rsold, i = state
 
         Jp = J_scaled @ p
         JTJp = J_scaled.T @ Jp
@@ -174,34 +187,87 @@ def _conjugate_gradient_solve(
         pAp = jnp.dot(p, Ap)
         # Positivity guard only: an absolute floor would be scale dependent
         safe_pAp = jnp.where(pAp > cg_tiny, pAp, cg_tiny)
-        alpha_cg = rsold / safe_pAp
+        alpha_cg = rz / safe_pAp
 
         x_new = x + alpha_cg * p
         r_new = r - alpha_cg * Ap
+        z_new = m_inv * r_new
+        rz_new = jnp.dot(r_new, z_new)
         rsnew = jnp.dot(r_new, r_new)
 
-        safe_rsold = jnp.where(rsold > cg_tiny, rsold, 1.0)
-        beta = jnp.where(rsold > cg_tiny, rsnew / safe_rsold, 0.0)
-        p_new = r_new + beta * p
+        safe_rz = jnp.where(rz > cg_tiny, rz, 1.0)
+        beta = jnp.where(rz > cg_tiny, rz_new / safe_rz, 0.0)
+        p_new = z_new + beta * p
 
-        return (x_new, r_new, p_new, rsnew, i + 1)
+        return (x_new, r_new, p_new, rz_new, rsnew, i + 1)
 
     final_state = lax.while_loop(cond_fn, body_fn, init_state)
-    x_final, _r_final, _p_final, rsold_final, n_iter = final_state
+    x_final, _r_final, _p_final, _rz_final, rsold_final, n_iter = final_state
 
-    return x_final * b_scale, jnp.sqrt(rsold_final) * b_scale, n_iter
+    return x_final * b_scale, jnp.sqrt(rsold_final) * b_scale, jnp.asarray(n_iter)
 
 
 @jit
 def _seed_lm_alpha(g_norm: jnp.ndarray, alpha: float, Delta: float) -> jnp.ndarray:
     """Standard LM initial damping estimate (||J^T f|| / Delta, per More 1978).
 
-    Used only when alpha is not already positive -- see the CG/lsmr trust
-    region solvers below for why alpha reaches them still at its unset
-    value of 0.0 on every call.
+    Used only when alpha is not already positive. With alpha unset it is an
+    upper bound on the boundary damping (||p(g_norm/Delta)|| <= Delta), the
+    safeguard for the CG trust-region Newton iteration below.
     """
     seed_alpha = jnp.where(Delta > 0, g_norm / Delta, 0.0)
     return jnp.where(alpha > 0, alpha, seed_alpha)
+
+
+TR_NEWTON_MAX_ITERATIONS = 10  # More-Hebden iterations for the boundary step
+TR_NEWTON_RTOL = 0.1  # stop once ||p|| <= (1 + rtol) * Delta
+
+
+def _cg_trust_region_step(
+    J_scaled: jnp.ndarray, f: jnp.ndarray, Delta: float | jnp.ndarray, tol: float
+) -> jnp.ndarray:
+    """argmin ||J_scaled p + f|| s.t. ||p|| <= Delta, with CG inner solves.
+
+    Gauss-Newton step if it fits; otherwise More-Hebden Newton on
+    1/||p(alpha)|| - 1/Delta from alpha=0, which approaches the boundary
+    damping from below (||p|| >= Delta), then the step is put on the boundary.
+    A single damped solve lands inside the region and the radius never grows.
+    """
+    b = -J_scaled.T @ f
+    p_gn, _, _ = _cg_core(J_scaled, b, jnp.asarray(0.0, b.dtype), tol)
+    p_gn_norm = jnp.linalg.norm(p_gn)
+    alpha_upper = _seed_lm_alpha(jnp.linalg.norm(b), 0.0, Delta)
+
+    def boundary_step():
+        def cond_fn(state):
+            _alpha, _p, p_norm, i = state
+            return (i < TR_NEWTON_MAX_ITERATIONS) & (
+                p_norm > (1.0 + TR_NEWTON_RTOL) * Delta
+            )
+
+        def body_fn(state):
+            alpha, p, p_norm, i = state
+            q, _, _ = _cg_core(J_scaled, p, alpha, tol)  # q = (A + alpha I)^-1 p
+            pq = jnp.dot(p, q)
+            # pq > 0 for a nonzero p; the guard only keeps a degenerate case finite
+            ratio = jnp.where(pq > 0, p_norm**2 / jnp.where(pq > 0, pq, 1.0), 0.0)
+            alpha_new = alpha + ratio * (p_norm - Delta) / Delta
+            # Newton from the left increases alpha toward alpha* <= alpha_upper;
+            # inexact CG solves can break that, so fall back to the safe bound
+            alpha_new = jnp.where(
+                alpha_new > alpha, jnp.minimum(alpha_new, alpha_upper), alpha_upper
+            )
+            p_new, _, _ = _cg_core(J_scaled, b, alpha_new, tol)
+            return alpha_new, p_new, jnp.linalg.norm(p_new), i + 1
+
+        init = (jnp.asarray(0.0, b.dtype), p_gn, p_gn_norm, 0)
+        _alpha, p, p_norm, _i = lax.while_loop(cond_fn, body_fn, init)
+        # Shrink onto the boundary only: lengthening a safeguard step can raise the model
+        return p * jnp.minimum(
+            1.0, Delta / jnp.maximum(p_norm, jnp.finfo(p.dtype).tiny)
+        )
+
+    return lax.cond(p_gn_norm <= Delta, lambda: p_gn, boundary_step)
 
 
 @jit
@@ -214,33 +280,8 @@ def _solve_tr_subproblem_cg(
     tol: float = DEFAULT_TOLERANCE,
 ) -> jnp.ndarray:
     """Solve trust region subproblem using conjugate gradient."""
-    p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(J, f, d, 0.0, tol)
-
-    p_gn_norm = jnp.linalg.norm(p_gn)
-
-    def compute_regularized():
-        # alpha is meant to carry the LM damping parameter forward across
-        # outer iterations via a multiplicative rescale (trf.py), but the
-        # value this CG solver seeds internally is never written back to
-        # that outer-loop alpha, so alpha reaches here still at its unset
-        # value of 0.0 on every call, and 0 * anything is still 0 --
-        # without a nonzero seed here, this branch always regularizes with
-        # alpha=0, silently degrading to the unregularized Gauss-Newton
-        # solution merely rescaled to the trust region boundary.
-        g_norm = jnp.linalg.norm((J * d[None, :]).T @ f)
-        effective_alpha = _seed_lm_alpha(g_norm, alpha, Delta)
-        p_reg, _, _ = _conjugate_gradient_solve(J, f, d, effective_alpha, tol)
-        p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
-        # If regularized step is within trust region, use it directly;
-        # otherwise scale to trust region boundary (no arbitrary clamping)
-        scale = jnp.where(p_reg_norm <= Delta, 1.0, Delta / p_reg_norm)
-        return scale * p_reg
-
-    return lax.cond(
-        p_gn_norm <= Delta,
-        lambda: p_gn,
-        compute_regularized,
-    )
+    del alpha  # boundary damping is solved for each call; see _cg_trust_region_step
+    return _cg_trust_region_step(J * d[None, :], f, Delta, tol)
 
 
 @jit
@@ -255,43 +296,10 @@ def _solve_tr_subproblem_cg_bounds(
     tol: float = DEFAULT_TOLERANCE,
 ) -> jnp.ndarray:
     """Solve trust region subproblem with bounds using conjugate gradient."""
+    del alpha  # see _solve_tr_subproblem_cg
     J_augmented = jnp.concatenate([J * d[None, :], J_diag])
     f_augmented = jnp.concatenate([f, f_zeros])
-    d_augmented = jnp.ones(J_augmented.shape[1], dtype=J_augmented.dtype)
-
-    p_gn, _residual_norm, _n_iter = _conjugate_gradient_solve(
-        J_augmented,
-        f_augmented,
-        d_augmented,
-        0.0,
-        tol,
-    )
-
-    p_gn_norm = jnp.linalg.norm(p_gn)
-
-    def compute_regularized():
-        # See _solve_tr_subproblem_cg for why this seed is needed on every
-        # call (alpha reaches here still at its unset value of 0.0).
-        g_norm = jnp.linalg.norm(J_augmented.T @ f_augmented)
-        effective_alpha = _seed_lm_alpha(g_norm, alpha, Delta)
-        p_reg, _, _ = _conjugate_gradient_solve(
-            J_augmented,
-            f_augmented,
-            d_augmented,
-            effective_alpha,
-            tol,
-        )
-        p_reg_norm = jnp.maximum(jnp.linalg.norm(p_reg), 1e-10)
-        # If regularized step is within trust region, use it directly;
-        # otherwise scale to trust region boundary (no arbitrary clamping)
-        scale = jnp.where(p_reg_norm <= Delta, 1.0, Delta / p_reg_norm)
-        return scale * p_reg
-
-    return lax.cond(
-        p_gn_norm <= Delta,
-        lambda: p_gn,
-        compute_regularized,
-    )
+    return _cg_trust_region_step(J_augmented, f_augmented, Delta, tol)
 
 
 @jit

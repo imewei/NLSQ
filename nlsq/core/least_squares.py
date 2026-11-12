@@ -1744,6 +1744,12 @@ class LeastSquares:
 
         m = f0.size
 
+        if method == "lm" and m < n:
+            raise TypeError(
+                f"Improper input: func input vector length N={n} must not exceed "
+                f"func output vector length M={m}"
+            )
+
         # Step 6: Check and fix initial Jacobian
         J0 = self._check_and_fix_initial_jacobian(J0, m, n)
 
