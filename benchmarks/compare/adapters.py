@@ -136,7 +136,7 @@ class _NLSQ(_Base):
 
 
 class _NLSQLarge(_Base):
-    """`curve_fit_large` default path (chunked precision-weighted GLS above 1M points)."""
+    """`curve_fit_large` default path (exact full-data streaming LM at or above size_threshold)."""
 
     name, dist = "nlsq_large", "nlsq"
     capabilities = Capabilities(
@@ -145,13 +145,13 @@ class _NLSQLarge(_Base):
         True,
         False,
         True,
-        "chunked GLS above 1M points: not a full-batch fit; reports no convergence flag",
+        "exact full-data streaming LM above size_threshold (Auto.exact; chunked GLS only with strategy=Chunked()); reports no convergence flag, stalls raise ExactSolverError",
     )
 
     def _fit(self, problem, x, y):
         # same call as benchmarks/results/2026-10-31/nlsq_large.py: library defaults for
-        # memory_limit_gb and chunking. The chunked path returns no status, so
-        # `converged` is True unless it raises.
+        # memory_limit_gb and chunking. No status is returned, so `converged` is
+        # True unless it raises (the exact path raises ExactSolverError on a stall).
         popt, _ = nlsq.curve_fit_large(
             _jnp_model(problem),
             x,

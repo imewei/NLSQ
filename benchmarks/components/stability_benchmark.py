@@ -46,12 +46,13 @@ def benchmark_svd_threshold(
     from nlsq.stability import NumericalStabilityGuard
 
     # Create test Jacobian
-    J = jnp.ones((m, n)) + 0.01 * jnp.random.randn(m, n)
+    J = jnp.asarray(1.0 + 0.01 * np.random.default_rng(0).standard_normal((m, n)))
 
     # Benchmark with SVD computation
     guard_with_svd = NumericalStabilityGuard(
         max_jacobian_elements_for_svd=m * n + 1  # Force SVD
     )
+    guard_with_svd.check_and_fix_jacobian(J)  # untimed warmup (compile)
     start = time.perf_counter()
     _J_fixed_svd, issues_svd = guard_with_svd.check_and_fix_jacobian(J)
     time_with_svd = time.perf_counter() - start
@@ -60,6 +61,7 @@ def benchmark_svd_threshold(
     guard_skip_svd = NumericalStabilityGuard(
         max_jacobian_elements_for_svd=m * n - 1  # Force skip
     )
+    guard_skip_svd.check_and_fix_jacobian(J)  # untimed warmup (compile)
     start = time.perf_counter()
     _J_fixed_skip, issues_skip = guard_skip_svd.check_and_fix_jacobian(J)
     time_skip_svd = time.perf_counter() - start
@@ -81,6 +83,7 @@ def benchmark_svd_threshold(
 def benchmark_stability_mode(
     problem_size: Literal["small", "medium", "large"] = "medium",
     n_iterations: int = 50,
+    n_repeats: int = 5,
 ) -> dict:
     """Benchmark curve fitting with/without stability mode.
 
@@ -90,6 +93,8 @@ def benchmark_stability_mode(
         Problem size: 'small' (1K pts), 'medium' (100K pts), 'large' (1M pts)
     n_iterations : int
         Expected number of optimization iterations
+    n_repeats : int
+        Timed repeats per variant (median reported, after one untimed warmup)
 
     Returns
     -------
@@ -104,7 +109,7 @@ def benchmark_stability_mode(
     xdata = np.linspace(0, 5, m)
     true_params = [1.0, 0.5, 0.1]
     ydata = true_params[0] * np.exp(-true_params[1] * xdata) + true_params[2]
-    ydata += 0.01 * np.random.randn(m)  # Add noise
+    ydata += 0.01 * np.random.default_rng(0).standard_normal(m)  # Add noise
 
     # Define model
     def model(x, a, b, c):
@@ -112,22 +117,19 @@ def benchmark_stability_mode(
 
     p0 = [0.8, 0.3, 0.0]
 
-    # Benchmark WITHOUT stability mode
-    start = time.perf_counter()
-    result_no_stab = curve_fit(model, xdata, ydata, p0, stability=False)
-    time_no_stability = time.perf_counter() - start
+    def timed(**kwargs):
+        """Median wall time over repeats after one untimed (compile) warmup."""
+        result = curve_fit(model, xdata, ydata, p0, **kwargs)  # warmup
+        times = []
+        for _ in range(n_repeats):
+            start = time.perf_counter()
+            result = curve_fit(model, xdata, ydata, p0, **kwargs)
+            times.append(time.perf_counter() - start)
+        return float(np.median(times)), result
 
-    # Benchmark WITH stability mode (init-only checks)
-    start = time.perf_counter()
-    result_with_stab = curve_fit(model, xdata, ydata, p0, stability="check")
-    time_with_stability = time.perf_counter() - start
-
-    # Benchmark WITH rescale_data=False
-    start = time.perf_counter()
-    result_no_rescale = curve_fit(
-        model, xdata, ydata, p0, stability="check", rescale_data=False
-    )
-    time_no_rescale = time.perf_counter() - start
+    time_no_stability, result_no_stab = timed(stability=False)
+    time_with_stability, result_with_stab = timed(stability="check")
+    time_no_rescale, result_no_rescale = timed(stability="check", rescale_data=False)
 
     return {
         "problem_size": problem_size,

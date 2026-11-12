@@ -24,12 +24,14 @@ import json
 import platform
 import sys
 import time
+from collections import OrderedDict
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+import nlsq.core.least_squares as _least_squares
 from benchmarks.common.constants import (
     DEFAULT_DATA_SIZES,
     TARGET_CACHE_HIT_RATE,
@@ -37,7 +39,49 @@ from benchmarks.common.constants import (
     TARGET_WARM_JIT_TIME_MS,
 )
 from nlsq import curve_fit
-from nlsq.caching.unified_cache import clear_cache, get_cache_stats
+from nlsq.caching.unified_cache import clear_cache as _clear_unified_cache
+
+
+class _CountingWrapperCache(OrderedDict):
+    """Wrapper-cache dict that counts lookups.
+
+    ``curve_fit`` does not use the ``unified_cache`` (its stats stay 0/0); the
+    cache it actually reuses across calls is ``least_squares._wrapper_cache``
+    (traced-model autodiff wrappers keyed by jaxpr digest and input shapes).
+    """
+
+    hits = 0
+    misses = 0
+
+    def get(self, key, default=None):
+        if key in self:
+            self.hits += 1
+        else:
+            self.misses += 1
+        return super().get(key, default)
+
+
+def clear_cache() -> None:
+    """Reset both caches and install a fresh lookup counter on the wrapper cache."""
+    _clear_unified_cache()
+    _least_squares.clear_wrapper_cache()
+    _least_squares._wrapper_cache = _CountingWrapperCache()
+
+
+def get_cache_stats() -> dict:
+    """Hit/miss stats of the wrapper cache that ``curve_fit`` actually uses."""
+    cache = _least_squares._wrapper_cache
+    if not isinstance(cache, _CountingWrapperCache):
+        raise RuntimeError("call clear_cache() first to install the lookup counter")
+    total = cache.hits + cache.misses
+    return {
+        "hits": cache.hits,
+        "misses": cache.misses,
+        "compilations": cache.misses,  # each miss builds (and later jit-compiles) wrappers
+        "cache_size": len(cache),
+        "total_requests": total,
+        "hit_rate": cache.hits / total if total else 0.0,
+    }
 
 
 def exponential_model(x: jnp.ndarray, a: float, b: float, c: float) -> jnp.ndarray:
