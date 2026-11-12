@@ -16,6 +16,19 @@ from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 
+def test_scan_cost_uses_changed_data_with_same_fingerprint():
+    optimizer = AdaptiveHybridStreamingOptimizer(HybridStreamingConfig(chunk_size=3))
+    optimizer.normalized_model = lambda x, a: a * x
+    optimizer._setup_scan_functions()
+    x = jnp.array([0.0, 1.0, 2.0, 3.0])
+    y = jnp.array([0.0, 1.0, 2.0, 3.0])
+    changed_y = jnp.array([0.0, 2.0, 1.0, 3.0])
+    params = jnp.array([1.0])
+
+    assert optimizer._compute_cost_scan(params, x, y) == 0.0
+    assert optimizer._compute_cost_scan(params, x, changed_y) == 2.0
+
+
 class TestPartiallyUnboundedNormalization:
     """A: 'bounds' strategy produced NaN for a partially/fully unbounded param."""
 
@@ -312,8 +325,8 @@ class TestFitCallbackInvoked:
 
         calls = []
 
-        def callback(params, loss, iteration):
-            calls.append((iteration, float(loss)))
+        def callback(iteration, cost, params, info):
+            calls.append((iteration, float(cost)))
 
         optimizer.fit(
             data_source=(x, y),
@@ -340,7 +353,7 @@ class TestFitCallbackInvoked:
         x = jnp.linspace(0, 1, 20)
         y = 2.0 * x + 1.0
 
-        def bad_callback(params, loss, iteration):
+        def bad_callback(iteration, cost, params, info):
             raise RuntimeError("user callback bug")
 
         result = optimizer.fit(
@@ -769,3 +782,66 @@ class TestMultiFeatureModelJacobian:
 
         jtj, _, _ = optimizer._accumulate_pass(params, x, y)
         np.testing.assert_allclose(np.asarray(jtj), expected, rtol=1e-8)
+
+
+class TestRejectedStepShrinksBelowStepNorm:
+    """A rejected Phase 2 step only halved the trust radius; with
+    ||step|| < radius the same step was re-proposed until the stall reset
+    restored the radius, so Phase 2 cycled to max iterations at a wrong point.
+    """
+
+    def test_bounded_large_residual_fit_converges(self):
+        import warnings
+
+        from nlsq import curve_fit
+
+        def model(x, a, b, c):
+            return a * jnp.exp(-b * x) + c
+
+        n = 5003
+        x = np.linspace(0.0, 5.0, n)
+        rng = np.random.default_rng(0)
+        y = 2.0 * np.exp(-0.5 * x) + 0.3 + rng.normal(0.0, 0.01, n)
+        bounds = ([0.0, 0.0, 0.0], [1.5, 5.0, 5.0])
+        ref, _ = curve_fit(model, x, y, p0=[1.0, 1.0, 1.0], bounds=bounds)
+
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(
+                chunk_size=1000,
+                gauss_newton_tol=1e-12,
+                verbose=0,
+                enable_checkpoints=False,
+            ),
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            result = optimizer.fit(
+                (x, y), model, [1.0, 1.0, 1.0], bounds=bounds, verbose=0
+            )
+        reason = result["streaming_diagnostics"]["gauss_newton_diagnostics"][
+            "convergence_reason"
+        ]
+        assert "Maximum iterations" not in reason
+        np.testing.assert_allclose(np.asarray(result["x"]), ref, rtol=1e-4)
+
+
+class TestLearningRateScheduleNotSilentlyIgnored:
+    """use_learning_rate_schedule had no consumer: enabling it was a no-op."""
+
+    @staticmethod
+    def _fit(**cfg):
+        optimizer = AdaptiveHybridStreamingOptimizer(
+            HybridStreamingConfig(chunk_size=64, verbose=0, **cfg),
+        )
+        x = np.linspace(0.0, 1.0, 100)
+        return optimizer.fit(
+            (x, 2.0 + 3.0 * x), lambda x, a, b: a + b * x, [1.0, 1.0], verbose=0
+        )
+
+    def test_enabled_schedule_raises(self):
+        with pytest.raises(NotImplementedError, match="use_learning_rate_schedule"):
+            self._fit(use_learning_rate_schedule=True)
+
+    def test_default_config_fits(self):
+        result = self._fit()
+        np.testing.assert_allclose(np.asarray(result["x"]), [2.0, 3.0], atol=1e-4)

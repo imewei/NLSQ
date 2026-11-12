@@ -218,12 +218,13 @@ class Hybrid:
     ----------
     config : HybridStreamingConfig or None
         Hybrid streaming configuration; ``None`` uses the defaults.
-    verbose : int
-        Verbosity level.
+    verbose : int or None
+        Verbosity level (0 silent; 1 progress; 2 debug). ``None`` (default) uses
+        ``config.verbose`` when a config is given and is silent otherwise.
     """
 
     config: HybridStreamingConfig | None = None
-    verbose: int = 1
+    verbose: int | None = None
 
 
 @dataclass(frozen=True)

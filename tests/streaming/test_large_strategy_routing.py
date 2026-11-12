@@ -334,7 +334,7 @@ def expect_hybrid_fit(
     sigma_is: bool = False,
     absolute_sigma: bool = False,
     callback: Any = None,
-    verbose: int = 1,
+    verbose: int = 0,
 ) -> None:
     n = call.named
     assert set(n) == {
@@ -2160,7 +2160,7 @@ def test_hybrid_routes_reject_unsupported_kwargs(rec: Recorder) -> None:
     tolerances and callback (on curve_fit_large) are rejected, never forwarded."""
     with pytest.raises(TypeError, match="Unrecognized keyword"):
         nlsq.curve_fit_large(MODEL, X, Y, p0=P0, method="hybrid_streaming", gtol=1e-3)
-    with pytest.raises(TypeError, match="Unrecognized keyword"):
+    with pytest.raises(TypeError, match="callback is not supported"):
         nlsq.curve_fit_large(
             MODEL, X, Y, p0=P0, method="hybrid_streaming", callback=_CALLBACK
         )

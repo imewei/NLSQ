@@ -233,7 +233,7 @@ class TestCallbackReceivesPhysicalParams:
             _exp_model,
             [8.0, 0.2],
             verbose=0,
-            callback=lambda p, loss, it: seen.append(np.asarray(p)),
+            callback=lambda it, cost, p, info: seen.append(np.asarray(p)),
         )
         assert seen
         # normalized p0 would be [1, 1]; physical p0 is [8, 0.2]

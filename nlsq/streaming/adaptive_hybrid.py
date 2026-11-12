@@ -22,6 +22,7 @@ This implementation focuses on Phase 0 setup logic and phase tracking infrastruc
 
 from __future__ import annotations
 
+import inspect
 import time
 from collections import deque
 from collections.abc import Callable
@@ -33,6 +34,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax  # type: ignore[import-not-found]
 
+from nlsq.callbacks import StopOptimization, call_user_callback
 from nlsq.core._option_checks import coerce_absolute_sigma
 from nlsq.core.covariance import pcov_from_normal, warn_not_estimated
 from nlsq.global_optimization.config import GlobalOptimizationConfig
@@ -63,6 +65,17 @@ _lazy_imports: dict = {}
 # Module-level logger for warmup defense diagnostics
 _logger = get_logger("adaptive_hybrid_streaming")
 
+# Same text as least_squares.TERMINATION_MESSAGES[-2] (TRF's callback stop).
+CALLBACK_STOP_MESSAGE = "Stopped because `callback` function raised `StopOptimization`."
+# convergence_reason -> scipy-style status (1 gtol, 2 ftol, 0 max iterations,
+# -2 callback stop); success is status != 0 with no phase failure.
+_REASON_STATUS = {
+    "Gradient norm below tolerance": 1,
+    "Cost change below tolerance": 2,
+    "Maximum iterations reached": 0,
+    CALLBACK_STOP_MESSAGE: -2,
+}
+
 # Re-export telemetry classes for backwards compatibility
 __all__ = [
     "AdaptiveHybridStreamingOptimizer",
@@ -86,6 +99,36 @@ def _fill_padded_rows(x_chunk: jnp.ndarray, mask: jnp.ndarray) -> jnp.ndarray:
     """
     mask_expanded = mask.reshape((-1,) + (1,) * (x_chunk.ndim - 1)) > 0
     return jnp.where(mask_expanded, x_chunk, x_chunk[0])
+
+
+def _reject_legacy_callback(callback: Callable | None) -> None:
+    """Raise one clear ``TypeError`` for a callback that cannot take the contract.
+
+    ``call_user_callback`` would otherwise fail on every invocation (swallowed and
+    logged), e.g. for the old ``callback(params, loss, iteration)`` form.
+    Uninspectable callables and ``*args``/``**kwargs`` signatures are accepted.
+    """
+    if callback is None:
+        return
+    try:
+        sig = inspect.signature(callback, follow_wrapped=False)
+    except (TypeError, ValueError):
+        return
+    try:
+        sig.bind(0, 0.0, None, None)
+        return
+    except TypeError:
+        pass
+    try:
+        sig.bind(iteration=0, cost=0.0, params=None, info=None)
+        return
+    except TypeError:
+        pass
+    raise TypeError(
+        "fit() callback must accept (iteration, cost, params, info), got "
+        f"signature {sig}; the legacy callback(params, loss, iteration) form is "
+        "no longer supported."
+    )
 
 
 class AdaptiveHybridStreamingOptimizer:
@@ -243,6 +286,10 @@ class AdaptiveHybridStreamingOptimizer:
         # User progress callback set by fit(); invoked every
         # config.callback_frequency iterations in Phase 1 and Phase 2.
         self._fit_callback: Callable | None = None
+        # Set when the callback raises StopOptimization; both loops then exit.
+        self._stop_requested = False
+        # Phase 1 iterations, so Phase 2 callback iterations continue from them.
+        self._callback_iter_offset = 0
 
         # Pre-compiled cost-only function (set up in _setup_cost_fn)
         # Used for efficient new_cost evaluation in Gauss-Newton iterations
@@ -255,23 +302,39 @@ class AdaptiveHybridStreamingOptimizer:
     def _invoke_fit_callback(
         self,
         params: jnp.ndarray,
-        loss: float,
+        cost: float,
         iteration: int,
+        phase: int,
+        gradient_norm: float,
     ) -> None:
         """Call the user progress callback, if any, at the configured frequency.
 
-        A callback exception must not abort the fit -- it's user code we
-        don't control, invoked from inside a hot loop.
+        Same contract as ``curve_fit``/TRF: ``callback(iteration, cost, params,
+        info)`` via :func:`nlsq.callbacks.call_user_callback`, with ``iteration``
+        1-based and monotonic across Phase 1 and Phase 2, ``cost`` = 0.5 * sum
+        of squared residuals, ``params`` physical (denormalized) NumPy values,
+        and ``info`` = ``{"phase", "gradient_norm"}`` (gradient in normalized
+        coordinates). ``StopOptimization`` ends the fit at the current best
+        point (status -2); any other callback exception is logged, not fatal.
         """
         if self._fit_callback is None:
             return
-        if (iteration + 1) % max(1, self.config.callback_frequency) != 0:
+        if iteration % max(1, self.config.callback_frequency) != 0:
             return
         try:
             # Callers see physical parameters, not the optimizer's normalized ones.
             if self.normalizer is not None:
                 params = self.normalizer.denormalize(params)
-            self._fit_callback(params, loss, iteration)
+            call_user_callback(
+                self._fit_callback,
+                iteration,
+                float(cost),
+                np.asarray(params),
+                {"phase": phase, "gradient_norm": float(gradient_norm)},
+            )
+        except StopOptimization:
+            _logger.info("Optimization stopped by callback (StopOptimization)")
+            self._stop_requested = True
         except Exception as exc:
             # exc_info=True preserves the traceback pointing into the user's
             # callback -- str(exc) alone (the previous behavior) discarded
@@ -326,11 +389,42 @@ class AdaptiveHybridStreamingOptimizer:
             self.best_cost_global = ssr_equivalent
             self.best_params_global = params
 
+    def _zero_p0_scales(
+        self, model: Callable, x_sample: jnp.ndarray | None
+    ) -> jnp.ndarray | None:
+        """Scales for parameters whose p0 is ~0, from Jacobian column norms at p0.
+
+        |p0| gives no magnitude for a zero entry, and the old fallback of 1 left
+        its normalized Jacobian column orders of magnitude off the others
+        (e.g. an offset c=0 next to an amplitude 2e8), so the trust region could
+        not move it. Each zero-p0 parameter is scaled so its normalized column
+        norm equals the median normalized column norm of the nonzero-p0 ones.
+        Returns None (scale 1 everywhere) when no such reference exists.
+        """
+        p0 = self.original_p0
+        abs_p0 = jnp.abs(p0)
+        zero = abs_p0 < jnp.finfo(jnp.float64).eps * 10  # as _p0_magnitude_scale
+        if x_sample is None or not bool(jnp.any(zero)) or bool(jnp.all(zero)):
+            return None
+        try:
+            jac = jax.jacfwd(lambda p: model(x_sample, *p))(p0)
+            col = jnp.linalg.norm(jnp.reshape(jac, (-1, p0.shape[0])), axis=0)
+        except Exception as exc:  # heuristic only; keep the scale-1 fallback
+            _logger.debug(f"zero-p0 scale probe failed: {exc}")
+            return None
+        ref = col * abs_p0
+        ok = ~zero & jnp.isfinite(ref) & (ref > 0)
+        if not bool(jnp.any(ok)):
+            return None
+        target = jnp.median(ref[ok])
+        return jnp.where(zero & (col > 0), target / col, jnp.nan)
+
     def _setup_normalization(
         self,
         model: Callable,
         p0: jnp.ndarray,
         bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
+        x_sample: jnp.ndarray | None = None,
     ) -> None:
         """Setup parameter normalization (Phase 0).
 
@@ -348,6 +442,9 @@ class AdaptiveHybridStreamingOptimizer:
         bounds : tuple of array_like, optional
             Parameter bounds as (lb, ub) where lb and ub are arrays of shape
             (n_params,). If None, no bounds are applied.
+        x_sample : array_like, optional
+            Representative xdata rows used to scale parameters whose p0 is 0
+            (see :meth:`_zero_p0_scales`). Without it they get scale 1.
 
         Notes
         -----
@@ -382,6 +479,7 @@ class AdaptiveHybridStreamingOptimizer:
             p0=self.original_p0,
             bounds=bounds,
             strategy=strategy,
+            zero_p0_scales=self._zero_p0_scales(model, x_sample),
         )
 
         # Create NormalizedModelWrapper
@@ -564,7 +662,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Optionally warm up the compiled function with a small test
         # This triggers compilation eagerly rather than on first use
-        if self.config.verbose >= 2:
+        if self._effective_verbose() >= 2:
             _logger.debug("Pre-compiled Jacobian function for Phase 2")
 
         # Also set up the cost-only function
@@ -624,7 +722,7 @@ class AdaptiveHybridStreamingOptimizer:
         # JIT compile the chunk cost function
         self._cost_fn_compiled = jax.jit(compute_chunk_cost)
 
-        if self.config.verbose >= 2:
+        if self._effective_verbose() >= 2:
             _logger.debug("Pre-compiled cost function for Phase 2")
 
         # Also set up scan functions for chunked cost evaluation
@@ -681,7 +779,7 @@ class AdaptiveHybridStreamingOptimizer:
         self._scan_cost_fn = jax.jit(scan_cost, static_argnums=(4,))
         self._cost_scan_body_compiled = True
 
-        if self.config.verbose >= 2:
+        if self._effective_verbose() >= 2:
             _logger.debug("Scan-based cost evaluation enabled for Phase 2")
 
     def _use_scan_for_accumulation(self) -> bool:
@@ -721,29 +819,6 @@ class AdaptiveHybridStreamingOptimizer:
             return platform in ("gpu", "cuda", "rocm", "tpu")
         return False  # Default to loops if no devices detected
 
-    @staticmethod
-    def _content_fingerprint(data: jnp.ndarray) -> tuple:
-        """Cheap content fingerprint used to invalidate _padded_cache.
-
-        Not a full hash (would need an O(n) host transfer on every call for
-        100M+-point datasets), but shape + first/last/sum/sum-of-squares
-        together make an accidental collision between two distinct real
-        datasets vanishingly unlikely -- sum-of-squares is nearly free here
-        since sum() already forces an O(n) device reduction.
-        """
-        flat = data.ravel()
-        if flat.size == 0:
-            return (data.shape, 0.0, 0.0, 0.0, 0.0)
-        return (
-            data.shape,
-            float(flat[0]),
-            float(flat[-1]),
-            float(jnp.sum(data)),
-            # vdot fuses the multiply+reduce into one pass without
-            # materializing a full-size (data * data) temporary.
-            float(jnp.vdot(flat, flat)),
-        )
-
     def _get_padded_data(
         self,
         x_data: jnp.ndarray,
@@ -767,15 +842,10 @@ class AdaptiveHybridStreamingOptimizer:
         n_chunks : int
             Number of chunks
         """
-        # Check cache validity using data content hash (not id() which can be
-        # recycled by GC -- see clear_cache()/_padded_cache history for why
-        # identity-based invalidation was rejected).
         cache = getattr(self, "_padded_cache", None)
         if cache is not None:
-            c_hash_x, c_hash_y, c_cs, c_xp, c_yp, c_np, c_nc, c_x, c_y = cache
-            # jax arrays are immutable and the cache holds strong refs, so
-            # identity (no id() recycling possible) implies equal content --
-            # skips the O(n) fingerprint reductions + host syncs per call.
+            c_cs, c_xp, c_yp, c_np, c_nc, c_x, c_y = cache
+            # JAX arrays are immutable and strong references prevent id reuse.
             if (
                 c_x is x_data
                 and c_y is y_data
@@ -784,11 +854,6 @@ class AdaptiveHybridStreamingOptimizer:
                 and isinstance(y_data, jax.Array)
             ):
                 return c_xp, c_yp, c_np, c_nc
-            x_hash = self._content_fingerprint(x_data)
-            y_hash = self._content_fingerprint(y_data)
-            if c_hash_x == x_hash and c_hash_y == y_hash and c_cs == chunk_size:
-                return c_xp, c_yp, c_np, c_nc
-
         n_points = x_data.shape[0]
         n_chunks = (n_points + chunk_size - 1) // chunk_size
         pad_size = n_chunks * chunk_size - n_points
@@ -803,11 +868,7 @@ class AdaptiveHybridStreamingOptimizer:
             x_padded = x_data
             y_padded = y_data
 
-        x_hash = self._content_fingerprint(x_data)
-        y_hash = self._content_fingerprint(y_data)
         self._padded_cache = (
-            x_hash,
-            y_hash,
             chunk_size,
             x_padded,
             y_padded,
@@ -1267,6 +1328,9 @@ class AdaptiveHybridStreamingOptimizer:
         the step is scaled by lbfgs_initial_step_size to prevent overshooting
         when the Hessian approximation is poor.
         """
+        # Denominator of the per-step telemetry rates (clip, line-search failure).
+        get_defense_telemetry().record_lbfgs_iteration()
+
         # Validate input parameters
         self._validate_numerics(params, context="at L-BFGS step input")
 
@@ -1328,7 +1392,7 @@ class AdaptiveHybridStreamingOptimizer:
             line_search_failed = False
         except Exception as e:
             # Line search can fail in some cases
-            if self.config.verbose >= 2:
+            if self._effective_verbose() >= 2:
                 _logger.warning(f"L-BFGS line search failed: {e}")
             # Fall back to gradient descent step
             updates = -self.config.lbfgs_initial_step_size * grads
@@ -1678,7 +1742,7 @@ class AdaptiveHybridStreamingOptimizer:
         self._warmup_relative_loss = relative_loss
 
         # Log diagnostic info
-        if self.config.verbose >= 2:
+        if self._effective_verbose() >= 2:
             _logger.debug(
                 f"Phase 1 initial assessment: loss={initial_loss:.6e}, "
                 f"y_var={y_variance:.6e}, relative_loss={relative_loss:.6e}",
@@ -1712,7 +1776,7 @@ class AdaptiveHybridStreamingOptimizer:
             }
             self.phase_history.append(phase_record)
 
-            if self.config.verbose >= 1:
+            if self._effective_verbose() >= 1:
                 _logger.info(
                     f"Phase 1: Skipping L-BFGS warmup - warm start detected "
                     f"(relative_loss={relative_loss:.4e})",
@@ -1772,7 +1836,7 @@ class AdaptiveHybridStreamingOptimizer:
             # Record Layer 2 telemetry
             telemetry.record_layer2_lr_mode(mode=lr_mode, relative_loss=relative_loss)
 
-            if self.config.verbose >= 2:
+            if self._effective_verbose() >= 2:
                 _logger.debug(
                     f"Phase 1 L-BFGS adaptive step: mode={lr_mode}, step={initial_step:.2f}, "
                     f"relative_loss={relative_loss:.4e}",
@@ -1840,7 +1904,7 @@ class AdaptiveHybridStreamingOptimizer:
             )
 
             # Loss increased beyond tolerance - abort and return best
-            if self.config.verbose >= 1:
+            if self._effective_verbose() >= 1:
                 _logger.warning(
                     f"Phase 1: Cost increase guard triggered at iteration "
                     f"{iteration + 1}. Loss {loss_value:.6e} > "
@@ -2176,12 +2240,25 @@ class AdaptiveHybridStreamingOptimizer:
             # is the loss AT params_before_step (see docstring of
             # _lbfgs_step), so pair it with that point, not the post-step
             # current_params, to keep callback telemetry internally consistent.
-            self._invoke_fit_callback(params_before_step, loss_value, iteration)
+            # The warmup loss is a mean; 0.5 * n * loss is 0.5 * SSR (exact for the
+            # default unweighted, unregularized loss), the Phase 2/TRF cost unit.
+            self._invoke_fit_callback(
+                params_before_step,
+                0.5 * len(x_data) * loss_value,
+                iteration + 1,
+                phase=1,
+                gradient_norm=grad_norm,
+            )
+            if self._stop_requested:
+                stop_iterations = iteration + 1
+                break
 
             # Update previous loss
             prev_loss = loss_value
+        else:
+            stop_iterations = None
 
-        # Maximum iterations reached (this shouldn't happen if max_iter criterion active)
+        # Maximum iterations reached or callback stop.
         # Same final-step evaluation gap as the should_switch exit above.
         final_loss_value = float(loss_fn(current_params, x_data, y_data))
         if final_loss_value < best_loss:
@@ -2193,8 +2270,12 @@ class AdaptiveHybridStreamingOptimizer:
             best_params=best_params,
             best_loss=best_loss,
             final_loss=final_loss_value,
-            iterations=self.config.max_warmup_iterations,
-            switch_reason="Maximum iterations reached",
+            iterations=stop_iterations or self.config.max_warmup_iterations,
+            switch_reason=(
+                CALLBACK_STOP_MESSAGE
+                if stop_iterations
+                else "Maximum iterations reached"
+            ),
             lr_mode=lr_mode,
             relative_loss=relative_loss,
         )
@@ -2517,7 +2598,7 @@ class AdaptiveHybridStreamingOptimizer:
         else:
             solver_type = "cg"
 
-        if self.config.verbose >= 2:
+        if self._effective_verbose() >= 2:
             _logger.debug(
                 f"GN solver selection: p={n_params}, threshold={threshold}, "
                 f"selected={solver_type}",
@@ -2810,7 +2891,7 @@ class AdaptiveHybridStreamingOptimizer:
         )
 
         # Log CG diagnostics
-        if self.config.verbose >= 2:
+        if self._effective_verbose() >= 2:
             status = "converged" if converged else "incomplete"
             _logger.debug(f"CG solver: {cg_iterations} iterations, {status}")
 
@@ -2820,7 +2901,7 @@ class AdaptiveHybridStreamingOptimizer:
         if not converged and cg_iterations >= self.config.cg_max_iterations * 0.9:
             # CG struggled - this is logged for diagnostics but we use the
             # incomplete solution which is typically still a descent direction
-            if self.config.verbose >= 1:
+            if self._effective_verbose() >= 1:
                 _logger.warning(
                     f"CG solver hit iteration limit ({cg_iterations}). "
                     "Using incomplete solution as descent direction.",
@@ -3056,6 +3137,11 @@ class AdaptiveHybridStreamingOptimizer:
             # Poor agreement: shrink trust region (use 0.5 instead of 0.25 for
             # less aggressive shrinkage)
             new_trust_radius = trust_radius * 0.5
+            if actual_reduction <= 0:
+                # Rejected: shrink relative to the step actually taken (as TRF
+                # does). Halving a radius larger than ||step|| re-proposes the
+                # identical step, and the stall reset then cycles forever.
+                new_trust_radius = 0.5 * min(trust_radius, step_norm)
 
             # Recovery mechanism: if trust radius is very small but gradient is
             # large, the optimizer may be stuck. Reset to allow exploration.
@@ -3359,6 +3445,39 @@ class AdaptiveHybridStreamingOptimizer:
         # Initialize stall detection counter
         self._consecutive_rejections = 0
 
+        # SSR at float64 rounding level of y: an exact (noise-free) fit sits
+        # here, where neither relative test below can resolve progress.
+        cost_floor = (10 * np.finfo(np.float64).eps) ** 2 * float(jnp.sum(y_data**2))
+
+        def _stopped_by_callback(iterations: int, gradient_norm: float) -> dict:
+            self.phase_history.append(
+                {
+                    "phase": 2,
+                    "name": "gauss_newton",
+                    "iterations": iterations,
+                    "final_cost": best_cost,
+                    "best_cost": best_cost,
+                    "convergence_reason": CALLBACK_STOP_MESSAGE,
+                    "gradient_norm": gradient_norm,
+                    "timestamp": time.time(),
+                }
+            )
+            # final_JTJ is at current_params, the last accepted (== best) point.
+            return {
+                "final_params": best_params,
+                "best_params": best_params,
+                "best_cost": best_cost,
+                "final_cost": best_cost,
+                "iterations": iterations,
+                "convergence_reason": CALLBACK_STOP_MESSAGE,
+                "gradient_norm": gradient_norm,
+                "JTJ_final": final_JTJ,
+                "residual_sum_sq": final_residual_sum_sq,
+            }
+
+        if self._stop_requested:  # stopped during Phase 1
+            return _stopped_by_callback(0, float(jnp.linalg.norm(init_JTr)))
+
         for iteration in range(self.config.gauss_newton_max_iterations):
             iter_start_time = time.time()
 
@@ -3412,7 +3531,13 @@ class AdaptiveHybridStreamingOptimizer:
                 self.best_params_global = new_params
 
             # Progress callback (no-op if fit() wasn't given one)
-            self._invoke_fit_callback(new_params, new_cost, iteration)
+            self._invoke_fit_callback(
+                new_params,
+                0.5 * new_cost,  # new_cost is the SSR
+                self._callback_iter_offset + iteration + 1,
+                phase=2,
+                gradient_norm=gradient_norm,
+            )
 
             # Save checkpoint periodically if enabled
             if self._should_save_checkpoint(iteration):
@@ -3481,6 +3606,10 @@ class AdaptiveHybridStreamingOptimizer:
                             f"{trust_radius:.4f}",
                         )
 
+            # After the accept/reject update, so final_JTJ matches best_params.
+            if self._stop_requested:
+                return _stopped_by_callback(iteration + 1, gradient_norm)
+
             # Check convergence: gradient norm (skip on a retry-exhaustion
             # fallback, where gradient_norm is a 0.0 sentinel, not a real value)
             # The absolute tolerance is capped by the problem's own scale
@@ -3489,9 +3618,10 @@ class AdaptiveHybridStreamingOptimizer:
                 1.0,
                 float(jnp.sqrt(jnp.trace(final_JTJ) * final_residual_sum_sq)),
             )
-            if (
-                not retry_exhausted
-                and gradient_norm < self.config.gauss_newton_tol * gradient_scale
+            # <= so an exactly-zero residual (scale 0, gradient 0) converges.
+            if not retry_exhausted and (
+                gradient_norm <= self.config.gauss_newton_tol * gradient_scale
+                or float(final_residual_sum_sq) <= cost_floor
             ):
                 # Record Phase 2 completion
                 phase_record = {
@@ -3629,8 +3759,8 @@ class AdaptiveHybridStreamingOptimizer:
 
         The covariance is the (unit-variance) pseudo-inverse of the Hessian
         approximation: Cov_norm = pinv(J^T J), via
-        :func:`nlsq.core.covariance.pcov_from_normal` (eigen-directions above
-        ``p*eps*lambda_max``; dropped directions give zero rows and columns, so a
+        :func:`nlsq.core.covariance.pcov_from_normal` on the unit-diagonal
+        equilibrated J^T J (eigen-directions above ``p*eps*lambda_max``; dropped directions give zero rows and columns, so a
         partially rank-deficient J^T J still gives a finite matrix).
 
         Parameters
@@ -3645,15 +3775,22 @@ class AdaptiveHybridStreamingOptimizer:
             All ``inf`` (after one ``OptimizeWarning``) when no direction survives the
             cutoff or J^T J or the result is non-finite.
         """
-        cov_norm, _ = pcov_from_normal(
-            np.asarray(JTJ),
+        # Equilibrate first: pinv(JTJ) = D^-1 pinv(D^-1 JTJ D^-1) D^-1 with
+        # D = sqrt(diag(JTJ)), so the eigenvalue cutoff sees the correlation
+        # structure, not column-scale disparity left by the normalization
+        # (which otherwise zeroed well-determined directions).
+        JTJ = np.asarray(JTJ)
+        d = np.sqrt(np.abs(np.diag(JTJ)))
+        d = np.where(np.isfinite(d) & (d > 0), d, 1.0)
+        cov_eq, _ = pcov_from_normal(
+            JTJ / np.outer(d, d),
             0.0,  # unused: absolute_sigma=True leaves the variance to the caller
             JTJ.shape[0] + 1,
             JTJ.shape[0],
             absolute_sigma=True,
             cond_warn=False,
         )
-        return jnp.asarray(cov_norm)
+        return jnp.asarray(cov_eq / np.outer(d, d))
 
     def _transform_covariance(self, cov_norm: jnp.ndarray) -> jnp.ndarray:
         """Transform covariance from normalized to original parameter space.
@@ -4110,6 +4247,14 @@ class AdaptiveHybridStreamingOptimizer:
         state = manager.load(checkpoint_path, global_config)
         self._restore_from_checkpoint_state(state)
 
+    def _effective_verbose(self) -> int:
+        """``config.verbose`` capped by the active ``fit(verbose=...)`` call, if any."""
+        fit_verbose = getattr(self, "_fit_verbose", None)
+        config_verbose = self.config.verbose
+        return (
+            config_verbose if fit_verbose is None else min(fit_verbose, config_verbose)
+        )
+
     def fit(
         self,
         data_source: Any,
@@ -4147,8 +4292,11 @@ class AdaptiveHybridStreamingOptimizer:
         absolute_sigma : bool, default=False
             If True, sigma is used in absolute sense (pcov not scaled)
         callback : Callable, optional
-            Callback with signature callback(params, loss, iteration)
-            Called every config.callback_frequency iterations
+            ``callback(iteration, cost, params, info)`` as for ``curve_fit``,
+            called every config.callback_frequency iterations (see
+            :meth:`_invoke_fit_callback`); raise ``StopOptimization`` to stop.
+            The legacy ``callback(params, loss, iteration)`` form is not
+            supported and raises ``TypeError`` before any work is done.
         verbose : int, default=1
             Verbosity level (0=silent, 1=progress, 2=debug)
 
@@ -4172,6 +4320,13 @@ class AdaptiveHybridStreamingOptimizer:
         # The config is a mutable dataclass; re-run its validation so a field
         # changed after construction cannot bypass the constructor checks.
         self.config.__post_init__()
+
+        _reject_legacy_callback(callback)
+
+        # One effective level for every print: the call-site ``verbose`` caps the
+        # config's (a config with verbose=0 stays silent whatever the caller passes).
+        verbose = min(verbose, self.config.verbose)
+        self._fit_verbose = verbose
 
         # Track total optimization time
         total_start_time = time.time()
@@ -4231,6 +4386,15 @@ class AdaptiveHybridStreamingOptimizer:
                 "cost, or reduce the parameter count.",
             )
 
+        # Validated in HybridStreamingConfig, but Phase 1 builds optax.lbfgs
+        # with a constant learning rate; no code consumes the schedule fields.
+        if self.config.use_learning_rate_schedule:
+            raise NotImplementedError(
+                "config.use_learning_rate_schedule=True is not supported: "
+                "Phase 1 uses a constant learning rate and the lr_schedule_* "
+                "settings are not applied. Set use_learning_rate_schedule=False.",
+            )
+
         # Reset per-fit optimization state now that all validation above has
         # passed. Without this, calling fit() more than once on the same
         # optimizer instance (a supported pattern -- nothing in __init__
@@ -4256,14 +4420,10 @@ class AdaptiveHybridStreamingOptimizer:
         # Reset alongside best_params_global/best_cost_global above (after
         # validation, not before) for the same reason.
         self._fit_callback = callback
+        self._stop_requested = False
+        self._callback_iter_offset = 0
 
-        # _padded_cache self-invalidates on a content-fingerprint mismatch
-        # (see _get_padded_data/_content_fingerprint), but that fingerprint
-        # is shape + first/last/sum/sum-of-squares, not a full hash -- an
-        # accidental collision between two distinct datasets on the same
-        # instance is vanishingly unlikely but not impossible. Clear it
-        # explicitly here too, same as clear_cache() does, rather than
-        # relying solely on the fingerprint for a new fit() call.
+        # Drop retained data before starting a new fit.
         self._padded_cache = None
 
         # ============================================================
@@ -4279,7 +4439,10 @@ class AdaptiveHybridStreamingOptimizer:
             print()
 
         phase0_start = time.time()
-        self._setup_normalization(func, p0_array, bounds)
+        sample_stride = max(1, n_points // max(1, self.config.chunk_size))
+        self._setup_normalization(
+            func, p0_array, bounds, x_sample=x_data[::sample_stride]
+        )
         phase0_duration = time.time() - phase0_start
         phase_timings["phase0_normalization"] = phase0_duration
 
@@ -4331,6 +4494,7 @@ class AdaptiveHybridStreamingOptimizer:
         phase1_duration = time.time() - phase1_start
         phase_timings["phase1_warmup"] = phase1_duration
         phase_iterations["phase1"] = phase1_result["iterations"]
+        self._callback_iter_offset = phase1_result["iterations"]
 
         if verbose >= 1:
             print(
@@ -4501,12 +4665,26 @@ class AdaptiveHybridStreamingOptimizer:
             if pipeline_failure
             else phase2_result["convergence_reason"]
         )
+        # A phase failure or max-iterations stop is status 0 / success=False
+        # (curve_fit full_output then reports ier=5, as for TRF).
+        status = (
+            0
+            if pipeline_failure
+            else _REASON_STATUS.get(phase2_result["convergence_reason"], 0)
+        )
+        nit = phase_iterations["phase1"] + phase_iterations["phase2"]
 
         # Format result dictionary (scipy-compatible + NLSQ extensions)
         result = {
             "x": phase3_result["popt"],  # Optimized parameters
-            "success": pipeline_failure is None,
+            "success": status != 0,
+            "status": status,
             "message": result_message,
+            "nit": nit,
+            # Approximate full-data model evaluations: one per L-BFGS iteration
+            # (line-search re-evaluations not counted), two per Gauss-Newton
+            # iteration (trial cost + Jacobian pass), plus the initial pass.
+            "nfev": phase_iterations["phase1"] + 2 * phase_iterations["phase2"] + 1,
             "fun": final_residuals,  # Final residuals
             "pcov": phase3_result["pcov"],  # Covariance matrix
             "perr": phase3_result["perr"],  # Standard errors (NLSQ extension)

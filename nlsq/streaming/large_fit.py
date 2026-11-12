@@ -60,6 +60,17 @@ def _multistart_kwargs(ms: Multistart) -> dict[str, Any]:
     }
 
 
+def _reject_output_flags(opts: Mapping[str, Any]) -> None:
+    """The chunked engine returns ``(popt, pcov)`` only; fail before any chunk is fit."""
+    for key in ("full_output", "return_eval"):
+        if opts.get(key):
+            raise TypeError(
+                f"curve_fit_large: {key}=True is not supported on the chunked/large "
+                "path (it returns only (popt, pcov)); use strategy=InMemory() or "
+                "call curve_fit directly"
+            )
+
+
 def _is_unbounded(lb: Any, ub: Any) -> bool:
     return bool(np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
 
@@ -169,6 +180,7 @@ def fit_with_strategy(
             # an owned key raises TypeError here, as on the chunked path, not after a fallback
             reject_owned_kwargs(auto.chunked, kwargs)
             opts = {**auto.chunked.options, **kwargs}  # what chunked would have used
+            _reject_output_flags(opts)
             hit = _exact_ineligible(
                 auto, opts, f, xdata, ydata, n_points, sigma, p0, bounds, check_finite
             )
@@ -433,6 +445,11 @@ def _fit_hybrid(
     p0, (lb, ub) = normalize_p0_bounds(f, p0, bounds)
     bounds_tuple = None if _is_unbounded(lb, ub) else (lb, ub)
 
+    # None: an explicit config's verbosity applies; the default Hybrid() is silent.
+    verbose = strategy.verbose
+    if verbose is None:
+        verbose = strategy.config.verbose if strategy.config is not None else 0
+
     # Build the hybrid engine (AdaptiveHybridStreamingOptimizer)
     large_strategy = build_large_strategy("hybrid", config)
 
@@ -449,7 +466,7 @@ def _fit_hybrid(
         sigma=sigma,
         absolute_sigma=absolute_sigma,
         callback=None,  # Hybrid has no callback; an unknown keyword raised above
-        verbose=strategy.verbose,
+        verbose=verbose,
     )
 
     return large_strategy.unpack(native)
@@ -526,6 +543,7 @@ def _fit_chunked(
     reject_owned_kwargs(strategy, kwargs)
     chunk_size = strategy.chunk_size
     fit_kwargs = {**strategy.options, **kwargs}
+    _reject_output_flags(fit_kwargs)
 
     # Configure memory settings if provided
     if memory_limit_gb is None:

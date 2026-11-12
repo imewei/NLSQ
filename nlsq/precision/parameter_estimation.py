@@ -460,7 +460,7 @@ def estimate_p0_for_pattern(
         half_val = (y_max + y_min) / 2
         try:
             half_idx = np.where(ydata < half_val)[0][0]
-            x_half = xdata[half_idx]
+            x_half = xdata[half_idx] - xdata[0]
             b = np.log(2) / x_half if x_half > 0 else 0.1
         except (IndexError, ValueError):
             b = (

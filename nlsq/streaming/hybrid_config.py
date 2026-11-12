@@ -339,6 +339,7 @@ class HybridStreamingConfig:
     lbfgs_refinement_step_size: float = 1.0  # For low relative loss (refinement)
 
     # Optax enhancements
+    # Not implemented: fit() raises NotImplementedError when True.
     use_learning_rate_schedule: bool = False
     lr_schedule_warmup_steps: int = 50
     lr_schedule_decay_steps: int = 450

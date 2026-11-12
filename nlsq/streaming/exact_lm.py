@@ -384,7 +384,13 @@ def check_model_contract(
     # compared on the model's own device: a host round trip of the 4M-point chunk and
     # three np.allclose passes cost ~0.2 s per fit on GPU
     def f(xs: Any) -> jax.Array:
-        return jnp.asarray(model(xs, *th), dtype=jnp.float64)
+        try:
+            return jnp.asarray(model(xs, *th), dtype=jnp.float64)
+        except (TypeError, ValueError) as err:  # e.g. a captured per-point array
+            raise ValueError(
+                "model is not pointwise over the sample axis (e.g. it captures a "
+                f"per-point array); use strategy=Chunked(). Probe failed with: {err}"
+            ) from err
 
     full = f(x_chunk)
     bad = ValueError(
@@ -790,6 +796,14 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     if not st.sigma_nonzero:
         raise ValueError("sigma must be nonzero (found a zero value)")
     if not _finite(st):
+        # error path only: one extra pass with the finiteness check on names the cause
+        if not run_pass(
+            stats, theta, source, chunk, check_finite=True, check_sigma=False
+        ).data_finite:
+            raise ValueError(
+                "xdata or ydata has non-finite values (check_finite=False): clean the "
+                "data, use check_finite=True/nan_policy, or strategy=Chunked()"
+            )
         raise ValueError("model cost, gradient or Hessian is not finite at p0")
     cost, g, H = st.cost, st.g, st.H
     nfev, lam, nu = 1, LAM0, 2.0

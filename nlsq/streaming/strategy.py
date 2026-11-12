@@ -19,11 +19,14 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import warnings
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
 import numpy as np
 from numpy.typing import ArrayLike
+
+from nlsq.result.optimize_warning import OptimizeWarning
 
 __all__ = [
     "Strategy",
@@ -78,7 +81,18 @@ class _HybridStrategy:
     def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
         x = native["x"]
         if not native.get("success", True):
-            raise RuntimeError(f"hybrid_streaming fit failed: {native.get('message')}")
+            if native.get("message") != "Maximum iterations reached":
+                raise RuntimeError(
+                    f"hybrid_streaming fit failed: {native.get('message')}"
+                )
+            # An iteration-budget stop returns its best point, like the
+            # chunked "nonconverged" case (the engine already warned too).
+            warnings.warn(
+                "hybrid_streaming stopped at max iterations; result may not be "
+                "converged",
+                OptimizeWarning,
+                stacklevel=2,
+            )
         return x, native.get("pcov", np.full((len(x), len(x)), np.inf))
 
 

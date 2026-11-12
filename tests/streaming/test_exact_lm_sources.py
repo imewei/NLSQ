@@ -735,8 +735,10 @@ def test_factory_check_finite_false(data, passes):
     )
     assert out["success"] and not any(k["check_finite"] for k in passes)
     x = data[0].copy()
-    x[-1] = np.nan  # with the check off, the NaN surfaces through the cost instead
-    with pytest.raises(ValueError, match=r"not finite at p0"):
+    x[-1] = (
+        np.nan
+    )  # with the check off, the NaN surfaces through the cost, named as data
+    with pytest.raises(ValueError, match=r"non-finite values .check_finite=False"):
         lm.exact_lm_fit(
             exp_model,
             make_factory(x, data[1]),

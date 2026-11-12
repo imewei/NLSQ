@@ -28,7 +28,8 @@ class ParameterNormalizer:
     This class handles automatic parameter scaling to address gradient signal
     weakness from parameter scale imbalance. It supports multiple strategies:
 
-    - **bounds**: Normalize to [0, 1] using parameter bounds (lb, ub)
+    - **bounds**: Normalize to [0, 1] using parameter bounds (lb, ub) when lb >= 0; a
+      zero-containing or negative range maps to a unit-width interval around 0
     - **p0**: Scale by initial parameter magnitudes
     - **auto**: Use bounds if provided, else p0-based
     - **none**: Identity transform (no normalization)
@@ -113,6 +114,8 @@ class ParameterNormalizer:
         p0: jnp.ndarray,
         bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
         strategy: str = "auto",
+        *,
+        zero_p0_scales: jnp.ndarray | None = None,
     ):
         """Initialize parameter normalizer.
 
@@ -124,7 +127,12 @@ class ParameterNormalizer:
             Parameter bounds as (lb, ub)
         strategy : str, default='auto'
             Normalization strategy
+        zero_p0_scales : array_like, optional
+            Per-parameter scales used instead of 1 where ``|p0|`` is ~0 and the
+            p0 magnitude is the scale source ('p0' strategy, or an infinite
+            bound under 'bounds'). Non-finite or non-positive entries keep 1.
         """
+        self.zero_p0_scales = zero_p0_scales
         self.p0 = jnp.atleast_1d(jnp.asarray(p0, dtype=jnp.float64))
         self.n_params = len(self.p0)
         self.original_bounds = bounds
@@ -160,7 +168,13 @@ class ParameterNormalizer:
         """
         abs_p0 = jnp.abs(self.p0)
         eps = jnp.finfo(jnp.float64).eps * 10
-        return jnp.where(abs_p0 < eps, jnp.ones_like(abs_p0), abs_p0)
+        fallback = jnp.ones_like(abs_p0)
+        if self.zero_p0_scales is not None:
+            hint = jnp.broadcast_to(
+                jnp.asarray(self.zero_p0_scales, dtype=jnp.float64), abs_p0.shape
+            )
+            fallback = jnp.where(jnp.isfinite(hint) & (hint > 0), hint, fallback)
+        return jnp.where(abs_p0 < eps, fallback, abs_p0)
 
     def _compute_normalization_parameters(self):
         """Compute scaling factors and offsets based on strategy."""
@@ -175,8 +189,8 @@ class ParameterNormalizer:
             if bool(jnp.any(lb > ub)):
                 raise ValueError("lower bounds must not exceed upper bounds")
 
-            # Scale = (ub - lb), offset = lb
-            # Normalized: (params - lb) / (ub - lb)
+            # Scale = (ub - lb), offset = clip(0, lb, ub)
+            # Normalized: (params - offset) / (ub - lb), a unit-width interval
             raw_scales = ub - lb
 
             # A parameter bounded on only one side (or neither) has an infinite
@@ -197,7 +211,13 @@ class ParameterNormalizer:
             unbounded_scales = self._p0_magnitude_scale()
 
             self.scales = jnp.where(finite_range, bounded_scales, unbounded_scales)
-            self.offsets = jnp.where(finite_range, lb, jnp.zeros_like(lb))
+            # Offset = the point of [lb, ub] nearest 0 (== lb when lb >= 0, so the
+            # usual [0, 1] mapping holds). It always lies between 0 and any
+            # feasible p, so (p - offset) cannot cancel a small p against a huge
+            # |lb| (lb=-1e10, p=1e-8 would otherwise round-trip to 0).
+            self.offsets = jnp.where(
+                finite_range, jnp.clip(0.0, lb, ub), jnp.zeros_like(lb)
+            )
 
         elif self.strategy == "p0":
             # p0-based: scale by parameter magnitudes
