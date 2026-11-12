@@ -388,8 +388,11 @@ def check_model_contract(
             return jnp.asarray(model(xs, *th), dtype=jnp.float64)
         except (TypeError, ValueError) as err:  # e.g. a captured per-point array
             raise ValueError(
-                "model is not pointwise over the sample axis (e.g. it captures a "
-                f"per-point array); use strategy=Chunked(). Probe failed with: {err}"
+                "model is not pointwise over the sample axis, or it raised on the "
+                "probe batch (e.g. it captures a per-point array; an error in the "
+                "model itself, such as a wrong argument count, is reported the same "
+                "way: fix it first); use strategy=Chunked() for a non-pointwise "
+                f"model. Probe failed with: {type(err).__name__}: {err}"
             ) from err
 
     full = f(x_chunk)
