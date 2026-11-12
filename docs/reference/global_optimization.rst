@@ -235,6 +235,14 @@ CMA-ES can be used directly through ``curve_fit`` with the ``method`` parameter:
        cmaes_config=config,
    )
 
+.. note::
+
+   ``result.nfev`` and ``result.njev`` from ``curve_fit(method="cmaes")`` count
+   only the NLSQ (TRF) refinement that polishes the CMA-ES optimum, not the
+   CMA-ES population evaluations; they are 0 when no refinement ran. For
+   CMA-ES generation counts, call ``CMAESOptimizer.fit`` and read its
+   ``cmaes_diagnostics`` (see Diagnostics below).
+
 Auto Method Selection
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -312,6 +320,13 @@ For problems where CMA-ES is not needed, multi-start optimization provides
 robust global search using quasi-random sampling.
 
 See the ``MultiStartOrchestrator`` API for details.
+
+.. note::
+
+   A multi-start result is the winning start's own fit result, so ``nfev`` and
+   ``njev`` count the evaluations of that start only, not the total across all
+   starts. Warnings logged by losing starts (for example a rank-deficient
+   Jacobian) are logged at DEBUG; only the winner's are shown at WARNING.
 
 API Reference
 -------------

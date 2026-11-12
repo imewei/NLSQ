@@ -213,7 +213,6 @@ See :doc:`configuration` for the full configuration reference.
    model:
      type: "builtin"
      name: "exponential_decay"
-     auto_p0: true
    export:
      results_file: "results.json"
 

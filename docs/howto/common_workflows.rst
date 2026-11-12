@@ -10,92 +10,121 @@ example focuses on a small set of fields so you can compose them easily.
 Quick single-fit workflow
 -------------------------
 
-Use this when you have a single dataset and a simple model.
-
-.. code-block:: yaml
-
-   paths:
-     input: ./data/experiment_01.csv
-     output_dir: ./runs/experiment_01
-
-   model:
-     name: exponential_decay
-     parameters:
-       p0: [2.0, 0.5]
-
-   fitting:
-     max_nfev: 200
-
-Multi-start global search (LHS)
--------------------------------
-
-Use this when you want robust initialization for nonconvex fits.
-
-.. code-block:: yaml
-
-   model:
-     name: exponential_decay
-     parameters:
-       bounds:
-         lower: [0.0, 0.0]
-         upper: [10.0, 5.0]
-
-   multistart:
-     enabled: true
-     sampler: lhs
-     n_starts: 32
-
-Large dataset workflow
-----------------------
-
-Use this when you need chunking and memory controls for big data.
+Use this when you have a single dataset and a simple model. Run it with
+``nlsq fit workflow.yaml``.
 
 .. code-block:: yaml
 
    data:
-     batch_size: 1_000_000
+     input_file: ./data/experiment_01.csv
+     columns: { x: 0, y: 1 }
 
-   resources:
-     memory_limit_gb: 4.0
+   model:
+     type: builtin
+     name: exponential_decay
 
    fitting:
-     max_nfev: 100
+     p0: [2.0, 0.5, 0.0]
+     max_nfev: 200
+
+   export:
+     results_file: ./runs/experiment_01/results.json
+
+Bounded fit
+-----------
+
+Use this to constrain parameters. ``fitting.bounds`` takes ``lower`` and
+``upper`` lists, one entry per parameter.
+
+.. code-block:: yaml
+
+   data:
+     input_file: ./data/experiment_01.csv
+     columns: { x: 0, y: 1 }
+
+   model:
+     type: builtin
+     name: exponential_decay
+
+   fitting:
+     p0: [2.0, 0.5, 0.0]
+     bounds:
+       lower: [0.0, 0.0, -1.0]
+       upper: [10.0, 5.0, 1.0]
+
+   export:
+     results_file: ./runs/experiment_01/results.json
+
+Multi-start global search (LHS)
+-------------------------------
+
+Multi-start is not available from YAML. Use the Python API for robust
+initialization of nonconvex fits (bounds are required for the sampler):
+
+.. code-block:: python
+
+   import jax.numpy as jnp
+   from nlsq import curve_fit
+
+
+   def model(x, a, b):
+       return a * jnp.exp(-b * x)
+
+
+   popt, pcov = curve_fit(
+       model,
+       x,
+       y,
+       bounds=([0.0, 0.0], [10.0, 5.0]),
+       multistart=True,
+       n_starts=32,
+       sampler="lhs",
+   )
+
+Large dataset workflow
+----------------------
+
+Chunking and memory limits are not available from YAML. Use
+``curve_fit_large`` from Python (see :doc:`handle_large_data`):
+
+.. code-block:: python
+
+   from nlsq import curve_fit_large
+
+   popt, pcov = curve_fit_large(
+       model, x, y, p0=[2.0, 0.5], memory_limit_gb=4.0, max_nfev=100
+   )
 
 Reproducible batch runs
 -----------------------
 
-Use this when running multiple datasets in a batch or on a scheduler.
+``nlsq batch`` takes several workflow files, one per dataset; it does not
+expand glob patterns or placeholders inside a single YAML. Give each file its
+own ``data.input_file`` and ``export.results_file`` (batch warns when two
+workflows write the same output file):
+
+.. code-block:: bash
+
+   nlsq batch runs/exp_01.yaml runs/exp_02.yaml --summary batch_summary.json
+
+Each workflow file is an ordinary single-fit configuration:
 
 .. code-block:: yaml
 
-   paths:
-     input: ./data/batch/*.csv
-     output_dir: ./runs/batch
+   # runs/exp_01.yaml
+   data:
+     input_file: ./data/batch/exp_01.csv
+     columns: { x: 0, y: 1 }
 
-   logging:
-     level: INFO
-     save_config: true
+   model:
+     type: builtin
+     name: exponential_decay
 
    fitting:
      max_nfev: 150
 
-Multi-dataset with per-file outputs
------------------------------------
-
-Use this when you want each input file to write to its own output folder.
-
-.. code-block:: yaml
-
-   paths:
-     input: ./data/batch/*.csv
-     output_dir: ./runs/{stem}
-
-   logging:
-     level: INFO
-     save_config: true
-
-   fitting:
-     max_nfev: 150
+   export:
+     results_file: ./runs/exp_01/results.json
 
 Warm-start refinement (v0.3.6+)
 -------------------------------

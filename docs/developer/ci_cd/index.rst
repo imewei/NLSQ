@@ -46,7 +46,7 @@ Run CI checks locally before pushing:
    make test
 
    # Run with coverage
-   make test-cov
+   make test-coverage
 
    # Check code quality
    make lint
