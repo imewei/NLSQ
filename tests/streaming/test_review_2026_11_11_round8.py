@@ -45,6 +45,7 @@ def test_legacy_three_arg_callback_rejected_up_front():
         )
 
 
+@pytest.mark.slow
 def test_four_arg_and_keyword_callbacks_still_called():
     x, y = _data()
     calls = []

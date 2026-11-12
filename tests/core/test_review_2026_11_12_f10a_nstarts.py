@@ -23,6 +23,7 @@ def _ssr(x, y, r):
     return float(np.sum((np.asarray(_f(x, *np.asarray(r[0]))) - y) ** 2))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("workflow", ["auto_global", "hpc"])
 def test_workflow_default_n_starts_is_ten_not_one(workflow):
     x, y, b, p0 = _data()

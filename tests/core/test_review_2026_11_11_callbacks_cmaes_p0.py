@@ -63,6 +63,7 @@ def test_gradient_monitor_forwards_positionally():
     assert seen == [3]
 
 
+@pytest.mark.slow
 def test_cmaes_scalar_sigma_streaming_matches_nonstreaming():
     n = 3000
     x = np.linspace(0, 4, n)

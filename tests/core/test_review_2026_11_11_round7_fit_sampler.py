@@ -9,6 +9,7 @@ import pytest
 import nlsq
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("sampler", ["lhs", "sobol", "halton"])
 def test_auto_global_forwards_sampler(sampler):
     x = np.linspace(0, 4, 80)

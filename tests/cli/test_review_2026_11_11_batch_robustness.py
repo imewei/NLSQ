@@ -2,6 +2,7 @@
 
 import json
 import logging
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -178,4 +179,6 @@ def test_collision_guard_skips_traversal_prefix(tmp_path, monkeypatch):
         "{enabled: true, filename_prefix: ../in, formats: [pdf]}",
         input_file="in_combined.pdf",
     )
-    batch._warn_output_collisions([wf], logging.getLogger("t"))  # must not raise
+    logger = MagicMock()
+    batch._warn_output_collisions([wf], logger)  # must not raise
+    logger.warning.assert_not_called()  # the traversal prefix is skipped, not flagged

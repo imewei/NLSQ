@@ -21,6 +21,7 @@ def test_line_search_failed_steps_counted_once_out_of_order():
     assert t.get_trigger_rates()["lbfgs_line_search_failure_rate"] <= 100.0
 
 
+@pytest.mark.slow
 def test_hybrid_verbose_without_config_is_honoured(monkeypatch):
     from nlsq import curve_fit_large
     from nlsq.streaming import strategy

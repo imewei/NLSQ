@@ -56,6 +56,7 @@ def _env():
 
 
 # H1 ------------------------------------------------------------------------
+@pytest.mark.slow
 @pytest.mark.serial
 def test_stdout_mode_is_pure_json_with_hybrid_streaming(tmp_path):
     cfg = _cfg(tmp_path, export=None)
@@ -70,7 +71,9 @@ def test_stdout_mode_is_pure_json_with_hybrid_streaming(tmp_path):
         cwd=tmp_path,
         timeout=300,
     )
-    json.loads(proc.stdout)  # whole stdout must be the JSON document
+    doc = json.loads(proc.stdout)  # whole stdout must be the JSON document
+    assert proc.returncode == 0, proc.stderr[-500:]
+    assert isinstance(doc, dict) and doc, "stdout JSON must be a non-empty fit result"
 
 
 # H2 ------------------------------------------------------------------------

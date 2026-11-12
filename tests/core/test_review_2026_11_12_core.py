@@ -14,6 +14,7 @@ def _exp(x, a, b, c):
     return a * jnp.exp(-b * x) + c
 
 
+@pytest.mark.slow
 def test_auto_global_cmaes_route_warns_about_ignored_sampler_options():
     x = np.linspace(0, 4, 50)
     y = 2 * np.exp(-1.3 * x) + 0.5

@@ -112,6 +112,7 @@ def _hybrid_data():
     return x, 2 * np.exp(-x) + 0.5
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("fitter", [curve_fit, curve_fit_large])
 def test_hybrid_streaming_silent_by_default(fitter, capfd):
     x, y = _hybrid_data()

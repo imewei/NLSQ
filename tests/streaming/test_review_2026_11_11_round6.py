@@ -70,6 +70,7 @@ class TestFullOutputRejectedOnLargePath:
 
 
 class TestTinyChunkWarning:
+    @pytest.mark.slow
     def test_raised_chunk_size_warns(self, caplog):
         n = 10_000
         x = np.linspace(0, 3, n)

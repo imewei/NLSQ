@@ -128,3 +128,20 @@ def test_parameter_names_wrong_length_ignored_yaml_wins(tmp_path):
     yml.write_text(yaml.safe_dump(cfg))
     run_fit(str(yml))
     assert json.loads(out2.read_text())["parameter_names"] == ["a", "b"]
+
+
+def test_raising_parameter_names_is_reported_with_its_error(caplog):
+    from types import SimpleNamespace
+
+    from nlsq.cli.workflow_runner import WorkflowRunner
+
+    def boom():
+        raise RuntimeError("names unavailable")
+
+    config = {"model": {}}
+    with caplog.at_level("WARNING", logger="nlsq.cli.workflow_runner"):
+        out = WorkflowRunner._with_model_parameter_names(
+            config, SimpleNamespace(parameter_names=boom), {"popt": [1.0, 2.0]}
+        )
+    assert out is config
+    assert "RuntimeError: names unavailable" in caplog.text
