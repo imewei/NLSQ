@@ -139,6 +139,10 @@ def _strip_unquoted_comment(line: str) -> str:
     return line
 
 
+# Declared element count above which unallocated HDF5 chunks are rejected.
+_HDF5_SPARSE_CHECK_MIN_ELEMENTS = 10_000_000
+
+
 class DataLoader:
     """Data loader supporting multiple file formats and data dimensions.
 
@@ -269,6 +273,23 @@ class DataLoader:
         # Determine if this is 2D surface data
         is_2d = self.is_2d_data(config)
 
+        # YAML `x: yes` parses to True; bool is an int subclass and would index
+        # numpy as a boolean mask instead of a column.
+        for key, col in (config.get("columns") or {}).items():
+            if isinstance(col, bool):
+                raise DataLoadError(
+                    f"columns.{key} must be a column index or name, got boolean {col}",
+                    file_path=file_path,
+                    suggestion="Quote YAML values such as yes/no/on/off, or use an integer index.",
+                )
+            # A negative index would silently select a trailing column (e.g. sigma).
+            if isinstance(col, int) and col < 0:
+                raise DataLoadError(
+                    f"columns.{key} must be a non-negative column index, got {col}",
+                    file_path=file_path,
+                    suggestion="Use a zero-based column index or a header name.",
+                )
+
         # Load data based on format
         if file_format == "ascii":
             xdata, ydata, sigma = self._load_ascii(file_path, config, is_2d)
@@ -386,7 +407,7 @@ class DataLoader:
                 # Drop footer rows ourselves, then parse with loadtxt so malformed
                 # cells raise exactly as in the skip_footer == 0 path ("nan"
                 # tokens still load; genfromtxt would silently turn junk into NaN).
-                with open(file_path) as fh:
+                with open(file_path, encoding="utf-8-sig") as fh:
                     lines = fh.read().splitlines()[skip_header:]
                 rows = [
                     ln
@@ -408,6 +429,7 @@ class DataLoader:
                     skiprows=skip_header,
                     dtype=dtype,
                     ndmin=2,
+                    encoding="utf-8-sig",  # tolerate a UTF-8 BOM
                 )
 
         except (ValueError, OSError) as e:
@@ -688,7 +710,7 @@ class DataLoader:
         DataLoadError
             If column name not found.
         """
-        if isinstance(col, int):
+        if isinstance(col, int) and not isinstance(col, bool):
             return col
 
         if header_names is None:
@@ -700,7 +722,7 @@ class DataLoader:
             )
 
         try:
-            return header_names.index(col)
+            return header_names.index(str(col))
         except ValueError:
             raise DataLoadError(
                 f"Column '{col}' not found in CSV header",
@@ -939,6 +961,24 @@ class DataLoader:
                         file_path=file_path,
                         file_format="hdf5",
                     )
+                if dset.chunks is not None and (
+                    math.prod(dset.shape) > _HDF5_SPARSE_CHECK_MIN_ELEMENTS
+                ):
+                    # Sparse chunked dataset: unwritten chunks read back as fill
+                    # values, so a ~10KB file can still expand to GBs. Small
+                    # datasets (<= 80 MB as float64) may legitimately leave chunks
+                    # at the fill value, so only large declared sizes are checked.
+                    expected = math.prod(
+                        -(-s // c) for s, c in zip(dset.shape, dset.chunks, strict=True)
+                    )
+                    if dset.id.get_num_chunks() < expected:
+                        raise DataLoadError(
+                            f"Dataset '{path}' has unallocated chunks "
+                            f"({dset.id.get_num_chunks()} of {expected} written); "
+                            "sparse datasets are not supported",
+                            file_path=file_path,
+                            file_format="hdf5",
+                        )
                 return np.asarray(dset, dtype=np.float64).flatten()
 
             with h5py.File(file_path, "r") as f:
@@ -1078,6 +1118,15 @@ class DataLoader:
         require_finite = cfg_get(validation_config, "require_finite", True)
         min_points = cfg_get(validation_config, "min_points", 2)
 
+        # Loaders must hand back 1-D y (and 1-D x, or (k, n) x for 2-D surfaces)
+        if ydata.ndim != 1 or xdata.ndim != (2 if is_2d else 1):
+            raise DataLoadError(
+                f"Unexpected data shapes: xdata {xdata.shape}, ydata {ydata.shape}",
+                file_path=file_path,
+                context={"x_shape": xdata.shape, "y_shape": ydata.shape},
+                suggestion="Check the column/key selection; each must yield a 1-D array.",
+            )
+
         # Get number of data points (accounting for 2D xdata shape)
         if is_2d and xdata.ndim == 2:
             # xdata shape is (2, n_points)
@@ -1160,5 +1209,6 @@ class DataLoader:
                         "sigma_nonfinite": int(sigma_nan),
                         "is_2d": is_2d,
                     },
-                    suggestion="Set validation.require_finite: false or clean the data to remove NaN/Inf values.",
+                    suggestion="Remove or repair the rows containing NaN/Inf in the input file; "
+                    "the CLI has no option to drop non-finite rows.",
                 )

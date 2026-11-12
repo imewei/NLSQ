@@ -39,6 +39,7 @@ def test_batch_bare_filename_prefix_gets_workflow_stem(tmp_path):
     paths = []
     for name in ("a", "b"):
         cfg = _cfg(data)
+        cfg["export"] = {"results_file": str(tmp_path / f"{name}.json")}
         cfg["visualization"] = yaml.safe_load(
             f"enabled: true\noutput_dir: {figs}\nfilename_prefix:\nformats: [png]\n"
         )

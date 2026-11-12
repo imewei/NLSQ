@@ -19,6 +19,26 @@ from nlsq.cli.model_validation import validate_path
 from nlsq.cli.templates import get_custom_model_template, get_workflow_template
 
 
+def _prepare_dest(cwd: Path, dest_name: str, force: bool) -> Path:
+    """Validate the target path and create its parent directories."""
+    dest = cwd / dest_name
+    if not validate_path(dest, base_dir=cwd):
+        msg = f"Output path '{dest_name}' escapes the current directory."
+        raise ValueError(msg)
+    if dest.is_dir():
+        msg = f"Output path '{dest_name}' is a directory; give a file name."
+        raise ValueError(msg)
+    if dest.exists() and not force:
+        msg = f"File '{dest}' already exists. Use --force to overwrite."
+        raise FileExistsError(msg)
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        msg = f"Cannot create directory for '{dest_name}': {e}"
+        raise ValueError(msg) from e
+    return dest
+
+
 def run_config(
     *,
     workflow: bool = False,
@@ -69,15 +89,7 @@ def run_config(
     # Copy workflow template
     if copy_workflow:
         src = get_workflow_template()
-        dest_name = output or "workflow_config.yaml"
-        dest = cwd / dest_name
-        if not validate_path(dest, base_dir=cwd):
-            msg = f"Output path '{dest_name}' escapes the current directory."
-            raise ValueError(msg)
-
-        if dest.exists() and not force:
-            msg = f"File '{dest}' already exists. Use --force to overwrite."
-            raise FileExistsError(msg)
+        dest = _prepare_dest(cwd, output or "workflow_config.yaml", force)
 
         shutil.copy(src, dest)
         copied_files.append(dest)
@@ -88,15 +100,7 @@ def run_config(
     # Copy custom model template
     if copy_model:
         src = get_custom_model_template()
-        dest_name = output or "custom_model.py"
-        dest = cwd / dest_name
-        if not validate_path(dest, base_dir=cwd):
-            msg = f"Output path '{dest_name}' escapes the current directory."
-            raise ValueError(msg)
-
-        if dest.exists() and not force:
-            msg = f"File '{dest}' already exists. Use --force to overwrite."
-            raise FileExistsError(msg)
+        dest = _prepare_dest(cwd, output or "custom_model.py", force)
 
         shutil.copy(src, dest)
         copied_files.append(dest)

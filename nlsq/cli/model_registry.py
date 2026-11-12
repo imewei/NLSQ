@@ -89,6 +89,9 @@ class ModelRegistry:
     def __init__(self) -> None:
         """Initialize ModelRegistry."""
         self._builtin_cache: dict[str, ModelFunction] = {}
+        # Extra roots a custom model file may live under besides the CWD
+        # (e.g. the workflow YAML's directory); `../` escapes stay rejected.
+        self.allowed_model_dirs: list[Path] = []
 
     def list_builtin_models(self) -> list[str]:
         """List all available builtin model names.
@@ -337,7 +340,9 @@ class ModelRegistry:
         ModelError
             If path traversal is detected.
         """
-        if not validate_path(path):
+        if not any(
+            validate_path(path, base) for base in (None, *self.allowed_model_dirs)
+        ):
             audit_logger = get_audit_logger()
             from nlsq.cli.model_validation import ModelValidationResult
 
@@ -353,7 +358,8 @@ class ModelRegistry:
                 model_name=function_name,
                 model_type="custom",
                 context={"path": str(path)},
-                suggestion="Model files must be within the current working directory",
+                suggestion="Model files must be within the current working directory "
+                "or the directory of the workflow file",
             )
 
     def _validate_model_security(
@@ -590,6 +596,7 @@ class ModelRegistry:
             module, f"{name}_estimate_p0", None
         )
         fn_bounds = getattr(module, f"{name}_bounds", None)
+        fn_names = getattr(module, f"{name}_parameter_names", None)
 
         def has_fit_parameters(function: Any) -> bool:
             """Require positional x plus positional or variadic fit parameters."""
@@ -609,7 +616,7 @@ class ModelRegistry:
                 and f.__module__ == module.__name__
                 and n not in ("estimate_p0", "bounds", "parameter_names")
                 and not n.startswith(("_", "estimate_"))
-                and not n.endswith(("_bounds", "_p0"))
+                and not n.endswith(("_bounds", "_p0", "_parameter_names"))
                 and has_fit_parameters(f)
             ),
             key=lambda f: f.__code__.co_firstlineno,
@@ -620,6 +627,8 @@ class ModelRegistry:
             fn_p0 = getattr(module, "estimate_p0", None)
         if not callable(fn_bounds) and owns_bare:
             fn_bounds = getattr(module, "bounds", None)
+        if not callable(fn_names) and owns_bare:
+            fn_names = getattr(module, "parameter_names", None)
 
         # Never hand the optimiser a p0/bounds sized for a different model.
         params = list(inspect.signature(model).parameters.values())
@@ -651,6 +660,8 @@ class ModelRegistry:
 
         if callable(fn_p0):
             model.estimate_p0 = checked(fn_p0, "p0", len)  # type: ignore[attr-defined]
+        if callable(fn_names):  # length is validated by the runner
+            model.parameter_names = fn_names  # type: ignore[attr-defined]
         if callable(fn_bounds):
             model.bounds = checked(  # type: ignore[attr-defined]
                 fn_bounds, "bounds", lambda b: np.size(b[0])

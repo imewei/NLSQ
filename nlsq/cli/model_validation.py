@@ -70,6 +70,21 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "eval",
         "compile",
         "__import__",
+        # site/pydoc builtins: help("mod") imports any module by string
+        # (help("antigravity") opens a browser); the rest read files or exit
+        "help",
+        "license",
+        "credits",
+        "copyright",
+        "exit",
+        "quit",
+        # numpy readers: URL/DataSource access and a CWD cache write
+        "genfromtxt",
+        "loadtxt",
+        "fromregex",
+        "fromfile",
+        "fromtextfile",  # numpy.ma.mrecords: reads any text file
+        "mrecords",  # numpy.ma.mrecords.openfile opens any file
         # System access
         "system",
         "popen",
@@ -325,6 +340,12 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "nt",
         "_posixsubprocess",
         "_io",
+        "_ctypes",
+        "_imp",
+        "_frozen_importlib",
+        "_frozen_importlib_external",
+        "_socket",
+        "_winapi",
         "pty",
         # Stdlib modules whose .run()/.runctx()/.run_docstring_examples()
         # compile+exec a code string
@@ -409,6 +430,15 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
     },
 )
 
+
+def _private_root(dotted: str) -> bool:
+    """True when the ROOT module is underscore-prefixed (``_ctypes``, ``_imp``,
+    ``_pickle``): C accelerator/implementation modules that bypass the public
+    denylist names. ``__future__`` is the only legitimate one."""
+    root = dotted.split(".", maxsplit=1)[0]
+    return root.startswith("_") and root != "__future__"
+
+
 # Dunder substrings that are dangerous even inside a plain string constant,
 # because str.format()/str.format_map() resolve dotted attribute chains at
 # runtime from a format-spec string (e.g. "{0.__class__.__bases__}".format(x)),
@@ -476,6 +506,7 @@ ALLOWLIST_BLOCKED_ATTRS: frozenset[str] = frozenset(
         "numpy.genfromtxt",
         "numpy.fromregex",
         "numpy.fromfile",
+        "numpy.ma.mrecords",  # fromtextfile reads any text file
         "numpy.save",
         "numpy.savez",
         "numpy.savez_compressed",
@@ -512,6 +543,12 @@ ALLOWLIST_FORBIDDEN_NAMES: frozenset[str] = frozenset(
         "vars",
         "input",
         "breakpoint",
+        "help",
+        "license",
+        "credits",
+        "copyright",
+        "exit",
+        "quit",
     }
 )
 
@@ -521,6 +558,59 @@ ALLOWLIST_FORBIDDEN_NAMES: frozenset[str] = frozenset(
 _ALLOWLIST_BLOCKED_TERMINALS: frozenset[str] = frozenset(
     p.rsplit(".", 1)[-1] for p in ALLOWLIST_BLOCKED_ATTRS
 ) - {"lib"}
+
+
+# site builtins that are ordinary words (`def m(x, entry, exit)`): a Name of one is
+# safe only when it resolves to a function-local binding, never to the builtin.
+_SHADOWABLE_BUILTINS: frozenset[str] = frozenset(
+    {"help", "license", "credits", "copyright", "exit", "quit"}
+)
+
+_NESTED_SCOPES = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
+    ast.Lambda,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+)
+
+
+def _function_scope(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[set, set]:
+    """(locals, globals) of a function body. Nested scopes are not entered, so a
+    missed binding kind only makes the check stricter, never looser."""
+    a = node.args
+    bound = {
+        x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs, a.vararg, a.kwarg) if x
+    }
+    declared_global: set[str] = set()
+    nonlocal_: set[str] = set()
+    stack: list[ast.AST] = list(node.body)
+    while stack:
+        n = stack.pop()
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(n.name)  # body, decorators, defaults: not walked
+            continue
+        if isinstance(n, _NESTED_SCOPES):
+            continue
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            bound.add(n.id)
+        elif isinstance(n, ast.alias):
+            bound.add((n.asname or n.name).split(".")[0])
+        elif (isinstance(n, ast.ExceptHandler) and n.name) or (
+            isinstance(n, (ast.MatchAs, ast.MatchStar)) and n.name
+        ):
+            bound.add(n.name)
+        elif isinstance(n, ast.MatchMapping) and n.rest:
+            bound.add(n.rest)
+        elif isinstance(n, ast.Global):
+            declared_global.update(n.names)
+        elif isinstance(n, ast.Nonlocal):
+            nonlocal_.update(n.names)
+        stack.extend(ast.iter_child_nodes(n))
+    return bound - declared_global - nonlocal_, declared_global
 
 
 def _under(path: str, prefixes: frozenset[str]) -> bool:
@@ -563,10 +653,12 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         self._callees: set[int] = set()
         # local name -> dotted module path, from import statements seen so far
         self._aliases: dict[str, str] = {}
+        # (kind, locals, globals) of the enclosing function/class scopes
+        self._scopes: list[tuple[str, set[str], set[str]]] = []
 
     def visit_Name(self, node: ast.Name) -> Any:
         """Check for dangerous name references."""
-        if node.id in DANGEROUS_PATTERNS:
+        if node.id in DANGEROUS_PATTERNS and not self._shadowed(node.id):
             self.violations.append(f"Dangerous name reference: {node.id}")
         if node.id == "open" and id(node) not in self._callees:
             self.violations.append("Dangerous name reference: open (aliased)")
@@ -628,11 +720,51 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
-        """Check return annotations."""
+        """Check return annotations; the body is visited in the function's scope."""
         self._check_annotation(node.returns)
-        self.generic_visit(node)
+        # decorators, defaults and annotations evaluate in the enclosing scope
+        for child in (
+            *node.decorator_list,
+            node.args,
+            node.returns,
+            *getattr(node, "type_params", ()),
+        ):
+            if child is not None:
+                self.visit(child)
+        self._scopes.append(("function", *_function_scope(node)))
+        for stmt in node.body:
+            self.visit(stmt)
+        self._scopes.pop()
 
     visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> Any:
+        """A class body runs top to bottom with builtins as fallback: no shadowing."""
+        for child in (*node.decorator_list, *node.bases, *node.keywords):
+            self.visit(child)
+        for tp in getattr(node, "type_params", ()):
+            self.visit(tp)
+        self._scopes.append(("class", set(), set()))
+        for stmt in node.body:
+            self.visit(stmt)
+        self._scopes.pop()
+
+    def _shadowed(self, name: str) -> bool:
+        """True if ``name`` is a shadowable builtin bound by an enclosing function,
+        so it cannot reach the builtin. Module/class bindings never count: code
+        there runs in order and a Load before the binding hits the builtin."""
+        if name not in _SHADOWABLE_BUILTINS:
+            return False
+        for i, (kind, bound, declared_global) in enumerate(reversed(self._scopes)):
+            if kind == "class":
+                if i == 0:
+                    return False
+                continue  # methods skip enclosing class scopes
+            if name in declared_global:
+                return False
+            if name in bound:
+                return True
+        return False
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
         """Check variable annotations."""
@@ -761,6 +893,15 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                 self.violations.append(
                     "Dangerous attribute access: scipy.io (file writers)"
                 )
+        # Any `.config` off a base other than self/cls: value aliases of the jax
+        # module (`J = jax`, default args, walrus, lambdas) defeat import-alias
+        # tracking, and no numeric model needs another object's `.config`.
+        if node.attr == "config" and not (
+            isinstance(node.value, ast.Name) and node.value.id in ("self", "cls")
+        ):
+            self.violations.append(
+                "Dangerous attribute access: .config (jax.config: runtime config, file writes)"
+            )
         if node.attr == "open" and id(node) not in self._callees:
             self.violations.append("Dangerous attribute access: .open (aliased)")
         if node.attr == "load" and id(node) not in self._callees:
@@ -793,6 +934,10 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                 self.violations.append(
                     f"Dangerous match class attribute: {attr} ({reason})"
                 )
+            elif attr == "config":  # same any-base rule as visit_Attribute
+                self.violations.append(
+                    "Dangerous match class attribute: config (jax.config)"
+                )
         self.generic_visit(node)
 
     def _check_capture(self, name: str | None) -> None:
@@ -819,7 +964,9 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """True for a dangerous submodule (jax.experimental.serialize_executable)
         or a private module of a numeric package (jax._src.*, numpy.lib._npyio_impl)."""
         parts = dotted.split(".")
-        if parts[:2] == ["scipy", "io"]:  # wavfile.write, savemat, netcdf, ...
+        if parts[:2] in (["scipy", "io"], ["jax", "config"]):  # file writers / config
+            return True
+        if parts[:3] == ["numpy", "ma", "mrecords"]:  # fromtextfile reads any file
             return True
         if any(p in DANGEROUS_PATTERNS for p in parts[1:]):
             return True
@@ -836,6 +983,7 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             if (
                 module_root in DANGEROUS_MODULES
                 or module_root in DANGEROUS_PATTERNS
+                or _private_root(alias.name)
                 or self._bad_module_path(alias.name)
             ):
                 self.violations.append(f"Dangerous import: import {alias.name}")
@@ -852,7 +1000,9 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """
         module_root = node.module.split(".")[0] if node.module else None
         if module_root and (
-            module_root in DANGEROUS_MODULES or module_root in DANGEROUS_PATTERNS
+            module_root in DANGEROUS_MODULES
+            or module_root in DANGEROUS_PATTERNS
+            or _private_root(module_root)
         ):
             self.violations.append(
                 f"Dangerous import: from {node.module} import ...",
@@ -871,8 +1021,17 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             self._aliases[alias.asname or alias.name] = (
                 f"{node.module}.{alias.name}" if node.module else alias.name
             )
+            if module_root == "jax" and alias.name == "config":
+                self.violations.append("Dangerous import: from jax import config")
+            if node.module == "jax" and alias.name == "*":  # binds bare `config`
+                self.violations.append("Dangerous import: from jax import *")
             if node.module == "scipy" and alias.name == "io":
                 self.violations.append("Dangerous import: from scipy import io")
+            if not node.module and _private_root(alias.name):
+                # `from . import _ctypes`: relative form of an underscore module
+                self.violations.append(
+                    f"Dangerous import: from {'.' * node.level} import {alias.name}",
+                )
             if module_root in _NUMERIC_ROOTS and alias.name.startswith("_"):
                 self.violations.append(
                     f"Dangerous import: from {node.module} import {alias.name} (private)",
@@ -969,7 +1128,7 @@ class AllowlistVisitor(DangerousPatternVisitor):
 
     def visit_Name(self, node: ast.Name) -> Any:
         super().visit_Name(node)
-        if node.id in ALLOWLIST_FORBIDDEN_NAMES:
+        if node.id in ALLOWLIST_FORBIDDEN_NAMES and not self._shadowed(node.id):
             self._flag(f"forbidden name '{node.id}'")
         if isinstance(node.ctx, ast.Load):
             if node.id in self._tainted:
@@ -1017,7 +1176,8 @@ class AllowlistVisitor(DangerousPatternVisitor):
         if not isinstance(target, ast.Name) or value is None:
             return
         if isinstance(value, ast.Name) and (
-            value.id in self._tainted or value.id in ALLOWLIST_FORBIDDEN_NAMES
+            value.id in self._tainted
+            or (value.id in ALLOWLIST_FORBIDDEN_NAMES and not self._shadowed(value.id))
         ):
             self._tainted.add(target.id)
             return

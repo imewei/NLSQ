@@ -96,6 +96,59 @@ def exponential_csv_data(temp_workspace):
 class TestEndToEndASCIIFit:
     """End-to-end test: nlsq fit with ASCII data, builtin model, JSON export."""
 
+    def test_plot_cannot_replace_input_data(self, temp_workspace):
+        import yaml
+
+        from nlsq.cli.commands.fit import run_fit
+        from nlsq.cli.errors import CLIError
+
+        source = temp_workspace / "fit_combined.png"
+        source.write_text("0 1\n1 3\n2 5\n")
+        config = {
+            "data": {
+                "input_file": str(source),
+                "format": "ascii",
+                "columns": {"x": 0, "y": 1},
+            },
+            "model": {"type": "builtin", "name": "linear"},
+            "fitting": {"p0": [1.0, 1.0]},
+            "visualization": {
+                "enabled": True,
+                "output_dir": str(temp_workspace),
+                "formats": ["png"],
+            },
+        }
+        workflow = temp_workspace / "plot.yaml"
+        workflow.write_text(yaml.safe_dump(config))
+        with pytest.raises(CLIError, match="input"):
+            run_fit(str(workflow))
+        assert source.read_text() == "0 1\n1 3\n2 5\n"
+
+    def test_output_cannot_replace_workflow_config(
+        self, temp_workspace, linear_data_file
+    ):
+        import yaml
+
+        from nlsq.cli.commands.fit import run_fit
+        from nlsq.cli.errors import CLIError
+
+        config_path = temp_workspace / "workflow.yaml"
+        config = {
+            "data": {
+                "input_file": str(linear_data_file),
+                "format": "ascii",
+                "columns": {"x": 0, "y": 1},
+            },
+            "model": {"type": "builtin", "name": "linear"},
+            "fitting": {"p0": [1.0, 1.0]},
+            "export": {"results_file": str(config_path), "format": "json"},
+        }
+        original = yaml.safe_dump(config)
+        config_path.write_text(original)
+        with pytest.raises(CLIError, match="workflow"):
+            run_fit(str(config_path))
+        assert config_path.read_text() == original
+
     def test_fit_ascii_builtin_json_complete_workflow(
         self, temp_workspace, linear_data_file
     ):

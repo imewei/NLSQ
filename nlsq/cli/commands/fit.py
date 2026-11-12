@@ -17,15 +17,36 @@ From Python:
     >>> result = run_fit("workflow.yaml", stdout=True)
 """
 
+import contextlib
+import sys
+import threading
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from nlsq.cli.errors import ConfigError, cfg_get, setup_logging
-from nlsq.cli.result_exporter import ResultExporter
-from nlsq.cli.visualization import FitVisualizer
-from nlsq.cli.workflow_runner import WorkflowRunner
+from nlsq.cli.errors import CLIError, ConfigError, cfg_get, setup_logging
+from nlsq.cli.result_exporter import ResultExporter, _dumps
+from nlsq.cli.visualization import (
+    FitVisualizer,
+    check_filename_prefix,
+    normalize_formats,
+)
+from nlsq.cli.workflow_runner import WorkflowRunner, validate_config_sections
+
+_STDOUT_REDIRECT_LOCK = threading.Lock()
+
+
+class _StdoutExporter(ResultExporter):
+    """Exporter whose JSON goes to the real stdout while the workflow's own
+    prints (hybrid banners, etc.) are diverted to stderr."""
+
+    def __init__(self, stream: Any) -> None:
+        super().__init__()
+        self._stream = stream
+
+    def _export_stdout(self, data: dict[str, Any]) -> None:
+        print(_dumps(data), file=self._stream)
 
 
 def run_fit(
@@ -95,13 +116,19 @@ def run_fit(
 
     # Load YAML configuration
     try:
-        with open(workflow_file) as f:
+        with open(workflow_file, encoding="utf-8-sig") as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise ConfigError(
             f"Failed to parse YAML: {e}",
             config_file=workflow_path,
             suggestion="Check YAML syntax for errors",
+        ) from e
+    except (UnicodeDecodeError, OSError) as e:
+        raise ConfigError(
+            f"Cannot read workflow file: {e}",
+            config_file=workflow_path,
+            suggestion="Provide a UTF-8 encoded YAML text file",
         ) from e
 
     if not isinstance(config, dict):
@@ -111,8 +138,15 @@ def run_fit(
             suggestion="Ensure the YAML file contains a valid configuration object",
         )
 
+    validate_config_sections(config, workflow_path)
+
     # Apply output override (`or {}`: a bare YAML key parses as None)
     if output_override is not None:
+        if not output_override.strip() or Path(output_override).is_dir():
+            raise ConfigError(
+                f"Invalid --output path {output_override!r}: give a results file name",
+                config_file=workflow_path,
+            )
         config["export"] = config.get("export") or {}
         config["export"]["results_file"] = output_override
 
@@ -128,6 +162,35 @@ def run_fit(
         config["export"] = config.get("export") or {}
         config["export"]["stdout"] = True
         config["export"]["skip_file_on_stdout"] = True
+
+    if not config.get("export"):
+        raise ConfigError(
+            "No output file specified for export",
+            config_file=workflow_path,
+            suggestion="Add export.results_file, or pass --output / --stdout",
+        )
+
+    export_config = config.get("export") or {}
+    results_file = export_config.get("results_file")
+    json_stdout = bool(cfg_get(export_config, "stdout", False))
+    skip_file = json_stdout and bool(
+        cfg_get(export_config, "skip_file_on_stdout", False)
+    )
+    if results_file is not None and not skip_file and Path(results_file).is_dir():
+        raise ConfigError(
+            f"export.results_file {str(results_file)!r} is a directory",
+            config_file=workflow_path,
+            suggestion="Give a results file name",
+        )
+    if (
+        results_file
+        and not (
+            cfg_get(export_config, "stdout", False)
+            and cfg_get(export_config, "skip_file_on_stdout", False)
+        )
+        and Path(results_file).resolve() == workflow_file.resolve()
+    ):
+        raise CLIError("Results file must not overwrite the workflow configuration")
 
     # Log start
     workflow_name = (config.get("metadata") or {}).get("workflow_name", "unnamed")
@@ -151,15 +214,77 @@ def run_fit(
         _beside = Path(workflow_path).resolve().parent / _in
         if not _in.is_absolute() and _beside.is_file():
             _data_cfg["input_file"] = str(_beside)
+    # Same lookup order for a custom model file (read-only input).
+    _model_cfg = config.get("model")
+    if isinstance(_model_cfg, dict) and isinstance(_model_cfg.get("path"), str):
+        _mp = Path(_model_cfg["path"])
+        _beside = Path(workflow_path).resolve().parent / _mp
+        if not _mp.is_absolute() and _beside.is_file():
+            _model_cfg["path"] = str(_beside)
 
-    # Execute workflow
-    runner = WorkflowRunner()
-    result = runner.run(config)
-
-    # Generate visualization if enabled
     vis_config = config.get("visualization") or {}
+    if "formats" in vis_config:
+        vis_config["formats"] = normalize_formats(vis_config["formats"])
     if cfg_get(vis_config, "enabled", False):
-        _generate_visualization(result, config, runner, verbose, logger)
+        check_filename_prefix(cfg_get(vis_config, "filename_prefix", "fit"))
+        sources = {workflow_file.resolve()}
+        input_file = (config.get("data") or {}).get("input_file")
+        model = config.get("model") or {}
+        if input_file:
+            sources.add(Path(input_file).resolve())
+        if model.get("type") == "custom" and model.get("path"):
+            sources.add(Path(model["path"]).resolve())
+        if results_file and not (
+            cfg_get(export_config, "stdout", False)
+            and cfg_get(export_config, "skip_file_on_stdout", False)
+        ):
+            sources.add(Path(results_file).resolve())
+        output_dir = Path(cfg_get(vis_config, "output_dir", "figures"))
+        prefix = cfg_get(vis_config, "filename_prefix", "fit")
+        suffixes = ["combined"]
+        hist = vis_config.get("histogram")  # may be a bare bool (`histogram: true`)
+        if isinstance(hist, dict) and cfg_get(hist, "enabled", False):
+            suffixes.append("histogram")
+        for suffix in suffixes:
+            for fmt in cfg_get(vis_config, "formats", ["pdf", "png"]):
+                if (output_dir / f"{prefix}_{suffix}.{fmt}").resolve() in sources:
+                    raise CLIError(
+                        "Visualization must not overwrite workflow input files"
+                    )
+
+    # Execute workflow. In JSON-stdout mode everything except the JSON document
+    # (banners, progress prints) goes to stderr so stdout stays machine-readable.
+    runner = WorkflowRunner()
+    runner.model_registry.allowed_model_dirs.append(
+        Path(workflow_path).resolve().parent
+    )
+    overwrites = (
+        bool(results_file) and not skip_file and Path(str(results_file)).is_file()
+    )
+    # redirect_stdout swaps a process-global: serialise it so concurrent batch
+    # workers cannot capture each other's redirect and leave sys.stdout on stderr.
+    with _STDOUT_REDIRECT_LOCK if json_stdout else contextlib.nullcontext():
+        real_stdout = sys.stdout  # captured before the redirect below
+        if json_stdout:
+            runner.result_exporter = _StdoutExporter(real_stdout)
+        with (
+            contextlib.redirect_stdout(sys.stderr)
+            if json_stdout
+            else contextlib.nullcontext()
+        ):
+            result = runner.run(config)
+
+            # Generate visualization if enabled
+            vis_config = config.get("visualization") or {}
+            if cfg_get(vis_config, "enabled", False):
+                _generate_visualization(result, config, runner, verbose, logger)
+
+    if overwrites and result.get("success") is False:
+        print(
+            f"Warning: overwrote existing results file {results_file} "
+            "with a non-converged fit",
+            file=sys.stderr,
+        )
 
     if verbose:
         logger.info(f"Workflow completed: {workflow_name}")

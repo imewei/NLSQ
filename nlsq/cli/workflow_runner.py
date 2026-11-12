@@ -20,6 +20,7 @@ Example Usage
 """
 
 import difflib
+import inspect
 import logging
 from typing import Any
 
@@ -51,6 +52,31 @@ _KNOWN_TOP_LEVEL_KEYS = (
     "hybrid_streaming",
 )
 
+_MAPPING_SECTIONS = (
+    "data",
+    "model",
+    "fitting",
+    "export",
+    "metadata",
+    "validation",
+    "visualization",
+)
+
+
+def validate_config_sections(
+    config: dict[str, Any], config_file: str | None = None
+) -> None:
+    """Raise ConfigError unless every present workflow section is a mapping or null."""
+    for key in _MAPPING_SECTIONS:
+        value = config.get(key)
+        if value is not None and not isinstance(value, dict):
+            raise ConfigError(
+                f"Config section '{key}' must be a mapping, got {type(value).__name__}",
+                config_file=config_file,
+                suggestion=f"Write '{key}:' followed by indented key: value pairs",
+            )
+
+
 _KNOWN_FITTING_KEYS = (
     "p0",
     "bounds",
@@ -63,6 +89,19 @@ _KNOWN_FITTING_KEYS = (
     "absolute_sigma",
     "check_finite",
 )
+
+
+def _model_param_count(model: Any) -> int | None:
+    """Number of fit parameters of ``f(x, *params)``; None if not determinable."""
+    try:
+        params = list(inspect.signature(model).parameters.values())
+    except (TypeError, ValueError):
+        return None
+    if not params or any(p.kind == p.VAR_POSITIONAL for p in params):
+        return None
+    return (
+        sum(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params) - 1
+    )
 
 
 def _bound_array(value: Any, which: str) -> np.ndarray:
@@ -164,6 +203,7 @@ class WorkflowRunner:
         CLIError
             If any other workflow error occurs.
         """
+        validate_config_sections(config)
         for key in config:
             if key not in _KNOWN_TOP_LEVEL_KEYS:
                 close = difflib.get_close_matches(
@@ -205,9 +245,44 @@ class WorkflowRunner:
 
         # Step 5: Export results if configured
         if "export" in config:
-            self.result_exporter.export(result, config)
+            self.result_exporter.export(
+                result, self._with_model_parameter_names(config, model, result)
+            )
 
         return result
+
+    @staticmethod
+    def _with_model_parameter_names(
+        config: dict[str, Any], model: Any, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Fill model.parameter_names from the model file's ``parameter_names()``.
+
+        YAML wins; the file's list is used only when it is a list of strings
+        whose length matches the fitted parameter count, otherwise ignored.
+        """
+        model_cfg = config.get("model") or {}
+        fn = getattr(model, "parameter_names", None)
+        if model_cfg.get("parameter_names") or not callable(fn):
+            return config
+        try:
+            names = fn()
+            n = np.size(result.get("popt", result.get("x", [])))
+            if (
+                isinstance(names, (list, tuple))
+                and len(names) == n
+                and all(isinstance(v, str) for v in names)
+            ):
+                return {
+                    **config,
+                    "model": {**model_cfg, "parameter_names": list(names)},
+                }
+        except Exception:
+            pass
+        logger.warning(
+            "Ignoring parameter_names() of the model file: it must return one "
+            "string per fitted parameter"
+        )
+        return config
 
     def _load_data(
         self,
@@ -378,6 +453,16 @@ class WorkflowRunner:
             )
         else:  # YAML scalar or ndarray from Python callers
             p0 = np.atleast_1d(np.asarray(p0))
+
+        n_params = _model_param_count(model)
+        if p0 is not None and not isinstance(p0, str) and n_params is not None:
+            if np.size(p0) != n_params:
+                raise ConfigError(
+                    f"fitting.p0 has {np.size(p0)} value(s) but model "
+                    f"'{getattr(model, '__name__', '?')}' has {n_params} parameter(s)",
+                    suggestion=f"Give exactly {n_params} initial values in "
+                    "fitting.p0, or use `p0: auto`.",
+                )
 
         # Extract bounds
         bounds_config = fitting_config.get("bounds")
