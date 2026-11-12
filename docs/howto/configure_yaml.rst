@@ -27,7 +27,9 @@ The CLI accepts these top-level keys (anything else is rejected with a
 - ``metadata``: free-form run description
 - ``validation``: input and result checks
 - ``visualization``: plot settings
-- ``hybrid_streaming``: streaming optimizer and defense layer configuration (v0.3.6+)
+- ``hybrid_streaming``: streaming optimizer and defense layer configuration.
+  Read only by the GUI; ``nlsq fit`` accepts the key but does not apply it
+  (it logs a warning and fits with defaults)
 
 Multi-start search and memory controls have no YAML equivalent. Use the
 Python API instead (``curve_fit(..., multistart=True)`` and
@@ -55,8 +57,16 @@ Minimal example
 
 Run it with ``nlsq fit workflow.yaml``.
 
-Defense layers example (v0.3.6+)
---------------------------------
+Defense layers example (GUI only)
+---------------------------------
+
+.. note::
+
+   ``nlsq fit`` does **not** apply the ``hybrid_streaming`` section; it logs
+   a warning and runs with default settings. The section is read only by the
+   GUI. From Python, pass the same settings as a ``HybridStreamingConfig`` to
+   ``curve_fit_large(..., strategy=Hybrid(config=config))``; see
+   :doc:`common_workflows`.
 
 Configure the 4-Layer Defense Strategy for warm-start refinement:
 

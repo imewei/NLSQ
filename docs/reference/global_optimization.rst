@@ -325,8 +325,8 @@ See the ``MultiStartOrchestrator`` API for details.
 
    A multi-start result is the winning start's own fit result, so ``nfev`` and
    ``njev`` count the evaluations of that start only, not the total across all
-   starts. Warnings logged by losing starts (for example a rank-deficient
-   Jacobian) are logged at DEBUG; only the winner's are shown at WARNING.
+   starts. Warnings raised by losing starts (for example a rank-deficient
+   Jacobian) are discarded; only the winning start's warnings are replayed.
 
 API Reference
 -------------

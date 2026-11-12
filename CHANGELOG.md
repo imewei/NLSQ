@@ -365,6 +365,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
 
 ### Fixed
+- **Security (CLI model validator, default mode)**: closed four bypasses that let a custom model file write
+  files or make network requests when loaded: `np.load`/`jnp.load` with a writable or non-literal
+  `mmap_mode`, `xml.etree` `.write(path)`, `xml.sax`/`xml.dom.pulldom` URL fetches and
+  `pstats.Stats().dump_stats(path)`. `xml`, `pstats` and other stdlib modules with file, terminal or network
+  side effects (mailbox, wave, aifc, sunau, ossaudiodev, termios, tty, curses, readline, rlcompleter, netrc,
+  syslog, cgi, cgitb, pipes, winreg, msvcrt, lib2to3, asyncore, asynchat, smtpd) and any `dump_stats` call are
+  now rejected. The validator remains a denylist, not a sandbox.
+- CLI: `fitting.p0`, and the lengths returned by a custom model's `estimate_p0`/`bounds`, may be anywhere
+  between the model's required and total positional parameters (as `curve_fit` allows); keyword-only
+  parameters are not counted and `*args` models are not checked.
+- Checkpoints: scalar and opaque-bytes datasets in hybrid and CMA-ES checkpoints are validated (shape `()`,
+  64 MiB byte cap) before being read, so a crafted file with a huge declared shape raises `ValueError`
+  instead of allocating.
+- `fit(workflow="auto_global")`: `sampler`/`center_on_p0`/`scale_factor` are forwarded only on the multi-start
+  route; on the CMA-ES route the "ignored" `UserWarning` is emitted again.
+- `CurveFit(flength=...).curve_fit(method="lm")` raises the same `TypeError` as `curve_fit` when there are
+  fewer data points than parameters; padding no longer hides the check.
+- `make_strictly_feasible` no longer emits an overflow `RuntimeWarning` for +/-`finfo.max` bounds.
+- Hybrid telemetry: L-BFGS line-search failed steps are deduplicated per warmup call, so the failure rate
+  cannot exceed 100%. `Hybrid(verbose=N)` without a config is honoured instead of capped at 1.
+- `NLSQ_SKIP_GPU_CHECK` accepts `1`/`true`/`yes`/`on` (case-insensitive, whitespace ignored).
+- Callbacks wrapped by a `functools.wraps` `(*args, **kwargs)` decorator are dispatched using the wrapped
+  signature.
+- GUI: Guided-mode Run Fit keeps `absolute_sigma`; `nlsq-gui --theme` decides the initial theme (ThemeManager,
+  toggle and saved setting; without it the saved setting is used); a recovered session refreshes the
+  built-in/polynomial equation, parameter and info labels; the Results parameter table is cleared when a
+  result cannot be displayed.
+- Docs: `hybrid_streaming` is documented as GUI-only (not applied by `nlsq fit`); multi-start losers'
+  warnings are documented as discarded.
 - `pcov` no longer depends on parameter units: the covariance SVD equilibrates Jacobian columns to unit
   norm before the rank cutoff (`eps * max(n, p) * s0`, now on the scaled singular values) and scales the
   result back. A fit with x ~ 1e8 (Jacobian cond 1e14, scaled cond 4.3) previously reported a

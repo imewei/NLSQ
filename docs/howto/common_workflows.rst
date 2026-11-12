@@ -126,53 +126,41 @@ Each workflow file is an ordinary single-fit configuration:
    export:
      results_file: ./runs/exp_01/results.json
 
-Warm-start refinement (v0.3.6+)
--------------------------------
+Warm-start refinement
+---------------------
 
 Use this when refining parameters from a previous fit. The 4-Layer Defense
 Strategy prevents L-BFGS warmup from overshooting when starting near the optimum.
 
-.. code-block:: yaml
+.. note::
 
-   hybrid_streaming:
-     normalize: true
-     warmup_iterations: 300
-     gauss_newton_tol: 1e-8
-
-     defense_layers:
-       preset: strict  # strictest protection for warm-start
-
-       layer1_warm_start:
-         enabled: true
-         threshold: 0.01  # 1% of data variance
-
-       layer2_adaptive_lr:
-         enabled: true
-         lr_refinement: 1.0e-6  # very conservative
-         lr_careful: 1.0e-5
-         lr_exploration: 0.001
-
-       layer3_cost_guard:
-         enabled: true
-         tolerance: 0.05  # 5% increase allowed
-
-       layer4_step_clipping:
-         enabled: true
-         max_step_size: 0.1
-
-Or configure programmatically:
+   This is a Python-only workflow. ``nlsq fit`` does not apply a
+   ``hybrid_streaming`` YAML section (it is read only by the GUI).
 
 .. code-block:: python
 
-   from nlsq import fit, HybridStreamingConfig
+   import jax.numpy as jnp
+   import numpy as np
+
+   from nlsq import HybridStreamingConfig, curve_fit_large, get_defense_telemetry
+   from nlsq.streaming import Hybrid
+
+
+   def model(x, a, b):
+       return a * jnp.exp(-b * x)
+
+
+   x = np.linspace(0, 4, 5000)
+   y = 2.5 * np.exp(-1.3 * x) + np.random.default_rng(0).normal(0, 0.01, x.size)
+   previous_popt = np.array([2.4, 1.25])
 
    # Use the strict defense preset for warm-start refinement
    config = HybridStreamingConfig.defense_strict()
-   popt, pcov = fit(model, x, y, p0=previous_popt, method="hybrid_streaming")
+   popt, pcov = curve_fit_large(
+       model, x, y, p0=previous_popt, strategy=Hybrid(config=config)
+   )
 
    # Monitor defense layer activations
-   from nlsq import get_defense_telemetry
-
    telemetry = get_defense_telemetry()
    print(telemetry.get_summary())
 
