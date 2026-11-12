@@ -54,6 +54,11 @@ def call_user_callback(
     try:
         # follow_wrapped=False: a functools.wraps decorator must not hide the real call shape
         sig = inspect.signature(callback, follow_wrapped=False)
+        if hasattr(callback, "__wrapped__") and {
+            p.kind for p in sig.parameters.values()
+        } == {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}:
+            # pure (*args, **kwargs) passthrough: dispatch by the wrapped signature
+            sig = inspect.signature(callback)
     except (TypeError, ValueError):
         return callback(iteration, cost, params, info)
     try:

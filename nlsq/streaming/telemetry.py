@@ -78,9 +78,11 @@ class DefenseLayerTelemetry:
         self.lbfgs_line_search_failures: int = 0
         self.total_lbfgs_iterations: int = 0
         self.lbfgs_line_search_failed_steps: int = 0
-        # (warmup call index, step) of the last counted failed step; failure
-        # events arrive in non-decreasing step order, so this dedupes in O(1).
-        self._last_failed_step: tuple[int, int] | None = None
+        # Steps already counted as failed, for the current warmup call only: the
+        # exception path and the deferred loss-increase check can both report a
+        # step, in either order.
+        self._failed_steps: set[int] = set()
+        self._failed_steps_call: int = 0
 
         # Detailed event log (last N events)
         self._max_events: int = 1000
@@ -212,9 +214,11 @@ class DefenseLayerTelemetry:
         """
         with self._lock:
             self.lbfgs_line_search_failures += 1
-            key = (self.total_warmup_calls, iteration)
-            if key != self._last_failed_step:
-                self._last_failed_step = key
+            if self._failed_steps_call != self.total_warmup_calls:
+                self._failed_steps_call = self.total_warmup_calls
+                self._failed_steps.clear()
+            if iteration not in self._failed_steps:
+                self._failed_steps.add(iteration)
                 self.lbfgs_line_search_failed_steps += 1
             self._log_event_locked(
                 "lbfgs_line_search_failure",

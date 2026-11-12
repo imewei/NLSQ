@@ -96,6 +96,33 @@ def check_checkpoint_dataset(
             )
 
 
+# Byte cap for opaque (void) scalar entries such as the JSON phase history.
+MAX_CHECKPOINT_BYTES = 1 << 26
+
+
+def read_checkpoint_scalar(dset: Any, name: str) -> Any:
+    """Validate a numeric dataset is a scalar (shape ``()``), then read it."""
+    check_checkpoint_dataset(dset, name, shape=())
+    return dset[()]
+
+
+def read_checkpoint_bytes(dset: Any, name: str) -> bytes:
+    """Validate an opaque scalar dataset (``np.void``) from metadata, then read it."""
+    if not isinstance(dset, h5py.Dataset):
+        raise ValueError(f"Checkpoint entry '{name}' is not a dataset")
+    if dset.dtype.kind != "V" or dset.shape != ():
+        raise ValueError(
+            f"Checkpoint dataset '{name}' must be an opaque scalar, got dtype "
+            f"{dset.dtype} shape {tuple(dset.shape)}"
+        )
+    if dset.dtype.itemsize > MAX_CHECKPOINT_BYTES:
+        raise ValueError(
+            f"Checkpoint dataset '{name}' holds {dset.dtype.itemsize} bytes, "
+            f"above the {MAX_CHECKPOINT_BYTES}-byte limit"
+        )
+    return bytes(dset[()])
+
+
 def read_checkpoint_array(
     dset: Any,
     name: str,
@@ -270,7 +297,9 @@ class CheckpointManager:
             self._validate_version(f)
             phase_state = f["phase_state"]
 
-            current_phase = int(phase_state["current_phase"][()])
+            current_phase = int(
+                read_checkpoint_scalar(phase_state["current_phase"], "current_phase")
+            )
             n = self._infer_n_params(phase_state)
             normalized_params = self._read_normalized_params(phase_state, n)
             phase1_optimizer_state = self._read_optimizer_state(phase_state, n)
@@ -521,7 +550,11 @@ class CheckpointManager:
             return None
 
         opt_state_group = phase_state["phase1_optimizer_state"]
-        count = int(opt_state_group["count"][()])
+        count = int(
+            read_checkpoint_scalar(
+                opt_state_group["count"], "phase1_optimizer_state/count"
+            )
+        )
         optimizer_type = opt_state_group.attrs.get("optimizer_type", "lbfgs")
 
         if optimizer_type != "lbfgs":
@@ -580,14 +613,18 @@ class CheckpointManager:
             best_params = read_checkpoint_array(
                 phase_state["best_params_global"], "best_params_global", shape=(n,)
             )
-        best_cost = float(phase_state["best_cost_global"][()])
+        best_cost = float(
+            read_checkpoint_scalar(phase_state["best_cost_global"], "best_cost_global")
+        )
         return best_params, best_cost
 
     def _read_phase_history(self, phase_state: h5py.Group) -> list[dict[str, Any]]:
         """Read phase history."""
         if "phase_history" not in phase_state:
             return []
-        phase_history_bytes = bytes(phase_state["phase_history"][()])
+        phase_history_bytes = read_checkpoint_bytes(
+            phase_state["phase_history"], "phase_history"
+        )
         return safe_loads(phase_history_bytes)
 
     def _read_tournament_state(
@@ -608,10 +645,15 @@ class CheckpointManager:
         tournament_group = phase_state["tournament_state"]
         tournament_checkpoint: dict[str, Any] = {}
         for key in tournament_group:
-            value = tournament_group[key][()]
-            if isinstance(value, np.void):
-                tournament_checkpoint[key] = safe_loads(bytes(value))
+            dset = tournament_group[key]
+            name = f"tournament_state/{key}"
+            if isinstance(dset, h5py.Dataset) and dset.dtype.kind == "V":
+                tournament_checkpoint[key] = safe_loads(
+                    read_checkpoint_bytes(dset, name)
+                )
             else:
+                check_checkpoint_dataset(dset, name)
+                value = dset[()]
                 tournament_checkpoint[key] = (
                     np.array(value) if hasattr(value, "__len__") else value
                 )

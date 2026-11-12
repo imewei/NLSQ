@@ -434,7 +434,15 @@ def _fit_hybrid(
             f"Unrecognized keyword argument(s) for a Hybrid strategy: {sorted(kwargs)}. "
             "Set verbose and HybridStreamingConfig fields on Hybrid(config, verbose).",
         )
-    config = strategy.config if strategy.config is not None else HybridStreamingConfig()
+    # An explicit Hybrid(verbose=...) with no config must not be capped by the
+    # default config's verbose=1 (the engine uses min(verbose, config.verbose)).
+    config = (
+        strategy.config
+        if strategy.config is not None
+        else HybridStreamingConfig(
+            **({} if strategy.verbose is None else {"verbose": strategy.verbose})
+        )
+    )
 
     if check_finite and not (
         np.isfinite(np.asarray(xdata)).all() and np.isfinite(np.asarray(ydata)).all()
