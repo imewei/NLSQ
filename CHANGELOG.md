@@ -365,6 +365,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
 
 ### Fixed
+- **Checkpoints**: tournament checkpoints (written when `enable_multistart=True`) no longer fail to load; the
+  checkpoint dataset check accepts the boolean `survival_mask` (`check_checkpoint_dataset(kinds=...)`).
+- **Callbacks**: `functools.wraps` decorators around progress callbacks are called with positional arguments
+  again; keyword dispatch is used only for non-canonical parameter orders or keyword-only callbacks.
+- **`fit(workflow="auto_global"|"hpc")`**: an omitted `n_starts` forwarded `None` and ran a single start; it
+  now defaults to 10 starts. The CMA-ES "ignored multi-start options" warning now says the options apply only
+  to the multi-start route.
+- **CLI validator**: `wave`, `pipes` and `xml` added to the colliding-symbol denylist.
+- **GUI table paste**: header sniffing in `parse_table_text` / `parse_numeric_rows` no longer treats a numeric
+  first row as a header (or drops a real header).
+- **Fallback recovery**: the `OptimizationRecovery` method chain is `trf -> lm -> trf`, `lm` is skipped for
+  finite bounds, and strategies that leave the problem state unchanged are skipped.
+- **Sparse Jacobian**: the sparsity threshold is relative to the per-column max `|J|` instead of absolute, so a
+  model scaled by 1e-3 is no longer reported 100% sparse and `compute_sparse_jacobian` no longer returns an
+  all-zero matrix for a nonzero Jacobian. Behavior change for callers relying on the absolute 0.01 cutoff.
+- **Algorithm selector**: explicit `user_preferences` (e.g. `prioritize="accuracy"`) are applied after the
+  noise and conditioning adjustments, so they are no longer loosened.
+- **`cached_jit`**: keyword arguments are keyed by dtype and rank (or type), not value; scalar kwarg sweeps no
+  longer create one cache entry per value or evict unrelated compiled functions.
+- **Examples**: `materials_characterization` (04_gallery, 09_gallery_advanced scripts and 09 notebook) draws
+  noise from `np.random.default_rng(42)` so noise length matches the strain grid under
+  `NLSQ_EXAMPLES_QUICK`; fixes the broadcast failure in `tests/regression/test_examples_scripts.py`.
 - **Security (CLI model validator, default mode)**: closed four bypasses that let a custom model file write
   files or make network requests when loaded: `np.load`/`jnp.load` with a writable or non-literal
   `mmap_mode`, `xml.etree` `.write(path)`, `xml.sax`/`xml.dom.pulldom` URL fetches and

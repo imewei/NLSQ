@@ -32,7 +32,7 @@ import numpy as np
 from nlsq import curve_fit
 
 # Set random seed
-np.random.seed(42)
+rng = np.random.default_rng(42)  # Generator-based noise
 
 
 def linear_elastic(strain, E):
@@ -177,8 +177,8 @@ stress_true = np.concatenate([stress_elastic, stress_plastic, stress_necking])
 
 # Add measurement noise (realistic for extensometer + load cell)
 # Strain: ±0.001% (1e-5), Stress: ±2 MPa
-strain_noise = np.random.normal(0, 1e-5, size=len(strain))
-stress_noise = np.random.normal(0, 2.0, size=len(stress_true))
+strain_noise = rng.normal(0, 1e-5, size=len(strain))
+stress_noise = rng.normal(0, 2.0, size=len(stress_true))
 
 strain_measured = strain + strain_noise
 stress_measured = stress_true + stress_noise
