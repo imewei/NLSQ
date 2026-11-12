@@ -784,3 +784,48 @@ class TestFitRescaledKwargs:
         np.testing.assert_allclose(scaled.x, [3.0, 0.4], rtol=5e-2)
         np.testing.assert_allclose(out[0], [3.0, 0.4], rtol=5e-2)
         assert refit.nfev <= 3
+
+
+class TestFallbackDefaultP0:
+    """With p0=None, strategies must see a p0 sized to the model, not [1.0]."""
+
+    def test_strategies_receive_signature_sized_p0(self, monkeypatch):
+        import jax.numpy as jnp
+
+        from nlsq.core import minpack
+        from nlsq.stability.fallback import (
+            AddParameterBoundsStrategy,
+            FallbackOrchestrator,
+            PerturbInitialGuessStrategy,
+        )
+
+        def model(x, a, b, c):
+            return a * jnp.exp(-b * x) + c
+
+        def always_fail(*args, **kwargs):
+            raise RuntimeError("forced failure")
+
+        monkeypatch.setattr(minpack, "curve_fit", always_fail)
+
+        seen = []
+        perturb, add_bounds = (
+            PerturbInitialGuessStrategy(),
+            AddParameterBoundsStrategy(),
+        )
+        for strategy in (perturb, add_bounds):
+            orig = strategy.apply
+            strategy.apply = lambda kw, orig=orig: seen.append(orig(kw)) or seen[-1]
+
+        orch = FallbackOrchestrator(strategies=[perturb, add_bounds], max_attempts=5)
+        x = np.linspace(0, 4, 20)
+        with pytest.raises(RuntimeError):
+            orch.fit_with_fallback(model, x, 2 * np.exp(-x) + 1, p0=None)
+
+        assert len(seen) >= 2  # perturb is progressive, so it can run again
+        assert len(seen[0]["p0"]) == 3
+        lb, ub = next(
+            k["bounds"]
+            for k in seen
+            if "bounds" in k and k["bounds"] is not None and len(k["bounds"][0]) == 3
+        )
+        assert len(lb) == len(ub) == 3

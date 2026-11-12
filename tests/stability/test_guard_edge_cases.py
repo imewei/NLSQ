@@ -585,3 +585,14 @@ class TestJacobianRegularizationScaleInvariance:
                 assert issues["regularized"]
                 rel.append(float(jnp.max(jnp.abs(Jf - J)) / jnp.max(jnp.abs(J))))
         assert_allclose(rel, rel[0], rtol=1e-6)
+
+
+def test_estimate_condition_number_int_input_does_not_overflow():
+    from nlsq.stability.guard import estimate_condition_number
+
+    n = np.arange(100000)
+    assert_allclose(
+        estimate_condition_number(n.astype(np.int32)),
+        estimate_condition_number(n.astype(np.float64)),
+        rtol=1e-12,
+    )

@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from nlsq.callbacks import call_user_callback
 from nlsq.diagnostics.recommendations import get_recommendation
 from nlsq.diagnostics.types import (
     DiagnosticsConfig,
@@ -375,13 +376,7 @@ class GradientMonitor:
 
             # Call user callback if provided
             if user_callback is not None:
-                user_callback(
-                    iteration=iteration,
-                    cost=cost,
-                    params=params,
-                    info=info,
-                    **kwargs,
-                )
+                call_user_callback(user_callback, iteration, cost, params, info)
 
         return gradient_monitor_callback
 

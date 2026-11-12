@@ -277,7 +277,8 @@ class IdentifiabilityAnalyzer:
             # Use the smallest singular value overall: dropping exact zeros
             # would report a finite cond for a rank-deficient Jacobian.
             min_s = float(np.min(s))
-            condition_number = (max_s / min_s) ** 2 if min_s > 0 else float("inf")
+            ratio = max_s / min_s if min_s > 0 else float("inf")
+            condition_number = ratio * ratio
             numerical_rank = int(np.sum(s > tol))
 
         return s, condition_number, numerical_rank, v, tol

@@ -83,6 +83,14 @@ class FallbackStrategy:
         """
         raise NotImplementedError("Subclasses must implement apply()")
 
+    def has_more(self) -> bool:
+        """Whether another apply() would yield a new variant (progressive strategies).
+
+        Queried by the orchestrator after each apply(); single-shot strategies
+        keep the default ``False`` and are tried once per fit.
+        """
+        return False
+
     def reset(self) -> None:
         """Reset per-fit progressive state before a new fit_with_fallback() run.
 
@@ -123,6 +131,9 @@ class AlternativeMethodStrategy(FallbackStrategy):
             modified["method"] = self.method_sequence[self.current_index]
             self.current_index += 1
         return modified
+
+    def has_more(self) -> bool:
+        return self.current_index < len(self.method_sequence)
 
     def reset(self) -> None:
         """Restart the method sequence from the beginning for a new fit."""
@@ -173,6 +184,9 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
 
         return modified
 
+    def has_more(self) -> bool:
+        return self.perturbation_count < self.max_perturbations
+
     def reset(self) -> None:
         """Restart the perturbation budget from zero for a new fit."""
         self.perturbation_count = 0
@@ -181,14 +195,16 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
 class AdjustTolerancesStrategy(FallbackStrategy):
     """Relax optimization tolerances."""
 
-    def __init__(self, relaxation_factor: float = 10.0):
+    def __init__(self, relaxation_factor: float = 10.0, max_relaxations: int = 3):
         super().__init__(
             name="adjust_tolerances",
             description=f"Relax tolerances by {relaxation_factor}x",
             priority=7,
         )
         self.relaxation_factor = relaxation_factor
+        self.max_relaxations = max_relaxations
         self.current_factor = 1.0
+        self._relaxations = 0
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Relax ftol, xtol, gtol."""
@@ -201,15 +217,20 @@ class AdjustTolerancesStrategy(FallbackStrategy):
 
         # Relax by factor
         self.current_factor *= self.relaxation_factor
+        self._relaxations += 1
         modified["ftol"] = ftol * self.current_factor
         modified["xtol"] = xtol * self.current_factor
         modified["gtol"] = gtol * self.current_factor
 
         return modified
 
+    def has_more(self) -> bool:
+        return self._relaxations < self.max_relaxations
+
     def reset(self) -> None:
         """Restart the relaxation factor from 1.0 (unrelaxed) for a new fit."""
         self.current_factor = 1.0
+        self._relaxations = 0
 
 
 class AddParameterBoundsStrategy(FallbackStrategy):
@@ -276,6 +297,9 @@ class UseRobustLossStrategy(FallbackStrategy):
             self.current_index += 1
 
         return modified
+
+    def has_more(self) -> bool:
+        return self.current_index < len(self.loss_sequence)
 
     def reset(self) -> None:
         """Restart the loss-function sequence from the beginning for a new fit."""
@@ -368,6 +392,34 @@ class RescaleProblemStrategy(FallbackStrategy):
         return modified
 
 
+def _fit_succeeded(result) -> bool:
+    """Tuple-style returns (no ``success`` attribute) count as success."""
+    return bool(getattr(result, "success", True))
+
+
+def _keep_best(best, result, attempt_loss, caller_loss, strategy_name=None):
+    """Keep the best unsuccessful ``(key, result, strategy_name)`` triple.
+
+    Robust-loss costs (sum of rho) are always <= 0.5*SSR and not comparable with
+    linear ones, so an attempt run under a different loss than the caller's is
+    ranked by its linear ``0.5*sum(fun**2)``; for a non-linear caller loss only
+    same-loss attempts compete first. Non-finite or missing cost ranks last.
+    """
+    try:
+        if attempt_loss == caller_loss:
+            cost = float(getattr(result, "cost", np.inf))
+        else:
+            cost = 0.5 * float(np.sum(np.square(np.asarray(result.fun))))
+    except (AttributeError, TypeError, ValueError):
+        cost = np.inf
+    if not np.isfinite(cost):
+        cost = np.inf
+    key = (caller_loss not in (attempt_loss, "linear"), cost)
+    if best is None or key < best[0]:
+        return (key, result, strategy_name)
+    return best
+
+
 class FallbackResult:
     """Enhanced optimization result with fallback information."""
 
@@ -380,7 +432,8 @@ class FallbackResult:
         result : OptimizeResult
             Underlying optimization result
         strategy_used : str, optional
-            Name of fallback strategy that succeeded
+            Name of the fallback strategy that produced ``result`` (None for
+            the original attempt)
         attempts : int, optional
             Number of attempts before success
         """
@@ -527,6 +580,7 @@ class FallbackOrchestrator:
         from nlsq.core.minpack import (
             curve_fit,  # Deferred import to avoid circular dependency
         )
+        from nlsq.core.problem import _is_auto_p0, _n_params_from_signature
 
         # Reset per-fit state: this orchestrator instance is commonly reused
         # across multiple fits, but total_attempts and each strategy's
@@ -549,6 +603,9 @@ class FallbackOrchestrator:
         if self.verbose:
             print(f"Attempt 1/{self.max_attempts}: Original parameters")
 
+        best: tuple[Any, Any, str | None] | None = None  # best unsuccessful attempt
+        caller_loss = kwargs.get("loss", "linear")
+        last_exception: Exception | None = None
         try:
             # _xdata/_ydata are for strategies only; curve_fit would warn on them.
             result = curve_fit(
@@ -557,72 +614,95 @@ class FallbackOrchestrator:
                 ydata,
                 **{k: v for k, v in kwargs.items() if k not in ("_xdata", "_ydata")},
             )
+            if _fit_succeeded(result):
+                if self.verbose:
+                    print("Success with original parameters!")
+                return FallbackResult(result, strategy_used=None, attempts=1)
             if self.verbose:
-                print("Success with original parameters!")
-            return FallbackResult(result, strategy_used=None, attempts=1)
+                print("[FAIL] Fit returned success=False")
+            best = _keep_best(best, result, caller_loss, caller_loss)
         except Exception as e:
             if self.verbose:
                 print(f"[FAIL] Failed: {type(e).__name__}: {e}")
             last_exception = e
 
-        # Try fallback strategies
-        for strategy in self.strategies:
-            if self.total_attempts >= self.max_attempts:
-                break
+        # Strategies perturb/derive bounds from p0 and default it to [1.0];
+        # give them curve_fit's own default (ones, sized from the signature).
+        # The original attempt above keeps curve_fit's estimate_p0/auto path.
+        p0 = kwargs.get("p0")
+        if p0 is None or _is_auto_p0(p0):
+            n_params = _n_params_from_signature(f)
+            if n_params >= 1:
+                kwargs["p0"] = np.ones(n_params)
 
-            self.total_attempts += 1
-            self._lifetime_attempts += 1
-            strategy.attempts += 1
+        return self._try_strategies(
+            curve_fit, f, xdata, ydata, kwargs, best, last_exception, caller_loss
+        )
 
-            if self.verbose:
-                print(
-                    f"\nAttempt {self.total_attempts}/{self.max_attempts}: "
-                    f"{strategy.description}",
-                )
+    def _try_strategies(
+        self, curve_fit, f, xdata, ydata, kwargs, best, last_exception, caller_loss
+    ) -> FallbackResult:
+        """Run the strategies; return the first success, else best result or raise."""
+        # Try fallback strategies: round-robin passes, so progressive strategies
+        # (perturbations, loss sequence, ...) get re-queried until exhausted.
+        pending = list(self.strategies)
+        while pending and self.total_attempts < self.max_attempts:
+            for strategy in list(pending):
+                if self.total_attempts >= self.max_attempts:
+                    break
 
-            try:
-                # Apply strategy modifications
-                modified_kwargs = strategy.apply(kwargs)
+                self.total_attempts += 1
+                self._lifetime_attempts += 1
+                strategy.attempts += 1
 
-                # Remove internal markers
-                modified_kwargs.pop("_xdata", None)
-                modified_kwargs.pop("_ydata", None)
-
-                # RescaleProblemStrategy can't rewrite xdata/ydata/f itself
-                # (its apply() only sees kwargs), so it signals a rescaled
-                # fit via internal keys; _fit_rescaled builds the scaled
-                # problem and returns a result in the user's original units.
-                scale_info = {
-                    k: modified_kwargs.pop(k, None)
-                    for k in ("_x_scale", "_y_scale", "_x_offset", "_y_offset")
-                }
-                if modified_kwargs.pop("_scaled", False):
-                    result = _fit_rescaled(
-                        curve_fit, f, xdata, ydata, modified_kwargs, scale_info
+                if self.verbose:
+                    print(
+                        f"\nAttempt {self.total_attempts}/{self.max_attempts}: "
+                        f"{strategy.description}",
                     )
-                else:
-                    result = curve_fit(f, xdata, ydata, **modified_kwargs)
 
-                # Success!
-                strategy.successes += 1
-                self.successful_strategies[strategy.name] = (
-                    self.successful_strategies.get(strategy.name, 0) + 1
-                )
+                try:
+                    result, attempt_loss = self._run_strategy(
+                        strategy, curve_fit, f, xdata, ydata, kwargs
+                    )
 
-                if self.verbose:
-                    print(f"[OK] Success with {strategy.name}!")
+                    if _fit_succeeded(result):
+                        strategy.successes += 1
+                        self.successful_strategies[strategy.name] = (
+                            self.successful_strategies.get(strategy.name, 0) + 1
+                        )
+                        if self.verbose:
+                            print(f"[OK] Success with {strategy.name}!")
+                        return FallbackResult(
+                            result,
+                            strategy_used=strategy.name,
+                            attempts=self.total_attempts,
+                        )
+                    if self.verbose:
+                        print(f"[FAIL] {strategy.name} returned success=False")
+                    best = _keep_best(
+                        best, result, attempt_loss, caller_loss, strategy.name
+                    )
 
-                return FallbackResult(
-                    result,
-                    strategy_used=strategy.name,
-                    attempts=self.total_attempts,
-                )
+                except Exception as e:
+                    if self.verbose:
+                        print(f"[FAIL] Failed: {type(e).__name__}")
+                    last_exception = e
 
-            except Exception as e:
-                if self.verbose:
-                    print(f"[FAIL] Failed: {type(e).__name__}")
-                last_exception = e
-                continue
+                if not strategy.has_more():
+                    pending.remove(strategy)
+
+        if best is not None:
+            # No attempt converged: hand back the lowest-cost result, still
+            # flagged success=False, rather than raising. strategy_used names the
+            # attempt that produced it (None = the original attempt).
+            self.logger.warning(
+                f"All {self.total_attempts} fallback attempts failed to converge; "
+                "returning best result"
+            )
+            return FallbackResult(
+                best[1], strategy_used=best[2], attempts=self.total_attempts
+            )
 
         # All strategies failed
         error_msg = (
@@ -631,6 +711,31 @@ class FallbackOrchestrator:
         )
         self.logger.error(error_msg)
         raise RuntimeError(error_msg) from last_exception
+
+    @staticmethod
+    def _run_strategy(strategy, curve_fit, f, xdata, ydata, kwargs):
+        """Apply one strategy's kwargs modifications and run the fit."""
+        modified_kwargs = strategy.apply(kwargs)
+
+        # Remove internal markers
+        modified_kwargs.pop("_xdata", None)
+        modified_kwargs.pop("_ydata", None)
+        attempt_loss = modified_kwargs.get("loss", "linear")
+
+        # RescaleProblemStrategy can't rewrite xdata/ydata/f itself (its apply()
+        # only sees kwargs), so it signals a rescaled fit via internal keys;
+        # _fit_rescaled builds the scaled problem and returns a result in the
+        # user's original units.
+        scale_info = {
+            k: modified_kwargs.pop(k, None)
+            for k in ("_x_scale", "_y_scale", "_x_offset", "_y_offset")
+        }
+        if modified_kwargs.pop("_scaled", False):
+            return (
+                _fit_rescaled(curve_fit, f, xdata, ydata, modified_kwargs, scale_info),
+                attempt_loss,
+            )
+        return curve_fit(f, xdata, ydata, **modified_kwargs), attempt_loss
 
     def get_statistics(self) -> dict[str, Any]:
         """
