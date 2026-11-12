@@ -114,7 +114,9 @@ N_true = N0_true * np.exp(-lambda_true * time)
 
 # Add realistic measurement noise (Poisson-like, ~5% relative uncertainty)
 # Simulate measurement uncertainty that increases as counts decrease
-noise_level = 0.05 * N_true + np.random.normal(0, 5, size=len(time))
+noise_level = np.random.normal(
+    0, 0.05 * N_true + 5
+)  # zero-mean, sd matches sigma below
 N_measured = N_true + noise_level
 
 # Measurement uncertainties (standard deviations)

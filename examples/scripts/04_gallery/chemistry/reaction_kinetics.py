@@ -124,7 +124,7 @@ noise_1st = np.random.normal(0, 0.02 * C_1st_true, size=len(time))
 C_1st_measured = C_1st_true + noise_1st
 
 # Measurement uncertainties
-sigma_1st = np.asarray(0.02 * C_1st_measured + 0.001)  # Relative + small constant
+sigma_1st = np.asarray(0.02 * C_1st_measured)  # 2% relative, matching the noise
 
 
 print("=" * 70)
@@ -193,7 +193,7 @@ k_2nd_true = 0.01  # M⁻¹s⁻¹
 C_2nd_true = second_order_decay(time, C0_2nd, k_2nd_true)
 noise_2nd = np.random.normal(0, 0.02 * C_2nd_true, size=len(time))
 C_2nd_measured = C_2nd_true + noise_2nd
-sigma_2nd = np.asarray(0.02 * C_2nd_measured + 0.001)
+sigma_2nd = np.asarray(0.02 * C_2nd_measured)
 
 # Fit second-order model
 popt_2nd, pcov_2nd = curve_fit(

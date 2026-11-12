@@ -57,6 +57,12 @@ def double_gaussian(x, a1, mu1, sigma1, a2, mu2, sigma2, baseline):
     return peak1 + peak2 + baseline
 
 
+def sort_peaks(p):
+    """Order the two interchangeable peaks by center so labels match the truth."""
+    p = np.asarray(p)
+    return p if p[1] <= p[4] else p[[3, 4, 5, 0, 1, 2, 6]]
+
+
 def main():
     print("=" * 70)
     print("Multi-Start Integration with fit() Workflows (v0.6.3)")
@@ -247,6 +253,7 @@ def main():
         workflow="auto",
     )
 
+    popt_spec_local = sort_peaks(popt_spec_local)
     print("\n  Local optimization (workflow='auto'):")
     print(
         f"    Peak 1: a={popt_spec_local[0]:.3f}, mu={popt_spec_local[1]:.3f}, sigma={popt_spec_local[2]:.3f}"
@@ -266,6 +273,7 @@ def main():
         n_starts=20,
     )
 
+    popt_spec_global = sort_peaks(popt_spec_global)
     print("\n  Global optimization (workflow='auto_global', n_starts=20):")
     print(
         f"    Peak 1: a={popt_spec_global[0]:.3f}, mu={popt_spec_global[1]:.3f}, sigma={popt_spec_global[2]:.3f}"

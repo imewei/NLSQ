@@ -342,8 +342,9 @@ plt.ylabel("Fit Time (seconds)")
 # ======================================================================
 
 
-def quad_exp(x, a, b, c, d):
-    return a * x**2 + b * x + c + jnp.exp(d)
+def quadratic(x, a, b, c):
+    # (an extra `+ exp(d)` term would be degenerate with the constant c)
+    return a * x**2 + b * x + c
 
 
 length = cap_samples(3 * 10**5)
@@ -353,13 +354,13 @@ jcf = CurveFit()
 nsamples = 3 if QUICK else 21
 
 all_linear_params = np.random.random(size=(nsamples, 2))
-all_quad_params = np.random.random(size=(nsamples, 4))
+all_quad_params = np.random.random(size=(nsamples, 3))
 
 linear_fit_times = []
 quad_fit_times = []
 for i in range(nsamples):
     y_linear = linear(x, *all_linear_params[i]) + np.random.normal(0, 0.2, size=length)
-    y_quad = quad_exp(x, *all_quad_params[i]) + np.random.normal(0, 0.2, size=length)
+    y_quad = quadratic(x, *all_quad_params[i]) + np.random.normal(0, 0.2, size=length)
 
     # fit the data
     start_time = time.time()
@@ -375,7 +376,7 @@ for i in range(nsamples):
     linear_fit_times.append(time.time() - start_time)
 
     start_time = time.time()
-    popt2, pcov2 = jcf.curve_fit(quad_exp, x, y_quad, p0=(0.5, 0.5, 0.5, 0.5))
+    popt2, pcov2 = jcf.curve_fit(quadratic, x, y_quad, p0=(0.5, 0.5, 0.5))
     quad_fit_times.append(time.time() - start_time)
 
 print("Summed Fit Times", np.sum(linear_fit_times + quad_fit_times))
@@ -407,7 +408,7 @@ linear_fit_times = []
 quad_fit_times = []
 for i in range(nsamples):
     y_linear = linear(x, *all_linear_params[i]) + np.random.normal(0, 0.2, size=length)
-    y_quad = quad_exp(x, *all_quad_params[i]) + np.random.normal(0, 0.2, size=length)
+    y_quad = quadratic(x, *all_quad_params[i]) + np.random.normal(0, 0.2, size=length)
 
     # fit the data
     start_time = time.time()
@@ -423,7 +424,7 @@ for i in range(nsamples):
     linear_fit_times.append(time.time() - start_time)
 
     start_time = time.time()
-    popt2, pcov2 = jcf_quad.curve_fit(quad_exp, x, y_quad, p0=(0.5, 0.5, 0.5, 0.5))
+    popt2, pcov2 = jcf_quad.curve_fit(quadratic, x, y_quad, p0=(0.5, 0.5, 0.5))
     quad_fit_times.append(time.time() - start_time)
 
 print("Summed Fit Times", np.sum(linear_fit_times + quad_fit_times))
@@ -454,12 +455,8 @@ plt.close()
 # ======================================================================
 
 
-def quad_exp_numpy(x, a, b, c, d):
-    # Clip d to prevent overflow in exp function
-    d_clipped = np.clip(
-        d, -700, 700
-    )  # exp(700) is near max float64, exp(-700) is near 0
-    return a * x**2 + b * x + c + np.exp(d_clipped)
+def quadratic_numpy(x, a, b, c):
+    return a * x**2 + b * x + c
 
 
 length = cap_samples(3 * 10**5)
@@ -470,19 +467,19 @@ nlsq_fit_times = []
 scipy_fit_times = []
 nsamples = 3 if QUICK else 21
 
-all_params = np.random.random(size=(nsamples, 4))
+all_params = np.random.random(size=(nsamples, 3))
 
 for i in range(nsamples):
     params = get_random_parameters()
-    y = quad_exp(x, *all_params[i]) + np.random.normal(0, 0.2, size=length)
+    y = quadratic(x, *all_params[i]) + np.random.normal(0, 0.2, size=length)
 
     # fit the data
     start_time = time.time()
-    popt1, pcov1 = jcf.curve_fit(quad_exp, x, y, p0=(0.5, 0.5, 0.5, 0.5))
+    popt1, pcov1 = jcf.curve_fit(quadratic, x, y, p0=(0.5, 0.5, 0.5))
     nlsq_fit_times.append(time.time() - start_time)
 
     start_time = time.time()
-    popt2, pcov2 = curve_fit(quad_exp_numpy, x, y, p0=(0.5, 0.5, 0.5, 0.5))
+    popt2, pcov2 = curve_fit(quadratic_numpy, x, y, p0=(0.5, 0.5, 0.5))
     scipy_fit_times.append(time.time() - start_time)
 
 plt.figure()

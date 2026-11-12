@@ -127,7 +127,7 @@ noise = np.random.normal(0, 0.05 * v_true, size=len(S))
 v_measured = v_true + noise
 
 # Measurement uncertainties (5% relative)
-sigma_v = 0.05 * v_measured + 1.0  # Add small constant for low velocities
+sigma_v = 0.05 * v_measured  # 5% relative error, matching the simulated noise
 
 
 print("=" * 70)
@@ -172,8 +172,13 @@ print(
 )
 
 # Catalytic efficiency
-kcat_Km = Vmax_fit / Km_fit  # Assuming [E]_total = 1 μM
-print(f"\nCatalytic efficiency (k_cat/K_M): {kcat_Km:.3f} min⁻¹")
+E_total = 1.0  # μM (assumed)
+kcat = Vmax_fit / E_total  # min⁻¹
+kcat_Km = kcat / Km_fit  # per μM per min
+print(
+    f"\nCatalytic efficiency (k_cat/K_M): {kcat_Km:.3f} μM⁻¹ min⁻¹ "
+    f"(assuming [E]_total = {E_total:g} μM)"
+)
 
 # Velocity at physiological substrate concentration (example: 20 μM)
 S_physiol = 20.0
@@ -238,27 +243,33 @@ print("COMPETITIVE INHIBITION ANALYSIS")
 print("-" * 70)
 
 # Simulate competitive inhibitor data
-I_conc = 100.0  # μM inhibitor concentration
+# Km and Ki are only separately identifiable if [I] is varied (a single [I]
+# constrains only Km*(1 + [I]/Ki)), so fit several [I] globally.
+I_grid = np.array([0.0, 10.0, 25.0, 50.0])  # μM inhibitor concentrations
+I_plot = I_grid[-1]  # [I] shown in Plot 4
 Ki_true = 25.0  # μM inhibition constant
 
-v_inhibited_true = competitive_inhibition(S, Vmax_true, Km_true, I_conc, Ki_true)
-noise_inh = np.random.normal(0, 0.05 * v_inhibited_true, size=len(S))
+S_all = np.tile(S, len(I_grid))
+I_all = np.repeat(I_grid, len(S))
+v_inhibited_true = competitive_inhibition(S_all, Vmax_true, Km_true, I_all, Ki_true)
+noise_inh = np.random.normal(0, 0.05 * v_inhibited_true)
 v_inhibited = v_inhibited_true + noise_inh
+sigma_inh = 0.05 * v_inhibited + 1.0
 
 
 # Fit with inhibition model
 
 
 def competitive_inh_fit(S, Vmax, Km, Ki):
-    return competitive_inhibition(S, Vmax, Km, I_conc, Ki)
+    return competitive_inhibition(S, Vmax, Km, I_all, Ki)
 
 
 popt_inh, pcov_inh = curve_fit(
     competitive_inh_fit,
-    S,
+    S_all,
     v_inhibited,
     p0=[100, 50, 30],
-    sigma=sigma_v,
+    sigma=sigma_inh,
     bounds=([0, 0, 0], [200, 500, 200]),
 )
 
@@ -266,9 +277,17 @@ Vmax_inh, Km_inh, Ki_fit = popt_inh
 perr_inh = np.sqrt(np.diag(pcov_inh))
 Ki_err = perr_inh[2]
 
-print(f"With [{I_conc:.0f} μM] inhibitor:")
-print(f"  Apparent K_M: {Km_inh:.2f} μM (increased from {Km_fit:.2f} μM)")
-print(f"  V_max:        {Vmax_inh:.2f} μM/min (unchanged)")
+print(f"Global fit over [I] = {', '.join(f'{i:.0f}' for i in I_grid)} μM:")
+print(
+    f"  K_M (no inhibitor): {Km_inh:.2f} μM (true {Km_true:.2f}, separate fit {Km_fit:.2f})"
+)
+print(
+    f"  Apparent K_M at [I] = {I_plot:.0f} μM: {Km_inh * (1 + I_plot / Ki_fit):.2f} μM"
+)
+print(
+    f"  V_max:        {Vmax_inh:.2f} μM/min "
+    f"(true {Vmax_true:.2f}, separate fit {Vmax_fit:.2f})"
+)
 print(f"  K_i:          {Ki_fit:.2f} ± {Ki_err:.2f} μM")
 print(f"  True K_i:     {Ki_true:.2f} μM")
 
@@ -367,14 +386,21 @@ ax3.grid(True, alpha=0.3)
 # Plot 4: Competitive inhibition comparison
 ax4 = plt.subplot(3, 2, 4)
 ax4.plot(S, v_measured, "o", markersize=8, label="No inhibitor", alpha=0.7)
-ax4.plot(S, v_inhibited, "s", markersize=8, label=f"[I] = {I_conc:.0f} μM", alpha=0.7)
+ax4.plot(
+    S,
+    v_inhibited[I_all == I_plot],
+    "s",
+    markersize=8,
+    label=f"[I] = {I_plot:.0f} μM",
+    alpha=0.7,
+)
 
 ax4.plot(
     S_fine, michaelis_menten(S_fine, *popt), "g-", linewidth=2, label="No inhibitor fit"
 )
 ax4.plot(
     S_fine,
-    competitive_inh_fit(S_fine, *popt_inh),
+    competitive_inhibition(S_fine, Vmax_inh, Km_inh, I_plot, Ki_fit),
     "b-",
     linewidth=2,
     label="With inhibitor fit",
@@ -443,7 +469,7 @@ print("=" * 70)
 print("Enzyme kinetics parameters successfully determined:")
 print(f"\n  Michaelis constant (K_M):  {Km_fit:.2f} ± {Km_err:.2f} μM")
 print(f"  Maximum velocity (V_max):  {Vmax_fit:.2f} ± {Vmax_err:.2f} μM/min")
-print(f"  Catalytic efficiency:      {kcat_Km:.3f} min⁻¹")
+print(f"  Catalytic efficiency:      {kcat_Km:.3f} μM⁻¹ min⁻¹")
 print("\nInhibition analysis:")
 print(f"  Inhibition constant (K_i): {Ki_fit:.2f} ± {Ki_err:.2f} μM")
 print("  Type: Competitive (K_M increased, V_max unchanged)")

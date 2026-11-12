@@ -56,7 +56,7 @@ def main():
 
     # Generate synthetic data
     np.random.seed(42)
-    x = jnp.logspace(-1, 3, 50)  # Shear rates from 0.1 to 1000 1/s
+    x = jnp.logspace(-5, -1, 50)  # Shear rates 1e-5 to 0.1 1/s (brackets gamma0)
 
     # True parameters (span 7 orders of magnitude)
     true_D0 = 1e-10  # m^2/s
@@ -66,6 +66,11 @@ def main():
     y_true = diffusion_model(x, true_D0, true_gamma0, true_n)
     noise = 0.02 * y_true * np.random.randn(len(x))
     y = y_true + noise
+
+    # 2% multiplicative noise -> relative weights keep every residual O(1); with
+    # raw residuals ~1e-9 the absolute gtol would stop a local fit at nfev=1.
+    sigma = 0.02 * y
+    p0_guess = [5e-10, 1e-2, 1.0]  # deliberately away from the truth
 
     # Bounds spanning the expected parameter ranges
     bounds = (
@@ -108,8 +113,10 @@ def main():
         diffusion_model,
         x,
         y,
-        p0=[1e-10, 1e-3, 0.5],
+        p0=p0_guess,
         bounds=bounds,
+        sigma=sigma,
+        absolute_sigma=True,
         workflow="auto_global",
         n_starts=10,
     )
@@ -143,7 +150,7 @@ def main():
         )
         optimizer = CMAESOptimizer(config=config)
 
-        result = optimizer.fit(diffusion_model, x, y, bounds=bounds)
+        result = optimizer.fit(diffusion_model, x, y, bounds=bounds, sigma=sigma)
 
         print("\n  CMA-ES fitted parameters:")
         print(
@@ -193,17 +200,22 @@ def main():
         diffusion_model,
         x,
         y,
-        p0=[1e-10, 1e-3, 0.5],
+        p0=p0_guess,
         bounds=bounds,
+        sigma=sigma,
+        absolute_sigma=True,
         workflow="auto",  # Local optimization
     )
 
-    print(
-        f"    Local (auto): D0={popt_local[0]:.2e}, gamma0={popt_local[1]:.2e}, n={popt_local[2]:.2f}"
-    )
-    print(
-        f"    Global (auto_global): D0={popt[0]:.2e}, gamma0={popt[1]:.2e}, n={popt[2]:.2f}"
-    )
+    for label, p in (("Local (auto)", popt_local), ("Global (auto_global)", popt)):
+        chi2 = float(jnp.sum(((y - diffusion_model(x, *p)) / sigma) ** 2))
+        print(
+            f"    {label}: D0={p[0]:.2e}, gamma0={p[1]:.2e}, n={p[2]:.2f}, "
+            f"chi2/dof={chi2 / (len(x) - 3):.2f}"
+        )
+    print("  Both agree: the data bracket gamma0, so the problem is identifiable and a")
+    print("  reasonable local start suffices; the global search is insurance against")
+    print("  poor p0 or multimodal landscapes.")
 
     # =========================================================================
     # 5. Visualization

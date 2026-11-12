@@ -197,9 +197,9 @@ bottom_err, top_err, EC50_err, hill_slope_err = perr
 # Dynamic range
 dynamic_range = top_fit - bottom_fit
 
-# EC20 and EC80 (20% and 80% effective concentrations)
-EC20 = EC50_fit * np.power((top_fit - 20) / (20 - bottom_fit), 1 / hill_slope_fit)
-EC80 = EC50_fit * np.power((top_fit - 80) / (80 - bottom_fit), 1 / hill_slope_fit)
+# EC20/EC80 as 20%/80% of the dynamic range: EC_x = EC50 * (x/(100-x))^(1/hill_slope)
+EC20 = EC50_fit * np.power(20 / 80, 1 / hill_slope_fit)
+EC80 = EC50_fit * np.power(80 / 20, 1 / hill_slope_fit)
 
 
 print("\n" + "=" * 70)

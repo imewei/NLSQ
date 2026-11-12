@@ -627,12 +627,15 @@ def demonstrate_memory_management():
     for size in test_sizes:
         try:
             stats = estimate_memory_requirements(size, n_params)
-            print(
-                f"{size:8,} points: {stats.total_memory_estimate_gb:.3f} GB, "
-                f"chunks: {stats.n_chunks}, strategy: {stats.processing_strategy}"
-            )
-        except Exception as e:
+        except ValueError as e:
             print(f"{size:8,} points: Error - {e}")
+            continue
+        # DatasetStats has no strategy field; derive it as get_memory_recommendations() does
+        strategy = "single_chunk" if stats.n_chunks == 1 else "chunked"
+        print(
+            f"{size:8,} points: {stats.total_memory_estimate_gb:.3f} GB, "
+            f"chunks: {stats.n_chunks}, strategy: {strategy}"
+        )
 
     # Test with different memory contexts
     print("\n--- Memory Context Testing ---")

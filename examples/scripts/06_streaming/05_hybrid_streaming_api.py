@@ -154,7 +154,10 @@ def main():
 
     print(f"Success: {result.success}")
     print(f"Message: {result.message}")
-    print(f"Final cost: {getattr(result, 'cost', 'N/A')}")
+    print(
+        f"Final cost: {0.5 * np.sum(np.asarray(result['fun']) ** 2):.6g} "
+        "(0.5 * sum of squared residuals)"
+    )
 
     if hasattr(result, "streaming_diagnostics") and result.streaming_diagnostics:
         diag = result.streaming_diagnostics

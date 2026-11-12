@@ -603,6 +603,25 @@ plt.close()
 # ======================================================================
 
 
+# Pendulum "truth" uses classical RK4: forward Euler pumps energy into a
+# frictionless pendulum, which would bias the recovered frequency.
+def rk4_integrate(f, y0, t, *args):
+    """Classical 4th-order Runge-Kutta on a uniform grid (lax.scan keeps the trace small)."""
+    y0 = jnp.asarray(y0, dtype=float)
+    dt = t[1] - t[0]
+
+    def step(y, ti):
+        k1 = f(y, ti, *args)
+        k2 = f(y + 0.5 * dt * k1, ti + 0.5 * dt, *args)
+        k3 = f(y + 0.5 * dt * k2, ti + 0.5 * dt, *args)
+        k4 = f(y + dt * k3, ti + dt, *args)
+        y_next = y + dt / 6.0 * (k1 + 2 * k2 + 2 * k3 + k4)
+        return y_next, y_next
+
+    _, ys = jax.lax.scan(step, y0, jnp.asarray(t)[:-1])
+    return jnp.concatenate([y0[None, :], ys])
+
+
 # Simple pendulum dynamics
 def pendulum_ode(state, t, omega):
     """Pendulum ODE: d²θ/dt² = -ω² sin(θ)"""
@@ -615,7 +634,7 @@ t_pend = np.linspace(0, 10, 150)
 omega_pend = 2.0
 y0_pend = jnp.array([0.5, 0.0])  # [angle, angular velocity]
 
-y_pend = euler_integrate(pendulum_ode, y0_pend, t_pend, omega_pend)
+y_pend = rk4_integrate(pendulum_ode, y0_pend, t_pend, omega_pend)
 theta_obs = y_pend[:, 0] + np.random.normal(0, 0.02, len(t_pend))
 
 # Compute energy (for verification)
@@ -684,7 +703,7 @@ if FLAX_AVAILABLE:
 
         # Integrate ODE
         y0 = jnp.array([theta0, thetadot0])
-        y = euler_integrate(pendulum_ode, y0, t, omega)
+        y = rk4_integrate(pendulum_ode, y0, t, omega)
 
         # Data fitting loss
         theta_pred = y[:, 0]
@@ -703,7 +722,9 @@ if FLAX_AVAILABLE:
         }
 
     # Optimize with Optax
-    params_init = jnp.array([1.5, 0.4, 0.1])  # [omega, theta0, thetadot0]
+    params_init = jnp.array(
+        [1.9, 0.4, 0.1]
+    )  # [omega, theta0, thetadot0] (off, but within the phase basin)
     optimizer = optax.adam(learning_rate=0.01)
     opt_state = optimizer.init(params_init)
 
@@ -743,18 +764,18 @@ if FLAX_AVAILABLE:
     # Compare with standard NLSQ fit
     def pendulum_model(t, omega, theta0, thetadot0):
         y0 = jnp.array([theta0, thetadot0])
-        y = euler_integrate(pendulum_ode, y0, t, omega)
+        y = rk4_integrate(pendulum_ode, y0, t, omega)
         return y[:, 0]
 
     popt_std, _ = cf_ode.curve_fit(
-        pendulum_model, t_pend, theta_obs, p0=[1.5, 0.4, 0.1]
+        pendulum_model, t_pend, theta_obs, p0=[1.9, 0.4, 0.1]
     )
 
     # Evaluate energy conservation
-    y_pi = euler_integrate(
+    y_pi = rk4_integrate(
         pendulum_ode, jnp.array([theta0_pi, thetadot0_pi]), t_pend, omega_pi
     )
-    y_std = euler_integrate(
+    y_std = rk4_integrate(
         pendulum_ode, jnp.array([popt_std[1], popt_std[2]]), t_pend, popt_std[0]
     )
 
@@ -769,7 +790,14 @@ if FLAX_AVAILABLE:
     print("\n⚡ Energy Conservation:")
     print(f"   Physics-informed: σ_E = {energy_std_pi:.6f}")
     print(f"   Standard NLSQ:    σ_E = {energy_std_std:.6f}")
-    print(f"   Improvement: {(1 - energy_std_pi / energy_std_std) * 100:.1f}%")
+    print(
+        f"   Fitted ω: physics-informed {omega_pi:.4f}, standard NLSQ {popt_std[0]:.4f} "
+        f"(true {omega_pend:.4f})"
+    )
+    print(
+        "   RK4 data conserve energy, so both fits satisfy the constraint; the penalty"
+    )
+    print("   only matters for noisy or underdetermined data.")
 
     # Visualize
     plt.figure(figsize=(12, 4))
