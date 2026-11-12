@@ -350,6 +350,18 @@ class HPCCheckpointManager:
                     )
 
             state_group = f["state"]
+            # Metadata-only validation before any read: a tiny sparse file must
+            # not expand to its declared shape (n from `mean`; C/B are (n, n)).
+            from nlsq.streaming.phases.checkpoint import check_checkpoint_dataset
+
+            n = int(state_group["mean"].shape[0]) if state_group["mean"].ndim else None
+            vec = (n,)
+            expected = {"mean": vec, "C": (n, n), "B": (n, n), "D": vec, "p_c": vec}
+            check_checkpoint_dataset(state_group["key_data"], "key_data")
+            for name in _EVOSAX_ARRAY_FIELDS:
+                check_checkpoint_dataset(
+                    state_group[name], name, shape=expected.get(name)
+                )
             kwargs: dict[str, Any] = {
                 "generation_counter": int(state_group["generation_counter"][()]),
                 "key_data": np.asarray(state_group["key_data"][()]),
