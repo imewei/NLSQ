@@ -7,6 +7,7 @@ including built-in models, polynomial models, or custom Python functions.
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
@@ -59,6 +60,8 @@ class ModelSelectionPage(QWidget):
     - Equation preview with LaTeX rendering
     - Parameter names display
     """
+
+    _custom_error: str | None = None  # why the current custom function was rejected
 
     # Signals
     model_selected = Signal(str, dict)  # model_type, config
@@ -299,10 +302,12 @@ class ModelSelectionPage(QWidget):
         self._current_config = state.model_config or {}
         self._current_model = state.model_func
         if type_id == 0:
-            with QSignalBlocker(self._builtin_combo):
-                self._builtin_combo.setCurrentIndex(
-                    self._builtin_combo.findData(self._current_config.get("name"))
-                )
+            idx = self._builtin_combo.findData(self._current_config.get("name"))
+            if idx >= 0:
+                with QSignalBlocker(self._builtin_combo):
+                    self._builtin_combo.setCurrentIndex(idx)
+            else:  # data-only session: keep the visible item and sync the model
+                self._on_builtin_model_changed(self._builtin_combo.currentIndex())
         elif type_id == 1:
             with QSignalBlocker(self._degree_slider):
                 self._degree_slider.setValue(self._current_config.get("degree", 2))
@@ -455,6 +460,7 @@ class ModelSelectionPage(QWidget):
         else:
             self._function_combo.setEnabled(False)
             self._current_model = None
+            self._custom_error = None  # a stale rejection must not outlive its code
             self._equation_label.setText("")
             self._param_list.setText("Parameters: (define a function)")
             self._info_p0.setText("Auto initial guess: No")
@@ -468,6 +474,7 @@ class ModelSelectionPage(QWidget):
             index: The selected function index
         """
         from nlsq.gui_qt.adapters.model_adapter import (
+            get_model_info,
             parse_custom_model_string,
             validate_jit_compatibility,
         )
@@ -483,8 +490,17 @@ class ModelSelectionPage(QWidget):
         self._current_model_type = "custom"
         self._current_config = {"code": code, "function": func_name}
 
+        self._custom_error = None
         try:
             func, param_names = parse_custom_model_string(code, func_name)
+            if not get_model_info(func)["param_names"] and any(
+                p.kind is inspect.Parameter.VAR_POSITIONAL
+                for p in inspect.signature(func).parameters.values()
+            ):
+                raise ValueError(
+                    "Custom model must declare explicit parameters, "
+                    "e.g. def model(x, a, b)."
+                )
             self._current_model = func
 
             # Update equation preview
@@ -509,23 +525,30 @@ class ModelSelectionPage(QWidget):
             # _current_model itself would still be the last *successfully*
             # parsed function, letting Apply silently reuse it.
             self._current_model = None
+            self._custom_error = str(e)
             self._equation_label.setText(f"<span style='color: red;'>Error: {e}</span>")
             self._param_list.setText("Parameters: (error)")
 
     def _on_apply(self) -> None:
         """Apply the selected model to app state."""
-        if self._current_model_type == "custom" and self._current_model is None:
-            self._on_function_selected(self._function_combo.currentIndex())
-        if self._current_model is None:
-            self._show_error("No Model", "Please select or define a model function.")
-            return
-
-        # Validate custom code syntax
-        if self._current_model_type == "custom":
+        custom = self._current_model_type == "custom"
+        if custom:
+            # Report syntax errors first: unparsable code never yields a model.
             is_valid, message = self._code_editor.validate_syntax()
             if not is_valid:
                 self._show_error("Syntax Error", message)
                 return
+            if self._current_model is None:
+                self._on_function_selected(self._function_combo.currentIndex())
+        if self._current_model is None:
+            custom_error = self._custom_error if custom else None
+            if custom and not custom_error and not self._function_combo.count():
+                custom_error = "No model function is defined in the custom code."
+            self._show_error(
+                "No Model",
+                custom_error or "Please select or define a model function.",
+            )
+            return
 
         # Update app state
         self._app_state.set_model(

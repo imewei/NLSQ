@@ -143,6 +143,15 @@ def _nfev(value: Any, name: str) -> int | None:
     return int(value)
 
 
+def _bound_side(side: Any, fill: float) -> Any:
+    """Map null (unbounded) entries to +/-inf; asarray would turn them into NaN."""
+    if side is None:
+        return fill
+    if isinstance(side, (list, tuple)):
+        return [fill if v is None else v for v in side]
+    return side
+
+
 def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
     """Parse fitting section of YAML config into state."""
 
@@ -177,7 +186,8 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
     if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
         try:
             lower, upper = np.broadcast_arrays(
-                np.asarray(bounds[0], dtype=float), np.asarray(bounds[1], dtype=float)
+                np.asarray(_bound_side(bounds[0], -np.inf), dtype=float),
+                np.asarray(_bound_side(bounds[1], np.inf), dtype=float),
             )
         except (TypeError, ValueError):
             raise ValueError(
@@ -196,7 +206,9 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.scale_factor = float(go.get("scale_factor", state.scale_factor))
 
     if "objective" in fitting:
-        state.loss = fitting["objective"].get("robust_loss", state.loss)
+        obj = fitting["objective"] or {}
+        state.loss = obj.get("robust_loss", state.loss)
+        state.absolute_sigma = bool(obj.get("absolute_sigma", state.absolute_sigma))
 
     if "termination" in fitting:
         term = fitting["termination"] or {}

@@ -59,34 +59,60 @@ def decimation_note(n: int, threshold: int) -> str:
     return f"plots show {len(range(0, n, stride))} of {n} points"
 
 
+_NO_GL_PLATFORMS = frozenset({"offscreen", "minimal", "minimalegl", "vnc"})
+
+
+def _opengl_default() -> tuple[bool, bool]:
+    """Decide the OpenGL default as ``(use_opengl, final)``.
+
+    ``final`` is False while no QGuiApplication exists: only the platform
+    environment variable can be inspected then, so widgets re-run the decision
+    once the application (and a probe GL context) is available.
+    """
+    if sys.platform == "darwin":
+        # Apple deprecated OpenGL in favour of Metal (10.14+); mixing a GL
+        # context with PySide6's Metal backend causes SIGBUS on macOS 26+.
+        return False, True
+    env_plat = os.getenv("QT_QPA_PLATFORM", "").split(":")[0].strip().lower()
+    if env_plat in _NO_GL_PLATFORMS:
+        return False, True
+    from PySide6.QtGui import QGuiApplication, QOpenGLContext
+
+    if QGuiApplication.instance() is None:
+        return True, False
+    if QGuiApplication.platformName().lower() in _NO_GL_PLATFORMS:
+        return False, True
+    # No usable GL (VM, remote X, CI): pyqtgraph's GL viewport would emit
+    # paintGL tracebacks and render nothing, so fall back to software.
+    try:
+        ctx = QOpenGLContext()
+        usable = bool(ctx.create() and ctx.isValid())
+    except Exception:
+        usable = False
+    return usable, True
+
+
 def _configure_pyqtgraph() -> None:
     """Configure pyqtgraph global settings for optimal performance.
 
-    On macOS, OpenGL acceleration is disabled by default because Apple
-    deprecated OpenGL in macOS 10.14 and has progressively reduced driver
-    support.  PySide6 (6.5+) uses Metal for its rendering backend, and
-    creating an OpenGL context alongside Metal can produce SIGBUS crashes
-    at the GPU-driver level.
-
-    Set the environment variable ``NLSQ_GUI_USE_OPENGL=1`` to force-enable
-    OpenGL on macOS at your own risk (e.g. for benchmarking).
+    OpenGL acceleration is disabled by default on macOS (Metal/SIGBUS), on the
+    ``offscreen``/``minimal`` Qt platform plugins, and whenever a probe
+    ``QOpenGLContext`` cannot be created.  ``NLSQ_GUI_USE_OPENGL=1`` /
+    ``=0`` overrides the default in either direction (at your own risk).
     """
     if not _pg_state["configured"]:
         import pyqtgraph as pg
 
         use_opengl_env = os.getenv("NLSQ_GUI_USE_OPENGL", "").strip().lower()
         if use_opengl_env:
-            use_opengl = use_opengl_env in {"1", "true", "yes", "on"}
+            use_opengl, final = use_opengl_env in {"1", "true", "yes", "on"}, True
         else:
-            # macOS deprecated OpenGL in favour of Metal (10.14+).  Mixing an
-            # OpenGL rendering context with PySide6's Metal backend causes
-            # SIGBUS on macOS 26+.  Default to software rendering there.
-            use_opengl = sys.platform != "darwin"
+            use_opengl, final = _opengl_default()
 
-        if not use_opengl and sys.platform == "darwin":
+        if not use_opengl and final:
             _log.info(
-                "pyqtgraph OpenGL disabled on macOS (Apple deprecated OpenGL). "
-                "Set NLSQ_GUI_USE_OPENGL=1 to override.",
+                "pyqtgraph OpenGL disabled (macOS, offscreen/minimal platform, or "
+                "no usable GL context). Set NLSQ_GUI_USE_OPENGL=1 to override.",
             )
 
         pg.setConfigOptions(
@@ -94,7 +120,7 @@ def _configure_pyqtgraph() -> None:
             antialias=True,
             enableExperimental=False,
         )
-        _pg_state["configured"] = True
+        _pg_state["configured"] = final
 
 
 # Eagerly configure pyqtgraph when this package is imported (not just when

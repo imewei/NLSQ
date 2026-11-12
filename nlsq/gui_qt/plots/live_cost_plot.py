@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 import pyqtgraph as pg
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
+from nlsq.gui_qt.plots import _configure_pyqtgraph
+
 if TYPE_CHECKING:
     from nlsq.gui_qt.theme import ThemeConfig
 
@@ -49,6 +51,7 @@ class LiveCostPlotWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Create plot widget — background from default theme
+        _configure_pyqtgraph()  # GL decision needs the live QApplication
         self._plot_widget = pg.PlotWidget()
         self._plot_widget.setBackground(self._theme.plot_background)
         self._plot_widget.setLabel("left", "Cost")

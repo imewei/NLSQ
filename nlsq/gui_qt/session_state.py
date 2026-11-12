@@ -78,6 +78,8 @@ class SessionState:
         Parameter tolerance for convergence.
     max_iterations : int
         Maximum number of iterations.
+    absolute_sigma : bool
+        Treat sigma as absolute (pcov is not rescaled by reduced chi-square).
     method : str
         Optimization method ("trf", "lm", "dogbox").
     loss : str
@@ -149,6 +151,7 @@ class SessionState:
     max_function_evals: int = 2000
     method: str = "trf"
     loss: str = "linear"
+    absolute_sigma: bool = False
 
     # Workflow and global optimization settings (3-workflow system v0.6.3)
     workflow: str = "auto"  # "auto", "auto_global", or "hpc"
@@ -230,6 +233,7 @@ class SessionState:
             max_function_evals=self.max_function_evals,
             method=self.method,
             loss=self.loss,
+            absolute_sigma=self.absolute_sigma,
             workflow=self.workflow,
             n_starts=self.n_starts,
             sampler=self.sampler,
@@ -388,6 +392,7 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
     state.max_function_evals = defaults.max_function_evals
     state.method = defaults.method
     state.loss = defaults.loss
+    state.absolute_sigma = defaults.absolute_sigma
 
     # Reset workflow and global optimization settings
     state.workflow = defaults.workflow
@@ -484,6 +489,7 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
             "method": state.method,
             "objective": {
                 "robust_loss": state.loss,
+                "absolute_sigma": state.absolute_sigma,
             },
             "termination": {
                 "gtol": state.gtol,

@@ -91,19 +91,22 @@ class TestImportGuards:
         assert "agg" in backend, f"Expected Agg-based backend, got {backend}"
 
     def test_pyqtgraph_opengl_platform_default(self, qtbot):
-        """pyqtgraph OpenGL must match platform default (off on macOS, on elsewhere)."""
-        from nlsq.gui_qt.plots import _configure_pyqtgraph, _pg_state
+        """OpenGL default: off on macOS and headless Qt platforms, else GL-probe."""
+        from PySide6.QtGui import QGuiApplication
+
+        from nlsq.gui_qt.plots import _configure_pyqtgraph, _opengl_default, _pg_state
 
         _pg_state["configured"] = False
         _configure_pyqtgraph()
 
         import pyqtgraph as pg
 
-        if sys.platform == "darwin":
+        headless = QGuiApplication.platformName().lower() in {"offscreen", "minimal"}
+        if sys.platform == "darwin" or headless:
             assert pg.getConfigOption("useOpenGL") is False
         else:
-            # Linux/Windows: OpenGL enabled by default
-            assert pg.getConfigOption("useOpenGL") is True
+            # Real display: on exactly when a GL context can be created
+            assert pg.getConfigOption("useOpenGL") is _opengl_default()[0]
 
     def test_pyqtgraph_opengl_env_override(self, qtbot, monkeypatch):
         """NLSQ_GUI_USE_OPENGL=1 must force OpenGL on."""

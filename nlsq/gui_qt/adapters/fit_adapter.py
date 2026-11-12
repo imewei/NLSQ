@@ -98,6 +98,14 @@ class FitConfig:
     scale_factor: float = 1.0
     chunk_size: int = 10000
     absolute_sigma: bool = False
+    # Hybrid-streaming-only controls: carried for reporting, not used by fit().
+    normalize: bool = True
+    warmup_iterations: int = 200
+    defense_preset: str | None = None
+    layer1_enabled: bool = True
+    layer2_enabled: bool = True
+    layer3_enabled: bool = True
+    layer4_enabled: bool = True
 
 
 @runtime_checkable
@@ -317,6 +325,28 @@ def _resolve_workflow(
     return workflow
 
 
+def _note_ignored_streaming_controls(config: FitConfig, notes: list[str]) -> None:
+    """Append a note for non-default streaming/defense settings fit() ignores."""
+    defaults = FitConfig()
+    ignored = []
+    if config.normalize != defaults.normalize:
+        ignored.append("normalize")
+    if config.warmup_iterations != defaults.warmup_iterations:
+        ignored.append("warmup iterations")
+    if config.defense_preset not in (None, "default"):
+        ignored.append("defense preset")
+    ignored += [
+        f"defense layer {i}"
+        for i in range(1, 5)
+        if not getattr(config, f"layer{i}_enabled")
+    ]
+    if ignored:
+        notes.append(
+            f"{', '.join(ignored)} apply only to hybrid-streaming runs and "
+            "are not used by this fit"
+        )
+
+
 def execute_fit(
     xdata: np.ndarray,
     ydata: np.ndarray,
@@ -426,6 +456,9 @@ def execute_fit(
     # fit()'s workflow API has no chunking control (memory-based selection).
     if config.chunk_size != FitConfig().chunk_size:
         notes.append("chunk size is not configurable here and was ignored")
+
+    # Streaming/defense controls only configure hybrid-streaming runs.
+    _note_ignored_streaming_controls(config, notes)
 
     # Add method if not auto-selecting
     if config.method and config.method != "auto":
@@ -653,7 +686,14 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
         center_on_p0=getattr(state, "center_on_p0", True),
         scale_factor=getattr(state, "scale_factor", 1.0),
         chunk_size=state.chunk_size,
-        absolute_sigma=False,
+        absolute_sigma=bool(getattr(state, "absolute_sigma", False)),
+        normalize=getattr(state, "normalize", True),
+        warmup_iterations=getattr(state, "warmup_iterations", 200),
+        defense_preset=getattr(state, "defense_preset", None),
+        layer1_enabled=getattr(state, "layer1_enabled", True),
+        layer2_enabled=getattr(state, "layer2_enabled", True),
+        layer3_enabled=getattr(state, "layer3_enabled", True),
+        layer4_enabled=getattr(state, "layer4_enabled", True),
     )
 
 

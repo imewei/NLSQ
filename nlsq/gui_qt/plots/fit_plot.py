@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from nlsq.gui_qt.plots import _downsample
+from nlsq.gui_qt.plots import _configure_pyqtgraph, _downsample
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -69,6 +69,7 @@ class FitPlotWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Create plot widget — background set properly in set_theme()
+        _configure_pyqtgraph()  # GL decision needs the live QApplication
         self._plot_widget = pg.PlotWidget()
         self._plot_widget.setBackground(self._theme.plot_background)
         self._plot_widget.showGrid(x=True, y=True, alpha=0.3)

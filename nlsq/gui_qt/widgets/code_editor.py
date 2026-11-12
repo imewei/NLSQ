@@ -521,7 +521,8 @@ class CodeEditorWidget(QWidget):
             return True, "Syntax valid"
         except SyntaxError as e:
             line = e.lineno or 1
-            return False, f"Line {line}: {e.msg}"
+            col = f", column {e.offset}" if e.offset else ""
+            return False, f"Line {line}{col}: {e.msg}"
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
