@@ -258,8 +258,10 @@ class OptimizationRecovery:
 
         Notes
         -----
-        Only ``tr_solver``, ``x_scale`` and ``loss`` reach the solver (see the
-        recovery lambda in ``CurveFit.curve_fit``). The ``regularization``
+        Only the keys forwarded by the recovery lambda in
+        ``CurveFit.curve_fit`` (``p0``/``params``, ``xdata``, ``ydata``,
+        ``bounds``, ``method``, ``ftol``, ``xtol``, ``tr_solver``,
+        ``x_scale``, ``loss``) reach the solver. The ``regularization``
         entry is not forwarded (the solver has no such parameter) and has no
         effect on the retry.
         """

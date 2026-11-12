@@ -20,7 +20,7 @@ Key Features
 ------------
 
 - **Automatic parameter perturbation** to escape local minima
-- **Algorithm switching** between TRF, LM, and Dogbox methods
+- **Algorithm switching** between TRF and LM (LM is skipped for finite bounds)
 - **Regularization adjustment** for ill-conditioned problems
 - **Problem reformulation** with data normalization and bound relaxation
 - **Multi-start optimization** from different initial points

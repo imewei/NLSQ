@@ -734,7 +734,7 @@ def detect_sparsity_at_p0(
     ...     model, p0, xdata, n_residuals=1000
     ... )
     >>> print(f"Sparsity: {sparsity_ratio:.1%}, Is sparse: {is_sparse}")
-    Sparsity: 50.0%, Is sparse: True
+    Sparsity: 50.0%, Is sparse: False
     """
     # Sample data for efficient detection
     # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)

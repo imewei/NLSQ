@@ -51,7 +51,8 @@ def pcov_from_jacobian(
     # Equilibrate columns to unit norm before the SVD so the rank cutoff sees
     # identifiability, not parameter units (x in 1e8 units made one direction look
     # "dropped" and its variance collapse); pcov is scaled back below. Departs from
-    # SciPy's unscaled cutoff on purpose. Zero/non-finite columns are left unscaled.
+    # SciPy's unscaled cutoff on purpose. Zero columns are left unscaled; if any
+    # column norm is non-finite, no column is scaled.
     J_np = np.asarray(J)
     col_max = np.max(
         np.abs(J_np), axis=0, initial=0.0

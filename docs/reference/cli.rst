@@ -328,6 +328,8 @@ Exit Codes
      - Success
    * - 1
      - General error (configuration, data loading, model, or fitting error), or a fit that did not converge
+   * - 130
+     - ``nlsq batch`` interrupted (Ctrl-C); completed results are still reported
 
 Scripting Examples
 ------------------

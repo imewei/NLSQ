@@ -262,8 +262,12 @@ class WorkflowRunner:
                     **config,
                     "model": {**model_cfg, "parameter_names": list(names)},
                 }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                f"Ignoring parameter_names() of the model file: it raised "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return config
         logger.warning(
             "Ignoring parameter_names() of the model file: it must return one "
             "string per fitted parameter"
