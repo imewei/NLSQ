@@ -489,8 +489,21 @@ _DANGEROUS_STRING_SUBSTRINGS: tuple[str, ...] = (
 _NUMERIC_ROOTS: frozenset[str] = frozenset({"numpy", "scipy", "jax"})
 # Dunders that legitimate models read and that expose nothing dangerous.
 _VETTED_DUNDERS: frozenset[str] = frozenset({"__name__", "__doc__", "__version__"})
+# Also plausible user-object field names (``C.wave``, ``net.pipes``); the
+# module imports stay blocked via DANGEROUS_MODULES.
 _COLLIDING_SYMBOLS: frozenset[str] = frozenset(
-    {"signal", "trace", "profile", "gc", "resource", "logging", "readline"}
+    {
+        "signal",
+        "trace",
+        "profile",
+        "gc",
+        "resource",
+        "logging",
+        "readline",
+        "wave",
+        "pipes",
+        "xml",
+    }
 )
 
 

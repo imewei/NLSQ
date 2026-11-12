@@ -252,13 +252,24 @@ def _to_float(cell: str, decimal_comma: bool) -> float:
     return float(cell)
 
 
-def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[float]]:
+def _is_number(cell: str, decimal_comma: bool) -> bool:
+    try:
+        _to_float(cell, decimal_comma)
+    except ValueError:
+        return False
+    return True
+
+
+def parse_numeric_rows(
+    lines: list[str], delimiter: str | None, start: int = 1
+) -> list[list[float]]:
     """Parse delimited text lines into rows of floats.
 
     With an explicit delimiter an empty cell becomes NaN so later values stay
     in their own column (dropping it would shift them left); downstream
     validation then rejects the NaN. Whitespace splitting (``delimiter=None``)
-    cannot express empty cells.
+    cannot express empty cells. ``start`` is the number reported for the first
+    line (``2`` when a header line was already consumed).
 
     Raises
     ------
@@ -266,7 +277,7 @@ def parse_numeric_rows(lines: list[str], delimiter: str | None) -> list[list[flo
         If a non-empty cell is not numeric (message names the line).
     """
     rows: list[list[float]] = []
-    for line_num, line in enumerate(lines, start=1):
+    for line_num, line in enumerate(lines, start=start):
         stripped_line = line.strip()
         if not stripped_line:
             continue
@@ -297,7 +308,10 @@ def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
     Returns
     -------
     rows, header
-        ``header`` is the first line's cells if it is non-numeric, else None.
+        ``header`` is the first line's cells if NONE of them is numeric, else
+    None. A first line mixing numeric and non-numeric cells (``1.0,NA``, or a
+    header such as ``run1,2`` whose cell happens to parse as a number) is data
+    and raises like any other bad row, instead of silently dropping that row.
 
     Raises
     ------
@@ -310,15 +324,17 @@ def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
         return [], None
     delimiter = detect_delimiter("\n".join(lines))
     header = None
-    try:
-        parse_numeric_rows(lines[:1], delimiter)
-    except ValueError:
-        header = [
-            h.strip()
-            for h in (lines[0].split(delimiter) if delimiter else lines[0].split())
-        ]
-        lines = lines[1:]
-    return parse_numeric_rows(lines, delimiter), header
+    first = [
+        c.strip()
+        for c in (lines[0].split(delimiter) if delimiter else lines[0].split())
+    ]
+    if not any(_is_number(c, delimiter == ";") for c in first if c):
+        try:
+            parse_numeric_rows(lines[:1], delimiter)
+        except ValueError:
+            header = first
+            lines = lines[1:]
+    return parse_numeric_rows(lines, delimiter, start=2 if header else 1), header
 
 
 def detect_delimiter(text: str) -> str | None:
