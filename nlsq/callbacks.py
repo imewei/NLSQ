@@ -50,7 +50,11 @@ def call_user_callback(
     arguments (so ``(params, cost, iteration, info)`` receives the right
     values). Otherwise the arguments are passed positionally (arbitrary names,
     ``*args``, builtins, callables whose signature cannot be inspected).
+    A pure ``(*args, **kwargs)`` ``functools.wraps`` wrapper is dispatched by the
+    wrapped signature but still called positionally unless the wrapped names
+    are in a non-canonical order.
     """
+    passthrough = False
     try:
         # follow_wrapped=False: a functools.wraps decorator must not hide the real call shape
         sig = inspect.signature(callback, follow_wrapped=False)
@@ -59,6 +63,7 @@ def call_user_callback(
         } == {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}:
             # pure (*args, **kwargs) passthrough: dispatch by the wrapped signature
             sig = inspect.signature(callback)
+            passthrough = True
     except (TypeError, ValueError):
         return callback(iteration, cost, params, info)
     try:
@@ -70,7 +75,21 @@ def call_user_callback(
         positional_ok = True
     except TypeError:
         positional_ok = False
-    if not positional_ok or any(n in sig.parameters for n in _CALLBACK_ARGS):
+    if passthrough and positional_ok:
+        # Wrappers commonly read args[0] or forward only *args, so keep the
+        # positional call unless the wrapped names are in a non-canonical order.
+        named = [
+            _CALLBACK_ARGS.index(n)
+            for n, p in sig.parameters.items()
+            if n in _CALLBACK_ARGS
+            and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
+        use_keywords = named != sorted(named)
+    else:
+        use_keywords = not positional_ok or any(
+            n in sig.parameters for n in _CALLBACK_ARGS
+        )
+    if use_keywords:
         return callback(iteration=iteration, cost=cost, params=params, info=info)
     return callback(iteration, cost, params, info)
 

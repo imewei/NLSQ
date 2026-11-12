@@ -58,10 +58,12 @@ def check_checkpoint_dataset(
     name: str,
     *,
     shape: tuple[int | None, ...] | None = None,
+    kinds: str = "fiu",
 ) -> None:
     """Validate an HDF5 dataset from metadata only, before anything is read.
 
-    Rejects non-datasets, non-numeric dtypes, shapes above
+    Rejects non-datasets, dtypes whose kind is not in ``kinds`` (default
+    float/int/uint; the tournament survival mask also allows bool), shapes above
     ``MAX_CHECKPOINT_ELEMENTS``, a mismatch with the expected ``shape`` (``None``
     entries are wildcards), and
     chunked datasets with unallocated chunks (a tiny sparse file would
@@ -69,7 +71,7 @@ def check_checkpoint_dataset(
     """
     if not isinstance(dset, h5py.Dataset):
         raise ValueError(f"Checkpoint entry '{name}' is not a dataset")
-    if dset.dtype.kind not in "fiu":
+    if dset.dtype.kind not in kinds:
         raise ValueError(
             f"Checkpoint dataset '{name}' has non-numeric dtype {dset.dtype}"
         )
@@ -652,7 +654,7 @@ class CheckpointManager:
                     read_checkpoint_bytes(dset, name)
                 )
             else:
-                check_checkpoint_dataset(dset, name)
+                check_checkpoint_dataset(dset, name, kinds="fiub")
                 value = dset[()]
                 tournament_checkpoint[key] = (
                     np.array(value) if hasattr(value, "__len__") else value
