@@ -1287,7 +1287,9 @@ def _fit_with_auto_global(
     _logger.debug(f"workflow='auto_global' bounds: lower={lb}, upper={ub}")
 
     # Extract optional parameters
-    n_starts = kwargs.pop("n_starts", 10)
+    # nlsq.fit forwards n_starts=None when the caller gave none: None means default.
+    n_starts = kwargs.pop("n_starts", None)
+    n_starts = 10 if n_starts is None else n_starts
     cmaes_config = kwargs.pop("cmaes_config", None)
     memory_limit_gb = kwargs.pop("memory_limit_gb", None)
 
@@ -1617,9 +1619,9 @@ def _fit_global_cmaes(
         kwargs.pop(k)
     if unused:
         warnings.warn(
-            f"{unused} are not used when `workflow` is given and are "
-            "ignored; configure them through the workflow config or use "
-            "curve_fit()/curve_fit_large().",
+            f"{unused} are not used on the CMA-ES route selected by "
+            "workflow='auto_global' and are ignored; they apply only to its "
+            "multi-start route, or use curve_fit()/curve_fit_large().",
             UserWarning,
             stacklevel=2,
         )

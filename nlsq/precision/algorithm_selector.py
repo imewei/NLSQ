@@ -531,35 +531,36 @@ class AlgorithmSelector:
         n_points = problem_analysis["n_points"]
         n_params = problem_analysis["n_params"]
 
-        # Step 1: Apply user preferences
-        self._apply_user_preferences(recommendations, user_preferences)
-
-        # Step 2: Adjust for condition number
+        # Step 1: Adjust for condition number
         condition_estimate = problem_analysis.get("condition_estimate", 1)
         self._adjust_for_condition_number(recommendations, condition_estimate)
 
-        # Step 3: Select trust region solver based on problem size
+        # Step 2: Select trust region solver based on problem size
         self._select_trust_region_solver(recommendations, n_points, n_params)
 
-        # Step 4: Select loss function based on outliers
+        # Step 3: Select loss function based on outliers
         has_outliers = problem_analysis.get("has_outliers", False)
         outlier_fraction = problem_analysis.get("outlier_fraction", 0)
         self._select_loss_function(recommendations, has_outliers, outlier_fraction)
 
-        # Step 5: Adjust for noisy data
+        # Step 4: Adjust for noisy data
         is_noisy = problem_analysis.get("is_noisy", False)
         self._adjust_for_noise(recommendations, is_noisy)
 
-        # Step 6: Adjust for memory constraints
+        # Step 5: Adjust for memory constraints
         memory_constrained = problem_analysis.get("memory_constrained", False)
         self._adjust_for_memory_constraints(recommendations, memory_constrained)
 
-        # Step 7: Adjust maximum iterations
+        # Step 6: Adjust maximum iterations
         self._adjust_max_iterations(recommendations, n_points)
 
-        # Step 8: Select parameter scaling
+        # Step 7: Select parameter scaling
         param_scale_range = problem_analysis.get("param_scale_range", 0)
         self._select_x_scale(recommendations, param_scale_range)
+
+        # Step 8: Apply user preferences last so explicit choices (e.g.
+        # prioritize="accuracy") are not loosened by data-driven adjustments
+        self._apply_user_preferences(recommendations, user_preferences)
 
         return recommendations
 
