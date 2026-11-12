@@ -242,6 +242,7 @@ class ResultsPage(QWidget):
             # Never leave stale stats/plots (or an enabled Export) behind
             logger.exception("Failed to display fit results")
             self._has_results = False
+            self._param_results.clear()
             self._fit_statistics.clear()
             self._fit_plot.clear()
             self._residuals_plot.clear()
@@ -290,7 +291,8 @@ class ResultsPage(QWidget):
         # Get parameter names
         param_names = self._get_param_names()
 
-        # Update parameter results
+        # Update parameter results (never keep the previous fit's table)
+        self._param_results.clear()
         if popt is not None and param_names:
             values = list(popt)
             uncertainties = list(perr) if perr is not None else []

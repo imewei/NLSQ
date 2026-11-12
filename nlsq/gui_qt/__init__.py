@@ -160,8 +160,8 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--theme",
         choices=("light", "dark"),
-        default="dark",
-        help="initial color scheme (default: dark)",
+        default=None,
+        help="initial color scheme (default: last saved, else dark)",
     )
     return parser.parse_known_args(list(argv))[0]
 
@@ -265,6 +265,8 @@ def run_desktop(argv: Sequence[str] | None = None) -> int:
     # Create and show main window
     window = MainWindow(app_state)
     _stage("MainWindow created")
+    if args.theme is not None:  # an explicit --theme beats the saved setting
+        window.set_theme(args.theme)
 
     window.show()
     _stage("window shown — entering event loop")

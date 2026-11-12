@@ -382,11 +382,12 @@ class FittingOptionsPage(QWidget):
 
         # Update state with current options
         if self._guided_radio.isChecked():
+            # absolute_sigma is not a preset property: keep the user's setting
+            defaults = {
+                k: v for k, v in self._default_options.items() if k != "absolute_sigma"
+            }
             self._sync_options_to_state(
-                {
-                    **self._default_options,
-                    **PRESETS.get(self._preset_combo.currentText(), {}),
-                }
+                {**defaults, **PRESETS.get(self._preset_combo.currentText(), {})}
             )
         else:
             self._sync_options_to_state(self._advanced_options.get_options())

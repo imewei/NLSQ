@@ -306,11 +306,13 @@ class ModelSelectionPage(QWidget):
             if idx >= 0:
                 with QSignalBlocker(self._builtin_combo):
                     self._builtin_combo.setCurrentIndex(idx)
+                self._on_builtin_model_changed(idx)  # refresh blocked preview labels
             else:  # data-only session: keep the visible item and sync the model
                 self._on_builtin_model_changed(self._builtin_combo.currentIndex())
         elif type_id == 1:
             with QSignalBlocker(self._degree_slider):
                 self._degree_slider.setValue(self._current_config.get("degree", 2))
+            self._on_degree_changed(self._degree_slider.value())  # refresh labels
         else:
             with (
                 QSignalBlocker(self._code_editor),
