@@ -115,6 +115,14 @@ class OptimizationRecovery:
                     # Apply recovery strategy
                     modified_state = strategy(failure_type, optimization_state, retry)
 
+                    # A strategy with nothing to propose returns the state
+                    # untouched (shallow copy: same value objects); re-running
+                    # it would just repeat the failed call.
+                    if modified_state.keys() == optimization_state.keys() and all(
+                        modified_state[k] is v for k, v in optimization_state.items()
+                    ):
+                        continue
+
                     # Retry optimization with modified state
                     result = optimization_func(**modified_state, **kwargs)
 
@@ -204,14 +212,16 @@ class OptimizationRecovery:
         modified_state = state.copy()
         current_method = state.get("method", "trf")
 
-        # Algorithm switching strategy
-        algorithm_chain = {
-            "trf": ["lm", "dogbox"],
-            "lm": ["trf", "dogbox"],
-            "dogbox": ["trf", "lm"],
-        }
-
+        # NLSQ supports only "trf" and "lm" ("dogbox" is rejected by the
+        # solver); "lm" cannot handle bounds, so a bounded problem has no
+        # alternative and the state is returned unchanged.
+        algorithm_chain = {"trf": ["lm"], "lm": ["trf"]}
         alternatives = algorithm_chain.get(current_method, ["trf"])
+        bounds = state.get("bounds")
+        if bounds is not None and any(
+            np.any(np.isfinite(np.asarray(b, dtype=float))) for b in bounds
+        ):
+            alternatives = [m for m in alternatives if m != "lm"]
 
         if retry < len(alternatives):
             modified_state["method"] = alternatives[retry]
@@ -221,10 +231,6 @@ class OptimizationRecovery:
                 # LM is less robust but more accurate
                 modified_state["ftol"] = 1e-10
                 modified_state["xtol"] = 1e-10
-            elif alternatives[retry] == "dogbox":
-                # Dogbox for bounded problems
-                modified_state["ftol"] = 1e-8
-                modified_state["xtol"] = 1e-8
 
         return modified_state
 
@@ -249,6 +255,15 @@ class OptimizationRecovery:
         -------
         modified_state : dict
             State with adjusted regularization
+
+        Notes
+        -----
+        Only the keys forwarded by the recovery lambda in
+        ``CurveFit.curve_fit`` (``p0``/``params``, ``xdata``, ``ydata``,
+        ``bounds``, ``method``, ``ftol``, ``xtol``, ``tr_solver``,
+        ``x_scale``, ``loss``) reach the solver. The ``regularization``
+        entry is not forwarded (the solver has no such parameter) and has no
+        effect on the retry.
         """
         modified_state = state.copy()
 

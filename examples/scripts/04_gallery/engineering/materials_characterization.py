@@ -32,7 +32,7 @@ import numpy as np
 from nlsq import curve_fit
 
 # Set random seed
-np.random.seed(42)
+rng = np.random.default_rng(42)  # Generator-based noise
 
 
 def linear_elastic(strain, E):
@@ -125,27 +125,47 @@ def power_law_hardening(strain, sigma_y, K, n):
     return K * jnp.power(strain, n)
 
 
+def offset_yield(strain, stress, E_GPa, offset=0.002):
+    """Return (strain, stress) where the curve crosses the offset line, or None."""
+    differences = stress - E_GPa * 1000 * (strain - offset)
+    idx = np.where(np.diff(np.sign(differences)) < 0)[0]
+    if len(idx) == 0:
+        return None
+    i = idx[0]
+    w = differences[i] / (differences[i] - differences[i + 1])
+    return (
+        strain[i] + w * (strain[i + 1] - strain[i]),
+        stress[i] + w * (stress[i + 1] - stress[i]),
+    )
+
+
 # Simulate aluminum alloy (6061-T6 like properties)
 # True material parameters
 E_true = 69.0  # GPa (Young's modulus)
 sigma_y_true = 275.0  # MPa (yield strength)
 UTS_true = 310.0  # MPa (ultimate tensile strength)
-epsilon_y_true = sigma_y_true / (E_true * 1000)  # Yield strain
+# Strain at the 0.2% offset yield point: elastic strain + 0.2% plastic offset
+epsilon_y_true = sigma_y_true / (E_true * 1000) + 0.002
 
-# Generate strain data (0% to 12% strain)
-strain = np.linspace(0, 0.12, 250)
+# Generate strain data (0% to 12% strain), dense in the elastic window so the
+# modulus fit has enough points (about 15 below 50% of yield)
+strain = np.unique(
+    np.concatenate([np.linspace(0, 0.008, 60), np.linspace(0.008, 0.12, 240)])
+)
 
 # Build stress-strain curve in three regions:
-# 1. Elastic region (0 to yield)
+# 1. Elastic region (0 to yield), then a short yield plateau at sigma_y up to the
+#    0.2% offset strain, so the 0.2% offset method returns exactly sigma_y_true
 mask_elastic = strain <= epsilon_y_true
-stress_elastic = E_true * 1000 * strain[mask_elastic]
+stress_elastic = np.minimum(E_true * 1000 * strain[mask_elastic], sigma_y_true)
 
 # 2. Plastic region (yield to UTS) - strain hardening
 mask_plastic = (strain > epsilon_y_true) & (strain <= 0.08)
 strain_plastic = strain[mask_plastic] - epsilon_y_true
 # Power law hardening: σ = σ_y + K * ε_p^n  # noqa: RUF003
-K_hardening = 450.0  # MPa
+# K is set so the curve reaches UTS_true at 8% strain (start of necking)
 n_hardening = 0.3
+K_hardening = (UTS_true - sigma_y_true) / (0.08 - epsilon_y_true) ** n_hardening  # MPa
 stress_plastic = sigma_y_true + K_hardening * strain_plastic**n_hardening
 
 # 3. Necking region (UTS to fracture) - stress decreases
@@ -156,15 +176,15 @@ stress_necking = UTS_true - 200 * (strain[mask_necking] - 0.08)
 stress_true = np.concatenate([stress_elastic, stress_plastic, stress_necking])
 
 # Add measurement noise (realistic for extensometer + load cell)
-# Strain: ±0.05% (0.0005), Stress: ±2 MPa
-strain_noise = np.random.normal(0, 0.0005, size=len(strain))
-stress_noise = np.random.normal(0, 2.0, size=len(stress_true))
+# Strain: ±0.001% (1e-5), Stress: ±2 MPa
+strain_noise = rng.normal(0, 1e-5, size=len(strain))
+stress_noise = rng.normal(0, 2.0, size=len(stress_true))
 
 strain_measured = strain + strain_noise
 stress_measured = stress_true + stress_noise
 
 # Measurement uncertainties
-sigma_strain = 0.0005 * np.ones_like(strain_measured)
+sigma_strain = 1e-5 * np.ones_like(strain_measured)
 sigma_stress = 2.0 * np.ones_like(stress_measured)
 
 
@@ -207,19 +227,13 @@ print("-" * 70)
 
 # 0.2% offset line: σ = E * (ε - 0.002)  # noqa: RUF003
 offset = 0.002
-offset_line = E_fit * 1000 * (strain_measured - offset)
 
-# Find intersection (yield point)
-# Approximate by finding where stress curve crosses offset line
-differences = stress_measured - offset_line
-# Find first crossing from below
-sign_changes = np.diff(np.sign(differences))
-yield_index = np.where(sign_changes > 0)[0]
+# Find intersection (yield point): the curve starts above the offset line
+# (the line is negative for ε < 0.002) and crosses below it once.
+yield_point = offset_yield(strain_measured, stress_measured, E_fit, offset)
 
-if len(yield_index) > 0:
-    yield_index = yield_index[0]
-    sigma_y_fit = stress_measured[yield_index]
-    epsilon_y_fit = strain_measured[yield_index]
+if yield_point is not None:
+    epsilon_y_fit, sigma_y_fit = yield_point
 
     print(f"Yield Strength (σ_y):     {sigma_y_fit:.1f} MPa")
     print(f"Yield Strain (ε_y):       {epsilon_y_fit:.4f} ({100 * epsilon_y_fit:.2f}%)")
@@ -239,22 +253,21 @@ print("-" * 70)
 mask_fit_plastic = (strain_measured > epsilon_y_fit) & (strain_measured < 0.08)
 
 if np.sum(mask_fit_plastic) > 10:
-    # Fit power law to plastic region
-    # Convert to true stress/strain for better fit
+    # Fit power law to the hardening part of the curve: σ - σ_y = K * ε_p^n  # noqa: RUF003
     strain_plastic_fit = strain_measured[mask_fit_plastic] - epsilon_y_fit
     stress_plastic_fit = stress_measured[mask_fit_plastic]
 
-    # Hollomon model: σ = K * ε^n  # noqa: RUF003
+    # Hollomon model: σ - σ_y = K * ε_p^n  # noqa: RUF003
     def hollomon_model(eps, K, n):
         return K * jnp.power(eps + 1e-6, n)  # Add small offset to avoid log(0)
 
     popt_plastic, pcov_plastic = curve_fit(
         hollomon_model,
         strain_plastic_fit,
-        stress_plastic_fit,
-        p0=[450, 0.3],
+        stress_plastic_fit - sigma_y_fit,
+        p0=[50, 0.3],
         sigma=sigma_stress[mask_fit_plastic],
-        bounds=([100, 0.01], [1000, 1.0]),
+        bounds=([1, 0.01], [1000, 1.0]),
         absolute_sigma=True,
     )
 
@@ -357,7 +370,9 @@ ax1.plot(
 
 if np.sum(mask_fit_plastic) > 10:
     strain_plastic_fine = np.linspace(0, np.max(strain_plastic_fit), 100)
-    stress_plastic_fine = hollomon_model(strain_plastic_fine, K_fit, n_fit)
+    stress_plastic_fine = sigma_y_fit + hollomon_model(
+        strain_plastic_fine, K_fit, n_fit
+    )
     ax1.plot(
         (strain_plastic_fine + epsilon_y_fit) * 100,
         stress_plastic_fine,
@@ -451,7 +466,7 @@ if np.sum(mask_fit_plastic) > 10:
     strain_log = np.logspace(
         np.log10(strain_plastic_fit.min()), np.log10(strain_plastic_fit.max()), 100
     )
-    stress_log = hollomon_model(strain_log, K_fit, n_fit) - sigma_y_fit
+    stress_log = hollomon_model(strain_log, K_fit, n_fit)
     ax3.loglog(
         strain_log,
         stress_log,

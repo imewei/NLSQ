@@ -138,7 +138,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from nlsq.caching.unified_cache import get_global_cache
-from nlsq.callbacks import StopOptimization
+from nlsq.callbacks import StopOptimization, call_user_callback
 from nlsq.common_jax import (
     CL_scaling_vector_jax,
     CommonJIT,
@@ -1300,11 +1300,12 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Termination status if callback requested stop, None otherwise.
         """
         try:
-            callback(
-                iteration=iteration,
-                cost=float(cost),  # JAX scalar -> Python float
-                params=np.array(x),  # JAX array -> NumPy array
-                info={
+            call_user_callback(
+                callback,
+                iteration,
+                float(cost),  # JAX scalar -> Python float
+                np.array(x),  # JAX array -> NumPy array
+                {
                     "gradient_norm": float(g_norm),
                     "gradient": np.asarray(g) if g is not None else None,
                     "nfev": nfev,

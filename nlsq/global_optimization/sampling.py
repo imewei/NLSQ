@@ -249,6 +249,8 @@ def sobol_sample(
         raise ValueError(f"n_dims must be positive, got {n_dims}")
     if n_dims > 21:
         raise ValueError(f"n_dims must be <= 21 for Sobol sequence, got {n_dims}")
+    if skip < 0:
+        raise ValueError(f"skip must be non-negative, got {skip}")
 
     # Use 32-bit precision for integer operations
     max_bits = 32
@@ -328,6 +330,8 @@ def halton_sample(
         raise ValueError(
             f"n_dims must be <= {len(_PRIMES)} for Halton sequence, got {n_dims}",
         )
+    if skip < 0:
+        raise ValueError(f"skip must be non-negative, got {skip}")
 
     samples = []
     for i in range(skip, skip + n_samples):
@@ -402,8 +406,7 @@ def scale_samples_to_bounds(
     lb = jnp.asarray(lb)
     ub = jnp.asarray(ub)
 
-    # Linear interpolation: sample * (ub - lb) + lb
-    return samples * (ub - lb) + lb
+    return (1 - samples) * lb + samples * ub
 
 
 def center_samples_around_p0(
@@ -443,7 +446,7 @@ def center_samples_around_p0(
 
     - Width = min(scale_factor, 1) * (ub - lb), centered on p0
     - Near a bound the window is shifted inward (width preserved), not clipped
-    - For a non-finite span, ``half_width = (abs(p0) + 0.1) * scale_factor`` and
+    - For non-finite bounds, ``half_width = (abs(p0) + 0.1) * scale_factor`` and
       ``[p0 - half_width, p0 + half_width]`` is clipped to ``[lb, ub]``
 
     Examples
@@ -472,20 +475,20 @@ def center_samples_around_p0(
     # Keep the window WIDTH and shift it inside [lb, ub] (clipping each end
     # independently would shrink it near a bound, e.g. to 1/2^n of the box at a
     # corner with scale_factor=1).
-    full_range = ub - lb
-    width = jnp.minimum(scale_factor * full_range, full_range)
-    shifted_lb = jnp.clip(p0 - width / 2.0, lb, ub - width)
-    centered_lb = shifted_lb
-    centered_ub = shifted_lb + width
-    # Non-finite span: width/shift are inf/NaN, so use a p0-based half-width
+    half_width = jnp.minimum(scale_factor, 1.0) * (ub / 2.0 - lb / 2.0)
+    center = jnp.clip(p0, lb + half_width, ub - half_width)
+    centered_lb = center - half_width
+    centered_ub = center + half_width
+    # Infinite bounds use a p0-based half-width
     # (same rule as adaptive_hybrid) and clip the window to [lb, ub].
-    finite = jnp.isfinite(full_range)
+    finite = jnp.isfinite(lb) & jnp.isfinite(ub)
     half_width = (jnp.abs(p0) + 0.1) * scale_factor
     centered_lb = jnp.where(finite, centered_lb, jnp.maximum(p0 - half_width, lb))
     centered_ub = jnp.where(finite, centered_ub, jnp.minimum(p0 + half_width, ub))
 
     # Transform samples to centered bounds
-    return scale_samples_to_bounds(samples, centered_lb, centered_ub)
+    # The half-width form can land 1 ulp outside [lb, ub]; clip (inf-safe).
+    return jnp.clip(scale_samples_to_bounds(samples, centered_lb, centered_ub), lb, ub)
 
 
 def get_sampler(sampler_type: str) -> Callable[..., jax.Array]:

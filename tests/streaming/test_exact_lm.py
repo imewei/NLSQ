@@ -314,7 +314,7 @@ def test_result_fields_and_check_finite_off(data, default_run):
     y_bad = y.copy()
     y_bad[7] = np.nan
     # with the check off the NaN reaches the cost at p0, which is always rejected
-    with pytest.raises(ValueError, match="not finite at p0"):
+    with pytest.raises(ValueError, match=r"non-finite values \(check_finite=False\)"):
         run(exp_model, x, y_bad, EXP.p0, check_finite=False)
 
 
@@ -452,7 +452,7 @@ def test_check_finite_flag(data):
     y_bad[7] = np.nan
     with pytest.raises(ValueError, match="x and y must be finite"):
         run(exp_model, x, y_bad, EXP.p0, check_finite=True)
-    with pytest.raises(ValueError, match="not finite at p0"):
+    with pytest.raises(ValueError, match=r"non-finite values \(check_finite=False\)"):
         run(exp_model, x, y_bad, EXP.p0, check_finite=False)
 
 

@@ -645,6 +645,14 @@ def parse_custom_model_string(
 
     # Extract parameter names
     sig = inspect.signature(func)
+    kw_only = [
+        n for n, p in sig.parameters.items() if p.kind is inspect.Parameter.KEYWORD_ONLY
+    ]
+    if kw_only:
+        raise ValueError(
+            f"Custom model has keyword-only parameter(s) {kw_only}; fit parameters "
+            "must be positional, e.g. def model(x, a, b)."
+        )
     params = list(sig.parameters.keys())
 
     # First param is x, rest are model parameters

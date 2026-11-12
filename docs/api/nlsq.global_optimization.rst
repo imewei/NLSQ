@@ -154,6 +154,7 @@ distinguish a clean checkpointed stop from a crash:
        checkpoint_interval=10,
        run_id="run-001",
        model_id="exponential-decay",
+       restart_strategy="none",
        seed=42,
    )
    try:

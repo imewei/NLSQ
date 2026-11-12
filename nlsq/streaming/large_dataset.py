@@ -285,6 +285,10 @@ class ChunkBufferPool:
         return self._x_feature_shape
 
 
+class _ChunkNotConverged(RuntimeError):
+    """A chunk's inner fit returned ``success=False`` (counts as a failed chunk)."""
+
+
 class _DefaultMinChunk(int):
     """Marks the untouched ``min_chunk_size`` default (an explicit 1000 is a plain int)."""
 
@@ -711,15 +715,20 @@ class MemoryEstimator:
             # (skipped when the whole dataset has fewer points than parameters).
             max_determined = max(1, n_points // (n_params + 1))
             if n_points > n_params and n_chunks > max_determined:
+                requested = chunk_size
+                chunk_size = (n_points + max_determined - 1) // max_determined
                 logging.getLogger("nlsq").warning(
-                    "chunk size %d would leave chunks with too few points for %d "
-                    "parameters (underdetermined); using %d chunk(s) instead of %d",
-                    chunk_size,
+                    "requested chunk size %d is too small for %d parameters "
+                    "(underdetermined); raised to effective chunk size %d "
+                    "(%d chunk(s) instead of %d). Chunks of only a few points "
+                    "make the precision-weighted (GLS) combination unreliable "
+                    "and the estimate can be heavily biased.",
+                    requested,
                     n_params,
+                    chunk_size,
                     max_determined,
                     n_chunks,
                 )
-                chunk_size = (n_points + max_determined - 1) // max_determined
                 n_chunks = (n_points + chunk_size - 1) // chunk_size
 
         # Calculate total memory estimate
@@ -1188,8 +1197,9 @@ class LargeDatasetFitter:
 
     >>> recommendations = fitter.get_memory_recommendations(len(x), n_params=3)
     >>> print(f"Strategy: {recommendations['processing_strategy']}")
-    >>> print(f"Memory estimate: {recommendations['memory_estimate_gb']:.2f} GB")
-    >>> print(f"Recommended chunks: {recommendations['n_chunks']}")
+    >>> rec = recommendations["recommendations"]
+    >>> print(f"Memory estimate: {rec['total_memory_estimate_gb']:.2f} GB")
+    >>> print(f"Recommended chunks: {rec['n_chunks']}")
 
     See Also
     --------
@@ -2798,7 +2808,8 @@ class LargeDatasetFitter:
         # Assemble result
         result = OptimizeResult(
             x=current_params,
-            success=True,
+            # min_success_rate=0 admits an all-failed fit; that is not success.
+            success=success_rate > 0,
             message=f"Chunked fit completed ({stats.n_chunks} chunks, {success_rate:.1%} success)",
         )
         result["popt"] = current_params
@@ -3062,6 +3073,13 @@ class LargeDatasetFitter:
                         solver=solver,
                         **chunk_kwargs,
                     )
+                    if not getattr(chunk_res, "success", True):
+                        # A max_nfev stop is not success (as in the single-chunk
+                        # path): count it as failed, don't combine its popt.
+                        raise _ChunkNotConverged(
+                            "chunk fit did not converge: "
+                            f"{getattr(chunk_res, 'message', '')}"
+                        )
                     popt_chunk, pcov_chunk = chunk_res
                     # B3: res.cost is already 0.5 * SSR at popt; re-evaluating
                     # the model on the chunk is the fallback.
@@ -3115,22 +3133,38 @@ class LargeDatasetFitter:
 
                 except Exception as e:
                     self.logger.warning(f"Chunk {chunk_idx} failed: {e}")
-                    # Retry chunk with helper method
-                    chunk_result, retry_params = self._retry_failed_chunk(
-                        f=f,
-                        x_chunk=x_valid,
-                        y_chunk=y_valid,
-                        chunk_idx=chunk_idx,
-                        chunk_start_time=chunk_start_time,
-                        chunk_times=chunk_times,
-                        current_params=current_params,
-                        initial_error=e,
-                        bounds=bounds,
-                        method=method,
-                        solver=solver,
-                        valid_length=len(y_valid),
-                        **chunk_kwargs,
-                    )
+                    if isinstance(e, _ChunkNotConverged):
+                        # The inner fit ran to its own stop; a retry from a
+                        # perturbed start would just double the cost.
+                        chunk_duration = time.time() - chunk_start_time
+                        chunk_times.append(chunk_duration)
+                        chunk_result = self._create_chunk_result(
+                            chunk_idx=chunk_idx,
+                            x_chunk=x_valid,
+                            y_chunk=y_valid,
+                            chunk_duration=chunk_duration,
+                            success=False,
+                            error=e,
+                            current_params=current_params,
+                        )
+                        retry_params = None
+                    else:
+                        # Retry chunk with helper method
+                        chunk_result, retry_params = self._retry_failed_chunk(
+                            f=f,
+                            x_chunk=x_valid,
+                            y_chunk=y_valid,
+                            chunk_idx=chunk_idx,
+                            chunk_start_time=chunk_start_time,
+                            chunk_times=chunk_times,
+                            current_params=current_params,
+                            initial_error=e,
+                            bounds=bounds,
+                            method=method,
+                            solver=solver,
+                            valid_length=len(y_valid),
+                            **chunk_kwargs,
+                        )
                     # Fold a successful retry into the same precision-weighted
                     # accumulator every other successful chunk goes through
                     # (_update_parameters_convergence), instead of only

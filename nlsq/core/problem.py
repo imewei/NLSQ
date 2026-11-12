@@ -125,7 +125,7 @@ def _initialize_feasible(lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
     ub_finite = np.isfinite(ub)
 
     mask = lb_finite & ub_finite
-    p0[mask] = 0.5 * (lb[mask] + ub[mask])
+    p0[mask] = 0.5 * lb[mask] + 0.5 * ub[mask]
 
     mask = lb_finite & ~ub_finite
     p0[mask] = lb[mask] + 1

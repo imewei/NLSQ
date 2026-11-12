@@ -45,6 +45,13 @@ def _prepare(x, y, *, data_mask=None, nan_policy="raise", ctx=None, **kw):
 
 
 class TestPreparedProblemFields:
+    def test_initial_guess_stays_finite_for_large_bounds(self):
+        x, y = _data()
+        prep = prepare_problem(
+            _model, x, y, bounds=([1e308, -1.5e308], [1.5e308, -1e308])
+        )
+        np.testing.assert_allclose(prep.p0, [1.25e308, -1.25e308])
+
     def test_n_effective_counts_unmasked_rows(self):
         x, y = _data()
         mask = np.ones(N, dtype=bool)

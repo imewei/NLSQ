@@ -390,10 +390,21 @@ def gradient_descent_momentum(
     return params, history
 
 
-# Test custom optimizer
+# Test custom optimizer on the exponential model. The mean (not sum) keeps the
+# gradient O(1), so a fixed learning rate is stable.
+def exponential_mse_loss(params, x, y):
+    return jnp.mean((y - exponential(x, *params)) ** 2)
+
+
 print("Custom Gradient Descent with Momentum:")
 params_gd, history_gd = gradient_descent_momentum(
-    least_squares_loss, [0.0, 0.0], x_data, y_data, lr=0.01, momentum=0.9, n_steps=2000
+    exponential_mse_loss,
+    [0.0, 0.0],
+    x_data,
+    y_data,
+    lr=0.05,
+    momentum=0.9,
+    n_steps=2000,
 )
 
 print(f"  Final params: a={params_gd[0]:.3f}, b={params_gd[1]:.3f}")
@@ -403,7 +414,10 @@ print(f"  Optimization steps: {len(history_gd['loss'])}")
 popt_nlsq, _ = cf.curve_fit(exponential, x_data, y_data, p0=[0.0, 0.0])
 print("\nNLSQ (Levenberg-Marquardt):")
 print(f"  Final params: a={popt_nlsq[0]:.3f}, b={popt_nlsq[1]:.3f}")
-print("\n→ Both converge to similar solution ✓")
+if np.allclose(params_gd, popt_nlsq, rtol=0.02):
+    print("\n→ Both converge to similar solution ✓")
+else:
+    print("\n→ Solutions differ: gradient descent has not converged (tune lr/steps)")
 
 
 # ======================================================================
@@ -437,17 +451,19 @@ print()
 
 # Define fitting function for single dataset
 def fit_single_dataset(y_single):
-    """Fit one dataset (simplified Newton's method)."""
-    params = jnp.array([3.0, 0.5])  # Initial guess
+    """Fit one dataset with a few Gauss-Newton steps (initial guess a=3, b=0.5)."""
 
-    def loss(p):
-        return jnp.sum((y_single - exponential(x_batch, *p)) ** 2)
+    def residual(p):
+        return y_single - exponential(x_batch, *p)
 
-    # Simple gradient descent (10 steps)
-    for _ in range(20):
-        g = grad(loss)(params)
-        params = params - 0.05 * g
+    def step(p, _):
+        r = residual(p)
+        J = jax.jacfwd(residual)(p)
+        # Damped Gauss-Newton step: solves (J^T J + eps I) dp = -J^T r
+        dp = jnp.linalg.solve(J.T @ J + 1e-6 * jnp.eye(2), -J.T @ r)
+        return p + dp, None
 
+    params, _ = jax.lax.scan(step, jnp.array([3.0, 0.5]), None, length=10)
     return params
 
 
@@ -504,7 +520,10 @@ fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_02.png", dpi=300, bbox_inches="tight")
 plt.close()
 
-print("\n→ vmap enables efficient parallel fitting across datasets ✓")
+if np.isfinite(params_batch).all() and a_error < 0.1 and b_error < 0.05:
+    print("\n→ vmap enables efficient parallel fitting across datasets ✓")
+else:
+    print("\n→ Batch fit did not recover the true parameters (check solver)")
 
 
 # ======================================================================

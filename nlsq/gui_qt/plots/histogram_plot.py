@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from nlsq.gui_qt.plots import _configure_pyqtgraph
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -78,6 +80,7 @@ class HistogramPlotWidget(QWidget):
         layout.addLayout(options_row)
 
         # Create plot widget — background from default theme
+        _configure_pyqtgraph()  # GL decision needs the live QApplication
         self._plot_widget = pg.PlotWidget()
         self._plot_widget.setBackground(self._theme.plot_background)
         self._plot_widget.showGrid(x=True, y=True, alpha=0.3)

@@ -14,6 +14,7 @@ Or programmatically:
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import faulthandler
 import os
@@ -22,7 +23,7 @@ import traceback
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from PySide6.QtWidgets import QApplication
 
@@ -36,7 +37,7 @@ GUI_INSTALL_HINT = 'The NLSQ desktop app needs the GUI extra: pip install "nlsq[
 # SIGBUS on macOS is caused by Metal/OpenGL/XLA conflicts in the GPU driver.
 # Layer 1 (nlsq/__init__.py): env vars — JAX_PLATFORM_NAME, MPLBACKEND, etc.
 # Layer 2 (here): explicit matplotlib.use(), faulthandler, Qt RHI guard
-# Layer 3 (plots/__init__.py): pyqtgraph useOpenGL=False
+# Layer 3 (plots/__init__.py): pyqtgraph useOpenGL off on macOS, offscreen, no-GL
 # Layer 4 (main_window.py): deferred QMessageBox via QTimer.singleShot
 # ---------------------------------------------------------------------------
 
@@ -148,12 +149,49 @@ def _env_dump_items(environ: Mapping[str, str]) -> list[tuple[str, str]]:
     return items
 
 
-def run_desktop() -> int:
+def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
+    """Parse launcher options; unknown (Qt) options are left for QApplication."""
+    parser = argparse.ArgumentParser(
+        prog="nlsq-gui",
+        description="Launch the NLSQ Qt desktop application.",
+        epilog="Standard Qt options (e.g. -style, -platform) are passed through.",
+    )
+    parser.add_argument("--version", action="store_true", help="print version and exit")
+    parser.add_argument(
+        "--theme",
+        choices=("light", "dark"),
+        default=None,
+        help="initial color scheme (default: last saved, else dark)",
+    )
+    return parser.parse_known_args(list(argv))[0]
+
+
+def _package_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("nlsq")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def run_desktop(argv: Sequence[str] | None = None) -> int:
     """Launch the NLSQ Qt desktop application.
+
+    Args:
+        argv: Command-line arguments without the program name. Defaults to
+            ``sys.argv[1:]``. ``--help`` and ``--version`` exit before any Qt
+            object is created.
 
     Returns:
         int: Application exit code (0 for success)
     """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    args = _parse_args(argv)
+    if args.version:
+        print(f"nlsq-gui {_package_version()}")
+        return 0
+
     _debug = os.environ.get("NLSQ_DEBUG", "").strip().lower() in {
         "1",
         "true",
@@ -194,7 +232,7 @@ def run_desktop() -> int:
     _stage("app modules imported")
 
     # Create application
-    app = QApplication(sys.argv)
+    app = QApplication([sys.argv[0], *argv])
     _stage("QApplication created")
 
     app.setApplicationName("NLSQ Curve Fitting")
@@ -204,12 +242,14 @@ def run_desktop() -> int:
     app.setStyle("Fusion")
     _stage("Fusion style applied")
 
-    # Apply dark theme by default using Qt 6.5+ built-in color scheme.
+    # Apply the requested (default dark) theme using Qt 6.5+ built-in color scheme.
     # Protected: some macOS + PySide6 combinations crash here.
     import contextlib
 
     with contextlib.suppress(Exception):
-        app.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+        app.styleHints().setColorScheme(
+            Qt.ColorScheme.Light if args.theme == "light" else Qt.ColorScheme.Dark
+        )
     _stage("color scheme set")
 
     # Let the platform plugin fully initialise its native surfaces before
@@ -225,6 +265,8 @@ def run_desktop() -> int:
     # Create and show main window
     window = MainWindow(app_state)
     _stage("MainWindow created")
+    if args.theme is not None:  # an explicit --theme beats the saved setting
+        window.set_theme(args.theme)
 
     window.show()
     _stage("window shown — entering event loop")

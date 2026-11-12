@@ -397,6 +397,12 @@ if not QUICK_MODE:
     )
 
     perr_double = np.sqrt(np.diag(pcov_double))
+    # The two peaks are interchangeable in the model: order them by x position
+    # so peak 1 is the left peak (as in the planted truth)
+    if popt_double[1] > popt_double[5]:
+        swap = [4, 5, 6, 7, 0, 1, 2, 3, 8]
+        popt_double = np.asarray(popt_double)[swap]
+        perr_double = perr_double[swap]
     amp1_fit, x01_fit, y01_fit, s1_fit, amp2_fit, x02_fit, y02_fit, s2_fit, off2_fit = (
         popt_double
     )

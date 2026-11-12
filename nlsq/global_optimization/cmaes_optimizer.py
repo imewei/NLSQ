@@ -88,7 +88,11 @@ def _split_covariance_sigma(
     factor, as ``curve_fit`` does (``residuals / sigma`` would broadcast
     (N,)/(N,N) to inf).
     """
-    if sigma is None or sigma.ndim != 2:
+    if sigma is None:
+        return None, None
+    if sigma.ndim == 0:  # scalar sigma: chunked streaming needs a per-sample axis
+        return None, jnp.full(n_data, sigma)
+    if sigma.ndim != 2:
         return None, sigma
     if sigma.shape != (n_data, n_data):
         raise ValueError(
@@ -867,7 +871,9 @@ class CMAESOptimizer:
         """Return the configured seed, or draw one and log it so the run can be replayed."""
         if self.config.seed is not None:
             return self.config.seed
-        seed = int(np.random.randint(0, 2**31))
+        seed = int(
+            np.random.default_rng().integers(2**31)
+        )  # leaves the global stream alone
         logger.info(
             f"CMAESConfig.seed is None; drew seed={seed} (pass it back to reproduce)"
         )

@@ -34,7 +34,7 @@ from nlsq.cli.errors import (
     ModelError,
     cfg_get,
 )
-from nlsq.cli.model_registry import ModelRegistry
+from nlsq.cli.model_registry import ModelRegistry, _describe_range, fit_param_range
 from nlsq.cli.result_exporter import ResultExporter
 from nlsq.core._option_checks import coerce_absolute_sigma
 
@@ -50,6 +50,31 @@ _KNOWN_TOP_LEVEL_KEYS = (
     "visualization",
     "hybrid_streaming",
 )
+
+_MAPPING_SECTIONS = (
+    "data",
+    "model",
+    "fitting",
+    "export",
+    "metadata",
+    "validation",
+    "visualization",
+)
+
+
+def validate_config_sections(
+    config: dict[str, Any], config_file: str | None = None
+) -> None:
+    """Raise ConfigError unless every present workflow section is a mapping or null."""
+    for key in _MAPPING_SECTIONS:
+        value = config.get(key)
+        if value is not None and not isinstance(value, dict):
+            raise ConfigError(
+                f"Config section '{key}' must be a mapping, got {type(value).__name__}",
+                config_file=config_file,
+                suggestion=f"Write '{key}:' followed by indented key: value pairs",
+            )
+
 
 _KNOWN_FITTING_KEYS = (
     "p0",
@@ -164,6 +189,7 @@ class WorkflowRunner:
         CLIError
             If any other workflow error occurs.
         """
+        validate_config_sections(config)
         for key in config:
             if key not in _KNOWN_TOP_LEVEL_KEYS:
                 close = difflib.get_close_matches(
@@ -205,9 +231,48 @@ class WorkflowRunner:
 
         # Step 5: Export results if configured
         if "export" in config:
-            self.result_exporter.export(result, config)
+            self.result_exporter.export(
+                result, self._with_model_parameter_names(config, model, result)
+            )
 
         return result
+
+    @staticmethod
+    def _with_model_parameter_names(
+        config: dict[str, Any], model: Any, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Fill model.parameter_names from the model file's ``parameter_names()``.
+
+        YAML wins; the file's list is used only when it is a list of strings
+        whose length matches the fitted parameter count, otherwise ignored.
+        """
+        model_cfg = config.get("model") or {}
+        fn = getattr(model, "parameter_names", None)
+        if model_cfg.get("parameter_names") or not callable(fn):
+            return config
+        try:
+            names = fn()
+            n = np.size(result.get("popt", result.get("x", [])))
+            if (
+                isinstance(names, (list, tuple))
+                and len(names) == n
+                and all(isinstance(v, str) for v in names)
+            ):
+                return {
+                    **config,
+                    "model": {**model_cfg, "parameter_names": list(names)},
+                }
+        except Exception as exc:
+            logger.warning(
+                f"Ignoring parameter_names() of the model file: it raised "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return config
+        logger.warning(
+            "Ignoring parameter_names() of the model file: it must return one "
+            "string per fitted parameter"
+        )
+        return config
 
     def _load_data(
         self,
@@ -378,6 +443,18 @@ class WorkflowRunner:
             )
         else:  # YAML scalar or ndarray from Python callers
             p0 = np.atleast_1d(np.asarray(p0))
+
+        n_range = fit_param_range(model)
+        if p0 is not None and not isinstance(p0, str) and n_range is not None:
+            if not n_range[0] <= np.size(p0) <= n_range[1]:
+                expected = _describe_range(n_range)
+                raise ConfigError(
+                    f"fitting.p0 has {np.size(p0)} value(s) but model "
+                    f"'{getattr(model, '__name__', '?')}' takes {expected} "
+                    "parameter(s)",
+                    suggestion=f"Give {expected} initial values in "
+                    "fitting.p0, or use `p0: auto`.",
+                )
 
         # Extract bounds
         bounds_config = fitting_config.get("bounds")

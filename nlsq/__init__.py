@@ -611,8 +611,13 @@ def fit(
         if size_threshold != 1_000_000:
             requested["size_threshold"] = size_threshold
         multistart_keys = ("multistart", "sampler", "center_on_p0", "scale_factor")
-        if isinstance(workflow, str) and workflow.strip().lower() == "auto":
+        wf_name = workflow.strip().lower() if isinstance(workflow, str) else None
+        if wf_name == "auto":
             forwarded = {k: v for k, v in requested.items() if k in multistart_keys}
+        elif wf_name == "auto_global":
+            # auto_global passes multistart=True itself, but not the sampler
+            # options, so those are safe to forward.
+            forwarded = {k: v for k, v in requested.items() if k in multistart_keys[1:]}
         else:
             forwarded = {}
         ignored = sorted(k for k in requested if k not in forwarded)
@@ -750,7 +755,7 @@ def fit(
         if (max_nfev := stream_kwargs.pop("max_nfev", None)) is not None:
             config_overrides["gauss_newton_max_iterations"] = int(max_nfev)
         stream_callback = stream_kwargs.pop("callback", None)
-        stream_verbose = stream_kwargs.pop("verbose", 1)
+        stream_verbose = stream_kwargs.pop("verbose", 0)
         if stream_kwargs:
             import warnings
 
@@ -940,7 +945,13 @@ def _legacy_to_strategy(**legacy: Any) -> "LargeStrategy":
     if method == "hybrid_streaming":
         from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
-        verbose = kwargs.pop("verbose", 1)
+        verbose = kwargs.pop("verbose", 0)
+        if kwargs.pop("callback", None) is not None:
+            raise TypeError(
+                "callback is not supported with method='hybrid_streaming' in "
+                "curve_fit_large; use curve_fit(method='hybrid_streaming', "
+                "callback=...)"
+            )
         overrides = {
             key: kwargs.pop(key)
             for key in list(kwargs)

@@ -598,6 +598,17 @@ def test_zero_column_jacobian_reports_infinite_condition_number():
     assert report.condition_number == float("inf")
 
 
+def test_extreme_condition_number_still_produces_report():
+    from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
+    from nlsq.diagnostics.types import DiagnosticsConfig
+
+    report = IdentifiabilityAnalyzer(DiagnosticsConfig()).analyze(np.diag([1e160, 1.0]))
+    assert report.available
+    assert report.numerical_rank == 1
+    assert report.condition_number == float("inf")
+    assert any(issue.code == "IDENT-001" for issue in report.issues)
+
+
 def test_underdetermined_jacobian_is_rank_deficient():
     """m < n: the n - m nullspace directions must count as zero singular values."""
     from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer

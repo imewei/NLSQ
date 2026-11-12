@@ -59,7 +59,8 @@ def _information_criteria(
 ) -> tuple[float, float]:
     """AIC / BIC, using ``CurveFitResult`` as the single source of truth.
 
-    Falls back to the same formulas (k parameters, no extra sigma^2 term):
+    ``CurveFitResult`` uses the sigma-weighted chi-square when the fit had
+    ``sigma``. The fallback (no result statistics available) is unweighted:
     ``AIC = 2k + n ln(RSS/n)``, ``BIC = k ln(n) + n ln(RSS/n)``; NaN when
     RSS is non-finite or <= 0 (undefined), matching ``CurveFitResult``.
     """
@@ -96,6 +97,7 @@ class ResultsPage(QWidget):
         self._app_state = app_state
         self._has_results = False
         self._last_result = None
+        self._last_statistics: dict[str, float] = {}  # finite R^2 / RMSE for export
         self._setup_ui()
         self._connect_signals()
 
@@ -240,6 +242,7 @@ class ResultsPage(QWidget):
             # Never leave stale stats/plots (or an enabled Export) behind
             logger.exception("Failed to display fit results")
             self._has_results = False
+            self._param_results.clear()
             self._fit_statistics.clear()
             self._fit_plot.clear()
             self._residuals_plot.clear()
@@ -263,6 +266,7 @@ class ResultsPage(QWidget):
         """Populate all widgets from ``result`` (may raise; see update_results)."""
         self._has_results = True
         self._last_result = result
+        self._last_statistics = {}
 
         # Extract result data
         state = self._app_state.state
@@ -287,7 +291,8 @@ class ResultsPage(QWidget):
         # Get parameter names
         param_names = self._get_param_names()
 
-        # Update parameter results
+        # Update parameter results (never keep the previous fit's table)
+        self._param_results.clear()
         if popt is not None and param_names:
             values = list(popt)
             uncertainties = list(perr) if perr is not None else []
@@ -363,6 +368,15 @@ class ResultsPage(QWidget):
             status_text += " — " + "; ".join(notes)
             status_color = "#FF9800"
 
+        if state.sigma is not None:
+            status_text += (
+                " — sigma treated as absolute (uncertainties not rescaled by "
+                "reduced chi-square)"
+                if state.absolute_sigma
+                else " — sigma treated as relative (uncertainties rescaled by "
+                "reduced chi-square)"
+            )
+
         self._status_label.setText(status_text)
         self._status_label.setStyleSheet(f"color: {status_color};")
 
@@ -416,19 +430,17 @@ class ResultsPage(QWidget):
             QMessageBox.warning(self, "Export Failed", "No result data available.")
             return
 
-        # Note: self._last_result is accessed directly in data_dict construction below
-        # Prepare dictionaries compatible with FitVisualizer or dict-like access
-        # Result might be OptimizeResult or CurveFitResult.
-        # Convert to dict for Visualizer if needed, or Visualizer handles dict-like?
-        # FitVisualizer.generate takes result: dict.
-        # But CurveFitResult (and OptimizeResult) behaves like a dict.
+        data_dict = {"xdata": xdata, "ydata": ydata, "sigma": state.sigma}
 
-        # Data dict
-        data_dict = {
-            "xdata": xdata,
-            "ydata": ydata,
-            # Pass sigma if available? Not stored in state except implicitly used?
-            # Ideally state should track sigma. For now assume None or equal weights.
+        # The visualizer reads popt/pcov/fun/statistics by key; the R^2 / RMSE
+        # annotation needs `statistics`, which a fit result does not carry.
+        last = self._last_result
+        popt = getattr(last, "popt", None)
+        vis_result = {
+            "popt": getattr(last, "x", None) if popt is None else popt,
+            "pcov": getattr(last, "pcov", None),
+            "fun": getattr(last, "fun", None),
+            "statistics": dict(self._last_statistics),
         }
 
         # Config dict
@@ -452,7 +464,7 @@ class ResultsPage(QWidget):
         try:
             visualizer = FitVisualizer()
             paths = visualizer.generate(
-                result=self._last_result,  # Should behave as dict
+                result=vis_result,
                 data=data_dict,
                 model=state.model_func,
                 config=config,
@@ -535,6 +547,12 @@ class ResultsPage(QWidget):
         k = len(popt)
 
         aic, bic = _information_criteria(result, ss_res, n, k)
+
+        self._last_statistics = {
+            name: float(v)
+            for name, v in (("r_squared", r_squared), ("rmse", rmse))
+            if np.isfinite(v)
+        }
 
         # Get iteration count
         n_iterations = getattr(result, "nfev", 0)

@@ -325,3 +325,24 @@ class TestNormalizedModelWrapper:
         # At optimal parameters, gradient should be near zero
         # (though not exactly due to normalization)
         assert jnp.linalg.norm(grad) < 1e-10
+
+
+class TestBoundsStrategyRoundTripPrecision:
+    """'bounds' strategy must not cancel small params against a huge lb."""
+
+    @pytest.mark.parametrize(
+        ("p", "lb", "ub"),
+        [
+            ([1e-8, 3.3e-7], [-1e10, -1e10], [1e10, 1e10]),  # straddles 0
+            ([-1e-8, -3.3e-7], [-1e10, -1e10], [-1e-9, -1e-9]),  # all negative
+            ([50.0, 0.5], [10.0, 0.0], [100.0, 1.0]),  # normal range
+        ],
+    )
+    def test_round_trip_relative_error(self, p, lb, ub):
+        p = jnp.array(p)
+        normalizer = ParameterNormalizer(p, (jnp.array(lb), jnp.array(ub)))
+        assert normalizer.strategy == "bounds"
+        back = normalizer.denormalize(normalizer.normalize(p))
+        np.testing.assert_allclose(back, p, rtol=1e-15, atol=0)
+        lb_n, ub_n = normalizer.transform_bounds()
+        np.testing.assert_allclose(ub_n - lb_n, 1.0, rtol=1e-14)

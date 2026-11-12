@@ -7,6 +7,7 @@ including tolerances, multi-start, streaming, and defense layers.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import Signal
@@ -31,6 +32,10 @@ from nlsq.gui_qt.widgets.param_config import _FloatEdit
 
 __all__ = ["AdvancedOptionsWidget"]
 
+logger = logging.getLogger(__name__)
+
+_AUTO_WORKFLOWS = ("auto", "auto_global")
+
 
 class AdvancedOptionsWidget(QWidget):
     """Widget for advanced fitting options with tabbed interface.
@@ -52,6 +57,8 @@ class AdvancedOptionsWidget(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
+        # Non-auto workflows (e.g. "hpc") have no widget; carry them through.
+        self._workflow = "auto"
         self._setup_ui()
         self._connect_signals()
 
@@ -83,33 +90,43 @@ class AdvancedOptionsWidget(QWidget):
         layout = QFormLayout(widget)
 
         # gtol
-        self._gtol_spin = _FloatEdit(1e-8, 1e-15, 1.0)
+        self._gtol_spin = _FloatEdit(1e-8, 0.0, 1.0)
         self._gtol_spin.setToolTip("Gradient tolerance for convergence")
         layout.addRow("Gradient Tolerance (gtol):", self._gtol_spin)
 
         # ftol
-        self._ftol_spin = _FloatEdit(1e-8, 1e-15, 1.0)
+        self._ftol_spin = _FloatEdit(1e-8, 0.0, 1.0)
         self._ftol_spin.setToolTip("Function tolerance for convergence")
         layout.addRow("Function Tolerance (ftol):", self._ftol_spin)
 
         # xtol
-        self._xtol_spin = _FloatEdit(1e-8, 1e-15, 1.0)
+        self._xtol_spin = _FloatEdit(1e-8, 0.0, 1.0)
         self._xtol_spin.setToolTip("Parameter tolerance for convergence")
         layout.addRow("Parameter Tolerance (xtol):", self._xtol_spin)
 
         # max_iterations
         self._max_iter_spin = QSpinBox()
-        self._max_iter_spin.setRange(1, 100000)
+        self._max_iter_spin.setRange(1, 10**9)
         self._max_iter_spin.setValue(200)
         self._max_iter_spin.setToolTip("Maximum number of iterations")
         layout.addRow("Max Iterations:", self._max_iter_spin)
 
         # max_function_evals
         self._max_fev_spin = QSpinBox()
-        self._max_fev_spin.setRange(1, 1000000)
+        self._max_fev_spin.setRange(1, 10**9)
         self._max_fev_spin.setValue(2000)
         self._max_fev_spin.setToolTip("Maximum number of function evaluations")
         layout.addRow("Max Function Evals:", self._max_fev_spin)
+
+        # absolute_sigma
+        self._abs_sigma_check = QCheckBox("Absolute sigma")
+        self._abs_sigma_check.setToolTip(
+            "Checked: sigma holds true measurement errors and the covariance is "
+            "used as is. Unchecked (default): sigma is relative and the "
+            "covariance is rescaled by the reduced chi-square. Only matters "
+            "when a sigma column is loaded.",
+        )
+        layout.addRow("", self._abs_sigma_check)
 
         return widget
 
@@ -132,7 +149,7 @@ class AdvancedOptionsWidget(QWidget):
 
         # n_starts
         self._n_starts_spin = QSpinBox()
-        self._n_starts_spin.setRange(2, 1000)
+        self._n_starts_spin.setRange(1, 10**6)
         self._n_starts_spin.setValue(10)
         self._n_starts_spin.setToolTip("Number of starting points")
         group_layout.addRow("Number of Starts:", self._n_starts_spin)
@@ -150,9 +167,9 @@ class AdvancedOptionsWidget(QWidget):
 
         # scale_factor
         self._scale_spin = QDoubleSpinBox()
-        self._scale_spin.setRange(0.01, 100.0)
+        self._scale_spin.setRange(1e-6, 1e6)
         self._scale_spin.setValue(1.0)
-        self._scale_spin.setDecimals(2)
+        self._scale_spin.setDecimals(6)
         self._scale_spin.setToolTip("Scale factor for sampling region")
         group_layout.addRow("Scale Factor:", self._scale_spin)
 
@@ -181,7 +198,7 @@ class AdvancedOptionsWidget(QWidget):
 
         # chunk_size
         self._chunk_spin = QSpinBox()
-        self._chunk_spin.setRange(1000, 1000000)
+        self._chunk_spin.setRange(1, 10**9)
         self._chunk_spin.setValue(10000)
         self._chunk_spin.setSingleStep(1000)
         self._chunk_spin.setToolTip("Number of points per chunk")
@@ -195,7 +212,7 @@ class AdvancedOptionsWidget(QWidget):
 
         # warmup_iterations
         self._warmup_spin = QSpinBox()
-        self._warmup_spin.setRange(10, 2000)
+        self._warmup_spin.setRange(1, 10**6)
         self._warmup_spin.setValue(200)
         self._warmup_spin.setToolTip("Warmup iterations on first chunk")
         form.addRow("Warmup Iterations:", self._warmup_spin)
@@ -222,7 +239,7 @@ class AdvancedOptionsWidget(QWidget):
         preset_label = QLabel("Preset:")
         self._defense_preset = QComboBox()
         self._defense_preset.addItems(
-            ["default", "conservative", "aggressive", "custom"],
+            ["default", "conservative", "aggressive", "relaxed", "custom"],
         )
         self._defense_preset.setToolTip("Defense layer preset configuration")
         preset_layout.addWidget(preset_label)
@@ -258,8 +275,10 @@ class AdvancedOptionsWidget(QWidget):
         self._xtol_spin.valueChanged.connect(self._emit_options)
         self._max_iter_spin.valueChanged.connect(self._emit_options)
         self._max_fev_spin.valueChanged.connect(self._emit_options)
+        self._abs_sigma_check.toggled.connect(self._emit_options)
 
         # Multi-start
+        self._multistart_check.toggled.connect(self._on_multistart_toggled)
         self._multistart_check.toggled.connect(self._emit_options)
         self._n_starts_spin.valueChanged.connect(self._emit_options)
         self._sampler_combo.currentIndexChanged.connect(self._emit_options)
@@ -278,6 +297,9 @@ class AdvancedOptionsWidget(QWidget):
         self._layer3_check.toggled.connect(self._emit_options)
         self._layer4_check.toggled.connect(self._emit_options)
 
+    def _on_multistart_toggled(self, checked: bool) -> None:
+        self._workflow = "auto_global" if checked else "auto"
+
     def _emit_options(self) -> None:
         """Emit the current options."""
         self.options_changed.emit(self.get_options())
@@ -295,8 +317,9 @@ class AdvancedOptionsWidget(QWidget):
             "xtol": self._xtol_spin.value(),
             "max_iterations": self._max_iter_spin.value(),
             "max_function_evals": self._max_fev_spin.value(),
+            "absolute_sigma": self._abs_sigma_check.isChecked(),
             # Multi-start
-            "workflow": "auto_global" if self._multistart_check.isChecked() else "auto",
+            "workflow": self._workflow,
             "n_starts": self._n_starts_spin.value(),
             "sampler": self._sampler_combo.currentText(),
             "center_on_p0": self._center_check.isChecked(),
@@ -339,6 +362,14 @@ class AdvancedOptionsWidget(QWidget):
         for key, spinbox in spinbox_mapping.items():
             if key in options:
                 spinbox.setValue(options[key])
+                if spinbox.value() != options[key]:
+                    logger.warning(
+                        "Advanced option %s=%r is outside the control's range; "
+                        "adjusted to %r",
+                        key,
+                        options[key],
+                        spinbox.value(),
+                    )
 
     def _set_checkbox_options(self, options: dict[str, Any]) -> None:
         """Set checkbox values from options dict."""
@@ -346,10 +377,13 @@ class AdvancedOptionsWidget(QWidget):
         # presets in presets.py), never "enable_multistart" — that key was a
         # dead mapping entry no producer ever set, so presets like Robust/
         # Quality silently left the Multi-Start checkbox unchecked.
-        if "workflow" in options:
+        if isinstance(options.get("workflow"), str):
             self._multistart_check.setChecked(options["workflow"] == "auto_global")
+            # After setChecked: its toggled handler would overwrite this.
+            self._workflow = options["workflow"]
 
         checkbox_mapping = {
+            "absolute_sigma": self._abs_sigma_check,
             "center_on_p0": self._center_check,
             "normalize": self._normalize_check,
             "layer1_enabled": self._layer1_check,

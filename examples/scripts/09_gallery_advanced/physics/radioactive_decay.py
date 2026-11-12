@@ -80,7 +80,9 @@ time = np.linspace(0, 20000, 20 if QUICK else 30)
 N_true = N0_true * np.exp(-lambda_true * time)
 
 # Add realistic measurement noise
-noise_level = 0.05 * N_true + np.random.normal(0, 5, size=len(time))
+noise_level = np.random.normal(
+    0, 0.05 * N_true + 5
+)  # zero-mean, sd matches sigma below
 N_measured = N_true + noise_level
 
 # Measurement uncertainties

@@ -285,8 +285,8 @@ class TestPhaseOrchestratorVerbosity:
         )
 
         captured = capsys.readouterr()
-        # With verbose=0, minimal output expected
-        # Note: GN phase may still print progress
+        assert captured.out == ""
+        assert captured.err == ""
 
 
 # ============================================================================

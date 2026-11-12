@@ -62,6 +62,34 @@ logger = logging.getLogger("nlsq.cli.model_registry")
 ModelFunction = Callable[..., Any]
 
 
+def fit_param_range(model: Any) -> tuple[int, int] | None:
+    """(required, total) fit-parameter counts of ``f(x, *params)``.
+
+    Only positional parameters after ``x`` count; defaulted ones may be omitted
+    (curve_fit sizes the fit from p0). None for ``*args`` models or when the
+    signature cannot be inspected.
+    """
+    try:
+        params = list(inspect.signature(model).parameters.values())
+    except (TypeError, ValueError):
+        return None
+    if any(p.kind == p.VAR_POSITIONAL for p in params):
+        return None
+    positional = [
+        p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    ]
+    if not positional:  # no x parameter: nothing to check against
+        return None
+    positional = positional[1:]
+    required = sum(p.default is p.empty for p in positional)
+    return required, len(positional)
+
+
+def _describe_range(n_range: tuple[int, int]) -> str:
+    lo, hi = n_range
+    return str(hi) if lo == hi else f"{lo} to {hi}"
+
+
 class ModelRegistry:
     """Registry for model functions used in curve fitting.
 
@@ -89,6 +117,9 @@ class ModelRegistry:
     def __init__(self) -> None:
         """Initialize ModelRegistry."""
         self._builtin_cache: dict[str, ModelFunction] = {}
+        # Extra roots a custom model file may live under besides the CWD
+        # (e.g. the workflow YAML's directory); `../` escapes stay rejected.
+        self.allowed_model_dirs: list[Path] = []
 
     def list_builtin_models(self) -> list[str]:
         """List all available builtin model names.
@@ -337,7 +368,9 @@ class ModelRegistry:
         ModelError
             If path traversal is detected.
         """
-        if not validate_path(path):
+        if not any(
+            validate_path(path, base) for base in (None, *self.allowed_model_dirs)
+        ):
             audit_logger = get_audit_logger()
             from nlsq.cli.model_validation import ModelValidationResult
 
@@ -353,7 +386,8 @@ class ModelRegistry:
                 model_name=function_name,
                 model_type="custom",
                 context={"path": str(path)},
-                suggestion="Model files must be within the current working directory",
+                suggestion="Model files must be within the current working directory "
+                "or the directory of the workflow file",
             )
 
     def _validate_model_security(
@@ -590,6 +624,7 @@ class ModelRegistry:
             module, f"{name}_estimate_p0", None
         )
         fn_bounds = getattr(module, f"{name}_bounds", None)
+        fn_names = getattr(module, f"{name}_parameter_names", None)
 
         def has_fit_parameters(function: Any) -> bool:
             """Require positional x plus positional or variadic fit parameters."""
@@ -609,7 +644,7 @@ class ModelRegistry:
                 and f.__module__ == module.__name__
                 and n not in ("estimate_p0", "bounds", "parameter_names")
                 and not n.startswith(("_", "estimate_"))
-                and not n.endswith(("_bounds", "_p0"))
+                and not n.endswith(("_bounds", "_p0", "_parameter_names"))
                 and has_fit_parameters(f)
             ),
             key=lambda f: f.__code__.co_firstlineno,
@@ -620,12 +655,11 @@ class ModelRegistry:
             fn_p0 = getattr(module, "estimate_p0", None)
         if not callable(fn_bounds) and owns_bare:
             fn_bounds = getattr(module, "bounds", None)
+        if not callable(fn_names) and owns_bare:
+            fn_names = getattr(module, "parameter_names", None)
 
         # Never hand the optimiser a p0/bounds sized for a different model.
-        params = list(inspect.signature(model).parameters.values())
-        n_params = (
-            None if any(p.kind == p.VAR_POSITIONAL for p in params) else len(params) - 1
-        )
+        n_range = fit_param_range(model)
 
         def checked(function: Any, what: str, size: Any) -> Any:
             @functools.wraps(function)
@@ -635,15 +669,16 @@ class ModelRegistry:
                     return value
                 n = size(value)
                 if (
-                    n_params is not None
-                    and n != n_params
+                    n_range is not None
+                    and not n_range[0] <= n <= n_range[1]
                     and not (
                         what == "bounds" and n == 1  # scalar bound broadcasts
                     )
                 ):
                     raise ValueError(
                         f"{function.__name__}() returned {what} of length {n}, but "
-                        f"model '{name}' has {n_params} parameter(s)"
+                        f"model '{name}' takes {_describe_range(n_range)} "
+                        "parameter(s)"
                     )
                 return value
 
@@ -651,6 +686,8 @@ class ModelRegistry:
 
         if callable(fn_p0):
             model.estimate_p0 = checked(fn_p0, "p0", len)  # type: ignore[attr-defined]
+        if callable(fn_names):  # length is validated by the runner
+            model.parameter_names = fn_names  # type: ignore[attr-defined]
         if callable(fn_bounds):
             model.bounds = checked(  # type: ignore[attr-defined]
                 fn_bounds, "bounds", lambda b: np.size(b[0])

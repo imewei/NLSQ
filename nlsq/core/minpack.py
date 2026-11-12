@@ -825,7 +825,7 @@ def _fit_with_config(
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
             callback=kwargs.get("callback"),
-            verbose=kwargs.get("verbose", 1),
+            verbose=kwargs.get("verbose", 0),
         )
 
         # Convert to CurveFitResult
@@ -1137,7 +1137,7 @@ def _fit_with_preset(  # noqa: C901
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
             callback=kwargs.get("callback"),
-            verbose=kwargs.get("verbose", 1),
+            verbose=kwargs.get("verbose", 0),
         )
 
         result = CurveFitResult(result_dict)
@@ -1287,7 +1287,9 @@ def _fit_with_auto_global(
     _logger.debug(f"workflow='auto_global' bounds: lower={lb}, upper={ub}")
 
     # Extract optional parameters
-    n_starts = kwargs.pop("n_starts", 10)
+    # nlsq.fit forwards n_starts=None when the caller gave none: None means default.
+    n_starts = kwargs.pop("n_starts", None)
+    n_starts = 10 if n_starts is None else n_starts
     cmaes_config = kwargs.pop("cmaes_config", None)
     memory_limit_gb = kwargs.pop("memory_limit_gb", None)
 
@@ -1608,6 +1610,22 @@ def _fit_global_cmaes(
     model_id = kwargs.pop("_hpc_model_id", None)
     seed = kwargs.pop("seed", None)
 
+    # fit(workflow="auto_global") forwards the multistart sampler options; only
+    # the multi-start route uses them, so say so here instead of dropping them.
+    unused = sorted(
+        k for k in ("sampler", "center_on_p0", "scale_factor") if k in kwargs
+    )
+    for k in unused:
+        kwargs.pop(k)
+    if unused:
+        warnings.warn(
+            f"{unused} are not used on the CMA-ES route selected by "
+            "workflow='auto_global' and are ignored; they apply only to its "
+            "multi-start route, or use curve_fit()/curve_fit_large().",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # seed applies whenever provided, independent of checkpoint_dir -- it's
     # the general CMA-ES reproducibility knob, not a checkpoint-only concern.
     if seed is not None:
@@ -1890,7 +1908,7 @@ def _fit_global_multistart(
         sigma=np.asarray(sigma) if sigma is not None else None,
         absolute_sigma=absolute_sigma,
         callback=kwargs.get("callback"),
-        verbose=kwargs.get("verbose", 1),
+        verbose=kwargs.get("verbose", 0),
     )
 
     result = CurveFitResult(result_dict)
@@ -4162,7 +4180,7 @@ class CurveFit:
         )
 
         # Extract verbosity from kwargs
-        verbose = kwargs.pop("verbose", 1)
+        verbose = kwargs.pop("verbose", 0)
 
         # Handle config: either a complete HybridStreamingConfig object or individual overrides
         config = kwargs.pop("config", None)

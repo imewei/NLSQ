@@ -48,12 +48,26 @@ def pcov_from_jacobian(
     ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is
     attributed to the first frame outside ``nlsq/``.
     """
-    cost = 2 * cost  # cost is half the sum of squares!
-
+    # Equilibrate columns to unit norm before the SVD so the rank cutoff sees
+    # identifiability, not parameter units (x in 1e8 units made one direction look
+    # "dropped" and its variance collapse); pcov is scaled back below. Departs from
+    # SciPy's unscaled cutoff on purpose. Zero columns are left unscaled; if any
+    # column norm is non-finite, no column is scaled.
+    J_np = np.asarray(J)
+    col_max = np.max(
+        np.abs(J_np), axis=0, initial=0.0
+    )  # max-scaled norm: no over/underflow
+    col_norm = col_max * np.linalg.norm(
+        J_np / np.where(col_max > 0, col_max, 1.0), axis=0
+    )
+    if not np.all(np.isfinite(col_norm)):
+        col_norm = np.ones_like(col_norm)
+    col_norm = np.where(col_norm > 0, col_norm, 1.0)
     # Do Moore-Penrose inverse discarding zero singular values
-    outputs = svd(J)
+    outputs = svd(J / col_norm)
     # Convert JAX arrays to NumPy more efficiently using np.asarray
     s, VT = (np.asarray(output) for output in outputs)
+    s = s.astype(np.result_type(s.dtype, np.float64), copy=False)
 
     n_params = J.shape[1]
     # NaN/Inf in J (e.g. a numerically unstable model at the solution)
@@ -78,16 +92,37 @@ def pcov_from_jacobian(
         warn_cov = True
         reason = "singular_jacobian"
     else:
-        pcov = np.dot(VT.T / s**2, VT)
+        scaled_cost = (
+            not absolute_sigma and n_eff > p and np.isfinite(cost) and cost >= 0
+        )
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            if scaled_cost:
+                scale = np.sqrt(cost) * np.sqrt(2.0 / (n_eff - p))
+                scaled = (VT * scale) / s[:, None]
+            else:
+                scaled = VT / s[:, None]
+            scaled = scaled / col_norm  # undo the equilibration before squaring
+            pcov = scaled.T @ scaled
         reason = None
         if not absolute_sigma:
             if n_eff > p:
-                s_sq = cost / (n_eff - p)
-                pcov = pcov * s_sq
+                if not scaled_cost:
+                    with np.errstate(over="ignore", invalid="ignore"):
+                        pcov = pcov * (2 * cost / (n_eff - p))
             else:
                 pcov.fill(np.inf)
                 warn_cov = True
                 reason = "insufficient_data"
+        # A non-finite cost with relative sigma keeps NaN/inf pcov, no warning: pinned
+        # by tests/core/test_covariance_characterization.py (deliberate site difference).
+        if (
+            not warn_cov
+            and (absolute_sigma or np.isfinite(cost))
+            and not np.isfinite(pcov).all()
+        ):
+            pcov.fill(np.inf)
+            warn_cov = True
+            reason = "nonfinite_covariance"
 
     if rank_deficient:
         # Pseudo-inverse (SciPy-trf compatible) gives zero variance along the

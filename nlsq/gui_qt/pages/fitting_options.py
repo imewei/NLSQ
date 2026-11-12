@@ -198,6 +198,9 @@ class FittingOptionsPage(QWidget):
         self._advanced_group = QGroupBox("Advanced Options")
         advanced_layout = QVBoxLayout(self._advanced_group)
         self._advanced_options = AdvancedOptionsWidget()
+        # Full default option set: Guided runs/Reset must not inherit hidden
+        # Advanced-mode edits.
+        self._default_options = self._advanced_options.get_options()
         advanced_layout.addWidget(self._advanced_options)
         layout.addWidget(self._advanced_group)
         self._advanced_group.setVisible(False)
@@ -329,8 +332,13 @@ class FittingOptionsPage(QWidget):
         """
         if preset_name in PRESETS:
             self._app_state.state.preset = preset_name
-            preset = PRESETS[preset_name]
-            self._advanced_options.set_options(preset)
+            # Keys the preset lacks (e.g. n_starts for Fast) return to their
+            # defaults instead of keeping the previous preset's value; the
+            # statistical convention is not a preset property, so it stays.
+            defaults = {
+                k: v for k, v in self._default_options.items() if k != "absolute_sigma"
+            }
+            self._advanced_options.set_options({**defaults, **PRESETS[preset_name]})
 
     def _on_model_changed(self) -> None:
         """Handle model change to update parameter config."""
@@ -374,8 +382,12 @@ class FittingOptionsPage(QWidget):
 
         # Update state with current options
         if self._guided_radio.isChecked():
+            # absolute_sigma is not a preset property: keep the user's setting
+            defaults = {
+                k: v for k, v in self._default_options.items() if k != "absolute_sigma"
+            }
             self._sync_options_to_state(
-                PRESETS.get(self._preset_combo.currentText(), {})
+                {**defaults, **PRESETS.get(self._preset_combo.currentText(), {})}
             )
         else:
             self._sync_options_to_state(self._advanced_options.get_options())
@@ -578,6 +590,11 @@ class FittingOptionsPage(QWidget):
         self._guided_radio.setChecked(True)
         self._on_mode_changed(0)
         self._preset_combo.setCurrentText("Robust")
+        # setCurrentText is a no-op when already Robust: restore explicitly
+        self._advanced_options.set_options(
+            {**self._default_options, **PRESETS["Robust"]}
+        )
+        self._app_state.state.preset = "Robust"
         self._cost_plot.reset()
         self._iteration_table.clear()
         self._status_label.setText("Ready")

@@ -143,10 +143,9 @@ bottom_err, top_err, EC50_err, hill_slope_err = perr
 # Dynamic range
 dynamic_range = top_fit - bottom_fit
 
-# EC20 and EC80 (20% and 80% effective concentrations)
-# For 4PL: EC_x = EC50 * ((100-x)/x)^(1/hill_slope)
-EC20 = EC50_fit * np.power((top_fit - 20) / (20 - bottom_fit), 1 / hill_slope_fit)
-EC80 = EC50_fit * np.power((top_fit - 80) / (80 - bottom_fit), 1 / hill_slope_fit)
+# x% of the dynamic range (not an absolute response level): EC_x = EC50 * (x/(100-x))^(1/hill_slope)
+EC20 = EC50_fit * np.power(20 / 80, 1 / hill_slope_fit)
+EC80 = EC50_fit * np.power(80 / 20, 1 / hill_slope_fit)
 
 
 print("\nFitted Parameters:")
@@ -175,7 +174,7 @@ print(
 )
 print(f"  EC20:           {EC20:.3f} μM")
 print(f"  EC80:           {EC80:.3f} μM")
-print(f"  EC20/EC80 ratio: {EC20 / EC80:.3f} (wider = shallower slope)")
+print(f"  EC80/EC20 ratio: {EC80 / EC20:.3f} (wider = shallower slope)")
 
 # Potency classification
 if EC50_fit < 0.1:

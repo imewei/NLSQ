@@ -578,16 +578,26 @@ except Exception as e:
     print(f"❌ Fit failed: {e}")
     print("💡 Tip: Try better p0 estimates or increase max_nfev")
 
-# Example 2: Conflicting bounds
-print("\nExample 2: Conflicting bounds")
+# Example 2: p0 outside restrictive bounds
+print("\nExample 2: p0 outside restrictive bounds")
 print("=" * 50)
-try:
-    # p0 outside bounds
-    bad_bounds = ([0, 0, 0], [1, 0.1, 0.5])  # Too restrictive
-    popt, pcov = curve_fit(exponential_decay, x, y, p0=[5, 0.3, 1], bounds=bad_bounds)
-except Exception as e:
-    print(f"❌ Fit failed: {type(e).__name__}")
-    print("💡 Tip: Ensure p0 is within bounds, and bounds are reasonable")
+import warnings
+
+p0_outside = [5, 0.3, 1]
+bad_bounds = ([0, 0, 0], [1, 0.1, 0.5])  # p0 violates every upper bound
+# NLSQ does not raise here: it clips p0 into the bounds and fits from there
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    popt_b, _ = curve_fit(exponential_decay, x, y, p0=p0_outside, bounds=bad_bounds)
+print(f"p0 = {p0_outside} lies outside the bounds; NLSQ clips it into them.")
+print(
+    f"Fitted: a={popt_b[0]:.3f}, b={popt_b[1]:.3f}, c={popt_b[2]:.3f} "
+    f"(upper bounds: {bad_bounds[1]})"
+)
+for w in caught:
+    print(f"⚠️  {w.category.__name__}: {w.message}")
+print("💡 Tip: bounds must contain the plausible parameter region; a parameter")
+print("   pinned at a bound means the bound (not the data) set its value")
 
 # Example 3: Successful fit with diagnostics
 print("\nExample 3: Successful fit with full diagnostics")

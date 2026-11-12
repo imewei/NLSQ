@@ -71,22 +71,27 @@ The module automatically analyzes Jacobian patterns:
 
 .. code-block:: python
 
-   # Analyze sparsity for different model functions
-   def multi_component_model(x, *params):
-       # Model with multiple independent components
-       # Often results in block-diagonal sparse Jacobian
-       pass
+   import numpy as np
+   import jax.numpy as jnp
+   from nlsq.core.sparse_jacobian import SparseJacobianComputer
+
+
+   # Model whose first half depends only on (a, b) and second half only on (c, d):
+   # the Jacobian is block-diagonal, so half of its entries are zero.
+   def multi_component_model(x, a, b, c, d):
+       n = x.shape[0] // 2
+       return jnp.concatenate([a * x[:n] + b, c * x[n:] + d])
 
 
    computer = SparseJacobianComputer()
+   p0 = np.array([1.0, 1.0, 1.0, 1.0])
+   x_sample = np.linspace(0, 10, 100)
    pattern, sparsity = computer.detect_sparsity_pattern(
        multi_component_model, p0, x_sample
    )
 
-   # Get detailed diagnostics
-   diagnostics = computer.get_diagnostics()
-   print(f"Non-zero elements: {diagnostics['nnz']}")
-   print(f"Sparsity pattern: {diagnostics['pattern']}")
+   print(f"Zero fraction: {sparsity:.1%}")  # about 50%
+   print(f"Non-zero entries: {int(pattern.sum())} of {pattern.size}")
 
 See Also
 --------

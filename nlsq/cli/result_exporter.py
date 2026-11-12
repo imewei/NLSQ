@@ -214,9 +214,26 @@ class ResultExporter:
 
         if results_file is not None:
             output_path = Path(results_file)
+            input_file = (config.get("data") or {}).get("input_file")
+            if input_file and output_path.resolve() == Path(input_file).resolve():
+                raise CLIError("Results file must not overwrite the input data file")
+            model_config = config.get("model") or {}
+            model_file = (
+                model_config.get("path")
+                if model_config.get("type") == "custom"
+                else None
+            )
+            if model_file and output_path.resolve() == Path(model_file).resolve():
+                raise CLIError("Results file must not overwrite the custom model file")
 
             # Ensure parent directory exists
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                raise CLIError(
+                    f"Cannot create results directory: {e}",
+                    context={"output_path": str(output_path)},
+                ) from e
 
             # Export based on format
             if output_format == "json":

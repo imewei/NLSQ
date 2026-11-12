@@ -174,10 +174,16 @@ def test_default_mode_unchanged_for_scipy_optimize(tmp_path):
 
 
 def test_default_mode_ignores_strict_only_rules(tmp_path):
-    # `jax.config` is a strict-only block; the default denylist accepts it.
-    src = "import jax\njax.config.update('jax_enable_x64', True)\n"
+    # `import scipy.optimize` is a strict-only block; the default denylist accepts it.
+    src = "import scipy.optimize\nimport numpy as np\n"
     assert _check(tmp_path, src, strict=False).is_valid
     assert not _check(tmp_path, src, strict=True).is_valid
+
+
+def test_jax_config_blocked_in_default_mode(tmp_path):
+    # jax.config mutates process-wide state and can write files (jax_dump_ir_to).
+    src = "import jax\njax.config.update('jax_enable_x64', True)\n"
+    assert not _check(tmp_path, src, strict=False).is_valid
 
 
 # ------------------------------------------------- registry wiring (d), (e)

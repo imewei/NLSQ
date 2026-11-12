@@ -436,10 +436,12 @@ def test_aic_zero_rss():
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         result = curve_fit(model, x, y, p0=[2.0, 0.0])
-        _ = result.aic  # Check property access doesn't raise error
+        aic = result.aic
 
-        # May warn about undefined AIC if RSS is exactly zero
-        # AIC may be NaN or very negative
+    # Exact-zero RSS: AIC is undefined -> NaN with an explicit warning.
+    assert np.sum(result.residuals**2) == 0
+    assert np.isnan(aic)
+    assert any("AIC undefined" in str(warning.message) for warning in w)
 
 
 def test_summary_with_none_pcov_does_not_crash():

@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 
-from nlsq.cli.errors import cfg_get
+from nlsq.cli.errors import ConfigError, cfg_get
 
 # =============================================================================
 # Style Presets Dictionary
@@ -128,6 +128,28 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
 _DRAW_LOCK = threading.RLock()
 
 
+def normalize_formats(formats: Any) -> Any:
+    """Wrap a bare string (``formats: pdf``) in a list; iterating it splits chars."""
+    if isinstance(formats, str):
+        return [formats]
+    if not isinstance(formats, (list, tuple)):
+        raise ConfigError(
+            f"visualization.formats must be a list of file extensions, got {formats!r}",
+            suggestion="Use e.g. formats: [png, pdf]",
+        )
+    return formats
+
+
+def check_filename_prefix(prefix: Any) -> None:
+    """Reject prefixes that could write outside ``output_dir``."""
+    text = str(prefix)
+    if "/" in text or "\\" in text or text in ("", ".", ".."):
+        raise ConfigError(
+            f"visualization.filename_prefix must be a plain file name, got {text!r}",
+            suggestion="Remove path separators and '..'; use output_dir for folders",
+        )
+
+
 def _field(result: Any, key: str) -> Any:
     """Read ``key`` from a result dict or a CurveFitResult (attribute-only fields)."""
     value = getattr(result, key, None)
@@ -207,11 +229,12 @@ class FitVisualizer:
             )
 
         output_paths: list[str] = []
+        filename_prefix = cfg_get(vis_config, "filename_prefix", "fit")
+        check_filename_prefix(filename_prefix)
         output_dir = Path(cfg_get(vis_config, "output_dir", "figures"))
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        filename_prefix = cfg_get(vis_config, "filename_prefix", "fit")
-        formats = cfg_get(vis_config, "formats", ["pdf", "png"])
+        formats = normalize_formats(cfg_get(vis_config, "formats", ["pdf", "png"]))
 
         # rc_context mutates global rcParams, so serialize drawing across
         # batch threads; each figure sees only its own style and it is restored.

@@ -138,6 +138,15 @@ def benchmark_sparse_vs_dense():
         # Benchmark with sparse solver activation (if implemented)
         # For now, both use dense solver (sparse path falls back to dense)
         print("\nBenchmark 1: Dense solver (tr_solver='exact')")
+        # untimed warmup so JIT compilation is not charged to the first solver
+        _warmup = curve_fit(
+            sparse_parameter_selection_model,
+            x_data,
+            y_data,
+            p0=p0,
+            tr_solver="exact",  # Force dense solver
+            maxfev=100,
+        )
         start = time.time()
         result_dense = curve_fit(
             sparse_parameter_selection_model,
@@ -145,17 +154,25 @@ def benchmark_sparse_vs_dense():
             y_data,
             p0=p0,
             tr_solver="exact",  # Force dense solver
-            full_output=True,
             maxfev=100,
         )
         time_dense = time.time() - start
 
         print(f"  Time: {time_dense:.3f}s")
-        print(f"  Iterations: {result_dense.get('nit', 'N/A')}")
-        print(f"  Final cost: {result_dense.get('cost', 'N/A'):.2e}")
+        print(f"  Iterations: {result_dense.nit} (nfev={result_dense.nfev})")
+        print(f"  Final cost: {result_dense.cost:.2e}")
 
         # Benchmark with auto-selection (currently also uses dense)
         print("\nBenchmark 2: Auto-selection (sparse detection enabled)")
+        # untimed warmup so JIT compilation is not charged to the first solver
+        _warmup = curve_fit(
+            sparse_parameter_selection_model,
+            x_data,
+            y_data,
+            p0=p0,
+            tr_solver=None,  # Let auto-selection decide
+            maxfev=100,
+        )
         start = time.time()
         result_auto = curve_fit(
             sparse_parameter_selection_model,
@@ -163,14 +180,13 @@ def benchmark_sparse_vs_dense():
             y_data,
             p0=p0,
             tr_solver=None,  # Let auto-selection decide
-            full_output=True,
             maxfev=100,
         )
         time_auto = time.time() - start
 
         print(f"  Time: {time_auto:.3f}s")
-        print(f"  Iterations: {result_auto.get('nit', 'N/A')}")
-        print(f"  Final cost: {result_auto.get('cost', 'N/A'):.2e}")
+        print(f"  Iterations: {result_auto.nit} (nfev={result_auto.nfev})")
+        print(f"  Final cost: {result_auto.cost:.2e}")
 
         # Check sparsity diagnostics
         if "sparsity_detected" in result_auto:

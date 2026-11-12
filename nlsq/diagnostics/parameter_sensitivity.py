@@ -520,6 +520,12 @@ class ParameterSensitivityAnalyzer:
         if wide:
             s = np.concatenate([s, np.zeros(jacobian.shape[1] - s.size, s.dtype)])
 
+        # s**2 underflows below ~1e-162 and overflows above ~1e154; every derived
+        # metric is scale-invariant, so rescale by s_max in those regimes only
+        # (reported eigenvalues are then relative to the largest one).
+        s_max = float(np.max(s)) if s.size else 0.0
+        if np.isfinite(s_max) and s_max > 0 and not (1e-100 < s_max < 1e100):
+            s = s / s_max
         eigenvalues = s**2
 
         # Sort in descending order (should already be sorted by SVD)

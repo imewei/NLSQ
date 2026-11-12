@@ -48,7 +48,7 @@ def _auto(ms=None, **chunked):
         ({"global_search": True}, _auto(Multistart(n_starts=20))),
         (
             {"method": "hybrid_streaming", "gauss_newton_tol": 1e-6},
-            Hybrid(config=HybridStreamingConfig(gauss_newton_tol=1e-6), verbose=1),
+            Hybrid(config=HybridStreamingConfig(gauss_newton_tol=1e-6), verbose=0),
         ),
         ({"method": "exact_streaming", "gtol": 1e-10}, Exact(gtol=1e-10)),
     ],
@@ -99,8 +99,8 @@ def test_legacy_mapping_carries_stability_on_in_memory_only():
         (
             {"method": "hybrid_streaming", "callback": print},
             TypeError,
-            r"^Unrecognized keyword argument\(s\) for method='hybrid_streaming': "
-            r"\['callback'\]\. These are not HybridStreamingConfig fields\.$",
+            r"^callback is not supported with method='hybrid_streaming' in "
+            r"curve_fit_large; use curve_fit\(method='hybrid_streaming', callback=\.\.\.\)$",
         ),
     ],
     ids=["exact_stability", "exact_loss", "hybrid_callback"],

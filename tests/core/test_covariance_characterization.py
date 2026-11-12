@@ -35,6 +35,7 @@ import pytest
 
 import nlsq
 from nlsq import curve_fit
+from nlsq.core.covariance import pcov_from_jacobian
 from nlsq.core.minpack import CurveFit
 from nlsq.result import OptimizeWarning
 from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
@@ -329,19 +330,23 @@ def test_standard_nonfinite_cost_gives_nan_no_warning(j_wc):
     _assert_golden(pcov, STD_WC_ABS)
 
 
-def _diag_jac(sv, rows=N, p=2):
-    """(rows, p) Jacobian with singular values (1, ..., 1, sv): s[0] == 1 exactly."""
-    jac = np.zeros((rows, p))
-    for i in range(p - 1):
-        jac[i, i] = 1.0
-    jac[p - 1, p - 1] = sv
-    return jac
+def _cutoff_last_pcov(sv, ysize, rows=N, p=2):
+    """pcov[p-1, p-1] (absolute_sigma) when the SVD of the column-equilibrated J returns
+    singular values (1, ..., 1, sv): 1/sv**2 if kept, 0.0 if dropped.
 
-
-def _std_last_pcov(sv, ysize, rows=N, p=2):
-    """pcov[p-1, p-1] (absolute_sigma): 1/sv**2 if kept, 0.0 if dropped."""
+    The SVD is injected, so this pins the cutoff alone, independent of column scaling
+    (``eye`` columns already have unit norm, so the scale-back is the identity).
+    """
+    s = np.ones(p)
+    s[-1] = sv
     (pcov, _), caught = _record(
-        _std_cov, _diag_jac(sv, rows, p), 1.0, ysize, np.zeros(p), True
+        pcov_from_jacobian,
+        np.eye(rows, p),
+        1.0,
+        ysize,
+        p,
+        True,
+        lambda _J: (s, np.eye(p)),
     )
     if pcov[p - 1, p - 1] == 0.0:  # a dropped direction: rank warning, not "singular"
         _assert_rank_warning(caught)
@@ -351,13 +356,13 @@ def _std_last_pcov(sv, ysize, rows=N, p=2):
 
 
 def test_standard_rank_cutoff_is_eps_max_ysize_p_times_s0():
-    """Cutoff is eps*max(ysize, p)*s0 (``pcov_from_jacobian``); pin both sides of it.
+    """Cutoff is eps*max(ysize, p)*s0 on the equilibrated J's singular values.
 
     eps*12 = 2.66e-15 here, so sv=3e-15 is kept (pcov = 1/sv^2) and 1e-15 dropped
     (pcov = 0). A p-only cutoff (eps*2 = 4.4e-16) would keep 1e-15.
     """
-    np.testing.assert_allclose(_std_last_pcov(3e-15, N), 1 / 3e-15**2, rtol=RTOL)
-    assert _std_last_pcov(1e-15, N) == 0.0
+    np.testing.assert_allclose(_cutoff_last_pcov(3e-15, N), 1 / 3e-15**2, rtol=RTOL)
+    assert _cutoff_last_pcov(1e-15, N) == 0.0
 
 
 def test_standard_rank_cutoff_uses_ysize_not_padded_row_count():
@@ -366,8 +371,8 @@ def test_standard_rank_cutoff_uses_ysize_not_padded_row_count():
     eps*12 = 2.66e-15 < sv=3.5e-15 < eps*20 = 4.44e-15: kept with ysize (production),
     dropped if the padded row count were used.
     """
-    assert _std_last_pcov(3.5e-15, 12, rows=20) == pytest.approx(1 / 3.5e-15**2)
-    assert _std_last_pcov(3.5e-15, 20, rows=20) == 0.0  # same J, true count 20
+    assert _cutoff_last_pcov(3.5e-15, 12, rows=20) == pytest.approx(1 / 3.5e-15**2)
+    assert _cutoff_last_pcov(3.5e-15, 20, rows=20) == 0.0  # same s, true count 20
 
 
 def test_standard_rank_cutoff_uses_max_of_ysize_and_p():
@@ -376,8 +381,35 @@ def test_standard_rank_cutoff_uses_max_of_ysize_and_p():
     eps*2 = 4.44e-16 < sv=5.5e-16 < eps*3 = 6.66e-16 -> dropped (a ysize-only
     cutoff would keep it); sv=8e-16 > eps*3 is kept.
     """
-    assert _std_last_pcov(5.5e-16, 2, p=3) == 0.0
-    np.testing.assert_allclose(_std_last_pcov(8e-16, 2, p=3), 1 / 8e-16**2, rtol=RTOL)
+    assert _cutoff_last_pcov(5.5e-16, 2, p=3) == 0.0
+    np.testing.assert_allclose(
+        _cutoff_last_pcov(8e-16, 2, p=3), 1 / 8e-16**2, rtol=RTOL
+    )
+
+
+def test_standard_covariance_is_invariant_to_column_units():
+    """Columns are equilibrated before the SVD, so a tiny column norm (pure units) is
+    not a rank deficiency: diag(1, 1e-15) keeps both directions, pcov = diag(1, 1e30).
+
+    Deliberate departure from SciPy, whose unscaled cutoff drops the second direction.
+    """
+    jac = np.zeros((N, 2))
+    jac[0, 0] = 1.0
+    jac[1, 1] = 1e-15
+    (pcov, warn_cov), caught = _record(_std_cov, jac, 1.0, N, np.zeros(2), True)
+    assert warn_cov is False
+    _assert_no_warnings(caught)
+    np.testing.assert_allclose(pcov, np.diag([1.0, 1e30]), rtol=RTOL)
+
+
+def test_standard_covariance_scale_back_matches_rescaled_problem():
+    """pcov of J @ D equals D^-1 pcov(J) D^-1 for badly scaled columns."""
+    rng = np.random.default_rng(0)
+    base = rng.normal(size=(N, 3))
+    d = np.array([1.0, 1e-9, 1e7])
+    (ref, _), _ = _record(_std_cov, base, 1.0, N, np.zeros(3), True)
+    (got, _), _ = _record(_std_cov, base * d, 1.0, N, np.zeros(3), True)
+    np.testing.assert_allclose(got * np.outer(d, d), ref, rtol=1e-8)
 
 
 def test_standard_warning_is_attributed_to_the_caller():

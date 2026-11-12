@@ -20,6 +20,26 @@ from nlsq.global_optimization.sampling import (
 )
 
 
+@pytest.mark.parametrize("sampler", [sobol_sample, halton_sample])
+def test_quasi_random_sampler_rejects_negative_skip(sampler):
+    with pytest.raises(ValueError, match="skip"):
+        sampler(4, 1, skip=-2)
+
+
+def test_scale_samples_handles_wide_finite_bounds():
+    samples = jnp.array([[0.0], [0.5], [1.0]])
+    scaled = scale_samples_to_bounds(samples, jnp.array([-1e308]), jnp.array([1e308]))
+    np.testing.assert_allclose(scaled[:, 0], [-1e308, 0.0, 1e308])
+
+
+def test_centered_samples_cover_wide_finite_bounds():
+    samples = jnp.array([[0.0], [0.5], [1.0]])
+    scaled = center_samples_around_p0(
+        samples, jnp.array([0.0]), 1.0, jnp.array([-1e308]), jnp.array([1e308])
+    )
+    np.testing.assert_allclose(scaled[:, 0], [-1e308, 0.0, 1e308])
+
+
 class TestLatinHypercubeSample:
     """Test Latin Hypercube Sampling implementation."""
 
@@ -266,6 +286,41 @@ class TestSamplerFactory:
         samples2 = sampler2(5, 2)
 
         assert samples1.shape == samples2.shape
+
+
+class TestCenterSamplesStayInBounds:
+    """center_samples_around_p0 promises points inside [lb, ub] (no 1-ulp excess)."""
+
+    @pytest.mark.parametrize("scale_factor", [0.5, 1.0, 2.0])
+    def test_random_boxes_with_corner_samples(self, scale_factor):
+        from nlsq.global_optimization.sampling import center_samples_around_p0
+
+        rng = np.random.default_rng(0)
+        n = 20000
+        lb = rng.uniform(-10, 10, size=(n, 1))
+        ub = lb + rng.uniform(1e-3, 20, size=(n, 1)) * rng.uniform(0.1, 3, (n, 1))
+        p0 = lb + rng.uniform(0, 1, size=(n, 1)) * (ub - lb)
+        samples = np.array([[0.0], [1.0], [0.5]])
+
+        out = jax.vmap(
+            lambda p, lo, hi: center_samples_around_p0(samples, p, scale_factor, lo, hi)
+        )(jnp.asarray(p0), jnp.asarray(lb), jnp.asarray(ub))
+
+        assert bool(jnp.all(out >= jnp.asarray(lb)[:, None, :]))
+        assert bool(jnp.all(out <= jnp.asarray(ub)[:, None, :]))
+
+    def test_infinite_bounds_still_work(self):
+        from nlsq.global_optimization.sampling import center_samples_around_p0
+
+        out = center_samples_around_p0(
+            jnp.array([[0.0, 0.0], [1.0, 1.0]]),
+            jnp.array([1.0, 2.0]),
+            1.0,
+            jnp.array([-jnp.inf, 0.0]),
+            jnp.array([jnp.inf, jnp.inf]),
+        )
+        assert bool(jnp.all(jnp.isfinite(out)))
+        assert bool(out[0, 1] >= 0.0)
 
 
 if __name__ == "__main__":

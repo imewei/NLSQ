@@ -42,6 +42,12 @@ class DefenseLayerTelemetry:
         Count of step clipping activations
     total_warmup_calls : int
         Total number of warmup phase executions
+    total_lbfgs_iterations : int
+        Total number of L-BFGS steps taken across all warmups
+    lbfgs_line_search_failures : int
+        Raw line-search-failure events (one step can be reported twice)
+    lbfgs_line_search_failed_steps : int
+        Distinct L-BFGS steps with a reported line-search failure
     """
 
     def __init__(self) -> None:
@@ -70,6 +76,13 @@ class DefenseLayerTelemetry:
         # L-BFGS-specific telemetry counters
         self.lbfgs_history_buffer_fill_events: int = 0
         self.lbfgs_line_search_failures: int = 0
+        self.total_lbfgs_iterations: int = 0
+        self.lbfgs_line_search_failed_steps: int = 0
+        # Steps already counted as failed, for the current warmup call only: the
+        # exception path and the deferred loss-increase check can both report a
+        # step, in either order.
+        self._failed_steps: set[int] = set()
+        self._failed_steps_call: int = 0
 
         # Detailed event log (last N events)
         self._max_events: int = 1000
@@ -79,6 +92,11 @@ class DefenseLayerTelemetry:
         """Record start of a warmup phase."""
         with self._lock:
             self.total_warmup_calls += 1
+
+    def record_lbfgs_iteration(self) -> None:
+        """Record one L-BFGS step (denominator of the per-iteration rates)."""
+        with self._lock:
+            self.total_lbfgs_iterations += 1
 
     def record_layer1_trigger(self, relative_loss: float, threshold: float) -> None:
         """Record Layer 1 warm start detection trigger.
@@ -196,6 +214,12 @@ class DefenseLayerTelemetry:
         """
         with self._lock:
             self.lbfgs_line_search_failures += 1
+            if self._failed_steps_call != self.total_warmup_calls:
+                self._failed_steps_call = self.total_warmup_calls
+                self._failed_steps.clear()
+            if iteration not in self._failed_steps:
+                self._failed_steps.add(iteration)
+                self.lbfgs_line_search_failed_steps += 1
             self._log_event_locked(
                 "lbfgs_line_search_failure",
                 {"iteration": iteration, "reason": reason},
@@ -215,7 +239,14 @@ class DefenseLayerTelemetry:
         self._event_log.append(event)
 
     def get_trigger_rates(self) -> dict[str, float]:
-        """Get trigger rates as percentage of total warmup calls.
+        """Get trigger rates as true percentages (0-100) of their own event count.
+
+        Denominators:
+
+        - per-warmup events (``layer1``, ``layer2_*``, ``layer3``,
+          ``lbfgs_history_buffer_fill``): ``total_warmup_calls``
+        - per-L-BFGS-step events (``layer4_clip``, ``lbfgs_line_search_failure``,
+          the latter counting distinct failed steps): ``total_lbfgs_iterations``
 
         Returns
         -------
@@ -223,42 +254,26 @@ class DefenseLayerTelemetry:
             Trigger rates for each layer as percentages (0-100)
         """
         with self._lock:
-            if self.total_warmup_calls == 0:
-                return {
-                    "layer1_warm_start_rate": 0.0,
-                    "layer2_refinement_rate": 0.0,
-                    "layer2_careful_rate": 0.0,
-                    "layer2_exploration_rate": 0.0,
-                    "layer3_cost_guard_rate": 0.0,
-                    "layer4_clip_rate": 0.0,
-                    "lbfgs_history_buffer_fill_rate": 0.0,
-                    "lbfgs_line_search_failure_rate": 0.0,
-                }
 
-            total = self.total_warmup_calls
+            def pct(n: int, d: int) -> float:
+                return 100.0 * n / d if d > 0 else 0.0
+
+            calls = self.total_warmup_calls
+            iters = self.total_lbfgs_iterations
+            modes = self.layer2_lr_mode_counts
             return {
-                "layer1_warm_start_rate": 100.0
-                * self.layer1_warm_start_triggers
-                / total,
-                "layer2_refinement_rate": 100.0
-                * self.layer2_lr_mode_counts["refinement"]
-                / total,
-                "layer2_careful_rate": 100.0
-                * self.layer2_lr_mode_counts["careful"]
-                / total,
-                "layer2_exploration_rate": 100.0
-                * self.layer2_lr_mode_counts["exploration"]
-                / total,
-                "layer3_cost_guard_rate": 100.0
-                * self.layer3_cost_guard_triggers
-                / total,
-                "layer4_clip_rate": 100.0 * self.layer4_clip_triggers / total,
-                "lbfgs_history_buffer_fill_rate": 100.0
-                * self.lbfgs_history_buffer_fill_events
-                / total,
-                "lbfgs_line_search_failure_rate": 100.0
-                * self.lbfgs_line_search_failures
-                / total,
+                "layer1_warm_start_rate": pct(self.layer1_warm_start_triggers, calls),
+                "layer2_refinement_rate": pct(modes["refinement"], calls),
+                "layer2_careful_rate": pct(modes["careful"], calls),
+                "layer2_exploration_rate": pct(modes["exploration"], calls),
+                "layer3_cost_guard_rate": pct(self.layer3_cost_guard_triggers, calls),
+                "layer4_clip_rate": pct(self.layer4_clip_triggers, iters),
+                "lbfgs_history_buffer_fill_rate": pct(
+                    self.lbfgs_history_buffer_fill_events, calls
+                ),
+                "lbfgs_line_search_failure_rate": pct(
+                    self.lbfgs_line_search_failed_steps, iters
+                ),
             }
 
     def get_summary(self) -> dict:

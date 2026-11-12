@@ -82,6 +82,8 @@ Repeats: 7 warm at 1k-1M, 3 at 10M, 100M: 3 (GPU), 2 (JAX-based CPU), 1 (SciPy, 
 
 ## Observations
 
+> **Superseded first run.** The observations below were written from the first run on `ec9dd429`. The NLSQ cells were re-run on `501fbe2f` (see the re-run note above the table): where they differ, notably versus JAXopt at 10M (first run: JAXopt still leads; re-run: NLSQ ahead of JAXopt at 10M and 100M on every problem), the re-run and the main table are authoritative. The numbers below are unchanged.
+
 - `curve_fit_large` at 100M: GPU 1.11 / 2.34 / 3.30 / 1.73 s against 12.8 / 12.4 / 13.4 / 25.4 s on 2026-11-09 (11x / 5.3x / 4.1x / 15x); CPU 12.9 / 31.3 / 39.6 / 28.8 s against 27.3 / 23.4 / 45.1 / 40.0 s (gaussian is 1.3x slower, inside this machine's drift). At 10M GPU: 237 / 976 / 1780 / 750 ms (rerun 207 / 355 / 1023 / 336 ms) against 1.18 / 1.21 / 1.31 / 2.87 s.
 - Versus JAXopt on GPU: at 100M NLSQ is level on exp_decay (1.11 vs 1.09 s) and faster on gaussian (2.34 vs 3.29 s) and two_exp (3.30 vs 4.20 s); on 2026-11-09 JAXopt led by 3-19x. At 10M JAXopt still leads on exp_decay (82 ms vs 207 ms rerun) and two_exp (354 vs 1023 ms rerun), and is level on gaussian (311 vs 355 ms rerun); at 1M it leads by 3-9x. The gap is therefore closed at 100M, not at 10M and below.
 - CPU at 100M `curve_fit_large` is the fastest library on every problem it shares: 12.9 / 31.3 / 39.6 s against JAXopt 16.7 / 45.6 / 45.8 s, lmfit 39.0 / 54.2 / 117 s, SciPy 49.4 / 87.6 / 126 s. bounded_exp (only SciPy, lmfit, NLSQ): 28.8 s against 177 and 182 s.

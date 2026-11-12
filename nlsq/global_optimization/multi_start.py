@@ -227,6 +227,54 @@ def _suppress_optimize_warning() -> Iterator[None]:
                 _ignore_state["added"] = False
 
 
+# Thread ident -> buffer of that thread's start-fit WARNING records (see below).
+_quiet_threads: dict[int, list[logging.LogRecord]] = {}
+
+
+class _DeferStartWarnings(logging.Filter):
+    """Drop a running start's nlsq WARNING records and buffer them for replay.
+
+    Per-start logger warnings (e.g. "Jacobian is rank-deficient") would read as
+    warnings about the returned winner; only the winner's are replayed (marked
+    ``_nlsq_replay`` so this filter lets them through).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if getattr(record, "_nlsq_replay", False):
+            return True
+        buf = _quiet_threads.get(record.thread)  # type: ignore[arg-type]
+        if buf is not None and record.levelno == logging.WARNING:
+            buf.append(record)
+            return False
+        return True
+
+
+_defer_filter = _DeferStartWarnings()
+
+
+def _install_defer_filter() -> None:
+    # Logger filters only see records created on that logger, so attach to each
+    # existing nlsq.* logger (addFilter is idempotent; no-op when no start runs).
+    # shortcut: loggers first created during a start are not covered; upgrade to a
+    # LogRecord factory if one appears.
+    for name, lg in list(logging.root.manager.loggerDict.items()):
+        if name.startswith("nlsq") and isinstance(lg, logging.Logger):
+            lg.addFilter(_defer_filter)
+
+
+def _fit_start_quietly(buf: list[logging.LogRecord], *args: Any) -> tuple:
+    ident = threading.get_ident()
+    prev = _quiet_threads.get(ident)
+    _quiet_threads[ident] = buf
+    try:
+        return _fit_single_start(*args)
+    finally:
+        if prev is None:
+            _quiet_threads.pop(ident, None)
+        else:
+            _quiet_threads[ident] = prev
+
+
 def _select_worker_count(n_starts: int) -> int:
     """Select optimal number of parallel workers.
 
@@ -559,11 +607,14 @@ class MultiStartOrchestrator:
         # the main thread before any worker thread is spawned and held until the pool
         # has fully joined. It is refcounted (not catch_warnings) so overlapping
         # multi-start calls from different user threads cannot leak the filter.
+        start_logs: list[list[logging.LogRecord]] = [[] for _ in range(n_starts)]
+        _install_defer_filter()
         with _suppress_optimize_warning():
             if n_workers <= 1:
                 # Sequential fallback (1 start or 1 worker)
                 for i, p0 in enumerate(starting_points):
-                    results[i] = _fit_single_start(
+                    results[i] = _fit_start_quietly(
+                        start_logs[i],
                         f,
                         xdata,
                         ydata,
@@ -584,7 +635,8 @@ class MultiStartOrchestrator:
                 with ThreadPoolExecutor(max_workers=n_workers) as executor:
                     for i, p0 in enumerate(starting_points):
                         future = executor.submit(
-                            _fit_single_start,
+                            _fit_start_quietly,
+                            start_logs[i],
                             f,
                             xdata,
                             ydata,
@@ -612,6 +664,12 @@ class MultiStartOrchestrator:
             "n_workers": n_workers,
             "wall_time_sec": wall_time,
         }
+
+        # Re-log only the winner's deferred warnings (stable sort: first min wins).
+        best_i = min(range(n_starts), key=lambda i: results[i][1])
+        for record in start_logs[best_i]:
+            record._nlsq_replay = True  # type: ignore[attr-defined]
+            logging.getLogger(record.name).handle(record)
 
         # Sort by loss (ascending)
         results.sort(key=lambda x: x[1])

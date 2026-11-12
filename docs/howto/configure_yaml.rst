@@ -16,36 +16,57 @@ Copy the template and edit only the fields you need for your run.
 Common sections
 ---------------
 
-Most workflows use a subset of these sections:
+The CLI accepts these top-level keys (anything else is rejected with a
+"did you mean" hint):
 
-- ``paths``: input data locations and output directories
-- ``data``: dataset-specific settings (ranges, filtering, batching)
-- ``model``: model name, parameters, and bounds
-- ``fitting``: solver selection, stopping criteria, and tolerances
-- ``multistart``: global search options (LHS, Sobol, Halton)
-- ``hybrid_streaming``: streaming optimizer and defense layer configuration (v0.3.6+)
-- ``resources``: memory and device controls
-- ``logging``: verbosity and log file destinations
+- ``data``: input file, column mapping, and loader options
+- ``model``: model type (``builtin``, ``polynomial``, ``custom``) and name
+- ``fitting``: ``p0``, ``bounds``, ``method``, ``ftol``/``xtol``/``gtol``,
+  ``max_nfev``, ``loss``, ``absolute_sigma``, ``check_finite``
+- ``export``: output files; ``nlsq fit`` errors when this section is missing
+- ``metadata``: free-form run description
+- ``validation``: input and result checks
+- ``visualization``: plot settings
+- ``hybrid_streaming``: streaming optimizer and defense layer configuration.
+  Read only by the GUI; ``nlsq fit`` accepts the key but does not apply it
+  (it logs a warning and fits with defaults)
+
+Multi-start search and memory controls have no YAML equivalent. Use the
+Python API instead (``curve_fit(..., multistart=True)`` and
+``curve_fit_large``); see :doc:`common_workflows`.
 
 Minimal example
 ---------------
 
 .. code-block:: yaml
 
-   paths:
-     input: ./data/experiment_01.csv
-     output_dir: ./runs/experiment_01
+   data:
+     input_file: ./data/experiment_01.csv
+     columns: { x: 0, y: 1 }
 
    model:
+     type: builtin
      name: exponential_decay
-     parameters:
-       p0: [2.0, 0.5]
 
    fitting:
+     p0: [2.0, 0.5, 0.0]
      max_nfev: 200
 
-Defense layers example (v0.3.6+)
---------------------------------
+   export:
+     results_file: ./runs/experiment_01/results.json
+
+Run it with ``nlsq fit workflow.yaml``.
+
+Defense layers example (GUI only)
+---------------------------------
+
+.. note::
+
+   ``nlsq fit`` does **not** apply the ``hybrid_streaming`` section; it logs
+   a warning and runs with default settings. The section is read only by the
+   GUI. From Python, pass the same settings as a ``HybridStreamingConfig`` to
+   ``curve_fit_large(..., strategy=Hybrid(config=config))``; see
+   :doc:`common_workflows`.
 
 Configure the 4-Layer Defense Strategy for warm-start refinement:
 

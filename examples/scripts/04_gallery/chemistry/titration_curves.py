@@ -88,7 +88,7 @@ def monoprotic_titration(V, pKa, Ve, C_acid, C_base):
     return pH
 
 
-def simplified_titration(V, pKa, Ve, pH0):
+def simplified_titration(V, pKa, Ve):
     """
     Simplified titration model for curve fitting.
 
@@ -100,8 +100,6 @@ def simplified_titration(V, pKa, Ve, pH0):
         Acid dissociation constant
     Ve : float
         Equivalence point volume (mL)
-    pH0 : float
-        Initial pH (at V=0)
 
     Returns
     -------
@@ -255,11 +253,11 @@ sigma_pH = np.full_like(pH_measured, noise_level)
 
 # Fit simplified titration model to extract pKa and Ve
 # Initial guess
-p0 = [4.5, 24.0, 3.0]  # pKa, Ve, pH0
+p0 = [4.5, 24.0]  # pKa, Ve
 
 # Bounds
-bounds_lower = [3.0, 20.0, 2.5]
-bounds_upper = [6.0, 30.0, 4.0]
+bounds_lower = [3.0, 20.0]
+bounds_upper = [6.0, 30.0]
 
 # Fit only the buffer region (5-22 mL, before the equivalence point; the
 # Henderson-Hasselbalch model cannot describe the post-equivalence pH jump)
@@ -279,15 +277,14 @@ popt, pcov = curve_fit(
     **FIT_KWARGS,
 )
 
-pKa_fitted, Ve_fitted, pH0_fitted = popt
-pKa_err, Ve_err, pH0_err = np.sqrt(np.diag(pcov))
+pKa_fitted, Ve_fitted = popt
+pKa_err, Ve_err = np.sqrt(np.diag(pcov))
 
 print("\nFitted Parameters:")
 print(f"  pKa = {pKa_fitted:.3f} ± {pKa_err:.3f} (true: {pKa_true:.2f})")
 print(
     f"  Equivalence point = {Ve_fitted:.2f} ± {Ve_err:.2f} mL (true: {Ve_true:.1f} mL)"
 )
-print(f"  Initial pH = {pH0_fitted:.2f} ± {pH0_err:.2f}")
 
 # Calculate fitted curve
 pH_fitted_curve = simplified_titration(V_fit, *popt)
@@ -369,26 +366,11 @@ Ve2_true = 50.0  # Second equivalence point (mL)
 
 # Generate synthetic diprotic titration data
 V_di = np.linspace(0.1, 70, 150)
-pH_di_true = np.zeros_like(V_di)
-
-for i, V in enumerate(V_di):
-    if Ve1_true > V:
-        # First buffer region
-        f = V / Ve1_true
-        if 0.01 < f < 0.99:
-            pH_di_true[i] = pKa1_true_di + np.log10(f / (1 - f))
-        else:
-            pH_di_true[i] = 4.0
-    elif Ve2_true > V:
-        # Second buffer region
-        f = (V - Ve1_true) / (Ve2_true - Ve1_true)
-        if 0.01 < f < 0.99:
-            pH_di_true[i] = pKa2_true_di + np.log10(f / (1 - f))
-        else:
-            pH_di_true[i] = 8.3
-    else:
-        # After second equivalence
-        pH_di_true[i] = 12.0
+# Generate the truth with the same model used for fitting (including its clipping
+# of the buffer fractions) so the fit can recover the planted parameters exactly
+pH_di_true = np.asarray(
+    diprotic_titration(V_di, pKa1_true_di, pKa2_true_di, Ve1_true, Ve2_true)
+)
 
 # Add noise
 pH_di_measured = pH_di_true + np.random.normal(0, 0.08, size=pH_di_true.shape)

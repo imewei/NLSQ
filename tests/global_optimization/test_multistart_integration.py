@@ -312,6 +312,7 @@ class TestPerformance:
     """Performance tests for multi-start optimization."""
 
     @pytest.mark.slow
+    @pytest.mark.serial
     def test_multistart_overhead_less_than_10_percent(self):
         """Performance: Multi-start overhead is <10% for n_starts=5 on 100K points.
 
@@ -332,8 +333,17 @@ class TestPerformance:
         p0 = [1.0, 1.0]
 
         # Time single-start (baseline)
-        # Warm up JIT compilation
-        _ = curve_fit(linear_model, xdata[:1000], ydata[:1000], p0=p0, bounds=bounds)
+        # Warm up JIT compilation at the timed shape (both single- and multi-start)
+        _ = curve_fit(linear_model, xdata, ydata, p0=p0, bounds=bounds)
+        _ = curve_fit(
+            linear_model,
+            xdata,
+            ydata,
+            p0=p0,
+            bounds=bounds,
+            multistart=True,
+            n_starts=5,
+        )
 
         start_time = time.perf_counter()
         _ = curve_fit(

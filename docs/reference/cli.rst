@@ -213,7 +213,6 @@ See :doc:`configuration` for the full configuration reference.
    model:
      type: "builtin"
      name: "exponential_decay"
-     auto_p0: true
    export:
      results_file: "results.json"
 
@@ -329,6 +328,8 @@ Exit Codes
      - Success
    * - 1
      - General error (configuration, data loading, model, or fitting error), or a fit that did not converge
+   * - 130
+     - ``nlsq batch`` interrupted (Ctrl-C); completed results are still reported
 
 Scripting Examples
 ------------------

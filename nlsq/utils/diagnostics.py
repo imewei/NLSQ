@@ -60,7 +60,9 @@ class ConvergenceMonitor:
         # Pattern detection thresholds
         self.oscillation_threshold = min(1.0, 0.7 / sensitivity)
         self.stagnation_threshold = 1e-10 * sensitivity
-        self.divergence_threshold = 1.5 / sensitivity
+        # Cost-growth ratio (recent/older) that counts as divergence: always > 1 so a
+        # falling cost is never flagged; shrinks toward 1 as sensitivity grows.
+        self.divergence_threshold = 1.0 + 0.5 / sensitivity
 
     def update(
         self,
@@ -158,7 +160,8 @@ class ConvergenceMonitor:
             )
             oscillation_score = max(oscillation_score, param_sign_changes)
 
-        return oscillation_score > self.oscillation_threshold, oscillation_score
+        # >=: the threshold saturates at 1.0 (perfect alternation) for low sensitivity
+        return oscillation_score >= self.oscillation_threshold, oscillation_score
 
     def detect_stagnation(self) -> tuple[bool, float]:
         """Detect stagnation in optimization.
@@ -239,7 +242,7 @@ class ConvergenceMonitor:
                 is_diverging = divergence_ratio > self.divergence_threshold
                 divergence_score = min(
                     1.0,
-                    (divergence_ratio - 1.0) / self.divergence_threshold,
+                    max(0.0, divergence_ratio - 1.0) / self.divergence_threshold,
                 )
             else:
                 is_diverging = mean_recent > mean_older * self.divergence_threshold

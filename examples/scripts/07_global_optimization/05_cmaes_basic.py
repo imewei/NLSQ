@@ -180,7 +180,7 @@ def main():
         print(f"  Total generations: {diag['total_generations']}")
         print(f"  Total restarts: {diag['total_restarts']}")
         print(f"  Final sigma: {diag['final_sigma']:.6e}")
-        print(f"  Best fitness (neg SSR): {diag['best_fitness']:.6e}")
+        print(f"  Best fitness (SSR): {diag['best_fitness']:.6e}")
         print(f"  Convergence reason: {diag['convergence_reason']}")
         print(f"  NLSQ refinement: {diag['nlsq_refinement']}")
         print(f"  Wall time: {diag['wall_time']:.3f}s")

@@ -12,6 +12,7 @@ import contextlib
 import json
 import stat
 import tempfile
+import warnings
 import zipfile
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -338,10 +339,8 @@ class ExportPage(QWidget):
 
     def _on_copy_code(self) -> None:
         """Handle copy code to clipboard."""
-        code = self._code_preview.toPlainText()
-        if not code:
-            code = self.generate_python_code()
-            self._code_preview.setPlainText(code)
+        code = self.generate_python_code()  # never reuse a stale preview
+        self._code_preview.setPlainText(code)
 
         clipboard = QGuiApplication.clipboard()
         if clipboard is not None:
@@ -358,11 +357,9 @@ class ExportPage(QWidget):
             "Python Files (*.py)",
         )
         if path:
-            code = self._code_preview.toPlainText()
-            if not code:
-                code = self.generate_python_code()
-
             try:
+                code = self.generate_python_code()  # never reuse a stale preview
+                self._code_preview.setPlainText(code)
                 Path(path).write_text(code, encoding="utf-8")
                 self._status_label.setText(f"Exported to {path}")
                 self._status_label.setStyleSheet("color: #4CAF50;")
@@ -587,6 +584,8 @@ class ExportPage(QWidget):
             ]
         if state.sigma is not None:
             extra.insert(0, "    sigma=sigma,")
+            if state.absolute_sigma:  # fit()'s default is False
+                extra.insert(1, "    absolute_sigma=True,")
         return extra
 
     def generate_python_code(self, for_bundle: bool = False) -> str:
@@ -764,10 +763,12 @@ class ExportPage(QWidget):
                 "pcov = result.pcov",
                 "",
                 "# Print results",
+                f"param_names = {[str(n) for n in self._get_param_names()]!r}",
                 'print("Fitted parameters:")',
                 "for i, val in enumerate(popt):",
                 "    err = np.sqrt(pcov[i, i])",
-                '    print(f"  p{i} = {val:.6g} +/- {err:.6g}")',
+                '    name = param_names[i] if i < len(param_names) else f"p{i}"',
+                '    print(f"  {name} = {val:.6g} +/- {err:.6g}")',
                 "",
                 "# Print fit statistics (computed by NLSQ)",
                 'print(f"R-squared: {result.r_squared:.6f}")',
@@ -833,6 +834,18 @@ class ExportPage(QWidget):
                 "converged": getattr(result, "success", True),
                 "n_evaluations": getattr(result, "nfev", 0),
             }
+
+            for key in ("aic", "bic"):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    try:
+                        val = float(getattr(result, key))
+                    except (AttributeError, TypeError, ValueError):
+                        continue
+                if np.isfinite(val):  # undefined (NaN) is omitted, not nulled
+                    data["statistics"][key] = val
+            if state.sigma is not None:
+                data["statistics"]["absolute_sigma"] = bool(state.absolute_sigma)
 
             # Add R², RMSE if data available
             if state.xdata is not None and state.ydata is not None and popt is not None:

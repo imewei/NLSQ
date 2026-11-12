@@ -12,6 +12,8 @@ import os
 import subprocess
 import sys
 
+from nlsq.config import _env_flag
+
 _logger = logging.getLogger(__name__)
 
 
@@ -207,7 +209,8 @@ def check_gpu_availability(warn: bool = True) -> bool:
     Environment Variables
     ---------------------
     NLSQ_SKIP_GPU_CHECK : str, optional
-        Set to "1", "true", or "yes" (case-insensitive) to suppress GPU warnings.
+        Set to "1", "true", "yes", or "on" (case-insensitive, surrounding whitespace
+        ignored) to suppress GPU warnings.
         Useful for CI/CD pipelines or users who intentionally use CPU-only JAX.
 
     Notes
@@ -219,7 +222,7 @@ def check_gpu_availability(warn: bool = True) -> bool:
     - Silent failures prevent disruption
     """
     # Early exit if user wants to skip GPU check
-    if os.environ.get("NLSQ_SKIP_GPU_CHECK", "").lower() in ("1", "true", "yes"):
+    if _env_flag("NLSQ_SKIP_GPU_CHECK"):
         return False
 
     # GPU acceleration is Linux-only; skip detection on other platforms

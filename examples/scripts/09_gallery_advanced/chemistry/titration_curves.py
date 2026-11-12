@@ -35,7 +35,7 @@ FIT_KWARGS = {"max_nfev": 200} if QUICK else {}
 np.random.seed(42)
 
 
-def simplified_titration(V, pKa, Ve, pH0):
+def simplified_titration(V, pKa, Ve):
     """
     Simplified titration model for curve fitting.
 
@@ -47,8 +47,6 @@ def simplified_titration(V, pKa, Ve, pH0):
         Acid dissociation constant
     Ve : float
         Equivalence point volume (mL)
-    pH0 : float
-        Initial pH (at V=0)
 
     Returns
     -------
@@ -181,16 +179,17 @@ print("\n" + "-" * 70)
 print("MONOPROTIC ACID TITRATION (Acetic Acid)")
 print("-" * 70)
 
-# Fit only the buffer region (5-35 mL) for better pKa estimation
-mask_fit = (V_titrant >= 5) & (V_titrant <= 35)
+# Fit only the buffer region (5-22 mL, before the equivalence point; the
+# Henderson-Hasselbalch model cannot describe the post-equivalence pH jump)
+mask_fit = (V_titrant >= 5) & (V_titrant <= 22)
 V_fit = V_titrant[mask_fit]
 pH_fit = pH_measured[mask_fit]
 sigma_fit = sigma_pH[mask_fit]
 
 # Initial guess and bounds
-p0 = [4.5, 24.0, 3.0]  # pKa, Ve, pH0
-bounds_lower = [3.0, 20.0, 2.5]
-bounds_upper = [6.0, 30.0, 4.0]
+p0 = [4.5, 24.0]  # pKa, Ve
+bounds_lower = [3.0, 20.0]
+bounds_upper = [6.0, 30.0]
 
 # Method 1: fit() with 'auto' workflow
 print("\nMethod 1: fit() with 'auto' workflow")
@@ -206,8 +205,8 @@ popt_robust, pcov_robust = fit(
     **FIT_KWARGS,
 )
 
-pKa_fit, Ve_fit, pH0_fit = popt_robust
-pKa_err, Ve_err, pH0_err = np.sqrt(np.diag(pcov_robust))
+pKa_fit, Ve_fit = popt_robust
+pKa_err, Ve_err = np.sqrt(np.diag(pcov_robust))
 
 print(f"  pKa = {pKa_fit:.3f} +/- {pKa_err:.3f} (true: {pKa_true})")
 print(f"  Ve = {Ve_fit:.2f} +/- {Ve_err:.2f} mL (true: {Ve_true})")
@@ -215,8 +214,8 @@ print(f"  Ve = {Ve_fit:.2f} +/- {Ve_err:.2f} mL (true: {Ve_true})")
 if QUICK:
     print("\n⏩ Quick mode: skipping global/custom multi-start fits.")
     # Use auto fit results as fallback for visualization
-    pKa_g, Ve_g, pH0_g = pKa_fit, Ve_fit, pH0_fit
-    pKa_c, Ve_c, pH0_c = pKa_fit, Ve_fit, pH0_fit
+    pKa_g, Ve_g = pKa_fit, Ve_fit
+    pKa_c, Ve_c = pKa_fit, Ve_fit
 else:
     # Method 2: fit() with 'auto_global' workflow
     global_starts = 20
@@ -233,7 +232,7 @@ else:
         n_starts=global_starts,
     )
 
-    pKa_g, Ve_g, pH0_g = popt_global
+    pKa_g, Ve_g = popt_global
     perr_g = np.sqrt(np.diag(pcov_global))
 
     print(f"  pKa = {pKa_g:.3f} +/- {perr_g[0]:.3f}")
@@ -255,16 +254,16 @@ else:
         sampler="lhs",
     )
 
-    pKa_c, Ve_c, pH0_c = popt_custom
+    pKa_c, Ve_c = popt_custom
     perr_c = np.sqrt(np.diag(pcov_custom))
 
     print(f"  pKa = {pKa_c:.3f} +/- {perr_c[0]:.3f}")
     print(f"  Ve = {Ve_c:.2f} +/- {perr_c[1]:.2f} mL")
 
 # Use auto workflow results for analysis
-pKa_fit, Ve_fit, pH0_fit = popt_robust
+pKa_fit, Ve_fit = popt_robust
 perr = np.sqrt(np.diag(pcov_robust))
-pKa_err, Ve_err, pH0_err = perr
+pKa_err, Ve_err = perr
 
 # Goodness of fit
 pH_fitted_curve = simplified_titration(V_fit, *popt_robust)
@@ -279,7 +278,6 @@ print("FITTED PARAMETERS (Auto Workflow)")
 print("=" * 70)
 print(f"  pKa = {pKa_fit:.3f} +/- {pKa_err:.3f}")
 print(f"  Equivalence point = {Ve_fit:.2f} +/- {Ve_err:.2f} mL")
-print(f"  Initial pH = {pH0_fit:.2f} +/- {pH0_err:.2f}")
 
 print("\nTrue Values:")
 print(f"  pKa = {pKa_true:.2f}")
@@ -357,23 +355,11 @@ else:
 
     # Generate synthetic diprotic titration data
     V_di = np.linspace(0.1, 70, 150)
-    pH_di_true = np.zeros_like(V_di)
-
-    for i, V in enumerate(V_di):
-        if Ve1_true > V:
-            f = V / Ve1_true
-            if 0.01 < f < 0.99:
-                pH_di_true[i] = pKa1_true_di + np.log10(f / (1 - f))
-            else:
-                pH_di_true[i] = 4.0
-        elif Ve2_true > V:
-            f = (V - Ve1_true) / (Ve2_true - Ve1_true)
-            if 0.01 < f < 0.99:
-                pH_di_true[i] = pKa2_true_di + np.log10(f / (1 - f))
-            else:
-                pH_di_true[i] = 8.3
-        else:
-            pH_di_true[i] = 12.0
+    # Generate the truth with the same model used for fitting (including its clipping
+    # of the buffer fractions) so the fit can recover the planted parameters exactly
+    pH_di_true = np.asarray(
+        diprotic_titration(V_di, pKa1_true_di, pKa2_true_di, Ve1_true, Ve2_true)
+    )
 
     pH_di_measured = pH_di_true + np.random.normal(0, 0.08, size=pH_di_true.shape)
     sigma_pH_di = np.full_like(pH_di_measured, 0.08)

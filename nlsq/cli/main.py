@@ -287,6 +287,9 @@ def handle_batch(args: argparse.Namespace) -> int:
             verbose=args.verbose if hasattr(args, "verbose") else False,
         )
 
+        if any(r.get("status") == "cancelled" for r in results):
+            return 130  # interrupted (SIGINT convention)
+
         # Return non-zero if any workflows failed
         failures = [r for r in results if r.get("status") == "failed"]
         if failures:

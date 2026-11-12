@@ -288,7 +288,7 @@ class DataLoadingPage(QWidget):
         self._column_selector.selection_changed.connect(
             self._on_column_selection_changed,
         )
-        self._clear_btn.clicked.connect(self.reset)
+        self._clear_btn.clicked.connect(self._on_clear)
         self._apply_btn.clicked.connect(self._on_apply)
         self._app_state.data_changed.connect(self._on_app_state_data_changed)
 
@@ -332,12 +332,7 @@ class DataLoadingPage(QWidget):
                 )
                 if not rows:
                     raise ValueError("No valid numeric data found.")
-                self._raw_data = np.array(rows, dtype=np.float64)
-                self._column_names = (
-                    header
-                    if header and len(header) == self._raw_data.shape[1]
-                    else [f"Column {i}" for i in range(self._raw_data.shape[1])]
-                )
+                self._set_table(rows, header)
             else:
                 # npz / hdf5: keys, not columns, define the arrays
                 xdata, ydata, sigma = load_from_file(str(file_path), config)
@@ -358,6 +353,22 @@ class DataLoadingPage(QWidget):
         except Exception as e:
             self._show_error("File Load Error", str(e))
 
+    def _set_table(self, rows: list[list[float]], header: list[str] | None) -> None:
+        """Store parsed rows; drop all-NaN columns with no header (trailing delimiter)."""
+        raw = np.array(rows, dtype=np.float64)
+        names = header if header and len(header) == raw.shape[1] else None
+        keep = [
+            i
+            for i in range(raw.shape[1])
+            if not (np.isnan(raw[:, i]).all() and not (names and names[i]))
+        ]
+        self._raw_data = raw[:, keep]
+        self._column_names = (
+            [names[i] for i in keep]
+            if names
+            else [f"Column {i}" for i in range(len(keep))]
+        )
+
     def _on_parse_clipboard(self) -> None:
         """Handle parse clipboard button click."""
         from nlsq.gui_qt.adapters.data_adapter import parse_table_text
@@ -376,13 +387,7 @@ class DataLoadingPage(QWidget):
                 return
 
             # Convert to numpy array
-            self._raw_data = np.array(rows, dtype=np.float64)
-            n_cols = self._raw_data.shape[1]
-            self._column_names = (
-                header
-                if header and len(header) == n_cols
-                else [f"Column {i}" for i in range(n_cols)]
-            )
+            self._set_table(rows, header)
 
             # Update UI
             self._file_path_label.setText("(Clipboard data)")
@@ -542,6 +547,11 @@ class DataLoadingPage(QWidget):
             )
         else:
             self._preview_info.setText(f"{n_rows:,} rows, {n_cols} columns")
+
+    def _on_clear(self) -> None:
+        """Clear button: drop the page's data and the applied AppState data."""
+        self.reset()
+        self._app_state.set_data(None, None)
 
     def _on_apply(self) -> None:
         """Apply the loaded data to app state."""

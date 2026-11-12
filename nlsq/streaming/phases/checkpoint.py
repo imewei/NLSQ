@@ -9,6 +9,7 @@ and provide recovery from failures.
 
 from __future__ import annotations
 
+import math
 import os
 import tempfile
 import time
@@ -46,6 +47,93 @@ def _find_lbfgs_state(tree: Any) -> Any | None:
             if found is not None:
                 return found
     return None
+
+
+# Element cap for any array read from a checkpoint (2**26 f8 = 512 MiB).
+MAX_CHECKPOINT_ELEMENTS = 1 << 26
+
+
+def check_checkpoint_dataset(
+    dset: Any,
+    name: str,
+    *,
+    shape: tuple[int | None, ...] | None = None,
+    kinds: str = "fiu",
+) -> None:
+    """Validate an HDF5 dataset from metadata only, before anything is read.
+
+    Rejects non-datasets, dtypes whose kind is not in ``kinds`` (default
+    float/int/uint; the tournament survival mask also allows bool), shapes above
+    ``MAX_CHECKPOINT_ELEMENTS``, a mismatch with the expected ``shape`` (``None``
+    entries are wildcards), and
+    chunked datasets with unallocated chunks (a tiny sparse file would
+    otherwise expand to the full declared shape). Raises ``ValueError``.
+    """
+    if not isinstance(dset, h5py.Dataset):
+        raise ValueError(f"Checkpoint entry '{name}' is not a dataset")
+    if dset.dtype.kind not in kinds:
+        raise ValueError(
+            f"Checkpoint dataset '{name}' has non-numeric dtype {dset.dtype}"
+        )
+    if math.prod(dset.shape) > MAX_CHECKPOINT_ELEMENTS:
+        raise ValueError(
+            f"Checkpoint dataset '{name}' shape {tuple(dset.shape)} exceeds "
+            f"{MAX_CHECKPOINT_ELEMENTS} elements",
+        )
+    if shape is not None and (
+        len(shape) != dset.ndim
+        or any(e is not None and e != a for e, a in zip(shape, dset.shape, strict=True))
+    ):
+        raise ValueError(
+            f"Checkpoint dataset '{name}' has shape {tuple(dset.shape)}, expected {shape}",
+        )
+    if dset.chunks is not None:
+        expected = math.prod(
+            -(-s // c) for s, c in zip(dset.shape, dset.chunks, strict=True)
+        )
+        if dset.id.get_num_chunks() < expected:
+            raise ValueError(
+                f"Checkpoint dataset '{name}' has unallocated chunks "
+                f"({dset.id.get_num_chunks()} of {expected}); sparse data is not supported",
+            )
+
+
+# Byte cap for opaque (void) scalar entries such as the JSON phase history.
+MAX_CHECKPOINT_BYTES = 1 << 26
+
+
+def read_checkpoint_scalar(dset: Any, name: str) -> Any:
+    """Validate a numeric dataset is a scalar (shape ``()``), then read it."""
+    check_checkpoint_dataset(dset, name, shape=())
+    return dset[()]
+
+
+def read_checkpoint_bytes(dset: Any, name: str) -> bytes:
+    """Validate an opaque scalar dataset (``np.void``) from metadata, then read it."""
+    if not isinstance(dset, h5py.Dataset):
+        raise ValueError(f"Checkpoint entry '{name}' is not a dataset")
+    if dset.dtype.kind != "V" or dset.shape != ():
+        raise ValueError(
+            f"Checkpoint dataset '{name}' must be an opaque scalar, got dtype "
+            f"{dset.dtype} shape {tuple(dset.shape)}"
+        )
+    if dset.dtype.itemsize > MAX_CHECKPOINT_BYTES:
+        raise ValueError(
+            f"Checkpoint dataset '{name}' holds {dset.dtype.itemsize} bytes, "
+            f"above the {MAX_CHECKPOINT_BYTES}-byte limit"
+        )
+    return bytes(dset[()])
+
+
+def read_checkpoint_array(
+    dset: Any,
+    name: str,
+    *,
+    shape: tuple[int | None, ...] | None = None,
+) -> Array:
+    """``check_checkpoint_dataset`` then read as a JAX array."""
+    check_checkpoint_dataset(dset, name, shape=shape)
+    return jnp.array(dset)
 
 
 @dataclass
@@ -211,17 +299,20 @@ class CheckpointManager:
             self._validate_version(f)
             phase_state = f["phase_state"]
 
-            current_phase = int(phase_state["current_phase"][()])
-            normalized_params = self._read_normalized_params(phase_state)
-            phase1_optimizer_state = self._read_optimizer_state(phase_state)
-            phase2_JTJ, phase2_JTr = self._read_accumulators(phase_state)
-            best_params, best_cost = self._read_best_params(phase_state)
+            current_phase = int(
+                read_checkpoint_scalar(phase_state["current_phase"], "current_phase")
+            )
+            n = self._infer_n_params(phase_state)
+            normalized_params = self._read_normalized_params(phase_state, n)
+            phase1_optimizer_state = self._read_optimizer_state(phase_state, n)
+            phase2_JTJ, phase2_JTr = self._read_accumulators(phase_state, n)
+            best_params, best_cost = self._read_best_params(phase_state, n)
             phase_history = self._read_phase_history(phase_state)
             tournament_selector = self._read_tournament_state(
                 phase_state,
                 global_config,
             )
-            multistart_candidates = self._read_multistart_candidates(phase_state)
+            multistart_candidates = self._read_multistart_candidates(phase_state, n)
 
             return CheckpointState(
                 current_phase=current_phase,
@@ -424,13 +515,32 @@ class CheckpointManager:
         if version != "3.0" and not f.attrs.get("completion_marker", False):
             raise ValueError("Checkpoint is incomplete (missing completion marker)")
 
-    def _read_normalized_params(self, phase_state: h5py.Group) -> Array | None:
+    @staticmethod
+    def _infer_n_params(phase_state: h5py.Group) -> int | None:
+        """Parameter count from the first 1-D parameter-sized dataset (metadata only)."""
+        for key in (
+            "normalized_params",
+            "best_params_global",
+            "phase2_jtr_accumulator",
+        ):
+            d = phase_state.get(key)
+            if isinstance(d, h5py.Dataset) and d.ndim == 1:
+                return int(d.shape[0])
+        return None
+
+    def _read_normalized_params(
+        self, phase_state: h5py.Group, n: int | None = None
+    ) -> Array | None:
         """Read normalized parameters."""
         if "normalized_params" not in phase_state:
             return None
-        return jnp.array(phase_state["normalized_params"])
+        return read_checkpoint_array(
+            phase_state["normalized_params"], "normalized_params", shape=(n,)
+        )
 
-    def _read_optimizer_state(self, phase_state: h5py.Group) -> Any | None:
+    def _read_optimizer_state(
+        self, phase_state: h5py.Group, n: int | None = None
+    ) -> Any | None:
         """Read Phase 1 optimizer state.
 
         The saved L-BFGS state is for diagnostics only and is NOT resumable:
@@ -442,7 +552,11 @@ class CheckpointManager:
             return None
 
         opt_state_group = phase_state["phase1_optimizer_state"]
-        count = int(opt_state_group["count"][()])
+        count = int(
+            read_checkpoint_scalar(
+                opt_state_group["count"], "phase1_optimizer_state/count"
+            )
+        )
         optimizer_type = opt_state_group.attrs.get("optimizer_type", "lbfgs")
 
         if optimizer_type != "lbfgs":
@@ -455,42 +569,64 @@ class CheckpointManager:
             ScaleByLBFGSState,
         )
 
+        def _arr(key: str, shape: tuple[int | None, ...]) -> Array:
+            return read_checkpoint_array(
+                opt_state_group[key], f"phase1_optimizer_state/{key}", shape=shape
+            )
+
         lbfgs_state = ScaleByLBFGSState(
             count=count,
-            params=jnp.array(opt_state_group["params"]),
-            updates=jnp.array(opt_state_group["updates"]),
-            diff_params_memory=jnp.array(opt_state_group["diff_params_memory"]),
-            diff_updates_memory=jnp.array(opt_state_group["diff_updates_memory"]),
-            weights_memory=jnp.array(opt_state_group["weights_memory"]),
+            params=_arr("params", (n,)),
+            updates=_arr("updates", (n,)),
+            diff_params_memory=_arr("diff_params_memory", (None, n)),
+            diff_updates_memory=_arr("diff_updates_memory", (None, n)),
+            weights_memory=_arr("weights_memory", (None,)),
         )
         return (lbfgs_state, optax.EmptyState())
 
     def _read_accumulators(
         self,
         phase_state: h5py.Group,
+        n: int | None = None,
     ) -> tuple[Array | None, Array | None]:
-        """Read Phase 2 accumulators."""
+        """Read Phase 2 accumulators (J^T J is (n, n), J^T r is (n,))."""
         phase2_JTJ = None
         phase2_JTr = None
         if "phase2_jtj_accumulator" in phase_state:
-            phase2_JTJ = jnp.array(phase_state["phase2_jtj_accumulator"])
+            phase2_JTJ = read_checkpoint_array(
+                phase_state["phase2_jtj_accumulator"],
+                "phase2_jtj_accumulator",
+                shape=(n, n),
+            )
         if "phase2_jtr_accumulator" in phase_state:
-            phase2_JTr = jnp.array(phase_state["phase2_jtr_accumulator"])
+            phase2_JTr = read_checkpoint_array(
+                phase_state["phase2_jtr_accumulator"],
+                "phase2_jtr_accumulator",
+                shape=(n,),
+            )
         return phase2_JTJ, phase2_JTr
 
-    def _read_best_params(self, phase_state: h5py.Group) -> tuple[Array | None, float]:
+    def _read_best_params(
+        self, phase_state: h5py.Group, n: int | None = None
+    ) -> tuple[Array | None, float]:
         """Read best parameters tracking."""
         best_params = None
         if "best_params_global" in phase_state:
-            best_params = jnp.array(phase_state["best_params_global"])
-        best_cost = float(phase_state["best_cost_global"][()])
+            best_params = read_checkpoint_array(
+                phase_state["best_params_global"], "best_params_global", shape=(n,)
+            )
+        best_cost = float(
+            read_checkpoint_scalar(phase_state["best_cost_global"], "best_cost_global")
+        )
         return best_params, best_cost
 
     def _read_phase_history(self, phase_state: h5py.Group) -> list[dict[str, Any]]:
         """Read phase history."""
         if "phase_history" not in phase_state:
             return []
-        phase_history_bytes = bytes(phase_state["phase_history"][()])
+        phase_history_bytes = read_checkpoint_bytes(
+            phase_state["phase_history"], "phase_history"
+        )
         return safe_loads(phase_history_bytes)
 
     def _read_tournament_state(
@@ -511,21 +647,32 @@ class CheckpointManager:
         tournament_group = phase_state["tournament_state"]
         tournament_checkpoint: dict[str, Any] = {}
         for key in tournament_group:
-            value = tournament_group[key][()]
-            if isinstance(value, np.void):
-                tournament_checkpoint[key] = safe_loads(bytes(value))
+            dset = tournament_group[key]
+            name = f"tournament_state/{key}"
+            if isinstance(dset, h5py.Dataset) and dset.dtype.kind == "V":
+                tournament_checkpoint[key] = safe_loads(
+                    read_checkpoint_bytes(dset, name)
+                )
             else:
+                check_checkpoint_dataset(dset, name, kinds="fiub")
+                value = dset[()]
                 tournament_checkpoint[key] = (
                     np.array(value) if hasattr(value, "__len__") else value
                 )
 
         return TournamentSelector.from_checkpoint(tournament_checkpoint, global_config)
 
-    def _read_multistart_candidates(self, phase_state: h5py.Group) -> Array | None:
-        """Read multi-start candidates."""
+    def _read_multistart_candidates(
+        self, phase_state: h5py.Group, n: int | None = None
+    ) -> Array | None:
+        """Read multi-start candidates, shape (n_starts, n_params)."""
         if "multistart_candidates" not in phase_state:
             return None
-        return jnp.array(phase_state["multistart_candidates"])
+        return read_checkpoint_array(
+            phase_state["multistart_candidates"],
+            "multistart_candidates",
+            shape=(None, n),
+        )
 
 
 __all__ = ["CheckpointManager", "CheckpointState"]

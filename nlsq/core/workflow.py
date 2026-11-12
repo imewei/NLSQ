@@ -20,9 +20,9 @@ Memory-based optimizer selection:
 >>> strategy, config = selector.select(n_points=5_000_000, n_params=10)
 >>> if strategy == "streaming":
 ...     pass  # Use HybridStreamingOptimizer
->>> elif strategy == "chunked":
+... elif strategy == "chunked":
 ...     pass  # Use LargeDatasetFitter
->>> else:
+... else:
 ...     pass  # Use standard curve_fit()
 
 Adaptive tolerance calculation:
@@ -41,6 +41,7 @@ Cluster detection for HPC environments:
 ...     print(f"Running on cluster: {cluster_info.total_gpus} GPUs")
 """
 
+import math
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -286,8 +287,12 @@ class MemoryBudget:
         if n_params <= 0:
             raise ValueError("n_params must be positive")
         safety_factor = _resolve_safety_factor(safety_factor, config.safety_factor)
-        if memory_limit_gb is not None and memory_limit_gb <= 0:
-            raise ValueError("memory_limit_gb must be positive")
+        if memory_limit_gb is not None and not (
+            math.isfinite(memory_limit_gb) and memory_limit_gb > 0
+        ):
+            raise ValueError(
+                f"memory_limit_gb must be finite and positive, got {memory_limit_gb!r}"
+            )
 
         # Get available memory (lazy import to avoid circular dependency)
         if memory_limit_gb is not None:
@@ -384,10 +389,10 @@ class MemoryBudgetSelector:
     >>> if strategy == "streaming":
     ...     # Use HybridStreamingOptimizer with config
     ...     pass
-    >>> elif strategy == "chunked":
+    ... elif strategy == "chunked":
     ...     # Use LargeDatasetFitter with config
     ...     pass
-    >>> else:
+    ... else:
     ...     # Use standard curve_fit()
     ...     pass
     """

@@ -42,7 +42,7 @@ Before contributing:
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/imewei/NLSQ.git
-   cd nlsq
+   cd NLSQ
    ```
 
 2. **Install development dependencies** (creates `.venv` with the `gui` extra and the `dev` and `bench` dependency groups, and installs the pre-commit hooks):

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- GUI: an "Absolute sigma" checkbox in Advanced options (default off, unchanged behaviour) passes
+  `absolute_sigma` to the fit, the exported script and YAML config, and autosave. The Results page
+  states which sigma convention the displayed uncertainties use.
 - `compute_covariance: bool = True` on `curve_fit`, `CurveFit.curve_fit` and `curve_fit_large`.
   With `False`, `pcov` is `None` in the tuple, `CurveFitResult` and `full_output` variants and
   the final covariance is not computed (no final-covariance warning; `CurveFitResult` members
@@ -155,6 +158,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the objective is `(r / sigma)**2`); this applies to `method="exact_streaming"` too. Zero
     and 2-D `sigma` still raise `ValueError`.
   - The return is unchanged: `(popt, pcov)`.
+- **Hybrid streaming callbacks use `(iteration, cost, params, info)`.** They are invoked through
+  `call_user_callback`, so a 3-argument `(params, loss, iteration)` callback no longer works.
+  `StopOptimization` is honoured (`status=-2`). `curve_fit_large(method="hybrid_streaming",
+  callback=...)` now raises a clear `TypeError` instead of failing inside the engine.
 
 #### Install footprint
 
@@ -358,6 +365,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
 
 ### Fixed
+- **Checkpoints**: tournament checkpoints (written when `enable_multistart=True`) no longer fail to load; the
+  checkpoint dataset check accepts the boolean `survival_mask` (`check_checkpoint_dataset(kinds=...)`).
+- **Callbacks**: `functools.wraps` decorators around progress callbacks are called with positional arguments
+  again; keyword dispatch is used only for non-canonical parameter orders or keyword-only callbacks.
+- **`fit(workflow="auto_global"|"hpc")`**: an omitted `n_starts` forwarded `None` and ran a single start; it
+  now defaults to 10 starts. The CMA-ES "ignored multi-start options" warning now says the options apply only
+  to the multi-start route.
+- **CLI validator**: `wave`, `pipes` and `xml` added to the colliding-symbol denylist.
+- **GUI table paste**: header sniffing in `parse_table_text` / `parse_numeric_rows` no longer treats a numeric
+  first row as a header (or drops a real header).
+- **Fallback recovery**: the `OptimizationRecovery` method chain is `trf -> lm -> trf`, `lm` is skipped for
+  finite bounds, and strategies that leave the problem state unchanged are skipped.
+- **Sparse Jacobian**: the sparsity threshold is relative to the per-column max `|J|` instead of absolute, so a
+  model scaled by 1e-3 is no longer reported 100% sparse and `compute_sparse_jacobian` no longer returns an
+  all-zero matrix for a nonzero Jacobian. Behavior change for callers relying on the absolute 0.01 cutoff.
+- **Algorithm selector**: explicit `user_preferences` (e.g. `prioritize="accuracy"`) are applied after the
+  noise and conditioning adjustments, so they are no longer loosened.
+- **`cached_jit`**: keyword arguments are keyed by dtype and rank (or type), not value; scalar kwarg sweeps no
+  longer create one cache entry per value or evict unrelated compiled functions.
+- **Examples**: `materials_characterization` (04_gallery, 09_gallery_advanced scripts and 09 notebook) draws
+  noise from `np.random.default_rng(42)` so noise length matches the strain grid under
+  `NLSQ_EXAMPLES_QUICK`; fixes the broadcast failure in `tests/regression/test_examples_scripts.py`.
+- **Security (CLI model validator, default mode)**: closed four bypasses that let a custom model file write
+  files or make network requests when loaded: `np.load`/`jnp.load` with a writable or non-literal
+  `mmap_mode`, `xml.etree` `.write(path)`, `xml.sax`/`xml.dom.pulldom` URL fetches and
+  `pstats.Stats().dump_stats(path)`. `xml`, `pstats` and other stdlib modules with file, terminal or network
+  side effects (mailbox, wave, aifc, sunau, ossaudiodev, termios, tty, curses, readline, rlcompleter, netrc,
+  syslog, cgi, cgitb, pipes, winreg, msvcrt, lib2to3, asyncore, asynchat, smtpd) and any `dump_stats` call are
+  now rejected. The validator remains a denylist, not a sandbox.
+- CLI: `fitting.p0`, and the lengths returned by a custom model's `estimate_p0`/`bounds`, may be anywhere
+  between the model's required and total positional parameters (as `curve_fit` allows); keyword-only
+  parameters are not counted and `*args` models are not checked.
+- Checkpoints: scalar and opaque-bytes datasets in hybrid and CMA-ES checkpoints are validated (shape `()`,
+  64 MiB byte cap) before being read, so a crafted file with a huge declared shape raises `ValueError`
+  instead of allocating.
+- `fit(workflow="auto_global")`: `sampler`/`center_on_p0`/`scale_factor` are forwarded only on the multi-start
+  route; on the CMA-ES route the "ignored" `UserWarning` is emitted again.
+- `CurveFit(flength=...).curve_fit(method="lm")` raises the same `TypeError` as `curve_fit` when there are
+  fewer data points than parameters; padding no longer hides the check.
+- `make_strictly_feasible` no longer emits an overflow `RuntimeWarning` for +/-`finfo.max` bounds.
+- Hybrid telemetry: L-BFGS line-search failed steps are deduplicated per warmup call, so the failure rate
+  cannot exceed 100%. `Hybrid(verbose=N)` without a config is honoured instead of capped at 1.
+- `NLSQ_SKIP_GPU_CHECK` accepts `1`/`true`/`yes`/`on` (case-insensitive, whitespace ignored).
+- Callbacks wrapped by a `functools.wraps` `(*args, **kwargs)` decorator are dispatched using the wrapped
+  signature.
+- GUI: Guided-mode Run Fit keeps `absolute_sigma`; `nlsq-gui --theme` decides the initial theme (ThemeManager,
+  toggle and saved setting; without it the saved setting is used); a recovered session refreshes the
+  built-in/polynomial equation, parameter and info labels; the Results parameter table is cleared when a
+  result cannot be displayed.
+- Docs: `hybrid_streaming` is documented as GUI-only (not applied by `nlsq fit`); multi-start losers'
+  warnings are documented as discarded.
+- `pcov` no longer depends on parameter units: the covariance SVD equilibrates Jacobian columns to unit
+  norm before the rank cutoff (`eps * max(n, p) * s0`, now on the scaled singular values) and scales the
+  result back. A fit with x ~ 1e8 (Jacobian cond 1e14, scaled cond 4.3) previously reported a
+  near-zero variance and a false "not identifiable" warning for one parameter. Deliberate departure
+  from SciPy's unscaled cutoff; truly collinear columns are still dropped. Also applies to the
+  `exact_streaming` TSQR covariance.
+- `CurveFitResult` AIC/BIC now use sigma-weighted chi-square when sigma is supplied:
+  `chi2 + penalty` with `absolute_sigma=True`, `n*ln(chi2/n) + penalty` otherwise (2-D
+  `sigma`: `r^T C^-1 r`). They used the unweighted RSS at the weighted optimum, which is
+  not any model's maximised likelihood and could prefer the wrong model. Unweighted fits
+  are unchanged.
+- `CurveFitResult.confidence_band` / `prediction_interval` use the exact model Jacobian
+  (`jax.jacfwd`) instead of a forward difference whose absolute step floor (~1.5e-8) gave
+  up to 55% band error for parameters of order 1e-8; untraceable models fall back to
+  central differences with a relative step.
 - `least_squares(..., data_mask=)` is now applied on the direct-residual and user-`jac` paths
   (it was ignored there); a mask that is not 1-D or does not match the residual shape raises
   `ValueError`.
@@ -493,6 +566,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nlsq batch` serialises logger setup and closes replaced handlers.
 - Multi-start `OptimizeWarning` suppression no longer leaks the filter across concurrent
   calls.
+- `curve_fit_large(strategy=Hybrid(...))`: `Hybrid.verbose` defaults to `None`,
+  which uses the passed config's `verbose` (`HybridStreamingConfig.verbose` still defaults to 1) or 0
+  when no config is given.
+- `call_user_callback` dispatches by parameter names (keyword arguments), so callbacks may declare
+  the arguments they need in any order.
+- `full_output`/`return_eval` are rejected up front on the chunked `curve_fit_large` route
+  with a clear error.
+- **Behavior change:** a hybrid fit that stops at the maximum iteration count reports
+  `success=False`/`ier=5`; `curve_fit_large` warns and returns the best point. Noise-free exact
+  fits converge, and the result carries `nfev`, `nit` and `status`.
+- **Behavior change:** the chunked fit counts non-converged chunks as failed; the overall `success`
+  is `success_rate > 0`.
+- Security: the custom-model validator rejects underscore-rooted imports (`import _ctypes`, ...),
+  which bypassed the module denylist in default (untrusted) mode and allowed code execution.
+- CLI: `nlsq batch` exits 130 on Ctrl-C; `nlsq fit` errors when the config has no `export:`
+  section and refuses to overwrite its input files; `--stdout` prints pure JSON; `model.path`
+  resolves beside the YAML file first; negative or boolean column indices are rejected; a BOM in
+  `.txt` data is skipped.
+- `fit(workflow="auto_global")` forwards `sampler`, `center_on_p0` and `scale_factor`.
+  `MemoryBudget` rejects NaN, inf and non-positive values.
+- The CG trust-region solver uses a Moré-Hebden boundary solve with Jacobi preconditioning: the
+  default `curve_fit` no longer stalls for `m*n >= 10000` or at extreme y-scales.
+- The bounds feasibility margin is relative to the bound width, so bounded parameters of tiny
+  scale are handled correctly.
+- `fallback=True` falls back on `success=False` and runs the progressive strategies.
+- Boolean environment flags accept `true`, `yes` and `on`.
+- HDF5 loading and checkpoint validation reject sparse and oversized datasets.
+- GUI: the Model Selection page no longer shows the previous custom model's error for new code, and
+  reports syntax errors (with line and column) before "select a model". Plots default to software
+  rendering on the `offscreen`/`minimal` Qt platforms or when no OpenGL context can be created
+  (`NLSQ_GUI_USE_OPENGL` still overrides). Switching Guided preset resets options the new preset
+  lacks (`n_starts`). Exported scripts print the model's parameter names, and exported JSON
+  statistics include AIC/BIC.
+- `nlsq-gui --help`/`--version` no longer launch the GUI; `--theme light|dark` selects the initial
+  color scheme.
 
 ### Performance
 - Covariance kernel: the SVD is taken of the `R` factor of `qr(J, mode="r")` instead of `J`

@@ -30,6 +30,39 @@ def test_json_export_failure_keeps_previous_file(tmp_path):
     assert list(tmp_path.iterdir()) == [p]  # no stray temp file
 
 
+@pytest.mark.parametrize("alias", [False, True])
+def test_export_rejects_output_that_aliases_input(tmp_path, alias):
+    source = tmp_path / "data.csv"
+    source.write_text("x,y\n1,2\n")
+    output = source
+    if alias:
+        output = tmp_path / "alias.csv"
+        output.symlink_to(source)
+    config = _cfg(output, data={"input_file": str(source)})
+    with pytest.raises(CLIError, match="input"):
+        ResultExporter().export({"popt": [1.0]}, config)
+    assert source.read_text() == "x,y\n1,2\n"
+
+
+def test_stdout_only_allows_output_path_equal_to_input(tmp_path, capsys):
+    source = tmp_path / "data.csv"
+    source.write_text("x,y\n1,2\n")
+    config = _cfg(source, data={"input_file": str(source)})
+    config["export"].update(stdout=True, skip_file_on_stdout=True)
+    ResultExporter().export({"popt": [1.0]}, config)
+    assert json.loads(capsys.readouterr().out)["popt"] == [1.0]
+    assert source.read_text() == "x,y\n1,2\n"
+
+
+def test_export_rejects_overwriting_custom_model(tmp_path):
+    source = tmp_path / "model.py"
+    source.write_text("def model(x, a): return a * x\n")
+    config = _cfg(source, model={"type": "custom", "path": str(source)})
+    with pytest.raises(CLIError, match="model"):
+        ResultExporter().export({"popt": [1.0]}, config)
+    assert source.read_text() == "def model(x, a): return a * x\n"
+
+
 def test_json_export_date_metadata(tmp_path):
     p = tmp_path / "out.json"
     ResultExporter().export({"popt": [1.0], "pcov": [[1.0]]}, {**_cfg(p), **DATE_CFG})

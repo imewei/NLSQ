@@ -21,8 +21,10 @@ Uses ThreadPoolExecutor by default for JAX compatibility. JAX does not work well
 with ProcessPoolExecutor due to fork safety issues with GPU devices.
 """
 
+import contextlib
 import json
 import os
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -30,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from nlsq.cli.errors import CLIError, cfg_get, setup_logging
+from nlsq.cli.result_exporter import _atomic_write
 
 
 def _run_single_workflow(
@@ -183,12 +186,27 @@ def _calculate_optimal_workers(
     return min(4, cpu_count, n_workflows)
 
 
-def _warn_output_collisions(workflow_paths: list[str], logger: Any) -> None:
+def _warn_output_collisions(
+    workflow_paths: list[str], logger: Any, summary_file: str | None = None
+) -> None:
     """Warn when two workflows in a batch would write the same output file."""
     import yaml
 
+    from nlsq.cli.visualization import check_filename_prefix, normalize_formats
+
     owners: dict[str, str] = {}
+    protected = {Path(path).resolve() for path in workflow_paths}
+    result_files: list[Path] = []
+    seen: dict[Path, str] = {}
     for path in workflow_paths:
+        resolved = Path(path).resolve()
+        if resolved in seen:
+            logger.warning(
+                f"Output collision: {seen[resolved]} and {path} are the same "
+                "workflow and write the same outputs; one will overwrite the other"
+            )
+            continue
+        seen[resolved] = path
         try:
             with open(path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f)
@@ -198,14 +216,50 @@ def _warn_output_collisions(workflow_paths: list[str], logger: Any) -> None:
             continue
         export = cfg.get("export") or {}
         vis = cfg.get("visualization") or {}
+        data = cfg.get("data") or {}
+        model = cfg.get("model") or {}
+        if isinstance(data, dict) and isinstance(data.get("input_file"), str):
+            input_path = Path(data["input_file"])
+            beside = Path(path).resolve().parent / input_path
+            if not input_path.is_absolute() and beside.is_file():
+                input_path = beside
+            protected.add(input_path.resolve())
+        if (
+            isinstance(model, dict)
+            and model.get("type") == "custom"
+            and isinstance(model.get("path"), str)
+        ):
+            protected.add(Path(model["path"]).resolve())
         targets = []
         if isinstance(export, dict) and export.get("results_file"):
             targets.append(export["results_file"])
-        if isinstance(vis, dict) and cfg_get(vis, "enabled", False):
-            prefix = cfg_get(vis, "filename_prefix", Path(path).stem)
-            targets.append(
-                Path(cfg_get(vis, "output_dir", "figures")) / f"{prefix}_combined"
-            )
+            if not (
+                cfg_get(export, "stdout", False)
+                and cfg_get(export, "skip_file_on_stdout", False)
+            ):
+                result_files.append(Path(export["results_file"]).resolve())
+        try:
+            if isinstance(vis, dict) and cfg_get(vis, "enabled", False):
+                prefix = cfg_get(vis, "filename_prefix", Path(path).stem)
+                check_filename_prefix(
+                    prefix
+                )  # ConfigError: run reports it; no paths computed
+                output_dir = Path(cfg_get(vis, "output_dir", "figures"))
+                suffixes = ["combined"]
+                hist = vis.get("histogram")  # may be a bare bool
+                if isinstance(hist, dict) and cfg_get(hist, "enabled", False):
+                    suffixes.append("histogram")
+                vis_files = [
+                    (output_dir / f"{prefix}_{suffix}.{fmt}").resolve()
+                    for suffix in suffixes
+                    for fmt in normalize_formats(
+                        cfg_get(vis, "formats", ["pdf", "png"])
+                    )
+                ]
+                targets.append(output_dir / f"{prefix}_combined")
+                result_files.extend(vis_files)
+        except (TypeError, AttributeError, CLIError):
+            pass  # malformed visualization block: the workflow run reports it
         for target in targets:
             key = os.path.abspath(target)
             if key in owners and owners[key] != path:
@@ -214,6 +268,41 @@ def _warn_output_collisions(workflow_paths: list[str], logger: Any) -> None:
                     f"{target}; one will overwrite the other"
                 )
             owners.setdefault(key, path)
+
+    if any(path in protected for path in result_files):
+        raise CLIError("Batch result must not overwrite workflow input files")
+    if summary_file and Path(summary_file).resolve() in protected.union(result_files):
+        raise CLIError(
+            "Batch summary must not overwrite workflow input or result files"
+        )
+
+
+def _validate_summary_path(summary_file: str) -> None:
+    """Reject an unusable --summary path before any workflow runs."""
+    if not summary_file or not summary_file.strip():
+        raise CLIError(
+            "Batch summary path is empty",
+            suggestion="Pass a file path to --summary, or omit it",
+        )
+    path = Path(summary_file)
+    if path.is_dir():
+        raise CLIError(
+            f"Batch summary path is a directory: {summary_file}",
+            suggestion="Pass a file path such as batch_summary.json",
+        )
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise CLIError(
+            f"Cannot create the summary directory {str(path.parent)!r}: {e}",
+            context={"summary_file": summary_file},
+        ) from e
+    if not os.access(path.parent, os.W_OK | os.X_OK):
+        raise CLIError(
+            f"Summary directory is not writable: {path.parent}",
+            context={"summary_file": summary_file},
+            suggestion="Choose a --summary path in a writable directory",
+        )
 
 
 def _collect_batch_results(
@@ -252,19 +341,58 @@ def _collect_batch_results(
     def _task(path: str) -> dict[str, Any] | None:
         if stop.is_set():
             return None
-        outcome = _run_single_workflow(path, verbose)
+        try:
+            outcome = _run_single_workflow(path, verbose)
+        except KeyboardInterrupt:
+            stop.set()  # don't let this worker pick up the next queued workflow
+            raise
         if outcome["status"] == "failed" and not continue_on_error:
             stop.set()
         return outcome
 
     futures = {executor.submit(_task, path): path for path in workflow_paths}
+    collected: set[Any] = set()
 
-    # Collect results as they complete
+    try:
+        _drain_futures(futures, collected, results, verbose, logger)
+    except KeyboardInterrupt:
+        # In-flight fits finish (JAX cannot be interrupted mid-kernel); queued ones are dropped.
+        stop.set()
+        executor.shutdown(wait=True, cancel_futures=True)
+        for future, workflow_path in futures.items():
+            if future in collected:
+                continue
+            outcome = None
+            if not future.cancelled():
+                with contextlib.suppress(Exception, KeyboardInterrupt):
+                    outcome = future.result()
+            results.append(
+                outcome
+                or {
+                    "status": "cancelled",
+                    "workflow_path": workflow_path,
+                    "result": None,
+                    "error": None,
+                }
+            )
+
+    return results
+
+
+def _drain_futures(
+    futures: dict[Any, str],
+    collected: set[Any],
+    results: list[dict[str, Any]],
+    verbose: bool,
+    logger: Any,
+) -> None:
+    """Append each future's outcome to ``results`` as it completes."""
     for future in as_completed(futures):
         workflow_path = futures[future]
 
         try:
             result = future.result()
+            collected.add(future)
             if result is None:  # not started: an earlier workflow failed
                 results.append(
                     {
@@ -288,6 +416,7 @@ def _collect_batch_results(
 
         except Exception as e:
             # Handle executor-level errors
+            collected.add(future)
             results.append(
                 {
                     "status": "failed",
@@ -302,8 +431,6 @@ def _collect_batch_results(
                 },
             )
             logger.warning(f"FAILED: {workflow_path} - Executor error: {e}")
-
-    return results
 
 
 def _build_batch_summary(
@@ -337,6 +464,7 @@ def _build_batch_summary(
     succeeded = sum(1 for r in results if r["status"] == "success")
     failed = sum(1 for r in results if r["status"] == "failed")
     skipped = [r["workflow_path"] for r in results if r["status"] == "skipped"]
+    cancelled = [r["workflow_path"] for r in results if r["status"] == "cancelled"]
 
     return {
         "total": n_workflows,
@@ -344,6 +472,8 @@ def _build_batch_summary(
         "failed": failed,
         "skipped": len(skipped),
         "skipped_workflows": skipped,
+        "cancelled": len(cancelled),
+        "cancelled_workflows": cancelled,
         "duration_seconds": duration,
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
@@ -388,8 +518,8 @@ def _write_batch_summary(
     summary_path = Path(summary_file)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
+    # Serialize first, then replace atomically: a failure never clobbers the old summary.
+    _atomic_write(summary_path, json.dumps(summary, indent=2, default=str))
 
     if verbose:
         logger.info(f"Summary written to: {summary_file}")
@@ -414,6 +544,8 @@ def _print_batch_summary(
     print(f"  Failed: {summary['failed']}")
     if summary["skipped"]:
         print(f"  Skipped: {summary['skipped']}")
+    if summary["cancelled"]:
+        print(f"  Cancelled: {summary['cancelled']}")
     print(f"  Duration: {summary['duration_seconds']:.2f}s")
 
     if summary["failed"] > 0:
@@ -482,7 +614,10 @@ def run_batch(
         logger.info(f"Starting batch processing of {n_workflows} workflows")
         logger.info(f"Using {num_workers} parallel workers (threads)")
 
-    _warn_output_collisions(workflow_paths, logger)
+    if summary_file is not None:
+        _validate_summary_path(summary_file)  # before any fit runs
+
+    _warn_output_collisions(workflow_paths, logger, summary_file)
 
     # Step 3: Execute workflows and collect results
     start_time = datetime.now()
@@ -503,9 +638,23 @@ def run_batch(
 
     # Step 5: Write summary file if requested
     if summary_file is not None:
-        _write_batch_summary(summary, summary_file, verbose, logger)
+        try:
+            _write_batch_summary(summary, summary_file, verbose, logger)
+        except OSError as e:
+            # Fits already ran: show the in-memory summary so results are not lost.
+            print(json.dumps(summary, indent=2, default=str), file=sys.stderr)
+            raise CLIError(
+                f"Failed to write batch summary: {e}",
+                context={"summary_file": summary_file},
+            ) from e
 
     # Step 6: Print summary to console
     _print_batch_summary(summary, results)
+    if summary["cancelled"]:
+        done = summary["succeeded"] + summary["failed"]
+        print(
+            f"Interrupted: {done} of {n_workflows} workflows completed",
+            file=sys.stderr,
+        )
 
     return results

@@ -400,25 +400,52 @@ class CurveFitResult(OptimizeResult):
 
         Notes
         -----
-        AIC = 2k + n*ln(RSS/n)
+        AIC = 2k + L, where k is the number of parameters, n the number of
+        data points and L the -2 log-likelihood term (constants dropped):
 
-        where k is number of parameters, n is number of data points,
-        and RSS is residual sum of squares.
+        - no ``sigma``: L = n*ln(RSS/n), RSS = sum((y - f)²)
+        - ``sigma`` with ``absolute_sigma=False``: L = n*ln(chi²/n)
+        - ``sigma`` with ``absolute_sigma=True``: L = chi² (known variance)
+
+        chi² = sum(((y - f)/sigma)²), or rᵀC⁻¹r for a 2-D covariance
+        ``sigma``. Only compare AIC values computed with the same ``sigma``.
 
         Used for model selection. Penalizes model complexity.
         """
+        return self._information_criterion("AIC", 2.0)
+
+    def _chi2(self):
+        """Sigma-weighted chi-square at popt, or None for unweighted fits."""
+        sigma = getattr(self, "sigma", None)
+        if sigma is None:
+            return None
+        r = np.asarray(self.residuals, dtype=float)
+        sig = np.asarray(sigma, dtype=float)
+        if sig.ndim == 2:
+            from scipy.linalg import solve_triangular
+
+            z = solve_triangular(np.linalg.cholesky(sig), r, lower=True)
+            return float(z @ z)
+        return float(np.sum((r / sig) ** 2))
+
+    def _information_criterion(self, name: str, penalty_per_param: float):
         if not hasattr(self, "ydata"):
-            raise AttributeError("Cannot compute AIC: ydata not available")
+            raise AttributeError(f"Cannot compute {name}: ydata not available")
 
         n = len(self.ydata)
         k = len(self.popt)
-        rss = np.sum(self.residuals**2)
-
-        if not np.isfinite(rss) or rss <= 0:
-            warnings.warn("RSS ≤ 0 or NaN, AIC undefined.")
+        chi2 = self._chi2()
+        if chi2 is not None and bool(getattr(self, "absolute_sigma", False)):
+            if not np.isfinite(chi2):
+                warnings.warn(f"chi² is NaN/inf, {name} undefined.")
+                return np.nan
+            return penalty_per_param * k + chi2
+        ss = np.sum(self.residuals**2) if chi2 is None else chi2
+        if not np.isfinite(ss) or ss <= 0:
+            warnings.warn(f"RSS ≤ 0 or NaN, {name} undefined.")
             return np.nan
 
-        return 2 * k + n * np.log(rss / n)
+        return penalty_per_param * k + n * np.log(ss / n)
 
     @property
     def bic(self):
@@ -431,26 +458,18 @@ class CurveFitResult(OptimizeResult):
 
         Notes
         -----
-        BIC = k*ln(n) + n*ln(RSS/n)
+        BIC = k*ln(n) + L
 
-        where k is number of parameters, n is number of data points,
-        and RSS is residual sum of squares.
+        with the same -2 log-likelihood term L as ``aic``: n*ln(RSS/n)
+        without ``sigma``, n*ln(chi²/n) with ``sigma`` and
+        ``absolute_sigma=False``, chi² with ``absolute_sigma=True``.
 
         BIC penalizes model complexity more heavily than AIC.
         Preferred for larger datasets.
         """
         if not hasattr(self, "ydata"):
             raise AttributeError("Cannot compute BIC: ydata not available")
-
-        n = len(self.ydata)
-        k = len(self.popt)
-        rss = np.sum(self.residuals**2)
-
-        if not np.isfinite(rss) or rss <= 0:
-            warnings.warn("RSS ≤ 0 or NaN, BIC undefined.")
-            return np.nan
-
-        return k * np.log(n) + n * np.log(rss / n)
+        return self._information_criterion("BIC", float(np.log(len(self.ydata))))
 
     def confidence_intervals(self, alpha: float = 0.95):
         """Compute parameter confidence intervals.
@@ -514,24 +533,44 @@ class CurveFitResult(OptimizeResult):
     def _finite_diff_jacobian(
         self, x, popt, eps: float = float(np.sqrt(np.finfo(float).eps))
     ):
-        """Compute y_pred and the finite-difference Jacobian of ``self.model``
-        w.r.t. ``popt`` at ``x``. Shared by ``prediction_interval`` and
-        ``confidence_band``, which both need the same parameter-uncertainty
-        propagation through the model.
+        """Compute y_pred and the Jacobian of ``self.model`` w.r.t. ``popt`` at
+        ``x``. Shared by ``prediction_interval`` and ``confidence_band``, which
+        both need the same parameter-uncertainty propagation through the model.
+
+        The Jacobian is exact (``jax.jacfwd``); models that cannot be traced
+        fall back to central differences with step
+        ``eps**(2/3) * max(|p|, 1)``.
         """
+        popt = np.asarray(popt, dtype=float)
         n_params = len(popt)
 
         y_pred = np.array(self.model(x, *popt))
         # Size from the predictions: 2-D xdata is (k, N), so len(x) would be k.
         n_points = y_pred.shape[0]
+        try:
+            import jax
+            import jax.numpy as jnp
+
+            jac = jax.jacfwd(lambda p: jnp.asarray(self.model(x, *p)))(
+                jnp.asarray(popt)
+            )
+            return y_pred, np.asarray(jac, dtype=float).reshape(n_points, n_params)
+        except Exception:  # untraceable (e.g. numpy-only) model
+            pass
+
         jacobian = np.zeros((n_points, n_params))
+        step = eps ** (2.0 / 3.0)  # = cbrt(machine eps), optimal for central diff
         for i in range(n_params):
-            # Relative step: an absolute eps vanishes (p + h == p) for |p| >= 1e8.
-            h = eps * max(abs(float(popt[i])), 1.0)
+            # floor: h << ulp(f) for tiny p would lose the column
+            h = step * max(abs(popt[i]), 1.0)
             params_plus = popt.copy()
+            params_minus = popt.copy()
             params_plus[i] += h
+            params_minus[i] -= h
             y_plus = np.array(self.model(x, *params_plus))
-            jacobian[:, i] = (y_plus - y_pred) / h
+            y_minus = np.array(self.model(x, *params_minus))
+            # divide by the representable step actually taken
+            jacobian[:, i] = (y_plus - y_minus) / (params_plus[i] - params_minus[i])
 
         return y_pred, jacobian
 

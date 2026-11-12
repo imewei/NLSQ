@@ -17,6 +17,101 @@ HEADER = "import jax.numpy as jnp\n"
 MODEL = "\ndef model(x, a, b):\n    return a * jnp.exp(-b * x)\n"
 
 
+def test_batch_summary_does_not_overwrite_workflow(tmp_path):
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text("{}\n")
+    with pytest.raises(CLIError, match="workflow"):
+        batch_mod.run_batch([str(workflow)], summary_file=str(workflow))
+    assert workflow.read_text() == "{}\n"
+
+
+@pytest.mark.parametrize("kind", ["data", "model", "results"])
+def test_batch_summary_does_not_overwrite_workflow_files(tmp_path, kind):
+    import yaml
+
+    target = tmp_path / "source.txt"
+    target.write_text("keep me\n")
+    config = {
+        "data": {"input_file": target.name},
+        "model": {"type": "custom", "path": str(target)},
+        "export": {"results_file": str(target)},
+    }
+    if kind != "data":
+        config.pop("data")
+    if kind != "model":
+        config.pop("model")
+    if kind != "results":
+        config.pop("export")
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(yaml.safe_dump(config))
+    with pytest.raises(CLIError, match="summary"):
+        batch_mod.run_batch([str(workflow)], summary_file=str(target))
+    assert target.read_text() == "keep me\n"
+
+
+def test_batch_result_does_not_overwrite_another_workflow_input(tmp_path):
+    import yaml
+
+    source = tmp_path / "data.txt"
+    source.write_text("0 1\n1 3\n2 5\n")
+    first_data = tmp_path / "first.txt"
+    first_data.write_text("0 1\n1 3\n2 5\n")
+    first = tmp_path / "first.yaml"
+    first.write_text(
+        yaml.safe_dump(
+            {
+                "data": {
+                    "input_file": str(first_data),
+                    "format": "ascii",
+                    "columns": {"x": 0, "y": 1},
+                },
+                "model": {"type": "builtin", "name": "linear"},
+                "fitting": {"p0": [1.0, 1.0]},
+                "export": {"results_file": str(source)},
+            }
+        )
+    )
+    second = tmp_path / "second.yaml"
+    second.write_text(yaml.safe_dump({"data": {"input_file": "data.txt"}}))
+    with pytest.raises(CLIError, match="input"):
+        batch_mod.run_batch([str(first), str(second)], max_workers=1)
+    assert source.read_text() == "0 1\n1 3\n2 5\n"
+
+
+def test_batch_plot_does_not_overwrite_another_workflow_input(tmp_path):
+    import yaml
+
+    source = tmp_path / "fit_combined.png"
+    source.write_text("0 1\n1 3\n2 5\n")
+    first_data = tmp_path / "first.txt"
+    first_data.write_text("0 1\n1 3\n2 5\n")
+    first = tmp_path / "first.yaml"
+    first.write_text(
+        yaml.safe_dump(
+            {
+                "data": {
+                    "input_file": str(first_data),
+                    "format": "ascii",
+                    "columns": {"x": 0, "y": 1},
+                },
+                "model": {"type": "builtin", "name": "linear"},
+                "fitting": {"p0": [1.0, 1.0]},
+                "visualization": {
+                    "enabled": True,
+                    "output_dir": str(tmp_path),
+                    "filename_prefix": "fit",
+                    "formats": ["png"],
+                },
+            }
+        )
+    )
+    second = tmp_path / "second.yaml"
+    second.write_text(yaml.safe_dump({"data": {"input_file": source.name}}))
+    with pytest.raises(CLIError, match="input"):
+        batch_mod.run_batch([str(first), str(second)], max_workers=1)
+    assert source.read_text() == "0 1\n1 3\n2 5\n"
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -117,3 +212,60 @@ def test_batch_reports_skipped_workflows(tmp_path, monkeypatch):
     assert summary["failed"] == 1
     assert summary["succeeded"] == 0
     assert len(summary["skipped_workflows"]) == 2
+
+
+def _histogram_bool_workflow(tmp_path, name):
+    """Workflow whose ``visualization.histogram`` is a bare bool, not a mapping."""
+    import yaml
+
+    data = tmp_path / f"{name}.txt"
+    data.write_text("0 1\n1 3\n2 5\n3 7\n")
+    results = tmp_path / f"{name}_results.json"
+    workflow = tmp_path / f"{name}.yaml"
+    workflow.write_text(
+        yaml.safe_dump(
+            {
+                "data": {
+                    "input_file": str(data),
+                    "format": "ascii",
+                    "columns": {"x": 0, "y": 1},
+                },
+                "model": {"type": "builtin", "name": "linear"},
+                "fitting": {"p0": [1.0, 1.0]},
+                "export": {"results_file": str(results)},
+                "visualization": {
+                    "enabled": True,
+                    "output_dir": str(tmp_path),
+                    "formats": ["png"],
+                    "histogram": True,
+                },
+            }
+        )
+    )
+    return workflow, results
+
+
+def test_fit_scalar_histogram_does_not_crash(tmp_path):
+    from nlsq.cli.commands.fit import run_fit
+
+    workflow, results = _histogram_bool_workflow(tmp_path, "w")
+    run_fit(str(workflow))
+    assert results.is_file()
+
+
+def test_batch_scalar_histogram_does_not_abort_batch(tmp_path):
+    workflow, results = _histogram_bool_workflow(tmp_path, "w")
+    out = batch_mod.run_batch([str(workflow)], max_workers=1)
+    assert [r["status"] for r in out] == ["success"]
+    assert results.is_file()
+
+
+def test_batch_malformed_visualization_does_not_abort_batch(tmp_path):
+    import yaml
+
+    workflow, _results = _histogram_bool_workflow(tmp_path, "w")
+    cfg = yaml.safe_load(workflow.read_text())
+    cfg["visualization"]["formats"] = 5  # not iterable
+    workflow.write_text(yaml.safe_dump(cfg))
+    out = batch_mod.run_batch([str(workflow)], max_workers=1)
+    assert len(out) == 1  # collision pre-scan skipped it; batch still ran

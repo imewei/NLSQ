@@ -115,6 +115,10 @@ class BenchmarkProblem:
         """Model function."""
         raise NotImplementedError
 
+    def numpy_model(self, x, *params):
+        """NumPy twin of :meth:`model` (SciPy must not dispatch through JAX)."""
+        return np.asarray(self.model(jnp.asarray(x), *params))
+
     def get_initial_guess(self, p_true) -> np.ndarray:
         """Get initial parameter guess."""
         # Default: perturb true parameters by 20%
@@ -129,6 +133,9 @@ class ExponentialDecayProblem(BenchmarkProblem):
 
     def model(self, x, a, b, c):
         return a * jnp.exp(-b * x) + c
+
+    def numpy_model(self, x, a, b, c):
+        return a * np.exp(-b * x) + c
 
     def generate_data(self, n_points: int, noise_level: float = 0.1):
         x = np.linspace(0, 10, n_points)
@@ -147,6 +154,9 @@ class GaussianProblem(BenchmarkProblem):
     def model(self, x, a, mu, sigma):
         return a * jnp.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
+    def numpy_model(self, x, a, mu, sigma):
+        return a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
+
     def generate_data(self, n_points: int, noise_level: float = 0.1):
         x = np.linspace(-5, 5, n_points)
         p_true = np.array([5.0, 0.0, 1.0])
@@ -162,6 +172,9 @@ class PolynomialProblem(BenchmarkProblem):
         super().__init__("polynomial", n_parameters=5)
 
     def model(self, x, a, b, c, d, e):
+        return a + b * x + c * x**2 + d * x**3 + e * x**4
+
+    def numpy_model(self, x, a, b, c, d, e):
         return a + b * x + c * x**2 + d * x**3 + e * x**4
 
     def generate_data(self, n_points: int, noise_level: float = 0.1):
@@ -180,6 +193,9 @@ class SinusoidalProblem(BenchmarkProblem):
 
     def model(self, x, a, b, c, d):
         return a * jnp.sin(b * x + c) + d
+
+    def numpy_model(self, x, a, b, c, d):
+        return a * np.sin(b * x + c) + d
 
     def generate_data(self, n_points: int, noise_level: float = 0.1):
         x = np.linspace(0, 4 * np.pi, n_points)
@@ -326,23 +342,19 @@ class BenchmarkSuite:
         for _ in range(self.config.n_repeats):
             profile_name = f"{problem.name}_{method}_{backend}_{len(x)}"
 
-            start_time = time.perf_counter()
+            popt = None
 
             with self.profiler.profile(profile_name) as metrics:
+                start_time = time.perf_counter()
                 try:
-                    jit_start = time.perf_counter()
                     popt, _pcov = curve_fit(problem.model, x, y, p0=p0, method=method)
-                    jit_time = time.perf_counter() - jit_start
-
                     success = True
-                    final_cost = np.sum((problem.model(x, *popt) - y) ** 2)
                 except (RuntimeError, ValueError, FloatingPointError):
                     # Optimization failures during benchmark are recorded as non-converged
                     success = False
-                    final_cost = np.inf
+                total_time = jit_time = time.perf_counter() - start_time
+                if not success:
                     jit_time = 0
-
-                total_time = time.perf_counter() - start_time
 
                 # Update profiler metrics
                 self.profiler.update_current(
@@ -352,6 +364,13 @@ class BenchmarkSuite:
                     method=method,
                     backend=backend,
                 )
+
+            # Cost is evaluated after timing: an eager model call is not part of the fit
+            final_cost = (
+                float(np.sum((problem.numpy_model(x, *popt) - y) ** 2))
+                if success
+                else np.inf
+            )
 
             # Get profiler metrics
             profile_metrics = self.profiler.get_metrics(profile_name)[-1]
@@ -388,14 +407,10 @@ class BenchmarkSuite:
         """Benchmark SciPy for a specific configuration."""
         results = []
 
-        # Convert JAX model to NumPy for SciPy
-        def numpy_model(x, *params):
-            # Convert to JAX, compute, convert back
-            x_jax = jnp.array(x)
-            result_jax = problem.model(x_jax, *params)
-            return np.array(result_jax)
+        # SciPy gets the pure-NumPy twin of the model, not eager JAX dispatch
+        numpy_model = problem.numpy_model
 
-        # Actual benchmark runs (no warmup for SciPy)
+        # Actual benchmark runs (no warmup needed: nothing to compile)
         for _ in range(self.config.n_repeats):
             start_time = time.perf_counter()
 

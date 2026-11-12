@@ -242,9 +242,10 @@ class NumericalStabilityGuard:
         @jit
         def _safe_divide_jit(numerator, denominator):
             """JIT-compiled safe division."""
+            # Preserve the denominator's sign (0 counts as positive).
             safe_denom = jnp.where(
                 jnp.abs(denominator) < self.eps,
-                self.eps,
+                jnp.where(denominator < 0, -self.eps, self.eps),
                 denominator,
             )
             return numerator / safe_denom
@@ -601,19 +602,15 @@ class NumericalStabilityGuard:
         Returns
         -------
         result : jnp.ndarray
-            base^exponent with numerical safety
+            base^exponent, saturated to the finite float range; NaN for a
+            negative base with a non-integer exponent
         """
-        # Handle negative base with fractional exponent
-        if not float(exponent).is_integer():
-            base = jnp.abs(base)
-
-        # Prevent overflow
-        max_base = (
-            jnp.power(self.max_float, 1.0 / abs(exponent)) if exponent != 0 else np.inf
-        )
-        base_clipped = jnp.clip(base, -max_base, max_base)
-
-        return jnp.power(base_clipped, exponent)
+        # jnp.power gives NaN for a negative base with a non-integer exponent
+        # (like numpy). Over/underflow (incl. 0**negative) saturates at +-max_float.
+        # float base: integer ** negative int raises TypeError
+        base = jnp.asarray(base)
+        result = jnp.power(base.astype(jnp.result_type(base, 1.0)), exponent)
+        return jnp.clip(result, -self.max_float, self.max_float)
 
     def check_gradient(self, gradient: jnp.ndarray) -> jnp.ndarray:
         """Check and fix gradient values.
@@ -744,6 +741,10 @@ class NumericalStabilityGuard:
         # Scale if needed to prevent overflow
         max_val = jnp.max(jnp.abs(x))
 
+        # Inf/NaN entries: scaling would produce NaN; defer to the true norm (inf/NaN)
+        if not bool(jnp.isfinite(max_val)):
+            return float(jnp.linalg.norm(x, ord=ord))
+
         # Use JIT-compiled safe norm when scaling is needed (2-5x faster)
         if max_val > 1e100 or (max_val < 1e-100 and max_val > 0):
             if ord == 2:
@@ -804,7 +805,7 @@ def estimate_condition_number(xdata: np.ndarray) -> float:
     For 1D data, constructs a Vandermonde-like matrix with [1, x, x^2].
     For multidimensional data, computes the condition number directly.
     """
-    xdata = np.asarray(xdata)
+    xdata = np.asarray(xdata, dtype=np.float64)  # int dtypes overflow in x**2
 
     # Handle 1D data
     if xdata.ndim == 1:

@@ -43,8 +43,11 @@ class SparseJacobianComputer:
         Parameters
         ----------
         sparsity_threshold : float
-            Elements with absolute value below this threshold are considered zero.
-            Default is 0.01 which works well for most problems.
+            Relative threshold in ``[0, 1)``: an element ``J[i, j]`` is considered
+            zero when ``|J[i, j]| <= sparsity_threshold * max_i |J[i, j]|``
+            (per-column scale, so the result does not depend on the units of
+            the model or of individual parameters). All-zero columns stay
+            all-zero. Default is 0.01.
         """
         self.sparsity_threshold = sparsity_threshold
         self._sparsity_pattern: np.ndarray | None = None
@@ -125,8 +128,13 @@ class SparseJacobianComputer:
             # Compute finite difference
             jac_col = (f_perturb - f0) / step
 
-            # Mark non-zero elements
-            pattern[:, i] = np.abs(jac_col) > self.sparsity_threshold
+            # Mark non-zero elements. The column scale is floored at the
+            # finite-difference round-off level so noise in a truly zero
+            # column is not promoted to structure.
+            jac_abs = np.abs(np.asarray(jac_col))
+            noise = 100 * np.finfo(float).eps * np.max(np.abs(f0), initial=0.0) / step
+            ref = max(float(jac_abs.max(initial=0.0)), float(noise))
+            pattern[:, i] = jac_abs > self.sparsity_threshold * ref
 
         # Calculate sparsity (handle empty pattern)
         if pattern.size > 0:
@@ -182,6 +190,8 @@ class SparseJacobianComputer:
         all_rows: list[np.ndarray] = []
         all_cols: list[np.ndarray] = []
         all_values: list[np.ndarray] = []
+        # Running per-column max |J| over finite entries (global reference scale)
+        col_max = np.zeros(n_params)
 
         # Process in chunks to manage memory
         for chunk_idx in range(n_chunks):
@@ -230,9 +240,16 @@ class SparseJacobianComputer:
             if hasattr(J_chunk, "block_until_ready"):
                 J_chunk = np.array(J_chunk)
 
-            # Vectorized sparse extraction: O(nnz) instead of O(nm)
-            # Find elements above threshold using NumPy vectorization
-            mask = np.abs(J_chunk) > self.sparsity_threshold
+            # Vectorized sparse extraction: O(nnz) instead of O(nm).
+            # Threshold is relative to the column max; the chunk-local max is
+            # <= the global one, so this keeps a superset that the final
+            # global filter below trims. Non-finite entries are always kept.
+            J_chunk = np.asarray(J_chunk)
+            finite = np.isfinite(J_chunk)
+            J_abs = np.where(finite, np.abs(J_chunk), 0.0)
+            chunk_max = J_abs.max(axis=0, initial=0.0)
+            col_max = np.maximum(col_max, chunk_max)
+            mask = (J_abs > self.sparsity_threshold * chunk_max) | ~finite
             chunk_rows, chunk_cols = np.where(mask)
             chunk_values = J_chunk[chunk_rows, chunk_cols]
 
@@ -249,6 +266,10 @@ class SparseJacobianComputer:
             rows = np.concatenate(all_rows)
             cols = np.concatenate(all_cols)
             values = np.concatenate(all_values)
+            keep = (np.abs(values) > self.sparsity_threshold * col_max[cols]) | ~(
+                np.isfinite(values)
+            )
+            rows, cols, values = rows[keep], cols[keep], values[keep]
             J_sparse = coo_matrix((values, (rows, cols)), shape=(n_data, n_params))
         else:
             # Empty matrix case
@@ -430,7 +451,8 @@ class SparseOptimizer:
         Parameters
         ----------
         sparsity_threshold : float
-            Threshold for considering elements as zero
+            Relative per-column threshold for considering elements as zero
+            (see `SparseJacobianComputer`)
         min_sparsity : float
             Minimum sparsity level to use sparse methods
         auto_detect : bool
@@ -604,7 +626,8 @@ def detect_jacobian_sparsity(
         a list of arrays [X, Y] for 2D problems, or a 2D array
         with shape (k, N) for multi-dimensional coordinates.
     threshold : float
-        Threshold for zero elements
+        Relative per-column threshold for zero elements (see
+        `SparseJacobianComputer`)
 
     Returns
     -------
@@ -674,7 +697,8 @@ def detect_sparsity_at_p0(
     n_residuals : int
         Number of residuals (data points)
     threshold : float, optional
-        Threshold for considering elements as zero (default: 0.01)
+        Relative per-column threshold for considering elements as zero
+        (default: 0.01)
     sample_size : int, optional
         Number of data points to sample for detection (default: 100)
         Using a sample speeds up detection for large datasets
@@ -692,7 +716,7 @@ def detect_sparsity_at_p0(
     Detection strategy:
     - Samples up to `sample_size` data points for efficiency
     - Uses finite differences to compute Jacobian at p0
-    - Considers elements with \\|J[i,j]\\| < threshold as zero
+    - Considers elements with \\|J[i,j]\\| <= threshold * max_i \\|J[i,j]\\| as zero
     - Caches result to avoid repeated computation
 
     For auto-selection to activate sparse solver, both conditions must be met:
@@ -710,7 +734,7 @@ def detect_sparsity_at_p0(
     ...     model, p0, xdata, n_residuals=1000
     ... )
     >>> print(f"Sparsity: {sparsity_ratio:.1%}, Is sparse: {is_sparse}")
-    Sparsity: 50.0%, Is sparse: True
+    Sparsity: 50.0%, Is sparse: False
     """
     # Sample data for efficient detection
     # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)

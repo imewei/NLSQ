@@ -269,13 +269,10 @@ class UnifiedCache:
                 sig = self._get_array_signature(arg)
                 key_parts.append(f"arg{i}:{sig}")
 
-        # 4. Keyword arguments
+        # 4. Keyword arguments: always traced dynamically by jax.jit (there is
+        # no static_argnames), so key by dtype/rank or type, never by value.
         for k, v in sorted(kwargs.items()):
-            if isinstance(v, (np.ndarray, jnp.ndarray, jax.Array)):
-                sig = self._get_array_signature(v)
-                key_parts.append(f"kwarg_{k}:{sig}")
-            else:
-                key_parts.append(f"kwarg_{k}:{v}")
+            key_parts.append(f"kwarg_{k}:{self._get_array_signature(v)}")
 
         # Generate MD5 hash of key string
         key_str = "|".join(key_parts)
