@@ -680,7 +680,7 @@ class CurveFitResult(OptimizeResult):
                 scale = (
                     1.0
                     if bool(getattr(self, "absolute_sigma", False))
-                    else float(np.sum((resid / sig) ** 2) / dof)
+                    else self._chi2() / dof
                 )
                 xd = np.asarray(getattr(self, "xdata", []), dtype=float)
                 xq = np.asarray(x, dtype=float)

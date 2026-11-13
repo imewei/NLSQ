@@ -220,11 +220,16 @@ def pcov_from_normal(
             Vk = V[:, keep]
             # overflow is caught below as all-inf + OptimizeWarning; silence numpy's own
             with np.errstate(over="ignore", invalid="ignore"):
-                cov = ((Vk / w[keep]) @ Vk.T) / s  # pinv(H) = pinv(H/s) / s
                 if absolute_sigma:
-                    pcov = cov
+                    pcov = ((Vk / w[keep]) @ Vk.T) / s
                 elif n > p:
-                    pcov = cov * (2.0 * cost / (n - p))
+                    if np.isfinite(cost) and cost >= 0:
+                        scaled = Vk * (np.sqrt(cost) * np.sqrt(2.0 / (n - p)))
+                        scaled = scaled / np.sqrt(w[keep]) / np.sqrt(s)
+                        pcov = scaled @ scaled.T
+                    else:
+                        cov = ((Vk / w[keep]) @ Vk.T) / s
+                        pcov = cov * (2.0 * cost / (n - p))
     if not np.isfinite(pcov).all():
         pcov = np.full((p, p), np.inf)
     fired = bool(np.isinf(pcov).any())

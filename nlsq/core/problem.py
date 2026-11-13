@@ -674,7 +674,7 @@ def _setup_data_mask_and_padding(
     len_diff = 0
 
     if data_mask is not None:
-        data_mask = np.asarray(data_mask)  # PreparedProblem.mask is an ndarray
+        data_mask = np.asarray(data_mask, dtype=bool)
         if len(data_mask) != m:
             raise ValueError("Data mask doesn't match data lengths.")
 

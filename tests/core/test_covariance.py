@@ -56,6 +56,23 @@ def test_jacobian_and_normal_agree_when_well_conditioned():
         assert not fb
 
 
+@pytest.mark.parametrize(
+    "h,cost,expected",
+    [
+        (1.0, 1e308, (1e308 / 3) * 2),
+        (1e-300, 1e-300, 2 / 3),
+        (1e300, 1e300, 2 / 3),
+        (np.nextafter(0.0, 1.0), np.nextafter(0.0, 1.0), 2 / 3),
+        (1e-300, 0.0, 0.0),
+        (1e300, 0.0, 0.0),
+    ],
+)
+def test_normal_relative_covariance_avoids_intermediate_overflow(h, cost, expected):
+    pcov, fired = pcov_from_normal(np.array([[h]]), cost, 4, 1, False)
+    assert not fired
+    assert pcov[0, 0] == pytest.approx(expected, rel=1e-12, abs=0)
+
+
 def test_jacobian_covariance_handles_extreme_singular_values():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
