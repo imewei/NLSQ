@@ -2801,12 +2801,18 @@ class LargeDatasetFitter:
             )
 
         n_unusable = self._n_unusable_cov_chunks
+        # shortcut: a rank-deficient chunk is dropped (counted and warned) rather than
+        # combined through its pseudo-inverse: that is exact only for linear models and
+        # was measured to yield a wrong "successful" fit for a*b*x. The exact solver
+        # (the curve_fit_large default) combines chunks without this limit.
         if n_unusable:
             msg = (
                 f"{n_unusable} of {stats.n_chunks} chunks had unusable covariance "
                 "(not numerically positive definite (singular, indefinite or "
                 "non-finite), e.g. an unidentifiable parameter) and were excluded "
-                "from the precision-weighted combination."
+                "from the precision-weighted combination. If the chunks only "
+                "jointly identify every parameter, use the exact full-data "
+                "solver (Auto, the curve_fit_large default)."
             )
             if self._accum_information is None:
                 msg += (
