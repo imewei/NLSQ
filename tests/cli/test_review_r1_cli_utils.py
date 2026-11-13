@@ -16,14 +16,13 @@ from nlsq.cli.result_exporter import _atomic_write
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
-def test_f4_atomic_write_respects_umask(tmp_path):
+def test_f4_atomic_write_is_private(tmp_path):
     old = os.umask(0o022)
     try:
         target = tmp_path / "res.json"
         _atomic_write(target, "{}")
-        assert stat.S_IMODE(target.stat().st_mode) == 0o644
-        # An existing file keeps its mode, like an in-place write would.
-        target.chmod(0o600)
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+        target.chmod(0o644)
         _atomic_write(target, "{}")
         assert stat.S_IMODE(target.stat().st_mode) == 0o600
     finally:

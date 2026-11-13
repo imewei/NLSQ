@@ -58,7 +58,7 @@ def test_npz_member_uncompressed_size_is_checked(monkeypatch, tmp_path):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
-def test_atomic_write_mode_follows_umask_without_toggling_it(monkeypatch, tmp_path):
+def test_atomic_write_is_private_without_toggling_umask(monkeypatch, tmp_path):
     old = os.umask(0o022)
     try:
 
@@ -68,9 +68,9 @@ def test_atomic_write_mode_follows_umask_without_toggling_it(monkeypatch, tmp_pa
         monkeypatch.setattr(os, "umask", boom)
         target = tmp_path / "out.json"
         _atomic_write(target, "{}")
-        assert stat.S_IMODE(target.stat().st_mode) == 0o644
-        os.chmod(target, 0o600)
-        _atomic_write(target, "{}")  # existing file keeps its mode
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
+        os.chmod(target, 0o644)
+        _atomic_write(target, "{}")
         assert stat.S_IMODE(target.stat().st_mode) == 0o600
         assert not list(tmp_path.glob("*.tmp"))
     finally:

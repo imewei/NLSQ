@@ -25,7 +25,6 @@ import json
 import math
 import os
 import secrets
-import stat
 from pathlib import Path
 from typing import Any
 
@@ -70,26 +69,15 @@ def _sanitize_nonfinite(obj: Any) -> Any:
 
 def _atomic_write(path: Path, text: str, newline: str | None = None) -> None:
     """Write ``text`` to a temp file beside ``path`` then ``os.replace`` it."""
-    # os.open(0o666) lets the kernel apply the umask; toggling os.umask is process-wide
-    # and races with other threads (batch ThreadPoolExecutor).
-    # shortcut: mode is sampled by stat() then applied before replace(); an uncoordinated
-    # second process chmod/replacing the destination in between wins or loses the mode.
-    # Upgrade to a shared lock file (or always-0600 exports) if exports become sensitive.
     tmp = str(path.parent / f".{path.name}.{secrets.token_hex(8)}.tmp")
-    try:
-        existing_mode = stat.S_IMODE(path.stat().st_mode)
-    except FileNotFoundError:
-        existing_mode = None
     fd = os.open(
         tmp,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-        0o600 if existing_mode is not None else 0o666,
+        0o600,
     )
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline=newline) as f:
             f.write(text)
-        if existing_mode is not None:
-            os.chmod(tmp, existing_mode)
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

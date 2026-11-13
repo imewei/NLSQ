@@ -52,6 +52,10 @@ nlsq fit
 
 Execute single curve fit from a YAML workflow configuration.
 
+On POSIX systems, result files and batch summary files are created with at
+most owner read/write permissions (``0600``), even when replacing an existing
+file. Change permissions after export if other users need access.
+
 **Syntax:**
 
 .. code-block:: text
