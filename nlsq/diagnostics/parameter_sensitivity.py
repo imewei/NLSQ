@@ -25,6 +25,7 @@ import time
 
 import numpy as np
 
+from nlsq.diagnostics.identifiability import _equilibrate_columns, _fim_scale
 from nlsq.diagnostics.recommendations import get_recommendation
 from nlsq.diagnostics.types import (
     DiagnosticsConfig,
@@ -445,6 +446,9 @@ class ParameterSensitivityAnalyzer:
         eigenvectors : np.ndarray
             Eigenvectors as columns, corresponding to sorted eigenvalues.
         """
+        # Unit-invariant spectrum: D^-1/2 F D^-1/2 with D = diag(F).
+        d = _fim_scale(fim)
+        fim = fim / np.outer(d, d)
         try:
             # Try to use NLSQ's SVD fallback for robustness
             from nlsq.stability.svd_fallback import compute_svd_with_fallback
@@ -503,6 +507,8 @@ class ParameterSensitivityAnalyzer:
         eigenvectors : np.ndarray
             Eigenvectors as columns, corresponding to sorted eigenvalues.
         """
+        # Column-equilibrate: the spectrum must not depend on parameter/data units.
+        jacobian = _equilibrate_columns(jacobian)
         try:
             from nlsq.stability.svd_fallback import compute_svd_with_fallback
 

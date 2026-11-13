@@ -184,6 +184,7 @@ class GradientMonitor:
         self,
         gradient: np.ndarray | Sequence[float],
         cost: float,
+        params: np.ndarray | Sequence[float] | None = None,
     ) -> None:
         """Record a gradient observation from an optimization iteration.
 
@@ -193,6 +194,11 @@ class GradientMonitor:
             The gradient vector (partial derivatives w.r.t. each parameter).
         cost : float
             The current cost/loss value at this iteration.
+        params : np.ndarray or Sequence[float], optional
+            Current parameter values. When given, the imbalance ratio
+            (GRAD-002) is evaluated on ``|g_j * p_j|``, which does not depend
+            on the units chosen for each parameter. Zero parameters are
+            excluded from the ratio.
 
         Raises
         ------
@@ -245,6 +251,13 @@ class GradientMonitor:
 
         # Update per-parameter running statistics (Welford's algorithm)
         abs_gradient = np.abs(gradient)
+        # Unit-free imbalance: g_j * p_j removes the parameter's units.
+        # shortcut: |p_j| = 0 drops that component from the ratio; use column
+        # norms of J instead if the callback ever supplies the Jacobian.
+        if params is not None and np.shape(params) == gradient.shape:
+            imbalance_basis = abs_gradient * np.abs(np.asarray(params, dtype=float))
+        else:
+            imbalance_basis = abs_gradient
         self._param_count += 1
         delta = abs_gradient - self._param_means
         self._param_means += delta / self._param_count
@@ -255,10 +268,9 @@ class GradientMonitor:
         # iterations (norm below the vanishing threshold relative to the first
         # gradient): their components are roundoff-level so the ratio is noise.
         # Mirrors the relative threshold in _detect_vanishing_gradients.
-        min_grad = (
-            np.min(abs_gradient[abs_gradient > 0]) if np.any(abs_gradient > 0) else 1.0
-        )
-        max_grad = np.max(abs_gradient)
+        positive = imbalance_basis > 0
+        min_grad = np.min(imbalance_basis[positive]) if np.any(positive) else 1.0
+        max_grad = np.max(imbalance_basis)
         converged = (
             self._initial_gradient_norm > 0
             and gradient_norm
@@ -372,7 +384,7 @@ class GradientMonitor:
             self._last_params = params.copy()
 
             # Record in monitor
-            self.record_gradient(gradient, cost)
+            self.record_gradient(gradient, cost, params)
 
             # Call user callback if provided
             if user_callback is not None:
@@ -567,15 +579,19 @@ class GradientMonitor:
         # catches that case independent of what the initial norm was.
         gradient_absolutely_small = avg_recent_norm < threshold
 
-        return (gradient_dropped or gradient_absolutely_small) and cost_significant
+        return bool(
+            (gradient_dropped or gradient_absolutely_small) and cost_significant
+        )
 
     def _detect_exploding_gradients(self, norm_history: list[float]) -> bool:
         """Detect if gradients are exploding to very large magnitudes.
 
-        Complements has_numerical_issues (NaN/Inf) and the cross-parameter
-        imbalance check (GRAD-002): a uniformly huge but finite, balanced
-        gradient triggers neither of those, so this checks the absolute
-        magnitude directly.
+        Complements has_numerical_issues (NaN/Inf). The check is relative:
+        the recent maximum norm must exceed ``exploding_threshold`` times the
+        first recorded norm. An absolute norm depends on the units of y and
+        of the parameters, and a large gradient at a poor start is not a
+        blow-up. No baseline (zero first gradient) means no growth can be
+        measured, so nothing is flagged.
 
         Parameters
         ----------
@@ -587,7 +603,7 @@ class GradientMonitor:
         bool
             True if exploding gradients detected.
         """
-        if len(norm_history) < 1:
+        if len(norm_history) < 1 or not self._initial_gradient_norm > 0:
             return False
 
         recent_norms = norm_history[-10:] if len(norm_history) >= 10 else norm_history
@@ -595,7 +611,8 @@ class GradientMonitor:
 
         return bool(
             np.isfinite(max_recent_norm)
-            and max_recent_norm > self.config.exploding_threshold,
+            and max_recent_norm
+            > self.config.exploding_threshold * self._initial_gradient_norm,
         )
 
     def _detect_gradient_imbalance(self) -> bool:
@@ -612,7 +629,7 @@ class GradientMonitor:
         if self._n_params < 2:
             return False
 
-        return self._max_imbalance_ratio > self.config.imbalance_threshold
+        return bool(self._max_imbalance_ratio > self.config.imbalance_threshold)
 
     def _detect_gradient_stagnation(self, norm_history: list[float]) -> bool:
         """Detect if gradient norm has stagnated (no significant change).
@@ -648,7 +665,7 @@ class GradientMonitor:
         std_norm = np.std(recent)
         relative_variation = std_norm / mean_norm
 
-        return relative_variation < tolerance
+        return bool(relative_variation < tolerance)
 
     def _compute_health_score(
         self,
