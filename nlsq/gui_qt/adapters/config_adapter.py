@@ -152,6 +152,27 @@ def _bound_side(side: Any, fill: float) -> Any:
     return side
 
 
+def _set_abs_sigma(section: dict[str, Any], state: SessionState, where: str) -> None:
+    """Bool-validate absolute_sigma like the CLI (``bool("false")`` is True)."""
+    from nlsq.core._option_checks import coerce_absolute_sigma
+
+    if "absolute_sigma" in section:
+        try:
+            state.absolute_sigma = coerce_absolute_sigma(section["absolute_sigma"])
+        except TypeError as exc:
+            raise ValueError(f"{where}.absolute_sigma: {exc}") from None
+
+
+def _parse_flat_flags(fitting: dict[str, Any], state: SessionState) -> None:
+    """CLI-schema flat ``fitting.absolute_sigma`` / ``check_finite`` (objective.* wins)."""
+    _set_abs_sigma(fitting, state, "fitting")
+    if "check_finite" in fitting and not isinstance(fitting["check_finite"], bool):
+        # shortcut: validated only; SessionState has no check_finite field to store it in
+        raise ValueError(
+            f"fitting.check_finite must be true or false, got {fitting['check_finite']!r}"
+        )
+
+
 def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
     """Parse fitting section of YAML config into state."""
 
@@ -205,10 +226,12 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.center_on_p0 = go.get("center_on_p0", state.center_on_p0)
         state.scale_factor = float(go.get("scale_factor", state.scale_factor))
 
+    _parse_flat_flags(fitting, state)
+
     if "objective" in fitting:
         obj = fitting["objective"] or {}
         state.loss = obj.get("robust_loss", state.loss)
-        state.absolute_sigma = bool(obj.get("absolute_sigma", state.absolute_sigma))
+        _set_abs_sigma(obj, state, "fitting.objective")
 
     if "termination" in fitting:
         term = fitting["termination"] or {}

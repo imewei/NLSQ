@@ -60,12 +60,13 @@ class TestAutoConfigureCMAESMemory:
 
     def test_huge_dataset_needs_data_chunking(self):
         """Test that huge datasets trigger data chunking."""
-        pop_batch, data_chunk = auto_configure_cmaes_memory(
-            n_data=100_000_000,
-            popsize=16,
-            available_memory_gb=1.0,  # Very limited memory
-            safety_factor=0.7,
-        )
+        with pytest.warns(UserWarning, match="exceeds"):  # 1.5 GB of data > budget
+            pop_batch, data_chunk = auto_configure_cmaes_memory(
+                n_data=100_000_000,
+                popsize=16,
+                available_memory_gb=1.0,  # Very limited memory
+                safety_factor=0.7,
+            )
 
         # Should need both population batching and data chunking
         assert pop_batch is not None
@@ -74,12 +75,13 @@ class TestAutoConfigureCMAESMemory:
 
     def test_chunk_size_is_power_of_two_bucket(self):
         """Test that chunk sizes use power-of-2 buckets for JIT efficiency."""
-        _, data_chunk = auto_configure_cmaes_memory(
-            n_data=100_000_000,
-            popsize=16,
-            available_memory_gb=0.5,
-            safety_factor=0.7,
-        )
+        with pytest.warns(UserWarning, match="exceeds"):
+            _, data_chunk = auto_configure_cmaes_memory(
+                n_data=100_000_000,
+                popsize=16,
+                available_memory_gb=0.5,
+                safety_factor=0.7,
+            )
 
         if data_chunk is not None:
             valid_buckets = (1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072)
@@ -332,3 +334,27 @@ class TestCMAESGlobalPresetStreaming:
                 bounds=bounds,
                 workflow="cmaes-global",  # OLD: removed preset
             )
+
+
+class TestAutoConfigureAccountsForResidentData:
+    """GD-4: the auto budget must include the xdata/ydata(/sigma) already in memory."""
+
+    def test_unchunked_choice_fits_budget_per_estimator(self):
+        n, avail = 100_000_000, 8.0
+        pop_batch, data_chunk = auto_configure_cmaes_memory(n, 16, avail)
+        assert data_chunk is None
+        # previously (2, None): estimator put that at 5.96 GB against a 5.6 GB target
+        assert estimate_cmaes_memory_gb(n, 16, pop_batch) <= avail * 0.7
+
+    def test_extra_resident_bytes_shrink_the_batch(self):
+        n, avail = 100_000_000, 12.0
+        base, _ = auto_configure_cmaes_memory(n, 16, avail)
+        more, _ = auto_configure_cmaes_memory(
+            n, 16, avail, data_bytes=n * 16 + 3 * 1024**3
+        )
+        assert (base, more) == (2, 1)
+
+    def test_data_larger_than_budget_warns_and_returns_minimum(self):
+        with pytest.warns(UserWarning, match="exceeds"):
+            result = auto_configure_cmaes_memory(100_000_000, 16, 1.0)
+        assert result == (1, 1024)

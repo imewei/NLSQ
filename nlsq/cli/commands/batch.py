@@ -210,7 +210,7 @@ def _warn_output_collisions(
         try:
             with open(path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f)
-        except (OSError, yaml.YAMLError):
+        except (OSError, UnicodeError, yaml.YAMLError):
             continue  # reported by the workflow run itself
         if not isinstance(cfg, dict):
             continue
@@ -218,7 +218,11 @@ def _warn_output_collisions(
         vis = cfg.get("visualization") or {}
         data = cfg.get("data") or {}
         model = cfg.get("model") or {}
-        if isinstance(data, dict) and isinstance(data.get("input_file"), str):
+        if (
+            isinstance(data, dict)
+            and isinstance(data.get("input_file"), str)
+            and "\x00" not in data["input_file"]
+        ):
             input_path = Path(data["input_file"])
             beside = Path(path).resolve().parent / input_path
             if not input_path.is_absolute() and beside.is_file():
@@ -228,10 +232,20 @@ def _warn_output_collisions(
             isinstance(model, dict)
             and model.get("type") == "custom"
             and isinstance(model.get("path"), str)
+            and "\x00" not in model["path"]
         ):
-            protected.add(Path(model["path"]).resolve())
+            model_path = Path(model["path"])
+            beside = Path(path).resolve().parent / model_path
+            if not model_path.is_absolute() and beside.is_file():
+                model_path = beside
+            protected.add(model_path.resolve())
         targets = []
-        if isinstance(export, dict) and export.get("results_file"):
+        if (
+            isinstance(export, dict)
+            and isinstance(export.get("results_file"), str)
+            and export["results_file"]
+            and "\x00" not in export["results_file"]
+        ):
             targets.append(export["results_file"])
             if not (
                 cfg_get(export, "stdout", False)
@@ -258,7 +272,7 @@ def _warn_output_collisions(
                 ]
                 targets.append(output_dir / f"{prefix}_combined")
                 result_files.extend(vis_files)
-        except (TypeError, AttributeError, CLIError):
+        except (TypeError, ValueError, AttributeError, CLIError):
             pass  # malformed visualization block: the workflow run reports it
         for target in targets:
             key = os.path.abspath(target)

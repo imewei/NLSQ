@@ -56,6 +56,39 @@ def test_jacobian_and_normal_agree_when_well_conditioned():
         assert not fb
 
 
+@pytest.mark.parametrize(
+    "h,cost,expected",
+    [
+        (1.0, 1e308, (1e308 / 3) * 2),
+        (1e-300, 1e-300, 2 / 3),
+        (1e300, 1e300, 2 / 3),
+        (np.nextafter(0.0, 1.0), np.nextafter(0.0, 1.0), 2 / 3),
+        (1e-300, 0.0, 0.0),
+        (1e300, 0.0, 0.0),
+    ],
+)
+def test_normal_relative_covariance_avoids_intermediate_overflow(h, cost, expected):
+    pcov, fired = pcov_from_normal(np.array([[h]]), cost, 4, 1, False)
+    assert not fired
+    assert pcov[0, 0] == pytest.approx(expected, rel=1e-12, abs=0)
+
+
+@pytest.mark.parametrize("absolute_sigma", [False, True])
+def test_normal_covariance_is_invariant_to_parameter_units(absolute_sigma):
+    """Rescaling a Jacobian column rescales pcov and must not drop directions."""
+    rng = np.random.default_rng(0)
+    J = rng.normal(size=(50, 3))
+    scale = np.array([1.0, 1e9, 1.0])
+    ref, _ = _H_pcov(J, 1.3, 50, 3, absolute_sigma)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # ill-conditioned H warning
+        got, fired = _H_pcov(J * scale, 1.3, 50, 3, absolute_sigma)
+        jac, _ = _J_pcov(J * scale, 1.3, 50, 3, absolute_sigma)
+    assert not fired
+    np.testing.assert_allclose(got * np.outer(scale, scale), ref, rtol=1e-6, atol=0)
+    np.testing.assert_allclose(got, jac, rtol=1e-6, atol=0)
+
+
 def test_jacobian_covariance_handles_extreme_singular_values():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -302,3 +335,10 @@ def test_qr_covariance_trailing_zero_padded_rows_match_svd():
     # zero rows add nothing to J^T J: same pcov as the unpadded Jacobian at the same n
     _, unpadded = _rank_and_pcov(_covariance_svd, jnp.asarray(J), 100)
     assert _rel(got, unpadded) <= 1e-12
+
+
+def test_pcov_from_normal_singular_h_keeps_moore_penrose_semantics():
+    """Equilibration must not change the null space of a rank-deficient H."""
+    H = np.array([[1.0, 1e-9], [1e-9, 1e-18]])
+    pcov, _ = pcov_from_normal(H, 1.0, 10, 2, True, False)
+    np.testing.assert_allclose(pcov, np.linalg.pinv(H), rtol=1e-6, atol=1e-30)

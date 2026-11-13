@@ -190,6 +190,19 @@ class WorkflowRunner:
             If any other workflow error occurs.
         """
         validate_config_sections(config)
+        # Fail before the fit runs: ResultExporter.export would only reject it after
+        export_config = config.get("export") or {}
+        fmt = export_config.get("format")
+        if (
+            export_config.get("results_file") is not None
+            and fmt is not None
+            and str(fmt).lower() not in ("json", "csv")
+        ):
+            raise CLIError(
+                f"Unsupported export format: {fmt}",
+                context={"format": fmt},
+                suggestion="Supported formats are: json, csv",
+            )
         for key in config:
             if key not in _KNOWN_TOP_LEVEL_KEYS:
                 close = difflib.get_close_matches(

@@ -33,6 +33,21 @@ from nlsq.diagnostics.types import (
 _logger = logging.getLogger(__name__)
 
 
+def _equilibrate_columns(jacobian: np.ndarray) -> np.ndarray:
+    """Scale each Jacobian column to unit 2-norm (zero columns stay zero)."""
+    jacobian = np.asarray(jacobian, dtype=np.result_type(jacobian, np.float32))
+    cmax = np.max(np.abs(jacobian), axis=0)
+    jn = jacobian / np.where(cmax > 0, cmax, 1.0)  # pre-scale: avoids norm underflow
+    norms = np.linalg.norm(jn, axis=0)
+    return jn / np.where(norms > 0, norms, 1.0)
+
+
+def _fim_scale(fim: np.ndarray) -> np.ndarray:
+    """Per-parameter scale sqrt(|diag(F)|); 1 where diag is zero/non-finite."""
+    d = np.sqrt(np.abs(np.diag(fim)))
+    return np.where((d > 0) & np.isfinite(d), d, 1.0)
+
+
 class IdentifiabilityAnalyzer:
     """Analyzer for parameter identifiability from Jacobian matrices.
 
@@ -246,6 +261,9 @@ class IdentifiabilityAnalyzer:
             different shape reference (which previously let the two
             disagree about which singular values count as "zero").
         """
+        # Column-equilibrate so cond/rank/correlation do not depend on the units
+        # of x, y or the parameters (correlation is invariant to this scaling).
+        jacobian = _equilibrate_columns(jacobian)
         try:
             from nlsq.stability.svd_fallback import compute_svd_with_fallback
 
@@ -531,6 +549,9 @@ class IdentifiabilityAnalyzer:
         numerical_rank : int
             Numerical rank based on singular value tolerance.
         """
+        # Unit-invariant: analyze D^-1/2 F D^-1/2 with D = diag(F).
+        d = _fim_scale(fim)
+        fim = fim / np.outer(d, d)
         try:
             # Try to use NLSQ's SVD fallback for robustness
             from nlsq.stability.svd_fallback import compute_svd_with_fallback

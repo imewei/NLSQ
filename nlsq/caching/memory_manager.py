@@ -105,6 +105,7 @@ class MemoryManager:
         # This enables move_to_end() for recently used arrays and
         # popitem(last=False) for LRU eviction when at capacity.
         self.memory_pool: OrderedDict[tuple, np.ndarray] = OrderedDict()
+        self._pool_lock = threading.Lock()
         self.allocation_history: deque[dict] = deque(maxlen=1000)
         self.gc_threshold = gc_threshold
         self.disable_padding = disable_padding
@@ -287,9 +288,10 @@ class MemoryManager:
         # undercounts true usage when psutil is unavailable.
         import sys
 
-        return sys.getsizeof(self.memory_pool) + sum(
-            arr.nbytes for arr in self.memory_pool.values()
-        )
+        with self._pool_lock:
+            return sys.getsizeof(self.memory_pool) + sum(
+                arr.nbytes for arr in self.memory_pool.values()
+            )
 
     def get_memory_usage_fraction(self) -> float:
         """Get current memory usage as fraction of total.
@@ -545,16 +547,12 @@ class MemoryManager:
         Calculates p95(safety_factor_needed) from telemetry and uses it to
         gradually reduce safety factor from initial value (1.2) to target minimum (1.05).
         """
-        if (
-            not self.enable_adaptive_safety
-            or len(self._safety_telemetry) < self._warmup_runs
-        ):
+        telemetry = self._safety_telemetry.copy()
+        if not self.enable_adaptive_safety or len(telemetry) < self._warmup_runs:
             return
 
         # Extract safety factors needed from telemetry
-        safety_factors_needed = [
-            entry["safety_factor_needed"] for entry in self._safety_telemetry
-        ]
+        safety_factors_needed = [entry["safety_factor_needed"] for entry in telemetry]
 
         # Calculate p95 (95th percentile) - conservative estimate
         p95_safety = np.percentile(safety_factors_needed, 95)
@@ -570,7 +568,7 @@ class MemoryManager:
 
         logger.debug(
             f"Adaptive safety factor: {self.safety_factor:.3f} "
-            f"(p95_needed={p95_safety:.3f}, runs={len(self._safety_telemetry)})",
+            f"(p95_needed={p95_safety:.3f}, runs={len(telemetry)})",
         )
 
     def get_safety_telemetry(self) -> dict:
@@ -587,25 +585,24 @@ class MemoryManager:
             - p95_safety_needed: 95th percentile of safety factors needed (if data available)
             - safety_factor_history: List of safety factors over time
         """
+        entries = self._safety_telemetry.copy()
         telemetry: dict[str, object] = {
             "current_safety_factor": self.safety_factor,
             "initial_safety_factor": self._initial_safety_factor,
             "min_safety_factor": self._min_safety_factor,
-            "telemetry_entries": len(self._safety_telemetry),
+            "telemetry_entries": len(entries),
             "adaptive_enabled": self.enable_adaptive_safety,
         }
 
-        if self._safety_telemetry:
-            safety_factors_needed = [
-                entry["safety_factor_needed"] for entry in self._safety_telemetry
-            ]
+        if entries:
+            safety_factors_needed = [entry["safety_factor_needed"] for entry in entries]
             telemetry["p95_safety_needed"] = float(
                 np.percentile(safety_factors_needed, 95),
             )
             telemetry["mean_safety_needed"] = float(np.mean(safety_factors_needed))
             telemetry["max_safety_needed"] = float(np.max(safety_factors_needed))
             telemetry["safety_factor_history"] = [
-                entry["current_safety_factor"] for entry in self._safety_telemetry
+                entry["current_safety_factor"] for entry in entries
             ]
 
         return telemetry
@@ -648,9 +645,9 @@ class MemoryManager:
         key = (shape_t, np.dtype(dtype))
 
         # Check pool for existing array
-        if key in self.memory_pool:
-            # Checked-out arrays must not remain available to another caller.
-            arr = self.memory_pool.pop(key)
+        with self._pool_lock:
+            arr = self.memory_pool.pop(key, None)
+        if arr is not None:
             if zero:
                 arr.fill(0)
             return arr
@@ -684,12 +681,14 @@ class MemoryManager:
         """
         key = (arr.shape, arr.dtype)
         # Keep the most recently returned buffer for each shape/dtype.
-        self.memory_pool[key] = arr
-        self.memory_pool.move_to_end(key)
+        with self._pool_lock:
+            self.memory_pool[key] = arr
+            self.memory_pool.move_to_end(key)
 
     def clear_pool(self):
         """Clear memory pool and run garbage collection."""
-        self.memory_pool.clear()
+        with self._pool_lock:
+            self.memory_pool.clear()
         gc.collect()
 
     def get_memory_stats(self) -> dict:
@@ -706,8 +705,9 @@ class MemoryManager:
         self._peak_memory = max(self._peak_memory, current_memory)
         available_memory = self.get_available_memory()
 
-        pool_memory = sum(arr.nbytes for arr in self.memory_pool.values())
-        pool_arrays = len(self.memory_pool)
+        with self._pool_lock:
+            pool_memory = sum(arr.nbytes for arr in self.memory_pool.values())
+            pool_arrays = len(self.memory_pool)
 
         stats: dict[str, object] = {
             "current_usage_gb": current_memory / 1e9,
@@ -752,13 +752,12 @@ class MemoryManager:
         Arrays are evicted in order of least recent use, keeping the
         most recently used arrays in the pool.
         """
-        if len(self.memory_pool) <= max_arrays:
-            return
+        with self._pool_lock:
+            if len(self.memory_pool) <= max_arrays:
+                return
 
-        # Task Group 7 (1.2a): Use LRU eviction
-        # popitem(last=False) removes the oldest (least recently used) entry
-        while len(self.memory_pool) > max_arrays:
-            self.memory_pool.popitem(last=False)
+            while len(self.memory_pool) > max_arrays:
+                self.memory_pool.popitem(last=False)
 
         gc.collect()
 

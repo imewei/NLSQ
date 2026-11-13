@@ -70,6 +70,7 @@ from nlsq.global_optimization.config import GlobalOptimizationConfig
 if TYPE_CHECKING:
     from nlsq.core.minpack import CurveFit
 from nlsq.global_optimization.sampling import (
+    _PRIMES,
     center_samples_around_p0,
     get_sampler,
     scale_samples_to_bounds,
@@ -78,6 +79,8 @@ from nlsq.precision.bound_inference import infer_bounds_for_multistart
 from nlsq.precision.parameter_estimation import estimate_initial_parameters
 from nlsq.result import CurveFitResult, OptimizeWarning
 from nlsq.utils.logging import get_logger
+
+_HALTON_MAX_DIMS = len(_PRIMES)
 
 __all__ = ["MultiStartOrchestrator"]
 
@@ -466,6 +469,13 @@ class MultiStartOrchestrator:
             warnings.warn(
                 f"Sobol sampling supports at most 21 dimensions (got {n_params}); "
                 "falling back to Latin hypercube sampling.",
+                stacklevel=2,
+            )
+            sampler_name = "lhs"
+        elif sampler_name == "halton" and n_params > _HALTON_MAX_DIMS:
+            warnings.warn(
+                f"Halton sampling supports at most {_HALTON_MAX_DIMS} dimensions "
+                f"(got {n_params}); falling back to Latin hypercube sampling.",
                 stacklevel=2,
             )
             sampler_name = "lhs"

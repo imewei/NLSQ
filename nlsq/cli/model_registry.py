@@ -619,6 +619,10 @@ class ModelRegistry:
         # Bare ``estimate_p0`` / ``bounds`` belong to the FIRST model function
         # defined in the module (the template's convention); applying them to
         # any other model would silently use another model's p0/bounds.
+        if getattr(model, "__module__", None) != module.__name__:
+            # A re-exported function (`from nlsq.core.functions import gaussian`)
+            # is shared: setting attributes on it would leak into every user.
+            return model
         name = getattr(model, "__name__", "")
         fn_p0 = getattr(module, f"estimate_{name}_p0", None) or getattr(
             module, f"{name}_estimate_p0", None

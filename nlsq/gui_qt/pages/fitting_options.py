@@ -408,7 +408,8 @@ class FittingOptionsPage(QWidget):
         # the worker reading the same ndarray objects.
         self._fit_thread = QThread()
         self._fit_epoch = self._app_state.input_epoch
-        self._fit_worker = FitWorker(state.snapshot_for_fit())
+        self._fit_settings = state.snapshot_for_fit()
+        self._fit_worker = FitWorker(self._fit_settings)
         self._fit_worker.moveToThread(self._fit_thread)
 
         # Connect signals
@@ -465,7 +466,7 @@ class FittingOptionsPage(QWidget):
         self._status_label.setStyleSheet("color: #4CAF50;")
 
         # Update app state — navigation to Results page happens via signal
-        self._app_state.set_fit_result(result)
+        self._app_state.set_fit_result(result, getattr(self, "_fit_settings", None))
         self.fit_completed.emit(result)
 
     def _on_fit_error(self, message: str) -> None:

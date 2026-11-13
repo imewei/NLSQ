@@ -2698,7 +2698,17 @@ class LargeDatasetFitter:
         """
         accum_information = self._accum_information
         if accum_information is not None:
-            singular_values = np.linalg.svd(accum_information, compute_uv=False)
+            # Gate on the condition number after diagonal (Jacobi) scaling so
+            # the check does not depend on parameter units: diag(1, 1e14) is a
+            # perfectly well-posed information matrix for parameters of very
+            # different scale.
+            diag = np.diag(accum_information)
+            if np.all(np.isfinite(diag)) and np.all(diag > 0):
+                inv_d = 1.0 / np.sqrt(diag)
+            else:
+                inv_d = np.ones_like(diag)
+            scaled = (accum_information * inv_d[:, None]) * inv_d[None, :]
+            singular_values = np.linalg.svd(scaled, compute_uv=False)
             condition_number = (
                 float(singular_values[0] / singular_values[-1])
                 if singular_values[-1] > 0
@@ -2706,7 +2716,8 @@ class LargeDatasetFitter:
             )
             if condition_number <= 1e12:
                 try:
-                    pcov = np.linalg.inv(accum_information)
+                    with np.errstate(over="ignore", invalid="ignore"):
+                        pcov = (np.linalg.inv(scaled) * inv_d[:, None]) * inv_d[None, :]
                 except np.linalg.LinAlgError:
                     pcov = None
                 if pcov is not None:
@@ -2790,12 +2801,18 @@ class LargeDatasetFitter:
             )
 
         n_unusable = self._n_unusable_cov_chunks
+        # shortcut: a rank-deficient chunk is dropped (counted and warned) rather than
+        # combined through its pseudo-inverse: that is exact only for linear models and
+        # was measured to yield a wrong "successful" fit for a*b*x. The exact solver
+        # (the curve_fit_large default) combines chunks without this limit.
         if n_unusable:
             msg = (
                 f"{n_unusable} of {stats.n_chunks} chunks had unusable covariance "
                 "(not numerically positive definite (singular, indefinite or "
                 "non-finite), e.g. an unidentifiable parameter) and were excluded "
-                "from the precision-weighted combination."
+                "from the precision-weighted combination. If the chunks only "
+                "jointly identify every parameter, use the exact full-data "
+                "solver (Auto, the curve_fit_large default)."
             )
             if self._accum_information is None:
                 msg += (

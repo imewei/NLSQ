@@ -13,6 +13,7 @@ The adapter handles:
 - Basic data statistics computation
 """
 
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -126,7 +127,9 @@ def load_from_file(
             tmp_path = Path(tmp.name)
 
         try:
-            tmp_path.write_bytes(file_obj.read())
+            # Stream in chunks: the raw bytes are never held in memory twice.
+            with tmp_path.open("wb") as out:
+                shutil.copyfileobj(file_obj, out)
             # Reset file position for potential re-reads
             file_obj.seek(0)
             return loader.load(tmp_path, config)

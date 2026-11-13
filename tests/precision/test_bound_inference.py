@@ -116,6 +116,14 @@ class TestBoundsInference:
 class TestInferBoundsFunction:
     """Test standalone infer_bounds function."""
 
+    @pytest.mark.parametrize("rate", [1e-12, np.nextafter(0.0, 1.0), 0.0, -1e-12])
+    def test_small_rate_remains_within_inferred_bounds(self, rate):
+        p0 = np.array([1.0, rate])
+        lower, upper = infer_bounds([0.0, 1.0], [0.0, 1.0], p0)
+        assert lower[1] <= p0[1] <= upper[1]
+        if rate > 0:
+            assert lower[1] >= 0
+
     def test_convenience_function(self):
         """Test that convenience function works."""
         x = np.linspace(0, 10, 100)

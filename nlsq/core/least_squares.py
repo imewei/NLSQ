@@ -1168,7 +1168,7 @@ class LeastSquares:
         """
         # Check and fix Jacobian if stability is enabled
         if self.enable_stability and J0 is not None:
-            J0_fixed, issues = self.stability_guard.check_and_fix_jacobian(J0)
+            _, issues = self.stability_guard.check_and_fix_jacobian(J0)
             if issues:
                 # Only warn if there's an actual problem, not just SVD skipped for performance
                 has_problem = (
@@ -1188,7 +1188,12 @@ class LeastSquares:
                         "SVD skipped for large Jacobian (expected for datasets > 10M points)",
                         issues=issues,
                     )
-                J0 = J0_fixed
+                # Keep the true Jacobian: the guard's diagonal "regularization"
+                # perturbs data-row entries (not a Tikhonov term) and would leak
+                # into result.jac / optimality checks. Only non-finite entries
+                # are replaced, as the guard does.
+                if issues.get("has_nan") or issues.get("has_inf"):
+                    J0 = jnp.where(jnp.isfinite(J0), J0, 0.0)
 
         if J0 is not None and J0.shape != (m, n):
             raise ValueError(
@@ -2056,8 +2061,8 @@ class LeastSquares:
             # OPT-11: Inlined masked_residual_func for XLA fusion optimization
             # XLA can better fuse operations when they're in the same JIT scope
             func_eval = func(_safe_coords(xdata, data_mask), *args) - ydata
-            masked_residual = jnp.where(data_mask, func_eval, 0)
-            return atransform * masked_residual
+            # Mask after weighting: sigma==0/NaN on a masked row must not give inf*0=NaN
+            return jnp.where(data_mask, atransform * func_eval, 0)
 
         @jit
         def func_2d_transform(
@@ -2196,7 +2201,13 @@ class LeastSquares:
             transform, that is when only the diagonal elements of the inverse
             covariance matrix are used."""
             J = masked_jac(coords, args, data_mask)
-            return jnp.atleast_2d(atransform[:, jnp.newaxis] * jnp.asarray(J))
+            return jnp.atleast_2d(
+                jnp.where(
+                    data_mask[:, jnp.newaxis],
+                    atransform[:, jnp.newaxis] * jnp.asarray(J),
+                    0,
+                )
+            )
 
         @jit
         def jac_2d_transform(

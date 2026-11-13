@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 )
 from scipy import stats
 
-from nlsq.cli.result_exporter import NumpyJSONEncoder
+from nlsq.cli.result_exporter import NumpyJSONEncoder, _atomic_write
 from nlsq.gui_qt.adapters.fit_adapter import _resolve_workflow
 from nlsq.gui_qt.session_state import n_points
 
@@ -360,7 +360,7 @@ class ExportPage(QWidget):
             try:
                 code = self.generate_python_code()  # never reuse a stale preview
                 self._code_preview.setPlainText(code)
-                Path(path).write_text(code, encoding="utf-8")
+                _atomic_write(Path(path).resolve(), code)
                 self._status_label.setText(f"Exported to {path}")
                 self._status_label.setStyleSheet("color: #4CAF50;")
                 self.export_completed.emit(path)
@@ -415,6 +415,8 @@ class ExportPage(QWidget):
                 zf.writestr("results.json", self._generate_json())
                 zf.writestr("fit_script.py", self.generate_python_code(for_bundle=True))
                 zf.writestr("config.yaml", self._generate_config_yaml())
+            # shortcut: same stat-then-replace mode race as cli.result_exporter._atomic_write
+            # (uncoordinated second process); upgrade to a lock file if exports get sensitive.
             if destination.exists():
                 temporary.chmod(stat.S_IMODE(destination.stat().st_mode))
             temporary.replace(destination)
@@ -426,7 +428,7 @@ class ExportPage(QWidget):
             path: Output file path
         """
         json_str = self._generate_json()
-        Path(path).write_text(json_str, encoding="utf-8")
+        _atomic_write(Path(path).resolve(), json_str)
 
     def export_csv(self, path: str, include_data: bool = False) -> None:
         """Export parameters/data as CSV.
@@ -442,7 +444,7 @@ class ExportPage(QWidget):
             if state.xdata is None or state.ydata is None:
                 raise ValueError("No data available")
 
-            Path(path).write_text("\n".join(self._data_csv_lines()), encoding="utf-8")
+            _atomic_write(Path(path).resolve(), "\n".join(self._data_csv_lines()))
         else:
             # Export parameters only
             result = state.fit_result
@@ -475,7 +477,7 @@ class ExportPage(QWidget):
 
                 lines.append(f"{name},{value},{uncert},{ci_lower},{ci_upper}")
 
-            Path(path).write_text("\n".join(lines), encoding="utf-8")
+            _atomic_write(Path(path).resolve(), "\n".join(lines))
 
     def _data_csv_lines(self) -> list[str]:
         """CSV lines (header first) for data with fit and residuals.
@@ -560,7 +562,7 @@ class ExportPage(QWidget):
 
     def _script_fit_kwargs(self, workflow: str, multistart: bool = False) -> list[str]:
         """fit() keyword lines mirroring the settings the GUI fit used."""
-        state = self._app_state.state
+        state = self._app_state.fit_settings
         # Mirror the settings the GUI fit used so a rerun reproduces its result
         extra = [
             f"    gtol={state.gtol!r},",
@@ -601,7 +603,7 @@ class ExportPage(QWidget):
         Returns:
             Python code string
         """
-        state = self._app_state.state
+        state = self._app_state.fit_settings
 
         # repr() of nan/inf is a bare name: the script must define it
         nonfinite = any(
@@ -845,7 +847,9 @@ class ExportPage(QWidget):
                 if np.isfinite(val):  # undefined (NaN) is omitted, not nulled
                     data["statistics"][key] = val
             if state.sigma is not None:
-                data["statistics"]["absolute_sigma"] = bool(state.absolute_sigma)
+                data["statistics"]["absolute_sigma"] = bool(
+                    self._app_state.fit_settings.absolute_sigma
+                )
 
             # Add R², RMSE if data available
             if state.xdata is not None and state.ydata is not None and popt is not None:
@@ -876,7 +880,7 @@ class ExportPage(QWidget):
         """Generate YAML configuration (same schema ``load_yaml_config`` reads)."""
         from nlsq.gui_qt.adapters.config_adapter import export_yaml_config
 
-        return export_yaml_config(self._app_state.state)
+        return export_yaml_config(self._app_state.fit_settings)
 
     @staticmethod
     def _read_model_file(model_path: Any) -> str:

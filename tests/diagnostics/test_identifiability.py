@@ -213,7 +213,10 @@ class TestIdentifiabilityAnalyzer:
     def test_condition_number_matches_analytic_svd(
         self, analyzer: IdentifiabilityAnalyzer, ill_conditioned_jacobian: np.ndarray
     ) -> None:
-        """cond(FIM) must match cond(J)**2 to high precision.
+        """cond(FIM) must match cond(J_eq)**2 to high precision.
+
+        J_eq is the column-equilibrated Jacobian (unit-norm columns), the
+        scale-invariant quantity the analyzer reports.
 
         Regression test for forming FIM = J.T @ J explicitly and then SVD-ing
         that (squares J's condition number *before* analysis, losing many
@@ -223,7 +226,10 @@ class TestIdentifiabilityAnalyzer:
         identifiability analyzer must derive condition_number directly from
         SVD(jacobian), not from an explicitly-formed normal-equations matrix.
         """
-        singular_values = np.linalg.svd(ill_conditioned_jacobian, compute_uv=False)
+        j_eq = ill_conditioned_jacobian / np.linalg.norm(
+            ill_conditioned_jacobian, axis=0
+        )
+        singular_values = np.linalg.svd(j_eq, compute_uv=False)
         analytic_condition_number = (singular_values.max() / singular_values.min()) ** 2
 
         report = analyzer.analyze(ill_conditioned_jacobian)
@@ -582,9 +588,10 @@ class TestIdentifiabilityAnalyzerEdgeCases:
         J[:, 1] = np.random.randn(100) * 1.0
         J[:, 2] = np.random.randn(100) * 1e10
         report = analyzer.analyze(J)
-        # Should detect conditioning issues
+        # Independent columns are well-posed whatever their units.
         assert report.available is True
-        assert report.condition_number > 1e8
+        assert report.numerical_rank == 3
+        assert report.condition_number < 100
 
 
 def test_zero_column_jacobian_reports_infinite_condition_number():
@@ -602,7 +609,9 @@ def test_extreme_condition_number_still_produces_report():
     from nlsq.diagnostics.identifiability import IdentifiabilityAnalyzer
     from nlsq.diagnostics.types import DiagnosticsConfig
 
-    report = IdentifiabilityAnalyzer(DiagnosticsConfig()).analyze(np.diag([1e160, 1.0]))
+    # Identical columns at an extreme scale: cond(FIM) would overflow if squared.
+    J = np.array([[1e160, 1e160], [1.0, 1.0]])
+    report = IdentifiabilityAnalyzer(DiagnosticsConfig()).analyze(J)
     assert report.available
     assert report.numerical_rank == 1
     assert report.condition_number == float("inf")

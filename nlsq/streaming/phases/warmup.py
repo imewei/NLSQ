@@ -16,9 +16,11 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax  # type: ignore[import-not-found,import-untyped]
 
 from nlsq.streaming.telemetry import get_defense_telemetry
+from nlsq.streaming.validators import validate_group_variance_bounds
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -28,6 +30,59 @@ if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 _logger = get_logger("warmup_phase")
+
+
+def _validate_group_labels(x_data: Any, weights: Any) -> None:
+    """Host-side check that residual-weighting group labels are valid.
+
+    Column 0 of ``x_data`` must hold finite integers in ``[0, len(weights))``.
+    Inside the jitted loss, JAX would otherwise truncate non-integers and
+    silently clamp out-of-range labels, applying the wrong weight.
+    """
+    x = np.asarray(x_data)
+    if x.ndim < 2:
+        raise ValueError(
+            "enable_residual_weighting=True requires xdata shaped (N, k) with "
+            "k>=1 -- column 0 must hold each point's group index. Got xdata "
+            f"of shape {x.shape}. Disable residual weighting or provide "
+            "xdata as a 2D array."
+        )
+    labels = x[:, 0]
+    n_weights = int(np.shape(weights)[0])
+    ok = np.isfinite(labels) & (labels == np.floor(labels))
+    ok &= (labels >= 0) & (labels < n_weights)
+    if not bool(np.all(ok)):
+        bad = labels[~ok]
+        raise ValueError(
+            "enable_residual_weighting=True requires xdata column 0 to hold "
+            f"finite integer group labels in [0, {n_weights}) (one per "
+            f"residual weight); found {bad.size} invalid label(s), e.g. "
+            f"{bad[:3].tolist()}."
+        )
+
+
+def _chunked_loss(
+    loss_fn: Callable, params: Any, x_data: Any, y_data: Any, chunk_size: int
+) -> float:
+    """Evaluate a warmup loss in ``chunk_size``-row pieces.
+
+    Same value as ``loss_fn(params, x_data, y_data)`` but no call sees more than
+    ``chunk_size`` rows: the per-chunk numerator/denominator sums are combined
+    (``sum(w r^2) / sum(w)``, or the mean for unweighted) and the
+    parameter-only variance penalty is added once. Falls back to a single call
+    for a loss function without the ``base_sums``/``penalty`` parts.
+    """
+    n = len(x_data)
+    if n <= chunk_size or not hasattr(loss_fn, "base_sums"):
+        return float(loss_fn(params, x_data, y_data))
+    num = den = 0.0
+    for s in range(0, n, chunk_size):
+        a, b = loss_fn.base_sums(
+            params, x_data[s : s + chunk_size], y_data[s : s + chunk_size]
+        )
+        num += float(a)
+        den += float(b)
+    return num / den + float(loss_fn.penalty(params))
 
 
 def _create_lbfgs_optimizer(
@@ -202,6 +257,11 @@ class WarmupPhase:
 
         current_params = initial_params
 
+        if self.config.enable_residual_weighting and self._residual_weights is not None:
+            _validate_group_labels(x_data, self._residual_weights)
+
+        validate_group_variance_bounds(self.config, len(current_params))
+
         # Create loss function
         loss_fn = self._create_loss_fn()
 
@@ -212,7 +272,9 @@ class WarmupPhase:
         # =====================================================
         # LAYER 1: Warm Start Detection
         # =====================================================
-        initial_loss = float(loss_fn(current_params, x_data, y_data))
+        initial_loss = _chunked_loss(
+            loss_fn, current_params, x_data, y_data, self.config.chunk_size
+        )
         y_variance = float(jnp.var(y_data))
         relative_loss = initial_loss / max(
             y_variance, float(jnp.finfo(jnp.float64).tiny)
@@ -473,12 +535,12 @@ class WarmupPhase:
             n_groups = 0
             max_group_size = 0
 
-        @jax.jit
-        def loss_fn(
+        def base_sums(
             params: jnp.ndarray,
             x_batch: jnp.ndarray,
             y_batch: jnp.ndarray,
-        ) -> jnp.ndarray:
+        ) -> tuple[jnp.ndarray, jnp.ndarray]:
+            """(numerator, denominator) of the base loss; chunks add up."""
             predictions = normalized_model(x_batch, *params)
             residuals = y_batch - predictions
 
@@ -487,53 +549,72 @@ class WarmupPhase:
                 group_idx = x_batch[:, 0].astype(jnp.int32)
                 assert residual_weights is not None
                 weights = residual_weights[group_idx]
-                base_loss = jnp.sum(weights * residuals**2) / jnp.sum(weights)
-            else:
-                base_loss = jnp.mean(residuals**2)
+                return jnp.sum(weights * residuals**2), jnp.sum(weights)
+            return jnp.sum(residuals**2), jnp.asarray(
+                residuals.shape[0], residuals.dtype
+            )
+
+        def penalty(params: jnp.ndarray) -> jnp.ndarray:
+            """Variance regularization term (parameter-only; 0 if disabled)."""
+            if not enable_var_reg:
+                return jnp.zeros((), dtype=params.dtype)
 
             # Variance regularization via lax.fori_loop (fixed XLA trace
             # regardless of number of groups)
+            # dynamic_slice clamps its start index to keep a fixed-size
+            # window in bounds. For a group whose (start + max_group_size)
+            # overruns len(params) -- e.g. the trailing group when group
+            # sizes are unequal -- that silently shifts the window to
+            # include elements from the PREVIOUS group instead of raising.
+            # Pad params so every max_group_size window fits without ever
+            # needing to clamp; the mask below already ignores the padding.
+            physical_params = (
+                params if normalizer is None else normalizer.denormalize(params)
+            )
+            padded_params = jnp.concatenate(
+                [physical_params, jnp.zeros(max_group_size, dtype=params.dtype)],
+            )
+
+            def var_body(i, acc):
+                start = group_starts[i]
+                size = group_sizes[i]
+                # Extract with fixed max_group_size, mask to actual size
+                group_params = jax.lax.dynamic_slice(
+                    padded_params,
+                    (start,),
+                    (max_group_size,),
+                )
+                mask = jnp.arange(max_group_size) < size
+                # Masked variance: Var = E[x^2] - E[x]^2 over valid elements
+                n = jnp.maximum(size, 1)  # avoid division by zero
+                mean_val = jnp.sum(jnp.where(mask, group_params, 0.0)) / n
+                sq_diff = jnp.where(mask, (group_params - mean_val) ** 2, 0.0)
+                group_var = jnp.sum(sq_diff) / n
+                return acc + group_var
+
+            variance_penalty = jax.lax.fori_loop(
+                0,
+                n_groups,
+                var_body,
+                jnp.array(0.0),
+            )
+            return var_lambda * variance_penalty
+
+        @jax.jit
+        def loss_fn(
+            params: jnp.ndarray,
+            x_batch: jnp.ndarray,
+            y_batch: jnp.ndarray,
+        ) -> jnp.ndarray:
+            num, den = base_sums(params, x_batch, y_batch)
+            base_loss = num / den
             if enable_var_reg:
-                # dynamic_slice clamps its start index to keep a fixed-size
-                # window in bounds. For a group whose (start + max_group_size)
-                # overruns len(params) -- e.g. the trailing group when group
-                # sizes are unequal -- that silently shifts the window to
-                # include elements from the PREVIOUS group instead of raising.
-                # Pad params so every max_group_size window fits without ever
-                # needing to clamp; the mask below already ignores the padding.
-                physical_params = (
-                    params if normalizer is None else normalizer.denormalize(params)
-                )
-                padded_params = jnp.concatenate(
-                    [physical_params, jnp.zeros(max_group_size, dtype=params.dtype)],
-                )
-
-                def var_body(i, penalty):
-                    start = group_starts[i]
-                    size = group_sizes[i]
-                    # Extract with fixed max_group_size, mask to actual size
-                    group_params = jax.lax.dynamic_slice(
-                        padded_params,
-                        (start,),
-                        (max_group_size,),
-                    )
-                    mask = jnp.arange(max_group_size) < size
-                    # Masked variance: Var = E[x^2] - E[x]^2 over valid elements
-                    n = jnp.maximum(size, 1)  # avoid division by zero
-                    mean_val = jnp.sum(jnp.where(mask, group_params, 0.0)) / n
-                    sq_diff = jnp.where(mask, (group_params - mean_val) ** 2, 0.0)
-                    group_var = jnp.sum(sq_diff) / n
-                    return penalty + group_var
-
-                variance_penalty = jax.lax.fori_loop(
-                    0,
-                    n_groups,
-                    var_body,
-                    jnp.array(0.0),
-                )
-                return base_loss + var_lambda * variance_penalty
-
+                return base_loss + penalty(params)
             return base_loss
+
+        # Parts for chunked evaluation (see _chunked_loss).
+        loss_fn.base_sums = jax.jit(base_sums)  # type: ignore[attr-defined]
+        loss_fn.penalty = jax.jit(penalty)  # type: ignore[attr-defined]
 
         return loss_fn
 

@@ -654,16 +654,27 @@ def test_ill_conditioned_warns():
 
 def test_compute_covariance_contract():
     s2 = 2 * 0.4 / (10 - 2)
-    # a direction below p*eps*lambda_max is dropped: zero row and column
+    # The cutoff p*eps*lambda_max is applied after Jacobi equilibration, so it is
+    # pinned with unit-diagonal inputs [[1, c], [c, 1]] (eigenvalues 1 +- c).
+    # A direction below the cutoff (2 * 2.2e-16 * ~2 = 8.9e-16) is dropped:
+    # 2**-51 gives the pseudo-inverse of the surviving (1, 1)/sqrt(2) direction.
+    c = 1.0 - 2.0**-51
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
-        pc = lm.compute_covariance(np.diag([4.0, 1e-17]), 0.4, 10, 2, False)
-    np.testing.assert_array_equal(pc, np.diag([s2 / 4.0, 0.0]))
-    # just above the cutoff (4 * 2.2e-16 * 4 = 3.6e-15) it is kept
+        pc = lm.compute_covariance(np.array([[1.0, c], [c, 1.0]]), 0.4, 10, 2, False)
+    np.testing.assert_allclose(pc, np.full((2, 2), s2 / 4.0), rtol=1e-9)
+    # just above the cutoff (2**-49 = 1.8e-15) it is kept: the full inverse
+    c = 1.0 - 2.0**-49
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
-        pc = lm.compute_covariance(np.diag([4.0, 1e-13]), 0.4, 10, 2, True)
-    np.testing.assert_allclose(pc, np.diag([0.25, 1e13]), rtol=1e-12)
+        pc = lm.compute_covariance(np.array([[1.0, c], [c, 1.0]]), 0.4, 10, 2, True)
+    inv = np.array([[1.0, -c], [-c, 1.0]]) / (1.0 - c * c)
+    np.testing.assert_allclose(pc, inv, rtol=1e-6)
+    # parameter units do not matter: a 1e-17 diagonal entry is a unit choice, kept
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        pc = lm.compute_covariance(np.diag([4.0, 1e-17]), 0.4, 10, 2, True)
+    np.testing.assert_allclose(pc, np.diag([0.25, 1e17]), rtol=1e-12)
     assert pc.dtype == np.float64
     # no surviving direction / non-finite H: all-inf with OptimizeWarning
     overflow = np.diag([1e-310, 1e-310])  # finite H whose inverse overflows

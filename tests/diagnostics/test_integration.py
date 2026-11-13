@@ -193,8 +193,9 @@ class TestCurveFitDiagnosticsIntegration:
         x, y = ill_conditioned_data
         result = curve_fit(simple_model, x, y, p0=[2.0, 0.5], compute_diagnostics=True)
         ident = result.diagnostics.identifiability
-        # Should have high condition number
-        assert ident.condition_number > 1e4
+        # Scale-invariant conditioning: a and b are strongly correlated
+        assert ident.correlation_matrix is not None
+        assert abs(ident.correlation_matrix[0, 1]) > 0.8
 
     # Test correlation detection
     def test_correlated_parameters_detection(self) -> None:

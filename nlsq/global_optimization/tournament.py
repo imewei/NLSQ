@@ -232,6 +232,8 @@ class TournamentSelector:
         # Run elimination rounds
         for round_num in range(self.current_round, self.config.elimination_rounds):
             if self.n_survivors <= top_m:
+                if not np.any(self.evaluation_counts):
+                    self._evaluate_initial_round(data_batch_iterator, model)
                 self.logger.info(
                     f"Round {round_num}: Only {self.n_survivors} survivors, "
                     f"stopping early (need {top_m})",
@@ -507,23 +509,18 @@ class TournamentSelector:
         )[0]
 
         if len(valid_indices) == 0:
-            # Fall back to any surviving, evaluated candidate
-            valid_indices = np.where(self.survival_mask & evaluated)[0]
-            if len(valid_indices) == 0:
-                # No survivors at all (every candidate produced a
-                # non-finite loss every round) -- raise rather than
-                # silently returning an arbitrary, unevaluated candidate
-                # as if selection had succeeded. The sole caller
-                # (AdaptiveHybridStreamingOptimizer._select_starting_point)
-                # wraps run_tournament() in try/except specifically to
-                # fall back to p0 on a genuine selection failure; a silent
-                # return here bypasses that intended fallback entirely.
+            if not any_evaluated and bool(np.any(self.survival_mask)):
+                msg = (
+                    "Tournament selection failed: no data batches were "
+                    "evaluated (the data batch iterator yielded nothing)."
+                )
+            else:
                 msg = (
                     "Tournament selection failed: no valid survivors "
                     "(every candidate produced a non-finite loss)."
                 )
-                self.logger.warning(msg)
-                raise RuntimeError(msg)
+            self.logger.warning(msg)
+            raise RuntimeError(msg)
 
         # Sort by (evaluation-aware) loss
         losses = effective_losses[valid_indices]

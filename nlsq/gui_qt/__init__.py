@@ -89,7 +89,7 @@ def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) ->
         if app is not None:
             # Try to save autosave before showing dialog
             try:
-                from nlsq.gui_qt.autosave import AUTOSAVE_FILE
+                from nlsq.gui_qt.autosave import AUTOSAVE_FILE, _write_autosave
 
                 # Write crash marker
                 crash_info = {
@@ -102,10 +102,7 @@ def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) ->
                 if AUTOSAVE_FILE.exists():
                     data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
                     data["crash_info"] = crash_info
-                    AUTOSAVE_FILE.write_text(
-                        json.dumps(data, indent=2),
-                        encoding="utf-8",
-                    )
+                    _write_autosave(data)
             except Exception:
                 pass
 

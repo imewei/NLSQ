@@ -405,6 +405,13 @@ class NLSQLogger:
         else:
             self.warning("Fit incomplete", **metrics)
 
+    def records_iterations(self) -> bool:
+        """True when per-iteration metrics are kept: PERFORMANCE level or
+        NLSQ_SAVE_ITERATIONS set."""
+        return self.logger.isEnabledFor(LogLevel.PERFORMANCE) or bool(
+            _save_iterations_setting()
+        )
+
     def optimization_step(
         self,
         iteration: int,
@@ -434,9 +441,7 @@ class NLSQLogger:
         # OPT-17: Guard to prevent unnecessary work when logging is disabled
         # This avoids building metrics dict and history append when not logging
         # NLSQ_SAVE_ITERATIONS opts into history even at the quiet default level.
-        if not (
-            self.logger.isEnabledFor(LogLevel.PERFORMANCE) or _save_iterations_setting()
-        ):
+        if not self.records_iterations():
             return
 
         metrics: dict[str, Any] = {
@@ -740,6 +745,8 @@ class NLSQLogger:
 # Module-level convenience functions
 _loggers: dict[str, NLSQLogger] = {}
 _loggers_lock = threading.Lock()
+# Level set by set_global_level(); loggers created later start at it.
+_global_level: int | LogLevel | None = None
 
 
 def get_logger(name: str, level: int | LogLevel | None = None) -> NLSQLogger:
@@ -770,7 +777,9 @@ def get_logger(name: str, level: int | LogLevel | None = None) -> NLSQLogger:
                 # Safety cap: evict all entries if an unexpectedly large number of
                 # distinct logger names accumulates (e.g. dynamic name generation).
                 _loggers.clear()
-            _loggers[name] = NLSQLogger(name, level)
+            _loggers[name] = NLSQLogger(
+                name, level if level is not None else _global_level
+            )
         return _loggers[name]
 
 
@@ -782,7 +791,9 @@ def set_global_level(level: int | LogLevel):
     level : int | LogLevel
         New logging level
     """
+    global _global_level  # noqa: PLW0603 - module-level default for new loggers
     with _loggers_lock:
+        _global_level = level
         loggers_snapshot = list(_loggers.values())
     for logger in loggers_snapshot:
         logger.logger.setLevel(level)

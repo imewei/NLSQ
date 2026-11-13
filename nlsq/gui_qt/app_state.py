@@ -47,6 +47,20 @@ class AppState(QObject):
         # Bumped whenever data or model change; a fit started under an older
         # epoch must not attach its result to the new inputs.
         self.input_epoch = 0
+        # Settings the displayed fit_result was computed with (see fit_settings)
+        self._fit_settings: SessionState | None = None
+
+    @property
+    def fit_settings(self) -> SessionState:
+        """Settings that produced the current fit result.
+
+        Exports must describe the fit whose popt/pcov are shown, not whatever
+        the options widgets say now. Falls back to live state when no snapshot
+        was recorded (result set directly, or no result yet).
+        """
+        if self._state.fit_result is not None and self._fit_settings is not None:
+            return self._fit_settings
+        return self._state
 
     @property
     def state(self) -> SessionState:
@@ -134,6 +148,7 @@ class AppState(QObject):
         """
         if self._state.fit_result is not None:
             self._state.fit_result = None
+            self._fit_settings = None
             self.fit_completed.emit(None)
 
     def set_fit_running(self, running: bool) -> None:
@@ -161,13 +176,17 @@ class AppState(QObject):
         self.fit_aborted.emit()
         self.page_access_changed.emit()
 
-    def set_fit_result(self, result: object) -> None:
+    def set_fit_result(
+        self, result: object, settings: SessionState | None = None
+    ) -> None:
         """Store fit result and emit signal.
 
         Args:
             result: The fit result object
+            settings: Snapshot of the settings the fit ran with (see fit_settings)
         """
         self._state.fit_result = result
+        self._fit_settings = settings
         self._state.fit_running = False
         self._state.fit_aborted = False
         self.fit_completed.emit(result)
@@ -195,6 +214,7 @@ class AppState(QObject):
         """Reset state to initial values."""
         had_fit_result = self._state.fit_result is not None
         self._state = SessionState()
+        self._fit_settings = None
         self.input_epoch += 1
         if had_fit_result:
             self.fit_completed.emit(None)

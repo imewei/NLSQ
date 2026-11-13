@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Literal
 
@@ -411,8 +412,14 @@ def auto_configure_cmaes_memory(
     popsize: int,
     available_memory_gb: float = 8.0,
     safety_factor: float = 0.7,
+    data_bytes: int | None = None,
 ) -> tuple[int | None, int | None]:
     """Auto-configure batch sizes to fit in available memory.
+
+    The resident data arrays (``data_bytes``) are subtracted from the budget first,
+    so a returned configuration whose ``estimate_cmaes_memory_gb`` is non-chunked
+    never exceeds ``available_memory_gb * safety_factor``. When data chunking is
+    chosen the arrays are counted twice (the padded chunk copy).
 
     Parameters
     ----------
@@ -424,12 +431,17 @@ def auto_configure_cmaes_memory(
         Available GPU/CPU memory in GB. Default: 8.0.
     safety_factor : float, optional
         Safety factor for memory allocation (0-1). Default: 0.7.
+    data_bytes : int | None, optional
+        Bytes held by xdata + ydata (+ sigma) in float64. Default: ``n_data * 16``
+        (xdata and ydata, as ``estimate_cmaes_memory_gb`` counts them).
 
     Returns
     -------
     tuple[int | None, int | None]
         (population_batch_size, data_chunk_size) configuration.
         None means no batching/chunking needed for that dimension.
+        If even the smallest configuration ``(1, 1024)`` exceeds the budget
+        a ``UserWarning`` is emitted and that configuration is returned.
 
     Examples
     --------
@@ -437,30 +449,26 @@ def auto_configure_cmaes_memory(
     (None, None)  # No batching needed
 
     >>> auto_configure_cmaes_memory(100_000_000, popsize=16, available_memory_gb=8.0)
-    (4, None)  # Population batching only
-
-    >>> auto_configure_cmaes_memory(100_000_000, popsize=16, available_memory_gb=1.0)
-    (1, 65536)  # Both population batching and data chunking
+    (1, None)  # 1.5 GiB of data leaves room for one full-length candidate only
     """
     target_memory_bytes = available_memory_gb * safety_factor * (1024**3)
     bytes_per_point_per_candidate = 8 * 3  # float64, 3 arrays
+    if data_bytes is None:
+        data_bytes = n_data * 16
 
-    # Try full data, full population first
-    full_memory = n_data * popsize * bytes_per_point_per_candidate
-    if full_memory <= target_memory_bytes:
+    # Try full data, full population first, then population batching (halving)
+    unchunked_budget = target_memory_bytes - data_bytes
+    if n_data * popsize * bytes_per_point_per_candidate <= unchunked_budget:
         return None, None  # No batching needed
-
-    # Try population batching only (halving until it fits)
     for pop_batch in [popsize // 2, popsize // 4, popsize // 8, 1]:
         if pop_batch < 1:
             continue
-        memory = n_data * pop_batch * bytes_per_point_per_candidate
-        if memory <= target_memory_bytes:
+        if n_data * pop_batch * bytes_per_point_per_candidate <= unchunked_budget:
             return pop_batch, None
 
-    # Need data chunking - calculate optimal chunk size
-    # With pop_batch=1, find largest chunk that fits
-    max_chunk = int(target_memory_bytes / bytes_per_point_per_candidate)
+    # Need data chunking: pop_batch=1, the padded chunk copy doubles the resident data
+    chunk_budget = target_memory_bytes - 2 * data_bytes
+    max_chunk = int(chunk_budget / bytes_per_point_per_candidate)
 
     # Use power-of-2 bucket sizes for JIT cache efficiency
     # These match CHUNK_BUCKETS from nlsq/streaming/large_dataset.py
@@ -472,4 +480,13 @@ def auto_configure_cmaes_memory(
         if bucket <= max_chunk:
             data_chunk = bucket
 
+    if max_chunk < data_chunk:
+        warnings.warn(
+            f"CMA-ES data ({data_bytes / 1024**3:.2f} GB, doubled when chunked) exceeds "
+            f"the {target_memory_bytes / 1024**3:.2f} GB memory budget; using the "
+            f"smallest configuration (population_batch_size=1, data_chunk_size="
+            f"{data_chunk}) which may still run out of memory",
+            UserWarning,
+            stacklevel=2,
+        )
     return 1, data_chunk

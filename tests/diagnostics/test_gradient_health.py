@@ -333,16 +333,15 @@ class TestExplodingGradientDetection:
     def test_exploding_gradient_detected(self) -> None:
         """Test that exploding gradients are detected.
 
-        A uniformly huge but finite, balanced gradient triggers neither
-        has_numerical_issues (no NaN/Inf) nor GRAD-002 (no cross-parameter
-        imbalance -- all components equal), so this requires a dedicated
-        absolute-magnitude check.
+        The check is relative: the norm must grow by more than
+        ``exploding_threshold`` times the initial norm. A constant huge
+        gradient is only a unit choice and is not flagged.
         """
         config = DiagnosticsConfig(exploding_threshold=1e8)
         monitor = GradientMonitor(config)
 
-        for _ in range(15):
-            gradient = np.array([1e12, 1e12, 1e12])
+        for i in range(15):
+            gradient = np.array([1.0, 1.0, 1.0]) * 10.0 ** (i)
             monitor.record_gradient(gradient, cost=100.0)
 
         report = monitor.get_report()

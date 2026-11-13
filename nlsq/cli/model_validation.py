@@ -307,6 +307,7 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         # the module root (not the imported symbol) was checked.
         "importlib",
         "builtins",
+        "antigravity",  # opens a web browser on import
         # Bytecode/function construction — bypasses exec/eval detection by
         # building and running arbitrary code objects directly
         "types",
@@ -1332,6 +1333,8 @@ def validate_model(
             violations=[f"Syntax error: {e}"],
         )
 
+    violations.extend(_find_protocol_hook_violations(tree))
+
     # Visit all nodes to find violations
     visitor = AllowlistVisitor() if strict else DangerousPatternVisitor()
     visitor.visit(tree)
@@ -1387,6 +1390,46 @@ def validate_path(path: Path, base_dir: Path | None = None) -> bool:
         return resolved_path.is_relative_to(resolved_base)
     except (ValueError, OSError):
         return False
+
+
+# Hooks that let a model fetch an attribute named by a runtime-built string
+# ("__glo" + "bals__"), which no literal check sees: a class-pattern
+# `case C(g)` reads the names in __match_args__ (reached through a
+# __subclasshook__ that makes any object an instance), and update_wrapper copies
+# the attributes named in `assigned`.
+_PROTOCOL_HOOK_NAMES: frozenset[str] = frozenset(
+    {
+        "__match_args__",
+        "__subclasshook__",
+        "__instancecheck__",
+        "__subclasscheck__",
+        "update_wrapper",
+    }
+)
+_PROTOCOL_HOOK_KEYWORDS: frozenset[str] = frozenset({"assigned", "updated"})
+
+
+def _find_protocol_hook_violations(tree: ast.AST) -> list[str]:
+    """Flag names and keywords that fetch attributes by runtime string."""
+    found: list[str] = []
+    for node in ast.walk(tree):
+        names: list[str] = []
+        if isinstance(node, ast.Name):
+            names.append(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.append(node.attr)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.append(node.name)
+        elif isinstance(node, ast.alias):
+            names.append(node.name.rsplit(".", 1)[-1])
+        elif isinstance(node, ast.keyword) and node.arg in _PROTOCOL_HOOK_KEYWORDS:
+            found.append(f"Dangerous keyword argument: {node.arg}=")
+        found.extend(
+            f"Dangerous attribute-by-name hook: {n}"
+            for n in names
+            if n in _PROTOCOL_HOOK_NAMES
+        )
+    return found
 
 
 class ResourceLimitError(Exception):
@@ -1617,11 +1660,16 @@ class AuditLogger:
         self.max_size_bytes = max_size_bytes
         self.retention_days = retention_days
 
-        # Ensure directory exists
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # Set up logging
-        self._setup_logger()
+        # Set up logging. An unwritable audit location (read-only HOME) must not
+        # stop every custom model from loading.
+        try:
+            self.log_file.parent.mkdir(parents=True, exist_ok=True)
+            self._setup_logger()
+        except OSError as e:
+            logger.warning("audit log disabled, cannot write %s: %s", self.log_file, e)
+            self._logger = logging.getLogger("nlsq.audit")
+            if not self._logger.handlers:
+                self._logger.addHandler(logging.NullHandler())
 
     def _setup_logger(self):
         """Set up the audit logger with rotation."""

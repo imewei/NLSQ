@@ -103,6 +103,7 @@ References
 
 from __future__ import annotations
 
+import functools
 import math
 import warnings
 from collections.abc import Callable
@@ -124,7 +125,7 @@ from nlsq.stability.svd_fallback import (
 )
 
 # Setup logging
-from nlsq.utils.logging import LogLevel, get_logger
+from nlsq.utils.logging import LogLevel, _save_iterations_setting, get_logger
 
 # Cache the performance log level for fast guard checks in hot loops
 PERFORMANCE_LEVEL = LogLevel.PERFORMANCE
@@ -390,6 +391,32 @@ def _read_attempt_scalars(vec: jnp.ndarray) -> np.ndarray:
     return np.asarray(jax.device_get(vec))
 
 
+def _saves_iteration_history(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Write this fit's iteration history when NLSQ_SAVE_ITERATIONS is set.
+
+    The logger is shared by every fit, so the history is cleared first: each
+    saved file holds one fit. Saving never masks the fit's own outcome.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        enabled = _save_iterations_setting() is not None
+        if enabled:
+            self.logger.optimization_history.clear()
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            if enabled:
+                try:
+                    self.logger.save_iteration_data()
+                except OSError as e:
+                    self.logger.warning(
+                        "Could not save iteration history", error=str(e)
+                    )
+
+    return wrapper
+
+
 class TrustRegionReflective(TrustRegionJITFunctions):
     """Trust Region Reflective algorithm for bounded least squares optimization.
 
@@ -475,6 +502,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             g_norm,
         )
 
+    @_saves_iteration_history
     def trf(
         self,
         fun: Callable[..., Any],
@@ -2011,7 +2039,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     break
 
                 # Log iteration details (call-site guard avoids kwargs construction)
-                if self.logger.logger.isEnabledFor(PERFORMANCE_LEVEL):
+                if self.logger.records_iterations():
                     self.logger.optimization_step(
                         iteration=iteration,
                         cost=cost,
@@ -2327,6 +2355,15 @@ class TrustRegionReflective(TrustRegionJITFunctions):
 
             if termination_status is not None or nfev >= max_nfev:
                 break
+
+            if self.logger.records_iterations():
+                self.logger.optimization_step(
+                    iteration=iteration,
+                    cost=cost,
+                    gradient_norm=g_norm,
+                    step_size=Delta if iteration > 0 else None,
+                    nfev=nfev,
+                )
 
             # Update v with scaling
             mask = dv != 0

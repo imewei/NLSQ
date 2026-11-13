@@ -193,7 +193,9 @@ def pcov_from_normal(
 ) -> tuple[np.ndarray, bool]:
     """Covariance from ``H = J^T J`` with the ``nlsq.curve_fit`` contract.
 
-    Pseudo-inverse over the eigen-directions with ``lambda_i > p*eps*lambda_max`` (dropped
+    Inverse over the eigen-directions of the Jacobi-equilibrated ``H`` (unit diagonal,
+    so independent of parameter units) when that matrix is full rank; otherwise the
+    pseudo-inverse of ``H`` itself over ``lambda_i > p*eps*lambda_max`` (dropped
     directions give zero rows and columns), scaled by ``2*cost/(n_eff-p)`` unless
     ``absolute_sigma``. All-``inf`` with an :class:`OptimizeWarning` if no direction
     survives, any value is non-finite, or ``n_eff <= p`` without ``absolute_sigma``.
@@ -206,8 +208,27 @@ def pcov_from_normal(
     if np.isfinite(H).all():
         s = _power_of_two_scale(H)
         Hs = H / s
-        w, V = np.linalg.eigh((Hs + Hs.T) / 2)  # ascending
-        keep = w > p * np.finfo(np.float64).eps * w[-1]
+        # Jacobi-equilibrate so the rank cutoff sees identifiability, not parameter units
+        # (columns of J in 1e9 units made well-determined directions look "dropped").
+        # Divide by d twice (not by outer(d, d): denormal-safe); skip when the diagonal
+        # is already within 1e8 (d within 1e4), keeping the cutoff exact for mild scales.
+        dg = np.diag(Hs)
+        d = np.sqrt(np.where(dg > 0, dg, 1.0))
+        if d.max() <= 1e4 * d.min():
+            d = np.ones_like(d)
+
+        def _eig(dvec):
+            Hn = (Hs / dvec[:, None]) / dvec[None, :]
+            w, V = np.linalg.eigh((Hn + Hn.T) / 2)  # ascending
+            return w, V, w > p * np.finfo(np.float64).eps * w[-1]
+
+        w, V, keep = _eig(d)
+        if not keep.all() and np.any(d != 1.0):
+            # Rank-deficient even after equilibration: a pseudo-inverse is not
+            # congruence-invariant (scaling changes its null space), so use the
+            # unscaled Moore-Penrose semantics.
+            d = np.ones_like(d)
+            w, V, keep = _eig(d)
         if keep.any():
             if cond_warn and normal_condition(H) > COND_WARN:
                 warnings.warn(
@@ -217,14 +238,20 @@ def pcov_from_normal(
                     UserWarning,
                     skip_file_prefixes=_NLSQ_DIR,
                 )
-            Vk = V[:, keep]
+            # pinv of H = D^-1 (pinv of Hn) D^-1
+            Vk = V[:, keep] / d[:, None]
             # overflow is caught below as all-inf + OptimizeWarning; silence numpy's own
             with np.errstate(over="ignore", invalid="ignore"):
-                cov = ((Vk / w[keep]) @ Vk.T) / s  # pinv(H) = pinv(H/s) / s
                 if absolute_sigma:
-                    pcov = cov
+                    pcov = ((Vk / w[keep]) @ Vk.T) / s
                 elif n > p:
-                    pcov = cov * (2.0 * cost / (n - p))
+                    if np.isfinite(cost) and cost >= 0:
+                        scaled = Vk * (np.sqrt(cost) * np.sqrt(2.0 / (n - p)))
+                        scaled = scaled / np.sqrt(w[keep]) / np.sqrt(s)
+                        pcov = scaled @ scaled.T
+                    else:
+                        cov = ((Vk / w[keep]) @ Vk.T) / s
+                        pcov = cov * (2.0 * cost / (n - p))
     if not np.isfinite(pcov).all():
         pcov = np.full((p, p), np.inf)
     fired = bool(np.isinf(pcov).any())

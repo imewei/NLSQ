@@ -294,7 +294,9 @@ class TestParametersAtBounds:
 
         J = np.random.randn(n_data, n_params)
         # Simulate parameter 0 hitting a bound (near-zero sensitivity)
-        J[:, 0] = J[:, 0] * 1e-10  # Nearly zero gradient
+        # Zero sensitivity (a merely small column is just a unit choice and is
+        # equilibrated away, so it is not an identifiability problem).
+        J[:, 0] = 0.0
 
         analyzer = IdentifiabilityAnalyzer(config=default_config)
         report = analyzer.analyze(J)

@@ -295,6 +295,18 @@ class TestChunkedFitCovarianceUsesAccumulatedInformation:
         assert not np.allclose(pcov, naive_inverse)
         assert np.all(np.isfinite(pcov))
 
+    def test_badly_scaled_but_well_posed_information_is_inverted(self):
+        """Condition is judged after diagonal scaling: parameters of very
+        different units (diag(1, 1e14)) must not trigger the history proxy,
+        which would report zero uncertainty for identical estimates."""
+        fitter = LargeDatasetFitter()
+        fitter._accum_information = np.diag([1.0, 1e14])
+        pcov = fitter._compute_covariance_from_history(
+            param_history=[np.zeros(2), np.zeros(2)],
+            current_params=np.zeros(2),
+        )
+        np.testing.assert_allclose(pcov, np.diag([1.0, 1e-14]), rtol=1e-12)
+
     def test_falls_back_to_proxy_when_no_accumulated_information(self):
         fitter = LargeDatasetFitter()
         fitter._accum_information = None

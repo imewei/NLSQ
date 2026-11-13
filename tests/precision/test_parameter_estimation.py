@@ -435,3 +435,15 @@ class TestIntegrationWithCurveFit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_estimate_initial_parameters_ignores_nonfinite_points():
+    import jax.numpy as jnp
+
+    from nlsq.precision.parameter_estimation import estimate_initial_parameters
+
+    x = np.linspace(0, 5, 50)
+    y = 3 * np.exp(-0.5 * x) + 1
+    y[10] = np.nan
+    p0 = estimate_initial_parameters(lambda x, a, b, c: a * jnp.exp(-b * x) + c, x, y)
+    assert np.all(np.isfinite(p0))
