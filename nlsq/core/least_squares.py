@@ -2056,8 +2056,8 @@ class LeastSquares:
             # OPT-11: Inlined masked_residual_func for XLA fusion optimization
             # XLA can better fuse operations when they're in the same JIT scope
             func_eval = func(_safe_coords(xdata, data_mask), *args) - ydata
-            masked_residual = jnp.where(data_mask, func_eval, 0)
-            return atransform * masked_residual
+            # Mask after weighting: sigma==0/NaN on a masked row must not give inf*0=NaN
+            return jnp.where(data_mask, atransform * func_eval, 0)
 
         @jit
         def func_2d_transform(
@@ -2196,7 +2196,13 @@ class LeastSquares:
             transform, that is when only the diagonal elements of the inverse
             covariance matrix are used."""
             J = masked_jac(coords, args, data_mask)
-            return jnp.atleast_2d(atransform[:, jnp.newaxis] * jnp.asarray(J))
+            return jnp.atleast_2d(
+                jnp.where(
+                    data_mask[:, jnp.newaxis],
+                    atransform[:, jnp.newaxis] * jnp.asarray(J),
+                    0,
+                )
+            )
 
         @jit
         def jac_2d_transform(

@@ -454,6 +454,7 @@ def _validate_and_sanitize_inputs(
     sigma: np.ndarray | None = None,
     *,
     ctx: PrepareContext,
+    data_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Validate and sanitize curve fit inputs if stability is enabled.
 
@@ -504,8 +505,16 @@ def _validate_and_sanitize_inputs(
     # an infinite weight (previously a misleading "Residuals are not finite").
     # Negative sigma is accepted as in SciPy; strict sigma > 0 is part of the
     # enable_stability validation below.
+    # Masked-out rows may legitimately hold bad sigma values (the residual/Jacobian
+    # wrappers zero them after weighting), so validate only the rows that are used.
+    sigma_chk, ydata_chk = sigma, ydata
+    if data_mask is not None and sigma is not None:
+        mask_arr = np.asarray(data_mask, dtype=bool)
+        sigma_arr = np.asarray(sigma)
+        if sigma_arr.ndim == 1 and sigma_arr.shape == mask_arr.shape == np.shape(ydata):
+            sigma_chk, ydata_chk = sigma_arr[mask_arr], np.asarray(ydata)[mask_arr]
     sigma_errors, _ = security_validator._validate_sigma(
-        sigma, ydata, check_finite, strict=False
+        sigma_chk, ydata_chk, check_finite, strict=False
     )
     if sigma_errors:
         error_msg = f"Input validation failed: {'; '.join(sigma_errors)}"
@@ -708,6 +717,7 @@ def _preprocess_input_data(
     sigma: np.ndarray | None = None,
     *,
     ctx: PrepareContext,
+    data_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, int, int, np.ndarray | None, np.ndarray | None]:
     """Preprocess input data.
 
@@ -764,6 +774,7 @@ def _preprocess_input_data(
         check_finite=effective_check_finite,
         sigma=sigma,
         ctx=ctx,
+        data_mask=data_mask,
     )
 
     # Step 7: Convert to arrays and validate finiteness
@@ -996,6 +1007,7 @@ def prepare_problem(
         bounds=(lb, ub),
         sigma=sigma,
         ctx=ctx,
+        data_mask=data_mask,
     )
 
     # A user-supplied data_mask is sized to the ORIGINAL data length; if
