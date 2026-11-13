@@ -562,7 +562,7 @@ class ExportPage(QWidget):
 
     def _script_fit_kwargs(self, workflow: str, multistart: bool = False) -> list[str]:
         """fit() keyword lines mirroring the settings the GUI fit used."""
-        state = self._app_state.state
+        state = self._app_state.fit_settings
         # Mirror the settings the GUI fit used so a rerun reproduces its result
         extra = [
             f"    gtol={state.gtol!r},",
@@ -603,7 +603,7 @@ class ExportPage(QWidget):
         Returns:
             Python code string
         """
-        state = self._app_state.state
+        state = self._app_state.fit_settings
 
         # repr() of nan/inf is a bare name: the script must define it
         nonfinite = any(
@@ -847,7 +847,9 @@ class ExportPage(QWidget):
                 if np.isfinite(val):  # undefined (NaN) is omitted, not nulled
                     data["statistics"][key] = val
             if state.sigma is not None:
-                data["statistics"]["absolute_sigma"] = bool(state.absolute_sigma)
+                data["statistics"]["absolute_sigma"] = bool(
+                    self._app_state.fit_settings.absolute_sigma
+                )
 
             # Add R², RMSE if data available
             if state.xdata is not None and state.ydata is not None and popt is not None:
@@ -878,7 +880,7 @@ class ExportPage(QWidget):
         """Generate YAML configuration (same schema ``load_yaml_config`` reads)."""
         from nlsq.gui_qt.adapters.config_adapter import export_yaml_config
 
-        return export_yaml_config(self._app_state.state)
+        return export_yaml_config(self._app_state.fit_settings)
 
     @staticmethod
     def _read_model_file(model_path: Any) -> str:
