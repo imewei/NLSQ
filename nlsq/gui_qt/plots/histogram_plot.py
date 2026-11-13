@@ -30,6 +30,26 @@ if TYPE_CHECKING:
 __all__ = ["HistogramPlotWidget"]
 
 
+def _histogram(finite_data: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray]:
+    """``np.histogram``, falling back to one bar when no finite bin width exists.
+
+    A subnormal spread, or ``max - min`` overflowing to inf, makes numpy raise
+    "Too many bins for data range"; the Results page would crash on it.
+    """
+    try:
+        return np.histogram(finite_data, bins=bins)
+    except ValueError:
+        pass
+    try:
+        # max - min overflowed: bin at half scale (exact counts), edges back at full scale.
+        counts, edges = np.histogram(finite_data / 2, bins=bins)
+        return counts, edges * 2
+    except ValueError:
+        # Subnormal spread: every value is effectively one point.
+        centre = finite_data.min() / 2 + finite_data.max() / 2
+        return np.array([finite_data.size]), np.array([centre - 0.5, centre + 0.5])
+
+
 class HistogramPlotWidget(QWidget):
     """Widget for displaying histogram of residuals.
 
@@ -131,7 +151,7 @@ class HistogramPlotWidget(QWidget):
             return
 
         # Compute histogram
-        counts, bin_edges = np.histogram(finite_data, bins=self._n_bins)
+        counts, bin_edges = _histogram(finite_data, self._n_bins)
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
         bin_width = bin_edges[1] - bin_edges[0]
 

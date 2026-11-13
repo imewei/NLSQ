@@ -372,7 +372,7 @@ class ResultsPage(QWidget):
             status_text += (
                 " — sigma treated as absolute (uncertainties not rescaled by "
                 "reduced chi-square)"
-                if state.absolute_sigma
+                if self._app_state.fit_settings.absolute_sigma
                 else " — sigma treated as relative (uncertainties rescaled by "
                 "reduced chi-square)"
             )
@@ -595,6 +595,8 @@ class ResultsPage(QWidget):
 
         if y_fit is None:
             # No valid model values: show the data only, no fake fit/residuals
+            # (clear first: set_data keeps the previous fit's curve and band)
+            self._fit_plot.clear()
             self._fit_plot.set_data(
                 np.arange(len(ydata)) if xdata.ndim == 2 else xdata, ydata
             )
@@ -615,7 +617,14 @@ class ResultsPage(QWidget):
 
         # Compute fitted curve on dense grid
         x_dense = _dense_grid(xdata)
-        y_dense = state.model_func(x_dense, *popt)
+        try:
+            y_dense = state.model_func(x_dense, *popt)
+        except Exception:
+            # e.g. a model tied to the data length: draw the curve through the
+            # data points instead of discarding the whole results page
+            logger.warning("Model evaluation on the dense grid failed", exc_info=True)
+            order = np.argsort(xdata)
+            x_dense, y_dense = xdata[order], y_fit[order]
 
         # Compute residuals
         residuals = ydata - y_fit
@@ -700,7 +709,7 @@ class ResultsPage(QWidget):
         # 1e-8 step gives J = 0 once |p| >~ 1e8).
         eps = float(np.sqrt(np.finfo(float).eps))
         # Ensure popt is a mutable numpy array (handle JAX arrays)
-        popt = np.array(popt)
+        popt = np.array(popt, dtype=float)
         n_params = len(popt)
         n_points = len(x)
 

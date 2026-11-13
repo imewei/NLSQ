@@ -166,11 +166,12 @@ def _set_abs_sigma(section: dict[str, Any], state: SessionState, where: str) -> 
 def _parse_flat_flags(fitting: dict[str, Any], state: SessionState) -> None:
     """CLI-schema flat ``fitting.absolute_sigma`` / ``check_finite`` (objective.* wins)."""
     _set_abs_sigma(fitting, state, "fitting")
-    if "check_finite" in fitting and not isinstance(fitting["check_finite"], bool):
-        # shortcut: validated only; SessionState has no check_finite field to store it in
-        raise ValueError(
-            f"fitting.check_finite must be true or false, got {fitting['check_finite']!r}"
-        )
+    if "check_finite" in fitting:
+        if not isinstance(fitting["check_finite"], bool):
+            raise ValueError(
+                f"fitting.check_finite must be true or false, got {fitting['check_finite']!r}"
+            )
+        state.check_finite = fitting["check_finite"]
 
 
 def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
