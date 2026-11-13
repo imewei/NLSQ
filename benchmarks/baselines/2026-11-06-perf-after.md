@@ -1,6 +1,6 @@
 # Performance results after the curve_fit small/large work, 2026-11-06
 
-Branch `perf/curve-fit-small-and-large` (HEAD `24f73ba8`) against `main` at `87d8912a`. Same machine as `2026-11-06-library-comparison-curve_fit-vs-large.md`
+Branch `perf/curve-fit-small-and-large` (HEAD `24f73ba8`) against `main` at `87d8912a`. Same machine as the 2026-11-06 library comparison (removed from `baselines/`, see git history)
 (i9-13900H, RTX 4090 Laptop 16 GB, jax[cuda13] 0.12.0.1, CPU governor `powersave`). Raw harness JSON (local, gitignored):
 `benchmarks/results/2026-11-06-perf-after/`. Phase 0 measurements and the per-task A/B addenda are in `2026-11-06-perf-phase0.md`.
 

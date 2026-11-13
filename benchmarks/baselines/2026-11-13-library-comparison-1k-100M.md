@@ -1,10 +1,26 @@
 # Library comparison, 1k / 10k / 100k / 1M / 10M / 100M points (2026-11-13)
 
-Commit `343af740` (branch `fix/open-items-2-3-6`, PR #70). Raw data (local, gitignored): `benchmarks/results/2026-11-13/`. Same machine and harness as `2026-11-10-library-comparison-1k-100M.md` (i9-13900H, RTX 4090 Laptop 16 GB), project `.venv`, `--no-batch`, fresh process per case, warm median, end-to-end. CPU runs use `JAX_PLATFORMS=cpu`; governor `powersave`. Cells are `CPU / GPU`; SciPy and lmfit are CPU only. API split as before: `curve_fit` at 1k-1M, `curve_fit_large` at 1M-100M (default exact streaming).
+Commit `343af740` (branch `fix/open-items-2-3-6`, PR #70). Raw data (local, gitignored): `benchmarks/results/2026-11-13/`. Same machine and harness as the 2026-11-10 run (i9-13900H, RTX 4090 Laptop 16 GB), project `.venv`, `--no-batch`, fresh process per case, warm median, end-to-end. CPU runs use `JAX_PLATFORMS=cpu`; governor `powersave`. Cells are `CPU / GPU`; SciPy and lmfit are CPU only. API split as before: `curve_fit` at 1k-1M, `curve_fit_large` at 1M-100M (default exact streaming).
 
 **Machine state: not quiet.** Load average was 9.9 / 8.3 / 7.5 at the start and 31 / 22 / 15 at the end. Right after the run, `ps` showed six Julia processes (not from this run) at 90-210% CPU each; what loaded the host earlier in the run was not identified. Host-driven loops (NLSQ) are sensitive to this, GPU-resident single-program libraries (JAXopt GPU, Optimistix GPU) much less.
 
-Invocations: identical to `2026-11-10-library-comparison-1k-100M.md` (nine runs, `--out benchmarks/results/2026-11-13/<name>`).
+Invocations (one `--out` each):
+
+```bash
+R() { .venv/bin/python -m benchmarks.compare.run_library_comparison --no-batch --out benchmarks/results/2026-11-13/$1 "${@:2}"; }
+R gpu-small    --sizes 1000 10000 100000 1000000 --libraries nlsq jaxopt optimistix --repeats 7
+R gpu-1M-large --sizes 1000000   --libraries nlsq_large --repeats 7
+R gpu-10M      --sizes 10000000  --libraries nlsq_large jaxopt optimistix --repeats 3
+R gpu-100M     --sizes 100000000 --libraries nlsq_large jaxopt optimistix --repeats 3
+export JAX_PLATFORMS=cpu
+R cpu-small    --sizes 1000 10000 100000 1000000 --libraries nlsq scipy lmfit jaxopt optimistix --repeats 7
+R cpu-1M-large --sizes 1000000   --libraries nlsq_large --repeats 7
+R cpu-10M      --sizes 10000000  --libraries nlsq_large scipy lmfit jaxopt optimistix --repeats 3
+R cpu-100M-jax --sizes 100000000 --libraries nlsq_large jaxopt optimistix --repeats 2
+R cpu-100M-scipy-lmfit --sizes 100000000 --libraries scipy lmfit --repeats 1
+```
+
+Repeats: 7 warm at 1k-1M, 3 at 10M, 100M: 3 (GPU), 2 (JAX-based CPU), 1 (SciPy, lmfit).
 
 | Case | SciPy | lmfit | NLSQ curve_fit (CPU / GPU) | NLSQ curve_fit_large (CPU / GPU) | JAXopt (CPU / GPU) | Optimistix (CPU / GPU) |
 |---|---|---|---|---|---|---|

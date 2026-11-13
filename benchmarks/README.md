@@ -151,11 +151,9 @@ worker process after a trivial backend warm-up, so "cold" is the first call
 the cost is recomputed from the returned parameters, and a library is ranked only
 if that cost matches the best in the case (a fast early stop is listed as
 `did_not_reach_optimum`, not ranked). The raw JSON lands in the git-ignored
-`benchmarks/results/`; the rendered report is committed under `baselines/`
-(`2026-10-30-library-comparison.md`; `…-before-overhead.md` is the run from before the
-small-fit overhead work, kept for the before/after comparison). The CPU and GPU runs
-from 1k to 100M points are `2026-10-31-library-comparison-cpu-gpu-100M.md` and, with
-`exact_streaming`, `2026-11-01-library-comparison-1k-1M-10M-100M.md`. Timings on the
+`benchmarks/results/`; only the newest rendered report is kept under `baselines/`
+(currently `2026-11-13-library-comparison-1k-100M.md`: 1k to 100M points, CPU and GPU, with
+the exact invocations; earlier reports are in git history). Timings on the
 development laptop drift by up to about 50% between sessions.
 
 ## Baselines
