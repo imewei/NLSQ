@@ -1055,3 +1055,16 @@ class TestMethodLM:
                 bounds=([-3.0, -3.0], [3.0, 3.0]),
                 method="lm",
             )
+
+
+@pytest.mark.parametrize("enable_stability", [True, False])
+def test_result_jac_is_true_jacobian_for_rank_deficient_problem(enable_stability):
+    """Stability regularization must not leak into the returned Jacobian."""
+    x = jnp.linspace(1.0, 5.0, 20)
+    y = 2.0 * x
+    res = LeastSquares(enable_stability=enable_stability).least_squares(
+        lambda p: p[0] * x + p[1] * x - y, [1.0, 1.0], max_nfev=1
+    )
+    true_jac = np.stack([np.asarray(x), np.asarray(x)], axis=1)
+    assert np.linalg.matrix_rank(np.asarray(res.jac)) == 1
+    assert_allclose(np.asarray(res.jac), true_jac, rtol=1e-12)
