@@ -82,7 +82,9 @@ Environment Variables
      - Directory for saved optimization iteration history; setting it (any
        value other than empty, ``0``, ``false``, ``no`` or ``off``, which
        disable saving) also records per-iteration metrics at the default
-       log level. A flag value
+       log level (bounded and unbounded fits). Each fit writes its own
+       ``optimization_history_*.npz`` (``iter``, ``cost`` and the other recorded
+       metrics). A flag value
        (``1``/``true``/``yes``) saves into ``NLSQ_LOG_DIR`` (default: current
        directory) instead of a directory of that name
      - unset
