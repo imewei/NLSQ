@@ -19,6 +19,7 @@ import jax.numpy as jnp
 
 from nlsq.streaming.large_dataset import get_bucket_size
 from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
+from nlsq.streaming.validators import validate_group_variance_bounds
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -227,6 +228,7 @@ class GaussNewtonPhase:
 
         x_data, y_data = data_source
         n_params = len(current_params)
+        validate_group_variance_bounds(self.config, n_params)
         chunk_size = self.config.chunk_size
         n_points = len(x_data)
 
@@ -291,13 +293,12 @@ class GaussNewtonPhase:
         new_cost = float(
             final_residual_sum_sq,
         )  # guard: used after loop; set to initial cost
-        initial_cost = (
-            new_cost  # true pre-loop SSR, for the rejected-first-step fallback below
-        )
         # Seed best from the starting point (same cost as the trial costs,
         # incl. any group-variance term) so an all-rejected run returns it
         # rather than a rejected trial.
         best_cost = self._compute_cost(current_params, x_data, y_data)
+        # Same objective as the trial costs, for the rejected-first-step fallback.
+        initial_cost = best_cost
         self._track_best(best_tracker, current_params, best_cost)
 
         # Gauss-Newton loop

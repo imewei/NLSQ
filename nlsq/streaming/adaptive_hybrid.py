@@ -49,12 +49,17 @@ from nlsq.precision.parameter_normalizer import (
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
-from nlsq.streaming.phases.warmup import _clip_update_norm, _create_lbfgs_optimizer
+from nlsq.streaming.phases.warmup import (
+    _clip_update_norm,
+    _create_lbfgs_optimizer,
+    _validate_group_labels,
+)
 from nlsq.streaming.telemetry import (
     DefenseLayerTelemetry,
     get_defense_telemetry,
     reset_defense_telemetry,
 )
+from nlsq.streaming.validators import validate_group_variance_bounds
 from nlsq.utils.bounds_sampling import sample_in_bounds
 from nlsq.utils.logging import get_logger
 
@@ -2075,6 +2080,14 @@ class AdaptiveHybridStreamingOptimizer:
         else:
             current_params = self.normalized_params
 
+        validate_group_variance_bounds(self.config, len(current_params))
+
+        if (
+            self.config.enable_residual_weighting
+            and self._residual_weights_jax is not None
+        ):
+            _validate_group_labels(x_data, self._residual_weights_jax)
+
         # Create loss function FIRST (needed for warm start detection)
         loss_fn = self._create_warmup_loss_fn()
 
@@ -3357,6 +3370,7 @@ class AdaptiveHybridStreamingOptimizer:
         - Maximum iterations reached
         """
         current_params = initial_params
+        validate_group_variance_bounds(self.config, len(current_params))
         trust_radius = self.config.trust_region_initial
 
         # Track best parameters. best_cost is seeded with the actual initial

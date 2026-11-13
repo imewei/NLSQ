@@ -16,9 +16,11 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax  # type: ignore[import-not-found,import-untyped]
 
 from nlsq.streaming.telemetry import get_defense_telemetry
+from nlsq.streaming.validators import validate_group_variance_bounds
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -28,6 +30,35 @@ if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 _logger = get_logger("warmup_phase")
+
+
+def _validate_group_labels(x_data: Any, weights: Any) -> None:
+    """Host-side check that residual-weighting group labels are valid.
+
+    Column 0 of ``x_data`` must hold finite integers in ``[0, len(weights))``.
+    Inside the jitted loss, JAX would otherwise truncate non-integers and
+    silently clamp out-of-range labels, applying the wrong weight.
+    """
+    x = np.asarray(x_data)
+    if x.ndim < 2:
+        raise ValueError(
+            "enable_residual_weighting=True requires xdata shaped (N, k) with "
+            "k>=1 -- column 0 must hold each point's group index. Got xdata "
+            f"of shape {x.shape}. Disable residual weighting or provide "
+            "xdata as a 2D array."
+        )
+    labels = x[:, 0]
+    n_weights = int(np.shape(weights)[0])
+    ok = np.isfinite(labels) & (labels == np.floor(labels))
+    ok &= (labels >= 0) & (labels < n_weights)
+    if not bool(np.all(ok)):
+        bad = labels[~ok]
+        raise ValueError(
+            "enable_residual_weighting=True requires xdata column 0 to hold "
+            f"finite integer group labels in [0, {n_weights}) (one per "
+            f"residual weight); found {bad.size} invalid label(s), e.g. "
+            f"{bad[:3].tolist()}."
+        )
 
 
 def _create_lbfgs_optimizer(
@@ -201,6 +232,11 @@ class WarmupPhase:
         y_data = jnp.asarray(y_data, dtype=jnp.float64)
 
         current_params = initial_params
+
+        if self.config.enable_residual_weighting and self._residual_weights is not None:
+            _validate_group_labels(x_data, self._residual_weights)
+
+        validate_group_variance_bounds(self.config, len(current_params))
 
         # Create loss function
         loss_fn = self._create_loss_fn()

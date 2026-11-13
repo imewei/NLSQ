@@ -425,6 +425,27 @@ def validate_group_variance_config(
             )
 
 
+def validate_group_variance_bounds(config: Any, n_params: int) -> None:
+    """Reject group-variance ranges that extend past the parameter vector.
+
+    Phase 1 (padded/masked) and Phase 2 (slice) would otherwise compute
+    different penalties for an out-of-range group without any error.
+
+    Raises
+    ------
+    ValueError
+        If any ``(start, end)`` has ``end > n_params``.
+    """
+    if not config.enable_group_variance_regularization:
+        return
+    for idx, (_start, end) in enumerate(config.group_variance_indices or ()):
+        if end > n_params:
+            raise ValueError(
+                f"group_variance_indices[{idx}] end ({end}) exceeds the number "
+                f"of parameters ({n_params})",
+            )
+
+
 def validate_streaming_config(
     chunk_size: int,
     checkpoint_frequency: int,
