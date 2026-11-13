@@ -490,37 +490,40 @@ def test_exact_ill_conditioned_warning_threshold():
     np.testing.assert_allclose(pcov, np.diag([1.0, 1.1e4**2]), rtol=RTOL)
 
 
-def _exact_last_pcov(lam, p=2, n=N):
-    """pcov[p-1, p-1] (absolute_sigma) of H = diag(1, ..., 1, lam): 1/lam if kept, else 0.
+def _exact_pcov00(k, p=2, n=N):
+    """pcov[0, 0] (absolute_sigma) of the unit-diagonal H = [[1, c], [c, 1]] (+ I for p > 2).
 
-    lam <= 1e-8 makes sqrt(cond) > 1e4, so exactly one UserWarning is expected
-    either way (kept or dropped); anything else is a behavior change.
+    ``c = 1 - 2**-k`` makes the small eigenvalue exactly ``2**-k`` and the largest ~2, so
+    the equilibrated cutoff is ``p*eps*2``. Unit diagonal: Jacobi equilibration is the
+    identity, so this pins the cutoff in the equilibrated space. Kept: pcov[0, 0] =
+    1/(1-c^2) ~ 2**(k-1); dropped: ~0.25. sqrt(cond) > 1e4 either way, so exactly one
+    UserWarning is expected.
     """
-    H = np.diag([1.0] * (p - 1) + [lam])
+    c = 1.0 - 2.0**-k
+    H = np.eye(p)
+    H[0, 1] = H[1, 0] = c
     pcov, caught = _record(compute_covariance, H, 1.0, n, p, True)
     _assert_single(caught, UserWarning)
-    return pcov[p - 1, p - 1]
+    return pcov[0, 0]
 
 
 def test_exact_rank_cutoff_is_p_eps_lambda_max():
-    """Keep eigen-directions with lambda > p*eps*lambda_max (``pcov_from_normal``).
+    """Keep eigen-directions with lambda > p*eps*lambda_max of the equilibrated H.
 
-    p=2: p*eps = 4.44e-16. lambda=6e-16 is kept, 3e-16 dropped. A cutoff of eps alone
-    (2.2e-16) would keep 3e-16; one of n*eps (n=12, 2.66e-15) would drop 1e-15, which
-    production keeps.
+    p=2, lambda_max~2: cutoff 8.9e-16. lambda=2**-49 (1.8e-15) is kept, 2**-51 (4.4e-16)
+    dropped. A cutoff of eps alone (4.4e-16) would keep 2**-51; one of n*eps (n=12,
+    5.3e-15) would drop 2**-49, which production keeps.
     """
-    np.testing.assert_allclose(_exact_last_pcov(6e-16), 1 / 6e-16, rtol=RTOL)
-    assert _exact_last_pcov(3e-16) == 0.0
-    np.testing.assert_allclose(
-        _exact_last_pcov(1e-15), 1 / 1e-15, rtol=RTOL
-    )  # kept: an n*eps cutoff would drop it
+    np.testing.assert_allclose(_exact_pcov00(49), 2.0**48 / (1 - 2.0**-50), rtol=RTOL)
+    assert _exact_pcov00(51) == pytest.approx(0.25, rel=1e-6)
 
 
 def test_exact_rank_cutoff_scales_with_p():
-    """p=3 moves the cutoff to 6.66e-16: 5.5e-16 is dropped here but kept at p=2."""
-    assert _exact_last_pcov(5.5e-16, p=3) == 0.0
-    np.testing.assert_allclose(_exact_last_pcov(5.5e-16, p=2), 1 / 5.5e-16, rtol=RTOL)
-    np.testing.assert_allclose(_exact_last_pcov(7.5e-16, p=3), 1 / 7.5e-16, rtol=RTOL)
+    """p=3 moves the cutoff to 1.33e-15: 2**-50 (8.9e-16) is dropped here, 2**-49 kept."""
+    assert _exact_pcov00(50, p=3) == pytest.approx(0.25, rel=1e-6)
+    np.testing.assert_allclose(
+        _exact_pcov00(49, p=3), 2.0**48 / (1 - 2.0**-50), rtol=RTOL
+    )
 
 
 def test_exact_fully_degenerate_contract(j_wc):
