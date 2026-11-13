@@ -745,15 +745,17 @@ def _unit_diag_info(cond):
 
 def test_gls_condition_number_gate_is_1e12_from_both_sides():
     """Scaled cond <= 1e12 inverts the information matrix; above it falls back to history."""
-    info = _unit_diag_info(5e11)
-    pcov, logged = _gls_from_info(info)
-    np.testing.assert_allclose(pcov, np.linalg.inv(info), rtol=RTOL)
-    assert logged == []
+    for cond in (5e11, 9e11):
+        info = _unit_diag_info(cond)
+        pcov, logged = _gls_from_info(info)
+        np.testing.assert_allclose(pcov, np.linalg.inv(info), rtol=RTOL)
+        assert logged == []
 
-    pcov, logged = _gls_from_info(_unit_diag_info(2e12))
-    _assert_golden(pcov, _HISTORY_PROXY)
-    assert len(logged) == 1
-    assert "condition number: " in logged[0]
+    for cond in (1.1e12, 2e12):
+        pcov, logged = _gls_from_info(_unit_diag_info(cond))
+        _assert_golden(pcov, _HISTORY_PROXY)
+        assert len(logged) == 1
+        assert f"condition number: {cond:.2e}" in logged[0]
 
 
 def test_gls_gate_ignores_parameter_units():

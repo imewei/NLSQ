@@ -1155,6 +1155,10 @@ class TestRankDeficientRotationInvariance:
         # null direction must be sloppy in both.
         assert 3 in m0.sloppy_indices
         assert 3 in m1.sloppy_indices
+        for m in (m0, m1):
+            stiff, sloppy = set(m.stiff_indices), set(m.sloppy_indices)
+            assert not stiff & sloppy
+            assert stiff | sloppy <= set(range(4))
 
     @pytest.mark.parametrize("nudge", [1 - 1e-12, 1.0, 1 + 1e-12])
     def test_sub_floor_eigenvalue_does_not_set_threshold(self, nudge):
