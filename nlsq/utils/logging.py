@@ -740,6 +740,8 @@ class NLSQLogger:
 # Module-level convenience functions
 _loggers: dict[str, NLSQLogger] = {}
 _loggers_lock = threading.Lock()
+# Level set by set_global_level(); loggers created later start at it.
+_global_level: int | LogLevel | None = None
 
 
 def get_logger(name: str, level: int | LogLevel | None = None) -> NLSQLogger:
@@ -770,7 +772,9 @@ def get_logger(name: str, level: int | LogLevel | None = None) -> NLSQLogger:
                 # Safety cap: evict all entries if an unexpectedly large number of
                 # distinct logger names accumulates (e.g. dynamic name generation).
                 _loggers.clear()
-            _loggers[name] = NLSQLogger(name, level)
+            _loggers[name] = NLSQLogger(
+                name, level if level is not None else _global_level
+            )
         return _loggers[name]
 
 
@@ -782,7 +786,9 @@ def set_global_level(level: int | LogLevel):
     level : int | LogLevel
         New logging level
     """
+    global _global_level  # noqa: PLW0603 - module-level default for new loggers
     with _loggers_lock:
+        _global_level = level
         loggers_snapshot = list(_loggers.values())
     for logger in loggers_snapshot:
         logger.logger.setLevel(level)
