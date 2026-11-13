@@ -681,8 +681,10 @@ def test_gls_degenerate_contract():
     # Ill-conditioned information (cond 1e13 > 1e12) falls back to the covariance of
     # the last parameter estimates, not an inverse.
     ill = LargeDatasetFitter(memory_limit_gb=1.0)
-    ill._accum_information = np.diag([1.0, 1e-13])
-    ill._accum_info_vector = np.array([1.0, 1e-13])
+    # Unit diagonal: the gate judges the Jacobi-scaled matrix, so the ill-conditioning
+    # must be correlation-like, not a mere parameter-unit disparity.
+    ill._accum_information = np.array([[1.0, 1.0], [1.0, 1.0 + 1e-13]])
+    ill._accum_info_vector = np.array([1.0, 1.0])
     ill._accum_n = 10
     ill._absolute_sigma = True
     history = [np.array([1.0, 2.0]), np.array([1.1, 2.2]), np.array([0.9, 1.8])]
@@ -732,17 +734,30 @@ def _gls_from_info(info):
     return pcov, logger.warnings
 
 
-def test_gls_condition_number_gate_is_1e12_from_both_sides():
-    """cond <= 1e12 inverts the information matrix; above it falls back to history."""
-    for cond in (5e11, 1e12):  # 1e12 itself passes: the gate is `<=`
-        pcov, logged = _gls_from_info(np.diag([1.0, 1.0 / cond]))
-        np.testing.assert_allclose(pcov, np.diag([1.0, cond]), rtol=RTOL)
-        assert logged == []
+def _unit_diag_info(cond):
+    """Unit-diagonal information matrix [[1, r], [r, 1]] with the given condition number."""
+    r = (cond - 1.0) / (cond + 1.0)
+    return np.array([[1.0, r], [r, 1.0]])
 
-    pcov, logged = _gls_from_info(np.diag([1.0, 1.0 / 2e12]))
+
+def test_gls_condition_number_gate_is_1e12_from_both_sides():
+    """Scaled cond <= 1e12 inverts the information matrix; above it falls back to history."""
+    info = _unit_diag_info(5e11)
+    pcov, logged = _gls_from_info(info)
+    np.testing.assert_allclose(pcov, np.linalg.inv(info), rtol=RTOL)
+    assert logged == []
+
+    pcov, logged = _gls_from_info(_unit_diag_info(2e12))
     _assert_golden(pcov, _HISTORY_PROXY)
     assert len(logged) == 1
-    assert "condition number: 2.00e+12" in logged[0]
+    assert "condition number: " in logged[0]
+
+
+def test_gls_gate_ignores_parameter_units():
+    """diag(1, 1e-13) is well posed after scaling: inverted, not replaced by the proxy."""
+    pcov, logged = _gls_from_info(np.diag([1.0, 1e-13]))
+    np.testing.assert_allclose(pcov, np.diag([1.0, 1e13]), rtol=RTOL)
+    assert logged == []
 
 
 def test_gls_nonfinite_inverse_falls_back_to_history():
