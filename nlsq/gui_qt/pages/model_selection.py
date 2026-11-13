@@ -324,6 +324,7 @@ class ModelSelectionPage(QWidget):
                 self._function_combo.setCurrentText(
                     self._current_config.get("function", "model")
                 )
+                self._function_combo.setEnabled(self._function_combo.count() > 0)
             self._param_list.setText("Recovered code: click Apply to load the model.")
 
     def _on_type_changed(self, type_id: int) -> None:
@@ -452,15 +453,17 @@ class ModelSelectionPage(QWidget):
         """
         # Update function combo
         funcs = self._code_editor.get_function_names()
-        self._function_combo.clear()
+        previous = self._function_combo.currentText()
+        with QSignalBlocker(self._function_combo):
+            self._function_combo.clear()
+            self._function_combo.addItems(funcs)
+            self._function_combo.setEnabled(bool(funcs))
+            if previous in funcs:
+                self._function_combo.setCurrentText(previous)
 
         if funcs:
-            self._function_combo.setEnabled(True)
-            for func in funcs:
-                self._function_combo.addItem(func)
-            self._on_function_selected(0)
+            self._on_function_selected(self._function_combo.currentIndex())
         else:
-            self._function_combo.setEnabled(False)
             self._current_model = None
             self._custom_error = None  # a stale rejection must not outlive its code
             self._equation_label.setText("")

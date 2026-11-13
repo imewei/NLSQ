@@ -420,11 +420,17 @@ class CodeEditorWidget(QWidget):
 
     def _connect_signals(self) -> None:
         """Connect internal signals."""
+        self._last_code = self._editor.toPlainText()
         self._editor.textChanged.connect(self._on_text_changed)
 
     def _on_text_changed(self) -> None:
         """Handle text changes."""
         code = self._editor.toPlainText()
+        # rehighlight() (theme change) fires textChanged without a text change;
+        # listeners must not re-parse or switch model type for it.
+        if code == self._last_code:
+            return
+        self._last_code = code
         self.code_changed.emit(code)
 
         # Validate syntax
