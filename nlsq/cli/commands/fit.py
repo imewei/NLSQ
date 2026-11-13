@@ -240,6 +240,9 @@ def run_fit(
         ):
             sources.add(Path(results_file).resolve())
         output_dir = Path(cfg_get(vis_config, "output_dir", "figures"))
+        # POSIX resolve() raises on NUL; Windows does not, so reject it here
+        if "\x00" in str(output_dir):
+            raise CLIError("Visualization output_dir contains a NUL character")
         prefix = cfg_get(vis_config, "filename_prefix", "fit")
         suffixes = ["combined"]
         hist = vis_config.get("histogram")  # may be a bare bool (`histogram: true`)

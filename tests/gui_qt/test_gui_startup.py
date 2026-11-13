@@ -146,6 +146,9 @@ class TestImportGuards:
             text=True,
             timeout=30,
             check=False,
+            # Without a QGuiApplication the GL decision is deferred (not
+            # final) unless the platform env var already rules GL out.
+            env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
         )
         assert result.returncode == 0, (
             f"pyqtgraph not eagerly configured on import: {result.stderr}"

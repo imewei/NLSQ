@@ -1,6 +1,7 @@
 import logging
 import os
 import stat
+import sys
 
 import pytest
 import yaml
@@ -30,6 +31,7 @@ def test_preflight_leaves_invalid_utf8_for_workflow_to_report(tmp_path):
     _warn_output_collisions([str(workflow)], logging.getLogger(__name__))
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
 def test_atomic_write_never_exposes_existing_private_content(tmp_path, monkeypatch):
     target = tmp_path / "private.json"
     target.write_text("old")
