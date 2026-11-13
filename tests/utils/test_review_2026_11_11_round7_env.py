@@ -1,5 +1,7 @@
 """Round-7 review fixes: consistent boolean env parsing in nlsq.config."""
 
+from pathlib import Path
+
 import pytest
 
 from nlsq import config as cfg
@@ -46,8 +48,9 @@ def test_empty_nlsq_cache_dir_means_unset(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     fake = _FakeJaxConfig()
     cfg.JAXConfig._configure_persistent_cache(object.__new__(cfg.JAXConfig), fake)
-    expected = str(tmp_path / ".cache" / "nlsq" / "jax_cache")
-    assert fake.updates.get("jax_compilation_cache_dir") == expected
+    expected = tmp_path / ".cache" / "nlsq" / "jax_cache"
+    # Path compare: expanduser("~/.cache/...") keeps "/" separators on Windows.
+    assert Path(fake.updates["jax_compilation_cache_dir"]) == expected
 
 
 def test_force_cpu_true(monkeypatch):
