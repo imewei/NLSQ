@@ -116,6 +116,7 @@ class UnifiedCache:
 
         # Per-instance lock for thread-safe cache operations
         self._lock = threading.Lock()
+        self._generation = 0
 
     @staticmethod
     def _identity_tag(func: Callable) -> str:
@@ -329,6 +330,7 @@ class UnifiedCache:
             if self.enable_stats:
                 self._stats["misses"] += 1
                 self._stats["compilations"] += 1
+            generation = self._generation
 
         # Compile outside lock (expensive, don't serialize)
         logger.debug(f"Cache miss for key {cache_key[:8]}..., compiling")
@@ -350,6 +352,8 @@ class UnifiedCache:
 
         # Store under lock (re-check to avoid duplicate compilation)
         with self._lock:
+            if generation != self._generation:
+                return compiled_func
             # Another thread may have stored while we compiled
             if cache_key in self._cache:
                 # Use the already-stored version, discard ours
@@ -408,6 +412,7 @@ class UnifiedCache:
     def clear(self):
         """Clear all cached compilations and reset statistics."""
         with self._lock:
+            self._generation += 1
             self._cache.clear()
             self._compile_times.clear()
 

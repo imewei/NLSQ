@@ -1,5 +1,9 @@
 """Outstanding allocations must retain independent storage."""
 
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 import numpy as np
 
 from nlsq.caching.memory_manager import MemoryManager
@@ -25,3 +29,21 @@ def test_pooled_array_is_not_handed_out_twice():
     b = manager.allocate_array((4,))  # pool hit: b is a
     c = manager.allocate_array((4,))  # must be fresh while b is checked out
     assert not np.shares_memory(b, c)
+
+
+def test_concurrent_pool_checkouts_do_not_raise_or_share_arrays():
+    barrier = Barrier(2)
+
+    class SynchronizedPool(OrderedDict):
+        def __contains__(self, key):
+            found = super().__contains__(key)
+            barrier.wait(timeout=5)
+            return found
+
+    manager = MemoryManager()
+    manager.memory_pool = SynchronizedPool()
+    manager.free_array(np.ones(4))
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(manager.allocate_array, (4,)) for _ in range(2)]
+        a, b = (future.result(timeout=10) for future in futures)
+    assert not np.shares_memory(a, b)

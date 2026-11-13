@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import jax.numpy as jnp
 import pytest
@@ -63,3 +64,36 @@ def test_unified_cache_concurrent_get_or_compile() -> None:
     assert errors == [], f"Errors during concurrent access: {errors}"
     stats = cache.get_stats()
     assert stats["compilations"] + stats["hits"] == 20
+
+
+@pytest.mark.serial
+def test_clear_during_compile_does_not_restore_old_entry(monkeypatch):
+    """A compilation started before clear must not repopulate the cache."""
+    import nlsq.caching.unified_cache as mod
+
+    cache = mod.UnifiedCache()
+    started = threading.Event()
+    resume = threading.Event()
+    original_jit = mod.jax.jit
+
+    def blocked_jit(*args, **kwargs):
+        started.set()
+        if not resume.wait(timeout=10):
+            raise TimeoutError("test did not resume compilation")
+        return original_jit(*args, **kwargs)
+
+    monkeypatch.setattr(mod.jax, "jit", blocked_jit)
+
+    def f(x):
+        return x + 1
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(cache.get_or_compile, f, (1,), {})
+        try:
+            assert started.wait(timeout=10)
+            cache.clear()
+        finally:
+            resume.set()
+        assert future.result(timeout=10)(1) == 2
+
+    assert cache.get_stats()["cache_size"] == 0
