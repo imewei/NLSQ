@@ -73,6 +73,23 @@ from collections.abc import Callable
 import numpy as np
 
 
+def _finite_points(xdata, ydata):
+    """Drop points with a non-finite x or y so NaN cannot leak into p0."""
+    xdata = np.asarray(xdata)
+    ydata = np.asarray(ydata)
+    if xdata.shape[-1:] != ydata.shape[-1:]:
+        return xdata, ydata
+    try:
+        mask = np.isfinite(ydata) & (
+            np.isfinite(xdata) if xdata.ndim == 1 else np.isfinite(xdata).all(axis=0)
+        )
+    except (TypeError, ValueError):
+        return xdata, ydata
+    if mask.all() or not mask.any() or ydata.ndim != 1:
+        return xdata, ydata
+    return (xdata[mask] if xdata.ndim == 1 else xdata[..., mask]), ydata[mask]
+
+
 def estimate_initial_parameters(
     f: Callable,
     xdata: np.ndarray,
@@ -168,8 +185,7 @@ def estimate_initial_parameters(
             pass  # Fall back to generic estimation
 
     # Convert to numpy arrays
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    xdata, ydata = _finite_points(xdata, ydata)
 
     # Get number of parameters from function signature
     try:
@@ -437,6 +453,7 @@ def estimate_p0_for_pattern(
     detect_function_pattern : Detect pattern from data
     estimate_initial_parameters : Main parameter estimation function
     """
+    xdata, ydata = _finite_points(xdata, ydata)
     if pattern == "linear":
         # Linear: y = a*x + b
         if n_params >= 2:
