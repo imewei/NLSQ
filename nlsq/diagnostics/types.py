@@ -45,12 +45,16 @@ def _validate_fim(fim: np.ndarray) -> str | None:
     if not np.all(np.isfinite(fim)):
         return "FIM contains non-finite (NaN/Inf) values"
 
-    if not np.allclose(fim, fim.T, rtol=1e-8, atol=1e-10):
+    if np.issubdtype(fim.dtype, np.integer):
+        fim = fim.astype(float)
+    scale = float(np.max(np.abs(fim))) if fim.size else 0.0
+    normalized = fim / scale if scale else fim
+    if not np.allclose(normalized, normalized.T, rtol=1e-8, atol=1e-10):
         return "FIM must be symmetric"
 
-    eigvals = np.linalg.eigvalsh(fim)
+    eigvals = np.linalg.eigvalsh(normalized)
     max_abs_eig = float(np.max(np.abs(eigvals))) if eigvals.size else 0.0
-    tol = fim.shape[0] * np.finfo(np.float64).eps * max(max_abs_eig, 1.0)
+    tol = fim.shape[0] * np.finfo(np.float64).eps * max_abs_eig
     if eigvals.size and float(np.min(eigvals)) < -tol:
         return "FIM must be positive semi-definite"
 
