@@ -46,6 +46,7 @@ def test_empty_nlsq_cache_dir_means_unset(monkeypatch, tmp_path):
     monkeypatch.delenv("NLSQ_CACHE_MIN_COMPILE_TIME_SECS", raising=False)
     monkeypatch.setenv("NLSQ_JAX_CACHE_DIR", "")
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # expanduser on Windows
     fake = _FakeJaxConfig()
     cfg.JAXConfig._configure_persistent_cache(object.__new__(cfg.JAXConfig), fake)
     expected = tmp_path / ".cache" / "nlsq" / "jax_cache"
