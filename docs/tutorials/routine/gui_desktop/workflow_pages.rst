@@ -131,6 +131,10 @@ Page 5: Export
 - Python code generation
 - Plot export (PNG, PDF, SVG)
 
+Exports describe the fit currently displayed: they use the settings (including the
+sigma convention) that fit ran with, not the current state of the options page.
+Files are written atomically and an existing file keeps its permission mode.
+
 **Export formats:**
 
 1. **ZIP Bundle**: Complete session including:

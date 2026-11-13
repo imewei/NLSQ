@@ -153,7 +153,8 @@ Two single-purpose modules sit on either side of the optimizer:
                               SVD-based pcov with rank cutoff, sigma transform
 
 ``pcov_from_normal()`` (same module) computes the covariance from the normal matrix
-for the exact streaming solver. ``core/device_policy.py`` runs small exact SVDs on the
+for the exact streaming solver; it Jacobi-equilibrates ``J^T J`` before the rank cutoff
+(when full rank after scaling) so the result does not depend on parameter units. ``core/device_policy.py`` runs small exact SVDs on the
 host CPU device when the active backend is a GPU, where launch overhead dominates.
 
 Key Files

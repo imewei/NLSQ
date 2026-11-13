@@ -365,6 +365,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
 
 ### Fixed
+- **`NLSQ_SAVE_ITERATIONS`**: setting the variable now works at the default log level. Both TRF solvers
+  (bounded and unbounded) record per-iteration metrics when it is set, and each fit writes its own
+  `optimization_history_*.npz` (history is cleared before every fit); a write error logs a warning instead
+  of failing the fit. `NLSQLogger.records_iterations()` is the shared gate. Before, nothing recorded or saved.
+- **Logging**: `set_global_level` also applies to loggers created afterwards.
+- **Covariance**: `pcov_from_normal` Jacobi-equilibrates `J^T J` before the rank cutoff when its diagonal
+  spans more than 1e8, but only when the equilibrated matrix is full rank (otherwise the Moore-Penrose path is
+  unchanged, since equilibrating a singular matrix changes its null space), so parameter units no longer
+  decide which directions are dropped.
+  It also applies the `2*cost/(n-p)` scaling inside the square root, which no longer overflows or underflows
+  for extreme cost or eigenvalue scales. The streaming GLS covariance gate (condition number above 1e12)
+  is judged after Jacobi scaling.
+- **Stability guard**: with `enable_stability`, `result.jac` is the true Jacobian; the damping applied to the
+  Jacobian diagonal no longer leaks into it.
+- **Masked rows**: a zero or non-finite `sigma` on a row excluded by the mask no longer affects the fit (the
+  mask is applied after weighting and only `sigma[mask]` is validated); a numeric 0/1 `data_mask` selects rows
+  like a boolean mask instead of being used as integer positions.
+- **Streaming warmup**: the final warmup loss is evaluated in chunks instead of one full-data call, group-label
+  and group-variance inputs are validated, and the excluded-chunk warning points to the exact solver
+  (`curve_fit_large` default).
+- **CMA-ES / multi-start**: the automatic memory budget counts the data held in memory; Halton sampling above
+  50 dimensions falls back to Latin hypercube; `TournamentSelector` evaluates an initial round before final
+  selection and raises when no candidate survives, instead of returning an arbitrary one.
+- **Diagnostics**: identifiability and gradient-health checks are unit-free (Jacobi-scaled; the gradient
+  monitor judges imbalance on `|g_j * p_j|` only when a real gradient is supplied, and rejects a `params`
+  array whose shape does not match the gradient); `_validate_fim` accepts matrices with tiny entries and
+  integer input.
+- **Precision**: `estimate_initial_parameters` ignores non-finite points; the inferred lower bound is kept
+  below small `p0` values (`p0 / safety_factor`) so it always brackets the initial guess.
+- **Config**: `enable_x64`, `is_x64_enabled` and `precision_context` read and write the live
+  `jax_enable_x64` flag (a stale cache made `enable_x64(True)` a silent no-op after an outside change);
+  `IterationLogger.close()` keeps a caller-provided file; `regularize_hessian` warns on a non-finite matrix.
+- **Caching**: `MemoryManager.memory_pool` and the safety telemetry list are lock-guarded, and
+  `UnifiedCache` no longer stores a function compiled before `clear()` into the freshly cleared cache.
+- **CLI custom-model validator**: closes attribute-by-runtime-string hooks (`update_wrapper(assigned=...,
+  updated=...)`, `__match_args__` read through `__subclasshook__`, `__instancecheck__` / `__subclasscheck__`)
+  and denies the `antigravity` module; utility attachment leaves a shared model object untouched unless it
+  was defined in the loaded module; `AuditLogger` falls back to a null handler when its log directory cannot
+  be created. The validator remains an AST denylist, not a sandbox.
+- **CLI workflows**: an unsupported `export.format` and a NUL byte in `visualization.output_dir` are rejected
+  before fitting (POSIX `Path.resolve()` raises on NUL, Windows does not); the batch output-collision
+  preflight skips inputs the workflow run reports itself (invalid UTF-8 YAML, NUL bytes, non-string
+  `results_file`) and protects a relative custom-model path resolved beside the config file.
+- **Exports**: GUI JSON, CSV and Python-code exports are written atomically (temp file plus `os.replace`) and
+  keep the mode of an existing file; the previous content is never exposed under a wider mode. The
+  stat-then-replace window against an uncoordinated second process is documented as a known limit.
+- **GUI**: exports use the settings snapshot taken when the displayed fit ran; the model type and function
+  survive theme changes and code edits; the crash-handler autosave is written atomically; file-like input is
+  streamed to the loader's temporary file instead of being read into memory.
 - **Checkpoints**: tournament checkpoints (written when `enable_multistart=True`) no longer fail to load; the
   checkpoint dataset check accepts the boolean `survival_mask` (`check_checkpoint_dataset(kinds=...)`).
 - **Callbacks**: `functools.wraps` decorators around progress callbacks are called with positional arguments

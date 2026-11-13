@@ -1,6 +1,13 @@
 # Documentation Changelog
 
 ## Unreleased
+- `/dev-suite:docs update --full` pass after PR #68 (audit hardening): `CHANGELOG.md` Fixed gains the
+  PR's user-visible fixes (none had been logged); `reference/configuration.rst` names the
+  `optimization_history_*.npz` file `NLSQ_SAVE_ITERATIONS` now writes per fit; `reference/cli.rst` lists
+  the runtime-string attribute hooks the validator rejects; `api/nlsq.core.covariance.rst` and
+  `developer/architecture.rst` describe the `pcov_from_normal` Jacobi equilibration; the GUI workflow
+  tutorial states that exports use the fit-time settings and are written atomically. `CLAUDE.md` is
+  gitignored and was not touched.
 - `/dev-suite:docs update --full` pass for the exact default in `curve_fit_large`: README
   feature table, `api/index.rst` and the `curve_fit_large` section of
   `api/large_datasets_api.rst` describe exact full-data streaming as the default at or above
