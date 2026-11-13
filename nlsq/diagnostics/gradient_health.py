@@ -254,7 +254,12 @@ class GradientMonitor:
         # Unit-free imbalance: g_j * p_j removes the parameter's units.
         # shortcut: |p_j| = 0 drops that component from the ratio; use column
         # norms of J instead if the callback ever supplies the Jacobian.
-        if params is not None and np.shape(params) == gradient.shape:
+        if params is not None and np.shape(params) != gradient.shape:
+            raise ValueError(
+                f"params shape {np.shape(params)} does not match gradient shape "
+                f"{gradient.shape}"
+            )
+        if params is not None:
             imbalance_basis = abs_gradient * np.abs(np.asarray(params, dtype=float))
         else:
             imbalance_basis = abs_gradient
@@ -353,6 +358,7 @@ class GradientMonitor:
                 Additional keyword arguments (ignored).
             """
             # Extract gradient information
+            has_real_gradient = info is not None and info.get("gradient") is not None
             if info is not None and info.get("gradient") is not None:
                 # Direct gradient available
                 gradient = np.asarray(info["gradient"])
@@ -384,7 +390,9 @@ class GradientMonitor:
             self._last_params = params.copy()
 
             # Record in monitor
-            self.record_gradient(gradient, cost, params)
+            # Parameter-scaled imbalance is only meaningful for a real gradient:
+            # the norm-only / step-based stand-ins carry no per-component signal.
+            self.record_gradient(gradient, cost, params if has_real_gradient else None)
 
             # Call user callback if provided
             if user_callback is not None:

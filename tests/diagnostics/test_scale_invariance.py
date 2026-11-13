@@ -119,3 +119,20 @@ def test_rescaled_wellposed_fit_is_healthy_and_json_safe(tau_scale) -> None:
     assert r.diagnostics.status == HealthStatus.HEALTHY
     assert r.diagnostics.identifiability.issues == []
     json.dumps(r.diagnostics.to_dict())
+
+
+def test_record_gradient_rejects_mismatched_params() -> None:
+    m = GradientMonitor(DiagnosticsConfig())
+    with pytest.raises(ValueError, match="params shape"):
+        m.record_gradient(np.ones(3), cost=1.0, params=np.ones(2))
+
+
+def test_callback_standin_gradient_does_not_use_parameter_scale() -> None:
+    """A norm-only callback has no per-component gradient: params must not leak in."""
+    cfg = DiagnosticsConfig(imbalance_threshold=1e6)
+    m = GradientMonitor(cfg)
+    cb = m.create_callback()
+    params = np.array([1e-9, 1.0])  # |p| ratio 1e9, gradient stand-in is uniform
+    for i in range(15):
+        cb(i, 1.0, params, {"gradient_norm": 1.0})
+    assert m.get_report().imbalance_detected is False
