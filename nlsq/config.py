@@ -464,12 +464,12 @@ class JAXConfig:
         instance = cls()
 
         with cls._lock:
-            if enable and not instance._x64_enabled:
-                config.update("jax_enable_x64", True)
-                instance._x64_enabled = True
-            elif not enable and instance._x64_enabled:
-                config.update("jax_enable_x64", False)
-                instance._x64_enabled = False
+            # Compare against the live JAX flag: anything else (user code,
+            # another library, JAX_ENABLE_X64) may have changed it since we
+            # last cached it, which would turn this call into a silent no-op.
+            if bool(config.jax_enable_x64) != enable:
+                config.update("jax_enable_x64", enable)
+            instance._x64_enabled = enable
 
     @classmethod
     def is_x64_enabled(cls) -> bool:
@@ -480,7 +480,10 @@ class JAXConfig:
         bool
             True if 64-bit precision is enabled, False otherwise.
         """
+        from jax import config
+
         instance = cls()
+        instance._x64_enabled = bool(config.jax_enable_x64)
         return instance._x64_enabled
 
     @classmethod
@@ -512,7 +515,7 @@ class JAXConfig:
         # block unrelated JAXConfig operations (singleton construction,
         # memory config) on other threads.
         with cls._precision_lock:
-            original_state = instance._x64_enabled
+            original_state = cls.is_x64_enabled()
             try:
                 cls.enable_x64(use_x64)
                 yield

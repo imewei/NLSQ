@@ -365,7 +365,7 @@ class IterationLogger(CallbackBase):
             # Only close file if we opened it (not if it was provided externally)
             if not self._file_provided:
                 self._file.close()
-            self._file = None
+                self._file = None
         self._start_time = None
 
     def __del__(self):

@@ -669,6 +669,9 @@ class NumericalStabilityGuard:
             eigenvalues = jnp.linalg.eigvalsh(H)
             min_eig = jnp.min(eigenvalues)
 
+            if not bool(jnp.all(jnp.isfinite(eigenvalues))):
+                raise ValueError("Hessian has non-finite eigenvalues")
+
             if min_eig < min_eigenvalue:
                 # Add diagonal to ensure positive definiteness
                 shift = min_eigenvalue - min_eig + self.eps
