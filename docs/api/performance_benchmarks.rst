@@ -209,8 +209,8 @@ Run the benchmark suite::
     # Individual benchmark scripts
     python benchmarks/benchmark_suite.py
 
-    # Memory profiling
-    python -m memory_profiler benchmarks/benchmark_memory_reuse.py
+    # Memory-reuse tests
+    pytest tests/benchmarks/test_benchmark_memory.py -n 0
 
     # GPU benchmarks (requires CUDA)
     JAX_PLATFORMS=gpu python benchmarks/run_benchmarks.py

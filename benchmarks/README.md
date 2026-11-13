@@ -71,11 +71,14 @@ python benchmarks/components/stability_benchmark.py
 python benchmarks/components/transfer_benchmark.py --gpu --save-baseline
 ```
 
+`pyproject.toml` passes `--benchmark-disable` to every pytest run (it avoids pytest-benchmark
+warnings under xdist), so the commands below need `--benchmark-enable` and `-n 0`.
+
 ### Run Micro-benchmarks
 
 ```bash
 # All microbenchmarks
-pytest benchmarks/microbench/ --benchmark-only
+pytest benchmarks/microbench/ --benchmark-only --benchmark-enable -n 0
 
 # Save results
 pytest benchmarks/microbench/ --benchmark-json=results.json
@@ -88,7 +91,7 @@ pytest benchmarks/microbench/ --benchmark-compare=baseline
 
 ```bash
 # Regression detection
-pytest benchmarks/ci/ --benchmark-only
+pytest benchmarks/ci/ --benchmark-only --benchmark-enable -n 0
 
 # Save new baseline
 pytest benchmarks/ci/ --benchmark-save=baseline
@@ -164,8 +167,15 @@ Baseline results are stored in `baselines/` as JSON files:
 - `jacobian_autoswitch.json` - Jacobian mode baselines
 - `memory_reuse.json` - Memory optimization baselines
 - `sparse_activation.json` - Sparse solver baselines
-- `host_device_transfers.json` - Transfer profiling baselines
-- `linux-py312-beta1.json` - CI regression baseline
+- `streaming_overhead.json`, `streaming_partial_batch_overhead.json` - Streaming overhead baselines
+- `import_baseline.txt` - Import-time baseline read by `microbench/test_import.py`
+- `v0.3.0-beta.3-linux.json`, `v0.3.0-beta.3-darwin.json` - Release cold-JIT / hot-path timings
+- `create_baseline.py` - Script that writes a release baseline
+- `2026-11-13-library-comparison-1k-100M.md` - Newest library comparison report
+
+`ci/test_regression.py` looks for `linux-py312-beta1.json` (the regression gates). It is not
+in the repository; without it the module still runs the benchmarks but applies no gates.
+Create one with `pytest benchmarks/ci/ --benchmark-enable --benchmark-save=<name>`.
 
 ## Creating New Baselines
 

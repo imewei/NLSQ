@@ -147,7 +147,7 @@ Problem Size    Total Time    TRF Time    Scaling
 ### Phase 1 Work Completed
 
 #### 1. Benchmark Infrastructure [PASS]
-Created `benchmarks/test_performance_regression.py`:
+Created `benchmarks/test_performance_regression.py` (now `benchmarks/ci/test_regression.py`):
 - 9 benchmark groups covering different scenarios
 - pytest-benchmark integration for CI/CD
 - Baseline measurements established
@@ -616,11 +616,9 @@ XLarge Polynomial Fit (50000 points):
 - `nlsq/trf.py`: Updated imports, eliminated 11 conversions
 
 **Files Created**: 5+
-- `benchmarks/test_performance_regression.py`
-- `benchmarks/profile_trf_hot_paths.py`
-- `benchmarks/trf_profiling_summary.md`
-- `benchmarks/lax_scan_design.md`
-- `benchmarks/numpy_jax_optimization_plan.md`
+- `benchmarks/test_performance_regression.py` (now `benchmarks/ci/test_regression.py`)
+- `benchmarks/profile_trf_hot_paths.py` (now `benchmarks/profile_trf.py`)
+- `benchmarks/trf_profiling_summary.md`, `benchmarks/lax_scan_design.md`, `benchmarks/numpy_jax_optimization_plan.md` (no longer in the repository)
 - `optimization_complete_summary.md`
 - `optimization_progress_summary.md`
 
