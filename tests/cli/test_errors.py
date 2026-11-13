@@ -480,3 +480,27 @@ class TestColoredConsoleFormatter:
         output = formatter.format(record)
         assert "WARNING" in output
         assert "Warning message" in output
+
+
+class TestBesideWorkflowFile:
+    """``fit`` reads and ``batch`` protects the same file: one lookup rule."""
+
+    def test_relative_file_next_to_the_yaml_wins(self, tmp_path, monkeypatch):
+        from nlsq.cli.errors import beside_workflow_file
+
+        (tmp_path / "wf").mkdir()
+        (tmp_path / "wf" / "data.csv").write_text("1,2\n")
+        (tmp_path / "data.csv").write_text("9,9\n")  # same name in the CWD
+        monkeypatch.chdir(tmp_path)
+        found = beside_workflow_file("wf/w.yaml", "data.csv")
+        assert found == (tmp_path / "wf" / "data.csv").resolve()
+
+    def test_none_when_absent_or_absolute(self, tmp_path):
+        from nlsq.cli.errors import beside_workflow_file
+
+        (tmp_path / "data.csv").write_text("1,2\n")
+        assert beside_workflow_file(tmp_path / "w.yaml", "missing.csv") is None
+        assert (
+            beside_workflow_file(tmp_path / "w.yaml", str(tmp_path / "data.csv"))
+            is None
+        )

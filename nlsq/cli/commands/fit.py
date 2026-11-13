@@ -25,7 +25,13 @@ from typing import Any
 
 import yaml
 
-from nlsq.cli.errors import CLIError, ConfigError, cfg_get, setup_logging
+from nlsq.cli.errors import (
+    CLIError,
+    ConfigError,
+    beside_workflow_file,
+    cfg_get,
+    setup_logging,
+)
 from nlsq.cli.result_exporter import ResultExporter, _dumps
 from nlsq.cli.visualization import (
     FitVisualizer,
@@ -210,16 +216,14 @@ def run_fit(
     # fit ./data.csv for every workflow). Fall back to the CWD-relative path.
     _data_cfg = config.get("data")
     if isinstance(_data_cfg, dict) and isinstance(_data_cfg.get("input_file"), str):
-        _in = Path(_data_cfg["input_file"])
-        _beside = Path(workflow_path).resolve().parent / _in
-        if not _in.is_absolute() and _beside.is_file():
+        _beside = beside_workflow_file(workflow_path, _data_cfg["input_file"])
+        if _beside is not None:
             _data_cfg["input_file"] = str(_beside)
     # Same lookup order for a custom model file (read-only input).
     _model_cfg = config.get("model")
     if isinstance(_model_cfg, dict) and isinstance(_model_cfg.get("path"), str):
-        _mp = Path(_model_cfg["path"])
-        _beside = Path(workflow_path).resolve().parent / _mp
-        if not _mp.is_absolute() and _beside.is_file():
+        _beside = beside_workflow_file(workflow_path, _model_cfg["path"])
+        if _beside is not None:
             _model_cfg["path"] = str(_beside)
 
     vis_config = config.get("visualization") or {}

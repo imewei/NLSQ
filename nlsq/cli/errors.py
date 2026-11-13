@@ -70,6 +70,18 @@ class Colors:
 # =============================================================================
 
 
+def beside_workflow_file(workflow_path: str | Path, value: str) -> Path | None:
+    """The relative file ``value`` as found next to the workflow YAML, else ``None``.
+
+    A relative ``data.input_file`` / ``model.path`` next to the YAML wins over a
+    same-named file in the CWD (matches the GUI). ``fit`` reads it from here and
+    ``batch`` guards it from being overwritten, so both must use this one lookup.
+    """
+    path = Path(value)
+    beside = Path(workflow_path).resolve().parent / path
+    return beside if not path.is_absolute() and beside.is_file() else None
+
+
 def cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
     """``cfg.get(key, default)`` that also returns *default* for a bare YAML key.
 
