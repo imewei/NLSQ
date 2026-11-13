@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import yaml
 
+from nlsq.gui_qt.adapters import fit_adapter
 from nlsq.gui_qt.adapters.config_adapter import export_yaml_config, load_yaml_config
 from nlsq.gui_qt.pages.export import ExportPage
 from nlsq.gui_qt.pages.fitting_options import FittingOptionsPage
@@ -91,3 +92,61 @@ def test_non_bool_options_rejected(extra):
 
 def test_flat_check_finite_bool_accepted():
     load_yaml_config(_BASE + "  check_finite: false\n")
+
+
+class TestCheckFinite:
+    """fitting.check_finite is stored on SessionState and reaches fit() and exports."""
+
+    def test_default_is_true(self):
+        assert load_yaml_config(_BASE).check_finite is True
+
+    def test_yaml_value_is_stored(self):
+        assert load_yaml_config(_BASE + "  check_finite: false\n").check_finite is False
+
+    def test_survives_snapshot_and_yaml_round_trip(self):
+        state = load_yaml_config(_BASE + "  check_finite: false\n")
+        assert state.snapshot_for_fit().check_finite is False
+        again = load_yaml_config(export_yaml_config(state))
+        assert again.check_finite is False
+
+    def test_reaches_fit_kwargs(self, monkeypatch):
+        seen = {}
+
+        def fake_fit(*args, **kwargs):
+            seen.update(kwargs)
+            return CurveFitResult(
+                popt=np.array([1.0, 0.0]), pcov=np.eye(2), success=True
+            )
+
+        monkeypatch.setattr(fit_adapter, "fit", fake_fit)
+        x = np.linspace(0, 1, 5)
+        for value in (False, True):
+            state = load_yaml_config(_BASE + f"  check_finite: {str(value).lower()}\n")
+            config = fit_adapter.create_fit_config_from_state(state)
+            assert config.check_finite is value
+            fit_adapter.execute_fit(x, x, None, lambda x, a, b: a * x + b, config, None)
+            assert seen["check_finite"] is value
+
+    @pytest.mark.serial
+    def test_python_export_only_names_non_default(self, app_state, qtbot):
+        _fitted_state(app_state)
+        export = ExportPage(app_state)
+        qtbot.addWidget(export)
+        assert "check_finite" not in export.generate_python_code()
+
+        app_state.state.check_finite = False
+        assert "check_finite=False" in export.generate_python_code()
+
+
+def test_validate_fit_inputs_honours_check_finite():
+    import numpy as np
+    import pytest
+
+    from nlsq.gui_qt.adapters.fit_adapter import validate_fit_inputs
+
+    x, y = np.array([0.0, 1.0]), np.array([1.0, np.nan])
+    with pytest.raises(ValueError, match="ydata"):
+        validate_fit_inputs(x, y, None)
+    validate_fit_inputs(x, y, None, check_finite=False)
+    with pytest.raises(ValueError, match="sigma"):
+        validate_fit_inputs(x, y, np.array([1.0, np.nan]), check_finite=False)

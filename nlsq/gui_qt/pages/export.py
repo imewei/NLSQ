@@ -588,6 +588,8 @@ class ExportPage(QWidget):
             extra.insert(0, "    sigma=sigma,")
             if state.absolute_sigma:  # fit()'s default is False
                 extra.insert(1, "    absolute_sigma=True,")
+        if not state.check_finite:  # fit()'s default is True
+            extra.append("    check_finite=False,")
         return extra
 
     def generate_python_code(self, for_bundle: bool = False) -> str:

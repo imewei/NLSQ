@@ -2600,6 +2600,7 @@ def _run_cmaes_optimization(
     from nlsq.global_optimization.cmaes_config import (
         CMAESConfig,
         auto_configure_cmaes_memory,
+        cmaes_resident_bytes,
     )
     from nlsq.global_optimization.method_selector import MethodSelector
 
@@ -2653,15 +2654,16 @@ def _run_cmaes_optimization(
                 popsize = popsize * 2
 
         # Auto-configure batch sizes based on available memory
+        data_bytes, fixed_bytes = cmaes_resident_bytes(
+            xdata, ydata, kwargs.get("sigma")
+        )
         pop_batch, data_chunk = auto_configure_cmaes_memory(
             n_data=n_data,
             popsize=popsize,
             available_memory_gb=budget.available_gb,
             safety_factor=0.7,
-            data_bytes=8
-            * sum(
-                np.size(a) for a in (xdata, ydata, kwargs.get("sigma")) if a is not None
-            ),
+            data_bytes=data_bytes,
+            fixed_bytes=fixed_bytes,
         )
 
         # Create new config with computed chunk sizes if needed

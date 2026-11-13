@@ -98,6 +98,7 @@ class FitConfig:
     scale_factor: float = 1.0
     chunk_size: int = 10000
     absolute_sigma: bool = False
+    check_finite: bool = True
     # Hybrid-streaming-only controls: carried for reporting, not used by fit().
     normalize: bool = True
     warmup_iterations: int = 200
@@ -157,6 +158,7 @@ def validate_fit_inputs(
     xdata: np.ndarray,
     ydata: np.ndarray,
     sigma: np.ndarray | None,
+    check_finite: bool = True,
 ) -> None:
     """Validate fit inputs before execution.
 
@@ -168,6 +170,9 @@ def validate_fit_inputs(
         Dependent variable data.
     sigma : np.ndarray | None
         Optional uncertainties.
+    check_finite : bool, default True
+        When False, NaN/Inf in ``xdata``/``ydata`` are left to ``curve_fit``
+        (``nan_policy``); sigma and shape checks still apply.
 
     Raises
     ------
@@ -189,11 +194,11 @@ def validate_fit_inputs(
         )
 
     # Check for NaN/Inf in xdata
-    if np.any(~np.isfinite(xdata)):
+    if check_finite and np.any(~np.isfinite(xdata)):
         raise ValueError("xdata contains NaN or Inf values")
 
     # Check for NaN/Inf in ydata
-    if np.any(~np.isfinite(ydata)):
+    if check_finite and np.any(~np.isfinite(ydata)):
         raise ValueError("ydata contains NaN or Inf values")
 
     # Check sigma if provided
@@ -389,7 +394,7 @@ def execute_fit(
         If fitting fails catastrophically.
     """
     # Validate inputs
-    validate_fit_inputs(xdata, ydata, sigma)
+    validate_fit_inputs(xdata, ydata, sigma, config.check_finite)
 
     # Convert to numpy arrays
     xdata = np.asarray(xdata)
@@ -425,6 +430,7 @@ def execute_fit(
         "max_nfev": min(config.max_function_evals, config.max_iterations),
         "loss": config.loss,
         "absolute_sigma": config.absolute_sigma,
+        "check_finite": config.check_finite,
     }
 
     # Add callback if provided
@@ -687,6 +693,7 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
         scale_factor=getattr(state, "scale_factor", 1.0),
         chunk_size=state.chunk_size,
         absolute_sigma=bool(getattr(state, "absolute_sigma", False)),
+        check_finite=bool(getattr(state, "check_finite", True)),
         normalize=getattr(state, "normalize", True),
         warmup_iterations=getattr(state, "warmup_iterations", 200),
         defense_preset=getattr(state, "defense_preset", None),

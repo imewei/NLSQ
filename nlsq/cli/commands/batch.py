@@ -31,7 +31,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from nlsq.cli.errors import CLIError, cfg_get, setup_logging
+from nlsq.cli.errors import CLIError, beside_workflow_file, cfg_get, setup_logging
 from nlsq.cli.result_exporter import _atomic_write
 
 
@@ -223,10 +223,9 @@ def _warn_output_collisions(
             and isinstance(data.get("input_file"), str)
             and "\x00" not in data["input_file"]
         ):
-            input_path = Path(data["input_file"])
-            beside = Path(path).resolve().parent / input_path
-            if not input_path.is_absolute() and beside.is_file():
-                input_path = beside
+            input_path = beside_workflow_file(path, data["input_file"]) or Path(
+                data["input_file"]
+            )
             protected.add(input_path.resolve())
         if (
             isinstance(model, dict)
@@ -234,10 +233,9 @@ def _warn_output_collisions(
             and isinstance(model.get("path"), str)
             and "\x00" not in model["path"]
         ):
-            model_path = Path(model["path"])
-            beside = Path(path).resolve().parent / model_path
-            if not model_path.is_absolute() and beside.is_file():
-                model_path = beside
+            model_path = beside_workflow_file(path, model["path"]) or Path(
+                model["path"]
+            )
             protected.add(model_path.resolve())
         targets = []
         if (

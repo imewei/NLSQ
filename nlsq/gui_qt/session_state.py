@@ -152,6 +152,7 @@ class SessionState:
     method: str = "trf"
     loss: str = "linear"
     absolute_sigma: bool = False
+    check_finite: bool = True
 
     # Workflow and global optimization settings (3-workflow system v0.6.3)
     workflow: str = "auto"  # "auto", "auto_global", or "hpc"
@@ -234,6 +235,7 @@ class SessionState:
             method=self.method,
             loss=self.loss,
             absolute_sigma=self.absolute_sigma,
+            check_finite=self.check_finite,
             workflow=self.workflow,
             n_starts=self.n_starts,
             sampler=self.sampler,
@@ -393,6 +395,7 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
     state.method = defaults.method
     state.loss = defaults.loss
     state.absolute_sigma = defaults.absolute_sigma
+    state.check_finite = defaults.check_finite
 
     # Reset workflow and global optimization settings
     state.workflow = defaults.workflow
@@ -487,6 +490,7 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
         },
         "fitting": {
             "method": state.method,
+            "check_finite": state.check_finite,
             "objective": {
                 "robust_loss": state.loss,
                 "absolute_sigma": state.absolute_sigma,
