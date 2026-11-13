@@ -117,6 +117,21 @@ def _ensure_private_dir(path: Path) -> None:
         path.chmod(0o700)
 
 
+def _write_autosave(data: dict[str, Any]) -> None:
+    """Atomically replace the recovery file with a private temporary file."""
+    fd, tmp_name = tempfile.mkstemp(
+        dir=AUTOSAVE_FILE.parent, prefix=AUTOSAVE_FILE.stem + ".", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_name, AUTOSAVE_FILE)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+
+
 class AutosaveManager(QObject):
     """Manages automatic session saving and recovery.
 
@@ -228,22 +243,7 @@ class AutosaveManager(QObject):
         """Perform the autosave operation."""
         try:
             data = self._serialize_state()
-            # Atomic write: write to a unique sibling temp file (mkstemp: O_EXCL,
-            # mode 0o600, never follows a pre-planted link) then os.replace()
-            # so the recovery file is never left in a partially-written state.
-            fd, tmp_name = tempfile.mkstemp(
-                dir=AUTOSAVE_FILE.parent,
-                prefix=AUTOSAVE_FILE.stem + ".",
-                suffix=".tmp",
-            )
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
-                os.replace(tmp_name, AUTOSAVE_FILE)
-            except BaseException:
-                with contextlib.suppress(OSError):
-                    os.unlink(tmp_name)
-                raise
+            _write_autosave(data)
             self.autosave_completed.emit()
         except (OSError, ValueError, TypeError, RecursionError) as exc:
             # Best-effort: never interrupt the user, but say so once per manager.
