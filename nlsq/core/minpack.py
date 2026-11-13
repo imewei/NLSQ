@@ -2658,6 +2658,10 @@ def _run_cmaes_optimization(
             popsize=popsize,
             available_memory_gb=budget.available_gb,
             safety_factor=0.7,
+            data_bytes=8
+            * sum(
+                np.size(a) for a in (xdata, ydata, kwargs.get("sigma")) if a is not None
+            ),
         )
 
         # Create new config with computed chunk sizes if needed

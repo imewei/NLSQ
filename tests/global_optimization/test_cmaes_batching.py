@@ -321,9 +321,10 @@ class TestMemoryEstimation:
 
     def test_auto_configure_large_dataset(self):
         """Test auto-configuration for large dataset (both strategies needed)."""
-        pop_batch, data_chunk = auto_configure_cmaes_memory(
-            100_000_000, popsize=16, available_memory_gb=0.5
-        )
+        with pytest.warns(UserWarning, match="exceeds"):
+            pop_batch, data_chunk = auto_configure_cmaes_memory(
+                100_000_000, popsize=16, available_memory_gb=0.5
+            )
         # 100M points with only 0.5GB needs both strategies
         assert pop_batch == 1
         assert data_chunk is not None
