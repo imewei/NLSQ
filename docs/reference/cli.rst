@@ -254,9 +254,10 @@ categories include:
   ``__doc__`` and ``__version__`` (so a model class using ``self._k`` needs
   ``trusted: true``); and attributes named like blocked modules (for example
   ``.string``, ``.profiler``);
-* hooks that fetch an attribute named by a runtime-built string, such as
-  ``update_wrapper(..., assigned=...)`` / ``updated=...``, ``__match_args__``,
-  ``__subclasshook__``, ``__instancecheck__`` and ``__subclasscheck__``;
+* hooks that fetch an attribute named by a runtime-built string: the names
+  ``update_wrapper``, ``__match_args__``, ``__subclasshook__``,
+  ``__instancecheck__`` and ``__subclasscheck__`` and the keyword arguments
+  ``assigned=`` / ``updated=`` are rejected wherever they appear;
 * process, thread and interpreter control (``os``, ``subprocess``,
   ``multiprocessing``, ``threading``, ``signal``, ``cProfile``, ``pdb`` ...);
 * network modules (``socket``, ``urllib``, ``http``, ``requests`` ...);

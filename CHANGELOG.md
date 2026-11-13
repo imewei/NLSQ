@@ -383,14 +383,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mask is applied after weighting and only `sigma[mask]` is validated); a numeric 0/1 `data_mask` selects rows
   like a boolean mask instead of being used as integer positions.
 - **Streaming warmup**: the final warmup loss is evaluated in chunks instead of one full-data call, group-label
-  and group-variance inputs are validated, and the excluded-chunk warning points to the exact solver
+  and group-variance inputs are validated (labels must be finite integers inside the weight table, index
+  ranges must end at or before `n_params`), the first Gauss-Newton step takes its baseline cost from the cost
+  that includes the group-variance term, and the excluded-chunk warning points to the exact solver
   (`curve_fit_large` default).
-- **CMA-ES / multi-start**: the automatic memory budget counts the data held in memory; Halton sampling above
-  50 dimensions falls back to Latin hypercube; `TournamentSelector` evaluates an initial round before final
-  selection and raises when no candidate survives, instead of returning an arbitrary one.
-- **Diagnostics**: identifiability and gradient-health checks are unit-free (Jacobi-scaled; the gradient
-  monitor judges imbalance on `|g_j * p_j|` only when a real gradient is supplied, and rejects a `params`
-  array whose shape does not match the gradient); `_validate_fim` accepts matrices with tiny entries and
+- **CMA-ES / multi-start**: the automatic CMA-ES memory budget counts the data held in memory (and warns when
+  even the smallest configuration exceeds it); multi-start with `sampler="halton"` above 50 dimensions
+  warns and falls back to Latin hypercube instead of crashing; `TournamentSelector` evaluates an initial round
+  before final selection, raises when no candidate survives instead of returning an arbitrary one, and reports
+  an empty data-batch iterator as such rather than as non-finite losses.
+- **Diagnostics**: identifiability and gradient-health checks are unit-free (Jacobi-scaled; the
+  exploding-gradient check is relative to the first norm; the gradient monitor judges imbalance on
+  `|g_j * p_j|` only when a real gradient is supplied, and rejects a `params` array whose shape does not
+  match the gradient; gradient detectors return Python bools so reports serialise to JSON); `_validate_fim` accepts matrices with tiny entries and
   integer input.
 - **Precision**: `estimate_initial_parameters` ignores non-finite points; the inferred lower bound is kept
   below small `p0` values (`p0 / safety_factor`) so it always brackets the initial guess.
@@ -399,9 +404,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `IterationLogger.close()` keeps a caller-provided file; `regularize_hessian` warns on a non-finite matrix.
 - **Caching**: `MemoryManager.memory_pool` and the safety telemetry list are lock-guarded, and
   `UnifiedCache` no longer stores a function compiled before `clear()` into the freshly cleared cache.
-- **CLI custom-model validator**: closes attribute-by-runtime-string hooks (`update_wrapper(assigned=...,
-  updated=...)`, `__match_args__` read through `__subclasshook__`, `__instancecheck__` / `__subclasscheck__`)
-  and denies the `antigravity` module; utility attachment leaves a shared model object untouched unless it
+- **CLI custom-model validator**: closes attribute-by-runtime-string hooks by rejecting the names
+  `update_wrapper`, `__match_args__`, `__subclasshook__`, `__instancecheck__` and `__subclasscheck__` and the
+  keyword arguments `assigned=` / `updated=` wherever they appear (names, attributes, `def`/`class` names,
+  import aliases), and denies the `antigravity` module; utility attachment leaves a shared model object untouched unless it
   was defined in the loaded module; `AuditLogger` falls back to a null handler when its log directory cannot
   be created. The validator remains an AST denylist, not a sandbox.
 - **CLI workflows**: an unsupported `export.format` and a NUL byte in `visualization.output_dir` are rejected

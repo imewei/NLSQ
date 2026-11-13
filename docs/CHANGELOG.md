@@ -2,7 +2,7 @@
 
 ## Unreleased
 - `/dev-suite:docs update --full` pass after PR #68 (audit hardening): `CHANGELOG.md` Fixed gains the
-  PR's user-visible fixes (none had been logged); `reference/configuration.rst` names the
+  PR's user-visible fixes (only the export file mode and an earlier `NLSQ_SAVE_ITERATIONS` note existed); `reference/configuration.rst` names the
   `optimization_history_*.npz` file `NLSQ_SAVE_ITERATIONS` now writes per fit; `reference/cli.rst` lists
   the runtime-string attribute hooks the validator rejects; `api/nlsq.core.covariance.rst` and
   `developer/architecture.rst` describe the `pcov_from_normal` Jacobi equilibration; the GUI workflow
