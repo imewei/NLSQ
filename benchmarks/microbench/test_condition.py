@@ -115,7 +115,9 @@ class TestPowerIterationCondition:
             for _ in range(20):
                 y = np.linalg.solve(AtA, y)
                 y = y / np.linalg.norm(y)
-            sigma_min = 1.0 / np.sqrt(y @ (AtA @ y))
+            # y converges to the eigenvector of the smallest eigenvalue of AtA, so
+            # the Rayleigh quotient y^T AtA y is sigma_min**2 (not its reciprocal).
+            sigma_min = np.sqrt(y @ (AtA @ y))
         except np.linalg.LinAlgError:
             sigma_min = 0.0
 
