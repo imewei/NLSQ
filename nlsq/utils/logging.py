@@ -405,6 +405,13 @@ class NLSQLogger:
         else:
             self.warning("Fit incomplete", **metrics)
 
+    def records_iterations(self) -> bool:
+        """True when per-iteration metrics are kept: PERFORMANCE level or
+        NLSQ_SAVE_ITERATIONS set."""
+        return self.logger.isEnabledFor(LogLevel.PERFORMANCE) or bool(
+            _save_iterations_setting()
+        )
+
     def optimization_step(
         self,
         iteration: int,
@@ -434,9 +441,7 @@ class NLSQLogger:
         # OPT-17: Guard to prevent unnecessary work when logging is disabled
         # This avoids building metrics dict and history append when not logging
         # NLSQ_SAVE_ITERATIONS opts into history even at the quiet default level.
-        if not (
-            self.logger.isEnabledFor(LogLevel.PERFORMANCE) or _save_iterations_setting()
-        ):
+        if not self.records_iterations():
             return
 
         metrics: dict[str, Any] = {
