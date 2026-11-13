@@ -194,7 +194,7 @@ class BoundsInference:
             lower = max(0, lower)
             # Also enforce positivity for rate-like parameters (param_idx == 1)
             if param_idx == 1:
-                lower = max(1e-10, lower)
+                lower = max(min(1e-10, p0_val / self.safety_factor), lower)
 
         # Ensure lower < upper
         if lower >= upper:
