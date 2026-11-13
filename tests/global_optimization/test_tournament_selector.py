@@ -401,7 +401,7 @@ class TestTournamentSelectorEdgeCases:
             return
             yield  # pragma: no cover -- makes this a generator function
 
-        with pytest.raises(RuntimeError, match="no valid survivors"):
+        with pytest.raises(RuntimeError, match="no data batches were evaluated"):
             selector.run_tournament(
                 data_batch_iterator=empty_batch_generator(),
                 model=model,

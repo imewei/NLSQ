@@ -301,7 +301,7 @@ def halton_sample(
     n_samples : int
         Number of samples to generate.
     n_dims : int
-        Number of dimensions. Must be <= 20 (number of available prime bases).
+        Number of dimensions. Must be <= 50 (number of available prime bases).
     skip : int, default=0
         Number of initial samples to skip (for different starting points).
 

@@ -509,10 +509,16 @@ class TournamentSelector:
         )[0]
 
         if len(valid_indices) == 0:
-            msg = (
-                "Tournament selection failed: no valid survivors "
-                "(every candidate produced a non-finite loss)."
-            )
+            if not any_evaluated and bool(np.any(self.survival_mask)):
+                msg = (
+                    "Tournament selection failed: no data batches were "
+                    "evaluated (the data batch iterator yielded nothing)."
+                )
+            else:
+                msg = (
+                    "Tournament selection failed: no valid survivors "
+                    "(every candidate produced a non-finite loss)."
+                )
             self.logger.warning(msg)
             raise RuntimeError(msg)
 

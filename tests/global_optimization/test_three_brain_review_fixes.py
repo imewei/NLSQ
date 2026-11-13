@@ -328,3 +328,22 @@ class TestConfigValidation:
         silently pass as valid n_starts/elimination_rounds/batches_per_round."""
         with pytest.raises(TypeError):
             GlobalOptimizationConfig(**kwargs)
+
+
+def test_halton_above_prime_table_falls_back_to_lhs():
+    import warnings
+
+    import numpy as np
+
+    from nlsq.global_optimization.config import GlobalOptimizationConfig
+    from nlsq.global_optimization.multi_start import MultiStartOrchestrator
+
+    orch = MultiStartOrchestrator(
+        GlobalOptimizationConfig(n_starts=5, sampler="halton")
+    )
+    n = 51
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        pts = orch._generate_starting_points(n, -np.ones(n), np.ones(n))
+    assert pts.shape == (5, n)
+    assert any("Halton" in str(x.message) for x in w)
