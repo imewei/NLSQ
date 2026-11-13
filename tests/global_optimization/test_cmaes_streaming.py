@@ -19,6 +19,7 @@ import pytest
 from nlsq.global_optimization.cmaes_config import (
     CMAESConfig,
     auto_configure_cmaes_memory,
+    cmaes_resident_bytes,
     estimate_cmaes_memory_gb,
     is_evosax_available,
 )
@@ -358,3 +359,43 @@ class TestAutoConfigureAccountsForResidentData:
         with pytest.warns(UserWarning, match="exceeds"):
             result = auto_configure_cmaes_memory(100_000_000, 16, 1.0)
         assert result == (1, 1024)
+
+
+class TestDenseSigmaMemory:
+    """A 2-D sigma is a covariance matrix whitened by its Cholesky factor (applied
+    whole), so matrix + factor are fixed cost that chunking neither pads nor shrinks."""
+
+    def test_two_d_sigma_counts_matrix_and_factor_as_fixed(self):
+        n = 5
+        data, fixed = cmaes_resident_bytes(np.zeros(n), np.zeros(n), np.eye(n))
+        assert (data, fixed) == (8 * 2 * n, 2 * 8 * n * n)
+
+    @pytest.mark.parametrize("sigma", [None, 0.1, np.ones(5)])
+    def test_per_point_sigma_stays_in_data_bytes(self, sigma):
+        data, fixed = cmaes_resident_bytes(np.zeros((5, 2)), np.zeros(5), sigma)
+        extra = 0 if sigma is None else np.size(sigma)
+        assert (data, fixed) == (8 * (10 + 5 + extra), 0)
+
+    def test_fixed_bytes_shrink_the_batch(self):
+        n, avail = 10_000_000, 8.0
+        base = auto_configure_cmaes_memory(n, 16, avail)
+        more = auto_configure_cmaes_memory(n, 16, avail, fixed_bytes=3 * 1024**3)
+        assert (base, more) == ((None, None), (8, None))
+
+    def test_fixed_bytes_are_not_doubled_by_chunking(self):
+        n, avail, extra = 310_000_000, 16.0, 1024**3
+        # counted once: the chunk budget still fits the largest bucket
+        assert auto_configure_cmaes_memory(n, 16, avail, fixed_bytes=extra) == (
+            1,
+            131072,
+        )
+        # counted as per-point data (doubled): budget collapses to the minimum
+        with pytest.warns(UserWarning, match="exceeds"):
+            doubled = auto_configure_cmaes_memory(
+                n, 16, avail, data_bytes=n * 16 + extra
+            )
+        assert doubled == (1, 1024)
+
+    def test_warning_names_the_covariance_sigma(self):
+        with pytest.warns(UserWarning, match="covariance sigma"):
+            auto_configure_cmaes_memory(1_000_000, 16, 1.0, fixed_bytes=2 * 1024**3)

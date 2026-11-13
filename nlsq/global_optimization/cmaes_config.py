@@ -10,7 +10,9 @@ import logging
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
+
+import numpy as np
 
 from nlsq.core._option_checks import _unwrap_scalar, is_integral
 
@@ -407,19 +409,40 @@ def estimate_cmaes_memory_gb(
     return peak_bytes / (1024**3)
 
 
+def cmaes_resident_bytes(xdata: Any, ydata: Any, sigma: Any = None) -> tuple[int, int]:
+    """Split the fit's resident float64 arrays into ``(data_bytes, fixed_bytes)``.
+
+    ``data_bytes`` covers xdata, ydata and a 0-/1-D sigma: per-point arrays that
+    data chunking pads and copies. A 2-D sigma is a covariance matrix that CMA-ES
+    whitens with its Cholesky factor, applied whole; the matrix and the factor
+    (``2 * 8 * N**2`` bytes) are ``fixed_bytes``, which chunking cannot shrink.
+    """
+    fixed = 0
+    arrays = [xdata, ydata]
+    if sigma is not None:
+        if np.ndim(sigma) == 2:
+            fixed = 2 * 8 * int(np.size(sigma))
+        else:
+            arrays.append(sigma)
+    return 8 * sum(int(np.size(a)) for a in arrays if a is not None), fixed
+
+
 def auto_configure_cmaes_memory(
     n_data: int,
     popsize: int,
     available_memory_gb: float = 8.0,
     safety_factor: float = 0.7,
     data_bytes: int | None = None,
+    fixed_bytes: int = 0,
 ) -> tuple[int | None, int | None]:
     """Auto-configure batch sizes to fit in available memory.
 
     The resident data arrays (``data_bytes``) are subtracted from the budget first,
     so a returned configuration whose ``estimate_cmaes_memory_gb`` is non-chunked
     never exceeds ``available_memory_gb * safety_factor``. When data chunking is
-    chosen the arrays are counted twice (the padded chunk copy).
+    chosen the arrays are counted twice (the padded chunk copy). ``fixed_bytes``
+    (a dense 2-D sigma and its Cholesky factor, see :func:`cmaes_resident_bytes`)
+    is subtracted once in both cases: chunking cannot shrink it.
 
     Parameters
     ----------
@@ -434,6 +457,8 @@ def auto_configure_cmaes_memory(
     data_bytes : int | None, optional
         Bytes held by xdata + ydata (+ sigma) in float64. Default: ``n_data * 16``
         (xdata and ydata, as ``estimate_cmaes_memory_gb`` counts them).
+    fixed_bytes : int, optional
+        Resident bytes that data chunking neither pads nor shrinks. Default: 0.
 
     Returns
     -------
@@ -457,7 +482,7 @@ def auto_configure_cmaes_memory(
         data_bytes = n_data * 16
 
     # Try full data, full population first, then population batching (halving)
-    unchunked_budget = target_memory_bytes - data_bytes
+    unchunked_budget = target_memory_bytes - data_bytes - fixed_bytes
     if n_data * popsize * bytes_per_point_per_candidate <= unchunked_budget:
         return None, None  # No batching needed
     for pop_batch in [popsize // 2, popsize // 4, popsize // 8, 1]:
@@ -467,7 +492,7 @@ def auto_configure_cmaes_memory(
             return pop_batch, None
 
     # Need data chunking: pop_batch=1, the padded chunk copy doubles the resident data
-    chunk_budget = target_memory_bytes - 2 * data_bytes
+    chunk_budget = target_memory_bytes - 2 * data_bytes - fixed_bytes
     max_chunk = int(chunk_budget / bytes_per_point_per_candidate)
 
     # Use power-of-2 bucket sizes for JIT cache efficiency
@@ -482,7 +507,8 @@ def auto_configure_cmaes_memory(
 
     if max_chunk < data_chunk:
         warnings.warn(
-            f"CMA-ES data ({data_bytes / 1024**3:.2f} GB, doubled when chunked) exceeds "
+            f"CMA-ES data ({data_bytes / 1024**3:.2f} GB, doubled when chunked, plus "
+            f"{fixed_bytes / 1024**3:.2f} GB of covariance sigma) exceeds "
             f"the {target_memory_bytes / 1024**3:.2f} GB memory budget; using the "
             f"smallest configuration (population_batch_size=1, data_chunk_size="
             f"{data_chunk}) which may still run out of memory",
