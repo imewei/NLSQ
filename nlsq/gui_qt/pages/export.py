@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import json
+import stat
 import tempfile
 import warnings
 import zipfile
@@ -408,13 +409,16 @@ class ExportPage(QWidget):
         destination = Path(path)
         with tempfile.TemporaryDirectory(dir=destination.parent) as tmp_dir:
             temporary = Path(tmp_dir) / destination.name
-            temporary.touch(mode=0o600)
             with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as zf:
                 if state.xdata is not None and state.ydata is not None:
                     zf.writestr("data.csv", "\n".join(self._data_csv_lines()) + "\n")
                 zf.writestr("results.json", self._generate_json())
                 zf.writestr("fit_script.py", self.generate_python_code(for_bundle=True))
                 zf.writestr("config.yaml", self._generate_config_yaml())
+            # shortcut: same stat-then-replace mode race as cli.result_exporter._atomic_write
+            # (uncoordinated second process); upgrade to a lock file if exports get sensitive.
+            if destination.exists():
+                temporary.chmod(stat.S_IMODE(destination.stat().st_mode))
             temporary.replace(destination)
 
     def export_json(self, path: str) -> None:

@@ -131,10 +131,6 @@ Page 5: Export
 - Python code generation
 - Plot export (PNG, PDF, SVG)
 
-On POSIX systems, ZIP, JSON, CSV and generated Python exports are created with
-at most owner read/write permissions (``0600``), including when replacing an
-existing file. Change permissions after export if other users need access.
-
 **Export formats:**
 
 1. **ZIP Bundle**: Complete session including:

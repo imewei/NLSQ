@@ -1,29 +1,9 @@
-import os
-import stat
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 pytestmark = pytest.mark.serial
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
-@pytest.mark.parametrize("existing", [False, True])
-def test_bundle_export_is_private(tmp_path, existing):
-    from nlsq.gui_qt.pages.export import ExportPage
-
-    target = tmp_path / "session.zip"
-    if existing:
-        target.write_text("old")
-        target.chmod(0o644)
-    page = MagicMock()
-    page._app_state.state.xdata = None
-    page._generate_json.return_value = "{}"
-    page.generate_python_code.return_value = ""
-    page._generate_config_yaml.return_value = ""
-    ExportPage.export_session_bundle(page, str(target))
-    assert stat.S_IMODE(target.stat().st_mode) & 0o077 == 0
 
 
 def test_failed_json_export_preserves_existing_file(tmp_path, monkeypatch):
