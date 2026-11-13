@@ -223,7 +223,7 @@ def pcov_from_normal(
             return w, V, w > p * np.finfo(np.float64).eps * w[-1]
 
         w, V, keep = _eig(d)
-        if not keep.all():
+        if not keep.all() and np.any(d != 1.0):
             # Rank-deficient even after equilibration: a pseudo-inverse is not
             # congruence-invariant (scaling changes its null space), so use the
             # unscaled Moore-Penrose semantics.
