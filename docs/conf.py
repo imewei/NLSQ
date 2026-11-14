@@ -506,9 +506,43 @@ mathjax3_config = {
 }
 
 
+# -- Redirects for removed pages ---------------------------------------------
+# Published URL (no suffix) -> replacement page. Written as meta-refresh pages after an HTML build.
+REMOVED_PAGE_REDIRECTS = {
+    "tutorials/01_first_fit": "tutorials/routine/getting_started/first_fit",
+    "tutorials/02_understanding_results": "tutorials/routine/getting_started/understanding_results",
+    "tutorials/03_fitting_with_bounds": "tutorials/routine/data_handling/bounds",
+    "tutorials/05_large_datasets": "tutorials/routine/data_handling/large_datasets",
+    "tutorials/06_gpu_acceleration": "tutorials/routine/gpu_acceleration/gpu_usage",
+    "gui/user_guide": "tutorials/routine/gui_desktop/index",
+}
+
+
+def _write_removed_page_redirects(app, exception):
+    if exception is not None or app.builder.format != "html":
+        return
+    import posixpath
+    from pathlib import Path
+
+    for old, new in REMOVED_PAGE_REDIRECTS.items():
+        target = posixpath.relpath(
+            f"{new}.html", start=posixpath.dirname(f"{old}.html")
+        )
+        page = Path(app.outdir) / f"{old}.html"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text(
+            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            f"<meta http-equiv='refresh' content='0; url={target}'>"
+            f"<link rel='canonical' href='{target}'><title>Moved</title></head>"
+            f"<body>This page moved to <a href='{target}'>{new}</a>.</body></html>",
+            encoding="utf-8",
+        )
+
+
 # -- Sphinx setup hook -------------------------------------------------------
 def setup(app):
     """Configure Sphinx after initialization."""
+    app.connect("build-finished", _write_removed_page_redirects)
     import logging as _logging
     import re
 

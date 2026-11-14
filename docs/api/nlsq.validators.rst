@@ -537,7 +537,9 @@ Performance Impact
 **Fast mode** (fast_mode=True):
 
 - Skips: Function callable test, data quality checks
-- Speedup: ~30-50% faster validation
+- Measured on one CPU with a two-parameter exponential model (median of 7 calls): 0.0002 s with
+  ``fast_mode=True`` against 0.0019 s with ``fast_mode=False`` at 100,000 points, and 0.0024 s against
+  0.0218 s at 1,000,000 points. The skipped checks scale with the number of points
 - Use for: Production code with trusted inputs
 
 **Full mode** (fast_mode=False):
