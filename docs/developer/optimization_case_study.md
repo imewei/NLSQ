@@ -38,7 +38,7 @@ This case study documents a performance optimization effort on NLSQ (Nonlinear L
 **NLSQ**: GPU/TPU-accelerated nonlinear least squares curve fitting library
 - **Technology**: JAX (Google's autodiff framework)
 - **Purpose**: Drop-in replacement for `scipy.optimize.curve_fit`
-- **Performance claim**: 150-270x faster than baseline on GPU
+- **Performance claim** (as stated in October 2025; no recorded source, see [Performance Benchmarks](../api/performance_benchmarks.rst) for measured same-device timings): 150-270x faster than baseline on GPU
 
 ### The Request
 
@@ -326,7 +326,7 @@ def inner_body(carry, _):
 #### 3. User Value Perspective
 
 **Performance Claims**:
-- Already **150-270x faster** than baseline
+- Already **150-270x faster** than baseline (the claim as stated at the time)
 - 500ms for 1000-point fit is **excellent**
 - No user complaints about speed
 
@@ -575,7 +575,7 @@ Why?
 **Optimization is about achieving sufficient performance at reasonable cost.**
 
 NLSQ is:
-- [PASS] 150-270x faster than baseline
+- [PASS] 150-270x faster than baseline (the claim as stated at the time)
 - [PASS] Excellent scaling characteristics
 - [PASS] Well-optimized with JAX primitives
 - [PASS] Clean, maintainable codebase

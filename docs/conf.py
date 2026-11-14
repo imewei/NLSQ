@@ -12,8 +12,10 @@
 #
 import logging
 import os
+import posixpath
 import sys
 import warnings
+from pathlib import Path
 
 # Filter out specific warnings that we can't easily suppress
 warnings.filterwarnings("ignore", category=UserWarning, module="sphinx")
@@ -521,13 +523,8 @@ REMOVED_PAGE_REDIRECTS = {
 def _write_removed_page_redirects(app, exception):
     if exception is not None or app.builder.format != "html":
         return
-    import posixpath
-    from pathlib import Path
-
     for old, new in REMOVED_PAGE_REDIRECTS.items():
-        target = posixpath.relpath(
-            f"{new}.html", start=posixpath.dirname(f"{old}.html")
-        )
+        target = posixpath.relpath(new, start=posixpath.dirname(old)) + ".html"
         page = Path(app.outdir) / f"{old}.html"
         page.parent.mkdir(parents=True, exist_ok=True)
         page.write_text(

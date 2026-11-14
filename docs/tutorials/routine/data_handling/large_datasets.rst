@@ -136,7 +136,7 @@ Performance Benchmarks
 
 ``curve_fit_large`` runs exact full-data streaming at or above ``size_threshold`` (1M points). At 1M points it
 was 2.2x to 11x faster than in-memory ``curve_fit`` on both devices (warm medians, i9-13900H and RTX 4090 Laptop
-GPU, run of 2026-11-13):
+GPU, run of 2026-11-13). Model fits at 1,000,000 points:
 
 .. list-table::
    :header-rows: 1
@@ -188,7 +188,8 @@ GPUs run large fits faster than the CPU:
    # Automatically uses GPU if available
    popt, pcov = fit(model, x, y, p0=[...])
 
-NLSQ on the GPU was faster than NLSQ on the CPU from about 100K points and slower below that
+NLSQ on the GPU was faster than NLSQ on the CPU from 1M points on the four models measured, depended on the model
+at 100K points, and was slower below that
 (:doc:`/api/performance_benchmarks`).
 
 Complete Example

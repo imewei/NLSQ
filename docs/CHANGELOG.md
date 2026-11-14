@@ -11,6 +11,11 @@
     old URLs after an HTML build, so published links still resolve.
     The hidden "Legacy Redirects" toctree in `tutorials/index.rst` went with them, and
     `tutorials/04_multiple_parameters` is retitled "Multi-Parameter Models" with its prerequisite repointed.
+  - Review follow-up: the GPU crossover is now stated as 1M points (model-dependent at 100K) in
+    `explanation/gpu_architecture.rst`, `howto`/tutorial pages and `developer/performance_tuning_guide.md`, matching the
+    measured table; the 150-270x claim is marked as historical in `developer/optimization_case_study.md` and removed
+    from `examples/notebooks/02_core_tutorials/large_dataset_demo.ipynb`; leftover `Task Group` comments removed from
+    `streaming/large_dataset.py`; `tests/packaging/test_docs_redirects.py` guards the redirect table and hook.
   - Unsourced multipliers: `api/nlsq.validators.rst` "~30-50% faster" replaced by a measurement (one CPU, median of
     7 calls: 0.0002 s against 0.0019 s at 100,000 points, 0.0024 s against 0.0218 s at 1,000,000);
     `api/nlsq.unified_cache.rst` "2-5x" compile-time goal removed. The "3-25x" in `api/nlsq.svd_fallback.rst`

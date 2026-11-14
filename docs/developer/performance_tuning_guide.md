@@ -469,13 +469,13 @@ host was not idle, so treat small values as indicative. Four models, both device
 ### When to Use GPU
 
 **GPU is beneficial when**:
-- Problem size of about 100,000 points or more
+- Problem size of 1,000,000 points or more (at 100,000 points the result depended on the model)
 - Batch fitting many curves
 - Complex model functions
 - Large Jacobian matrices
 
 **GPU may not help when**:
-- Problem size below about 100,000 points (the CPU was faster up to 10,000 points and about even at 100,000)
+- Problem size below 1,000,000 points (the CPU was faster up to 10,000 points; at 100,000 points the GPU ranged from 1.2x slower to 3.2x faster)
 - Simple model functions
 - JIT compilation dominates (first run)
 

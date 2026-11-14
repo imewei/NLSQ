@@ -1227,7 +1227,7 @@ class LargeDatasetFitter:
         config: LDMemoryConfig | None = None,
         curve_fit_class: CurveFit | None = None,
         logger: Logger | None = None,
-        # Multi-start parameters (Task Group 3)
+        # Multi-start parameters
         multistart: bool = False,
         n_starts: int = 10,
         sampler: Literal["lhs", "sobol", "halton"] = "lhs",
@@ -1271,7 +1271,7 @@ class LargeDatasetFitter:
         # Neutral outside a fit (unscaled covariance); each run sets the caller's choice.
         self._absolute_sigma = True
 
-        # Multi-start configuration (Task Group 3)
+        # Multi-start configuration
         self.multistart = multistart
         # Ensure enough starts for robust exploration on large datasets
         # Only enforce minimum when multistart is enabled AND n_starts > 0
@@ -1305,7 +1305,7 @@ class LargeDatasetFitter:
         self.fit_history: list[dict] = []
         self._error_log_timestamps: defaultdict[str, list[float]] = defaultdict(list)
 
-        # Task Group 7 (5.1a): Model validation caching
+        # Model validation caching
         # Cache validated functions by (id(func), id(func.__code__)) to avoid
         # redundant validation across chunks. Provides 1-5% performance gain.
         self._validated_functions: dict[int, bool] = {}
@@ -1487,12 +1487,12 @@ class LargeDatasetFitter:
 
         Notes
         -----
-        Task Group 7 (5.1a): Uses validation caching by function content.
+        Uses validation caching by function content.
         Validation is skipped for functions that have already been validated,
         using content-based key (name, bytecode, consts) for cache lookup.
         Provides 1-5% performance gain in chunked processing.
         """
-        # Task Group 7 (5.1a): Check validation cache
+        # Check validation cache
         # Use closure_serial(f) rather than (name, __code__.co_code,
         # __code__.co_consts): two closures built by the same factory share
         # identical bytecode/consts but capture different free variables
@@ -1597,7 +1597,7 @@ class LargeDatasetFitter:
                 f"f({x_test.shape}, {len(p0_test)} params) -> {output_test.shape}",
             )
 
-            # Task Group 7 (5.1a): Cache successful validation
+            # Cache successful validation
             self._validated_functions[func_key] = True
 
         except (ValueError, TypeError) as e:
@@ -3309,7 +3309,7 @@ def fit_large_dataset(
     memory_limit_gb: float = 8.0,
     show_progress: bool = False,
     logger: Logger | None = None,
-    # Multi-start parameters (Task Group 3)
+    # Multi-start parameters
     multistart: bool = False,
     n_starts: int = 10,
     sampler: Literal["lhs", "sobol", "halton"] = "lhs",

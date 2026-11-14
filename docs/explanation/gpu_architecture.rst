@@ -72,8 +72,9 @@ Key observations:
 
 1. **Fixed per-fit overhead**: JIT dispatch and host/device transfers dominate small problems, and the
    first call for a new shape also compiles the kernel
-2. **Crossover point**: on this hardware the GPU starts to pay off at about 100,000 points; below that the
-   CPU is faster
+2. **Crossover point**: on this hardware the GPU was faster on all four models from 1,000,000 points; at
+   100,000 points it ranged from 1.2x slower to 3.2x faster depending on the model, and below that the CPU
+   was faster
 3. **Scaling advantage**: the GPU's advantage over the CPU grows with the dataset size
 
 Memory Considerations
@@ -232,7 +233,7 @@ GPU acceleration in NLSQ provides:
 4. **Memory management**: Automatic chunking and streaming
 
 Best for:
-- Large datasets (about 100K points and above; the CPU is faster for small fits)
+- Large datasets (1M points and above; at 100K points it depends on the model, and the CPU is faster for small fits)
 - Repeated fits (amortize JIT)
 - Production pipelines
 
