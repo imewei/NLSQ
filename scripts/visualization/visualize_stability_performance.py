@@ -5,17 +5,31 @@ This script generates plots to understand:
 2. Stability overhead across different problem sizes
 3. rescale_data impact on convergence
 
+All figures are ILLUSTRATIVE MODELS built from assumed constants (about 1 GFLOP/s,
+assumed iteration counts and per-iteration costs). No NLSQ fit is run and nothing
+here is measured; the figure titles say so. For measured numbers use
+scripts/benchmarks/.
+
 Requires: matplotlib, numpy
-Run with: python scripts/visualization/visualize_stability_performance.py
+Run with: python scripts/visualization/visualize_stability_performance.py [--output-dir DIR]
+PNGs go to --output-dir (default: <system temp>/nlsq_stability_plots).
+Exits non-zero if any plot fails.
 """
 
 from __future__ import annotations
 
+import argparse
+import sys
+import tempfile
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 
+ILLUSTRATIVE = "illustrative model, not measured"
 
-def plot_svd_cost_scaling():
+
+def plot_svd_cost_scaling(outdir: Path) -> None:
     """Plot theoretical SVD cost scaling with matrix size."""
     # Matrix configurations (m, n)
     configs = [
@@ -23,7 +37,7 @@ def plot_svd_cost_scaling():
         ("Tall matrices (n=7)", [(1e3, 7), (1e4, 7), (1e5, 7), (1e6, 7), (1e7, 7)]),
         # Vary n, fixed m
         (
-            "Wide matrices (m=100K)",
+            "Tall matrices, varying n (m=100K)",
             [(1e5, 1), (1e5, 10), (1e5, 50), (1e5, 100), (1e5, 500)],
         ),
         # Square matrices
@@ -31,7 +45,10 @@ def plot_svd_cost_scaling():
     ]
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    fig.suptitle("SVD Computational Cost Scaling: O(min(m,n)² × max(m,n))", fontsize=14)
+    fig.suptitle(
+        f"SVD Computational Cost Scaling: O(min(m,n)² × max(m,n)) ({ILLUSTRATIVE})",
+        fontsize=14,
+    )
 
     for idx, (title, sizes) in enumerate(configs):
         ax = axes[idx]
@@ -68,12 +85,12 @@ def plot_svd_cost_scaling():
                 )
 
     plt.tight_layout()
-    plt.savefig("stability_svd_cost_scaling.png", dpi=300, bbox_inches="tight")
-    print("Saved: stability_svd_cost_scaling.png")
+    plt.savefig(outdir / "stability_svd_cost_scaling.png", dpi=300, bbox_inches="tight")
+    print(f"Saved: {outdir / 'stability_svd_cost_scaling.png'}")
     plt.close()
 
 
-def plot_stability_overhead():
+def plot_stability_overhead(outdir: Path) -> None:
     """Plot stability mode overhead vs. problem size."""
     # Problem sizes
     problem_sizes = np.logspace(2, 7, 20)  # 100 to 10M points
@@ -108,7 +125,8 @@ def plot_stability_overhead():
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle(
-        "Stability Mode Overhead: Before vs. After Fix (50 iterations)", fontsize=14
+        f"Stability Mode Overhead: Before vs. After Fix, 50 iterations ({ILLUSTRATIVE})",
+        fontsize=14,
     )
 
     # Absolute overhead
@@ -139,12 +157,14 @@ def plot_stability_overhead():
     ax2.set_ylim([0, max(*pct_old, *pct_new) * 1.2])
 
     plt.tight_layout()
-    plt.savefig("stability_overhead_comparison.png", dpi=300, bbox_inches="tight")
-    print("Saved: stability_overhead_comparison.png")
+    plt.savefig(
+        outdir / "stability_overhead_comparison.png", dpi=300, bbox_inches="tight"
+    )
+    print(f"Saved: {outdir / 'stability_overhead_comparison.png'}")
     plt.close()
 
 
-def plot_threshold_sensitivity():
+def plot_threshold_sensitivity(outdir: Path) -> None:
     """Plot SVD skip threshold sensitivity."""
     # Different threshold values
     thresholds = [1e6, 5e6, 1e7, 2e7, 5e7, 1e8]
@@ -180,7 +200,9 @@ def plot_threshold_sensitivity():
 
     ax.set_xlabel("SVD Skip Threshold (elements)", fontsize=11)
     ax.set_ylabel("Matrix Configuration", fontsize=11)
-    ax.set_title("SVD Computation Decision Matrix", fontsize=13)
+    ax.set_title(
+        "SVD Computation Decision Matrix (elements <= threshold: computed)", fontsize=13
+    )
 
     # Add text annotations
     for i in range(len(configs)):
@@ -197,12 +219,14 @@ def plot_threshold_sensitivity():
     cbar.set_ticklabels(["Skipped", "Computed"])
 
     plt.tight_layout()
-    plt.savefig("stability_threshold_sensitivity.png", dpi=300, bbox_inches="tight")
-    print("Saved: stability_threshold_sensitivity.png")
+    plt.savefig(
+        outdir / "stability_threshold_sensitivity.png", dpi=300, bbox_inches="tight"
+    )
+    print(f"Saved: {outdir / 'stability_threshold_sensitivity.png'}")
     plt.close()
 
 
-def plot_rescale_impact():
+def plot_rescale_impact(outdir: Path) -> None:
     """Plot impact of data rescaling on convergence."""
     # Simulate different data conditioning scenarios
     conditions = [
@@ -226,7 +250,10 @@ def plot_rescale_impact():
     ]  # +rescale cost
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-    fig.suptitle("Impact of Data Rescaling (rescale_data parameter)", fontsize=14)
+    fig.suptitle(
+        f"Impact of Data Rescaling (rescale_data parameter): {ILLUSTRATIVE}",
+        fontsize=14,
+    )
 
     # Iterations comparison
     x = np.arange(len(conditions))
@@ -308,49 +335,57 @@ def plot_rescale_impact():
         )
 
     plt.tight_layout()
-    plt.savefig("stability_rescale_impact.png", dpi=300, bbox_inches="tight")
-    print("Saved: stability_rescale_impact.png")
+    plt.savefig(outdir / "stability_rescale_impact.png", dpi=300, bbox_inches="tight")
+    print(f"Saved: {outdir / 'stability_rescale_impact.png'}")
     plt.close()
 
 
-def generate_all_plots():
-    """Generate all performance visualization plots."""
-    print("Generating stability performance visualizations...")
+def generate_all_plots(outdir: Path) -> None:
+    """Generate all performance visualization plots into ``outdir``."""
+    outdir.mkdir(parents=True, exist_ok=True)
+    print(f"Generating stability performance visualizations in {outdir} ...")
     print()
 
+    print("1. SVD Cost Scaling...")
+    plot_svd_cost_scaling(outdir)
+    print()
+
+    print("2. Stability Overhead Comparison...")
+    plot_stability_overhead(outdir)
+    print()
+
+    print("3. Threshold Sensitivity Analysis...")
+    plot_threshold_sensitivity(outdir)
+    print()
+
+    print("4. Rescale Impact Analysis...")
+    plot_rescale_impact(outdir)
+    print()
+
+    print("=" * 60)
+    print("All plots generated successfully!")
+    print("=" * 60)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(tempfile.gettempdir()) / "nlsq_stability_plots",
+        help="directory for the PNGs (default: %(default)s)",
+    )
+    args = parser.parse_args()
     try:
-        print("1. SVD Cost Scaling...")
-        plot_svd_cost_scaling()
-        print()
-
-        print("2. Stability Overhead Comparison...")
-        plot_stability_overhead()
-        print()
-
-        print("3. Threshold Sensitivity Analysis...")
-        plot_threshold_sensitivity()
-        print()
-
-        print("4. Rescale Impact Analysis...")
-        plot_rescale_impact()
-        print()
-
-        print("=" * 60)
-        print("All plots generated successfully!")
-        print("=" * 60)
-        print()
-        print("Files created:")
-        print("  - stability_svd_cost_scaling.png")
-        print("  - stability_overhead_comparison.png")
-        print("  - stability_threshold_sensitivity.png")
-        print("  - stability_rescale_impact.png")
-
+        generate_all_plots(args.output_dir)
     except Exception as e:
-        print(f"Error generating plots: {e}")
         import traceback
 
+        print(f"Error generating plots: {e}", file=sys.stderr)
         traceback.print_exc()
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    generate_all_plots()
+    sys.exit(main())

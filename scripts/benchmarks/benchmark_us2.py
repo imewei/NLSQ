@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Benchmark script for User Story 2: SVD Efficiency.
 
-Validates SC-002 and SC-006 success criteria:
-- SC-002: 20-40% iteration improvement when SVD caching is applicable
+Validates the SC-006 success criterion and reports SC-002 as an illustration:
+- SC-002 (informational, not gated): 20-40% iteration improvement when SVD
+  caching is applicable. This is a synthetic micro-benchmark of the caching
+  pattern; it never runs NLSQ's TRF, so it cannot pass or fail on trf.py.
 - SC-006: 3x faster condition number estimation using svdvals()
 
-Note: The current implementation already has SVD caching in place (SVD computed
-once per outer iteration and reused in inner loop). This benchmark validates
-that the caching is effective and measures the svdvals() optimization.
+Exits non-zero if SC-006 or the stability-guard svdvals check fails.
 """
 
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -90,16 +91,19 @@ def benchmark_svdvals_vs_full_svd() -> dict[str, Any]:
 
 
 def benchmark_svd_caching_pattern() -> dict[str, Any]:
-    """Benchmark the SVD caching pattern used in TRF.
+    """Illustrate the SVD caching pattern used in TRF (informational only).
 
-    SC-002: 20-40% iteration improvement when SVD caching is applicable
+    SC-002: 20-40% iteration improvement when SVD caching is applicable.
+    The result is a function of the synthetic loop counts below (100 vs 20
+    eager SVDs); no NLSQ code runs, so it is reported but never gates the exit
+    code.
 
     The optimization is: SVD is computed once per outer iteration and reused
     across all inner loop iterations. When steps are rejected, only the
     trust-region subproblem is re-solved (using cached s, V, uf), not the SVD.
     """
     print("\n" + "=" * 60)
-    print("SC-002: SVD Caching Pattern Analysis")
+    print("SC-002: SVD Caching Pattern (illustrative, not gated)")
     print("=" * 60)
 
     # Create a test problem
@@ -150,15 +154,12 @@ def benchmark_svd_caching_pattern() -> dict[str, Any]:
     print(f"  With caching:    {t_with_cache * 1000:.2f}ms")
     print(f"  Improvement:     {improvement:.1f}%")
 
-    # SC-002: Target is 20-40% improvement
-    passed = improvement >= 20.0
-    print(
-        f"\n  SC-002 {'PASSED' if passed else 'FAILED'}: {improvement:.1f}% >= 20% required"
-    )
+    # Informational: the figure follows from the loop counts, not from TRF.
+    print("\n  SC-002 INFO: synthetic pattern only, not a TRF measurement")
 
     return {
         "sc_002": {
-            "passed": passed,
+            "informational": True,
             "improvement_percent": float(improvement),
             "target": 20.0,
             "time_no_cache_ms": float(t_no_cache * 1000),
@@ -183,27 +184,47 @@ def verify_svdvals_in_stability_guard() -> dict[str, Any]:
     np.random.seed(42)
     J = jnp.array(np.random.randn(100, 10))
 
-    # Call check_and_fix_jacobian which should use svdvals internally
-    _, issues = guard.check_and_fix_jacobian(J)
+    # Make the check real: a full SVD must not be reached, svdvals must be.
+    real_svd, real_svdvals = jnp.linalg.svd, jnp.linalg.svdvals
+    calls = {"svdvals": 0}
 
-    print(f"  Condition number computed: {issues.get('condition_number', 'N/A'):.2e}")
-    print(f"  svd_skipped flag:          {issues.get('svd_skipped', 'N/A')}")
+    def _no_full_svd(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("full jnp.linalg.svd called by check_and_fix_jacobian")
 
-    # The implementation uses svdvals - verified by code inspection
-    verified = True
+    def _counting_svdvals(*args: Any, **kwargs: Any) -> Any:
+        calls["svdvals"] += 1
+        return real_svdvals(*args, **kwargs)
+
+    jnp.linalg.svd, jnp.linalg.svdvals = _no_full_svd, _counting_svdvals
+    try:
+        _, issues = guard.check_and_fix_jacobian(J)
+        verified = calls["svdvals"] >= 1 and not issues.get("svd_skipped", False)
+    except AssertionError as exc:
+        print(f"  {exc}")
+        issues, verified = {}, False
+    finally:
+        jnp.linalg.svd, jnp.linalg.svdvals = real_svd, real_svdvals
+
+    # condition_number is None when the guard skips the SVD (huge Jacobians).
+    cond = issues.get("condition_number")
     print(
-        f"\n  Verification: {'PASSED' if verified else 'FAILED'} - check_and_fix_jacobian uses jnp.linalg.svdvals"
+        f"  Condition number computed: {f'{cond:.2e}' if cond is not None else 'N/A'}"
+    )
+    print(f"  svd_skipped flag:          {issues.get('svd_skipped', 'N/A')}")
+    print(f"  svdvals calls:             {calls['svdvals']}")
+    print(
+        f"\n  Verification: {'PASSED' if verified else 'FAILED'} - check_and_fix_jacobian uses jnp.linalg.svdvals (no full SVD)"
     )
 
     return {
         "svdvals_verification": {
             "passed": verified,
-            "condition_number": float(issues.get("condition_number", 0)),
+            "condition_number": float(cond) if cond is not None else None,
         }
     }
 
 
-def main() -> None:
+def main() -> int:
     """Run all benchmarks and save results."""
     print("\n" + "=" * 60)
     print("User Story 2 Benchmark: SVD Efficiency")
@@ -261,7 +282,8 @@ def main() -> None:
             indent=2,
         )
     print(f"\n  Results saved to: {output_path}")
+    return 0 if all_passed else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

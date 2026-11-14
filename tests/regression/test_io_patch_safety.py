@@ -138,3 +138,20 @@ class TestPatchSavefigContainment:
 
     def test_empty_script_name_falls_back(self, savefig_spy, monkeypatch):
         self._run(savefig_spy, monkeypatch, "", "fig.png")
+
+
+class TestFileLikeTargets:
+    """savefig(<buffer>) has no path to redirect and must pass through."""
+
+    def test_figure_savefig_to_buffer(self, savefig_spy, monkeypatch):
+        import io
+
+        import io_patch
+        from matplotlib.figure import Figure
+
+        monkeypatch.setenv("NLSQ_CURRENT_SCRIPT", "myscript")
+        io_patch.patch_savefig()
+
+        buf = io.BytesIO()
+        Figure().savefig(buf, format="png")
+        assert buf.getvalue().startswith(b"\x89PNG")

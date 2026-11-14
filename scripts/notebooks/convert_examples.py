@@ -7,11 +7,29 @@ For scripts: Replaces display() with plt.savefig() for non-interactive execution
 Also supports configuring matplotlib for inline plotting in notebooks.
 """
 
+import ast
 import json
 import re
 import sys
 import textwrap
 from pathlib import Path
+
+
+def swap_dir_part(path: Path, old: str, new: str) -> Path | None:
+    """Replace the last path component named ``old`` with ``new``.
+
+    Works on path parts (not a string replace), so it behaves the same with
+    Windows separators, a trailing component-less ``.../scripts`` argument, or a
+    parent directory that happens to share the name. Returns None if ``path``
+    has no ``old`` component.
+    """
+    parts = list(path.parts)
+    for idx in range(len(parts) - 1, -1, -1):
+        if parts[idx] == old:
+            parts[idx] = new
+            return Path(*parts)
+    return None
+
 
 # ============================================================================
 # Matplotlib Configuration for Notebooks
@@ -104,23 +122,25 @@ def replace_plt_show_in_cell(cell_source):
     if "plt.show()" not in source:
         return cell_source, False
 
-    # Check if tight_layout already exists on the line before plt.show()
-    already_has_tight = bool(
-        re.search(r"plt\.tight_layout\(\)\s*\n\s*plt\.show\(\)", source)
+    # Every inserted line reuses the indent of the plt.show() line it replaces,
+    # so a plt.show() inside a for/if/with body stays in that body.
+    replacement = r"\1plt.tight_layout()\n\1display(plt.gcf())\n\1plt.close()"
+    trailing = r"[ \t]*(?:#.*)?$"
+    # Fold an existing plt.tight_layout() into the replacement.
+    new_source = re.sub(
+        r"^([ \t]*)plt\.tight_layout\(\)[ \t]*\n[ \t]*plt\.show\(\)" + trailing,
+        replacement,
+        source,
+        flags=re.MULTILINE,
     )
-
-    if already_has_tight:
-        new_source = re.sub(
-            r"plt\.tight_layout\(\)\s*\n\s*plt\.show\(\)",
-            "plt.tight_layout()\ndisplay(plt.gcf())\nplt.close()",
-            source,
-        )
-    else:
-        new_source = re.sub(
-            r"plt\.show\(\)",
-            "plt.tight_layout()\ndisplay(plt.gcf())\nplt.close()",
-            source,
-        )
+    new_source = re.sub(
+        r"^([ \t]*)plt\.show\(\)" + trailing,
+        replacement,
+        new_source,
+        flags=re.MULTILINE,
+    )
+    if new_source == source:
+        return cell_source, False
 
     # Convert back to list of lines
     if isinstance(cell_source, list):
@@ -195,28 +215,30 @@ def post_process_script_code(code: str, script_name: str, fig_counter: dict) -> 
     if "%matplotlib" in code:
         code = re.sub(r"^%matplotlib.*\n?", "", code, flags=re.MULTILINE)
 
-    # Replace display(plt.gcf()) with plt.savefig()
-    if "display(plt.gcf())" in code:
-        # Increment figure counter
+    # Replace each display(plt.gcf()) with its own plt.savefig(): one figure
+    # number per call (not per cell) and the call's indent on every inserted
+    # line, so two figures in a cell, or a call inside a loop body, keep working.
+    def _save_figure(match: re.Match) -> str:
+        indent = match.group(1)
         fig_counter["count"] += 1
         fig_num = fig_counter["count"]
+        lines = [
+            "# Save figure to file",
+            f"fig_dir = Path(__file__).parent / 'figures' / '{script_name}'",
+            "fig_dir.mkdir(parents=True, exist_ok=True)",
+            f"plt.savefig(fig_dir / 'fig_{fig_num:02d}.png', dpi=300, bbox_inches='tight')",
+        ]
+        return "\n".join(indent + line for line in lines)
 
-        # Create figure path
-        _fig_path = f"figures/{script_name}/fig_{fig_num:02d}.png"
-
-        # Replace the pattern
-        replacement = (
-            f"# Save figure to file\n"
-            f"fig_dir = Path(__file__).parent / 'figures' / '{script_name}'\n"
-            f"fig_dir.mkdir(parents=True, exist_ok=True)\n"
-            f"plt.savefig(fig_dir / 'fig_{fig_num:02d}.png', dpi=300, bbox_inches='tight')"
-        )
-
-        code = code.replace("display(plt.gcf())", replacement)
-
+    code, n_figs = re.subn(
+        r"^([ \t]*)display\(plt\.gcf\(\)\)[ \t]*$",
+        _save_figure,
+        code,
+        flags=re.MULTILINE,
+    )
+    if n_figs:
         # Ensure Path is imported
-        if "from pathlib import Path" not in fig_counter.get("imports", set()):
-            fig_counter.setdefault("imports", set()).add("from pathlib import Path")
+        fig_counter.setdefault("imports", set()).add("from pathlib import Path")
 
     return code
 
@@ -230,19 +252,16 @@ def notebook_to_script(notebook_path: Path, output_path: Path | None = None) -> 
     - Creates figure directories automatically
     - Numbers figures sequentially
     """
-    with open(notebook_path) as f:
+    with open(notebook_path, encoding="utf-8") as f:
         notebook = json.load(f)
 
     if output_path is None:
         # Determine output path based on notebook structure
-        # notebooks/ -> scripts/
-        notebook_str = str(notebook_path)
-        if "/notebooks/" in notebook_str:
-            output_path = Path(
-                notebook_str.replace("/notebooks/", "/scripts/")
-            ).with_suffix(".py")
-        else:
-            output_path = notebook_path.with_suffix(".py")
+        # notebooks/ -> scripts/ (only directories above the file are swapped)
+        mapped = swap_dir_part(notebook_path.parent, "notebooks", "scripts")
+        output_path = (
+            mapped / notebook_path.name if mapped else notebook_path
+        ).with_suffix(".py")
 
     script_name = output_path.stem
 
@@ -298,54 +317,78 @@ def notebook_to_script(notebook_path: Path, output_path: Path | None = None) -> 
             python_lines.extend(["", content.rstrip(), ""])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\n".join(python_lines))
+    output_path.write_text("\n".join(python_lines), encoding="utf-8")
     return output_path
 
 
+def _code_cell(block: list[str]) -> dict | None:
+    """Build a code cell from raw lines; None if there is no code in them."""
+    if not any(ln.strip() and not ln.strip().startswith("#") for ln in block):
+        return None
+    code_text = textwrap.dedent("\n".join(block)).strip("\n")
+    return {
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [code_text + "\n"],
+    }
+
+
 def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Path:
-    """Convert Python script to Jupyter notebook."""
-    content = script_path.read_text()
+    """Convert Python script to Jupyter notebook.
+
+    The module docstring is skipped; every other line is kept (code cells keep
+    their comments and blank lines, so multi-line strings survive intact).
+    ``# ====`` banners delimit markdown cells. By default a script under a
+    ``scripts/`` directory is written to the mirrored ``notebooks/`` directory.
+
+    Raises:
+        SyntaxError: if the script does not parse (nothing is written).
+    """
+    content = script_path.read_text(encoding="utf-8")
 
     if output_path is None:
-        output_path = script_path.with_suffix(".ipynb")
+        mapped = swap_dir_part(script_path.parent, "scripts", "notebooks")
+        output_path = (
+            mapped / script_path.name if mapped else script_path
+        ).with_suffix(".ipynb")
 
     cells = []
     lines = content.split("\n")
     i = 0
 
-    # Skip module docstring
-    if lines[0].strip().startswith('"""'):
-        while i < len(lines) and '"""' not in lines[i][1:]:
-            i += 1
-        i += 1
+    # Skip the module docstring by its AST extent: a closing quote at column 0
+    # (PEP 257 style) or a nested docstring cannot fool this.
+    tree = ast.parse(content)
+    first = tree.body[0] if tree.body else None
+    if (
+        isinstance(first, ast.Expr)
+        and isinstance(first.value, ast.Constant)
+        and isinstance(first.value.value, str)
+    ):
+        i = first.end_lineno
 
-    current_block = []
+    current_block: list[str] = []
+    banner = "# " + "=" * 70
 
     while i < len(lines):
         line = lines[i]
 
-        if line.strip().startswith("# " + "=" * 70):
+        if line.startswith(banner):
             # Start of markdown section
-            if current_block:
-                # Dedent code block to remove common leading whitespace
-                code_text = "\n".join(current_block)
-                code_text = textwrap.dedent(code_text)
-                cells.append(
-                    {
-                        "cell_type": "code",
-                        "execution_count": None,
-                        "metadata": {},
-                        "outputs": [],
-                        "source": [code_text + "\n"],
-                    }
-                )
-                current_block = []
+            cell = _code_cell(current_block)
+            if cell:
+                cells.append(cell)
+            current_block = []
 
             # Collect markdown
             i += 1
             markdown_lines = []
-            while i < len(lines) and not lines[i].strip().startswith("# " + "=" * 70):
-                markdown_lines.append(lines[i].lstrip("# "))
+            while i < len(lines) and not lines[i].startswith(banner):
+                md = lines[i]
+                # Drop only the comment marker, not the markdown's own '#' headings
+                markdown_lines.append(md[2:] if md.startswith("# ") else md.lstrip("#"))
                 i += 1
 
             if markdown_lines:
@@ -356,26 +399,14 @@ def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Pa
                         "source": [line + "\n" for line in markdown_lines],
                     }
                 )
-
-        elif line.strip() and not line.strip().startswith("#"):
-            # Code line
+        else:
             current_block.append(line)
 
         i += 1
 
-    if current_block:
-        # Dedent code block to remove common leading whitespace
-        code_text = "\n".join(current_block)
-        code_text = textwrap.dedent(code_text)
-        cells.append(
-            {
-                "cell_type": "code",
-                "execution_count": None,
-                "metadata": {},
-                "outputs": [],
-                "source": [code_text + "\n"],
-            }
-        )
+    cell = _code_cell(current_block)
+    if cell:
+        cells.append(cell)
 
     notebook = {
         "cells": cells,
@@ -400,7 +431,7 @@ def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Pa
     }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(notebook, f, indent=2)
 
     return output_path

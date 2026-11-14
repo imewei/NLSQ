@@ -44,6 +44,14 @@ def find_figure_variable(source: list[str], show_line_idx: int) -> str:
                     return name
             return names[0]
 
+        # Do not cross into an earlier figure: a previous plt.show() closes the
+        # search window, and a bare plt.figure()/plt.subplots() (no binding) is
+        # the current figure, i.e. plt.gcf().
+        if "plt.show()" in line and not line.lstrip().startswith("#"):
+            break
+        if re.search(r"\bplt\.(figure|subplots)\s*\(", line):
+            break
+
     # Default: use plt.gcf() to get current figure
     return "plt.gcf()"
 
@@ -141,9 +149,11 @@ class PltShowReplacementTransformer(NotebookTransformer):
 
             source = cell.get("source", [])
             if isinstance(source, str):
-                # A single multi-line string must become one entry per line,
-                # or the line-anchored regexes below only ever see line 1.
-                source = source.splitlines(keepends=True)
+                source = [source]
+            # Re-split to one entry per physical line: a single multi-line string
+            # (or a list whose elements embed newlines, as the converters emit)
+            # would otherwise show the line-anchored logic only its first line.
+            source = "".join(source).splitlines(keepends=True)
 
             modified_source, num_replacements = replace_plt_show(source)
 

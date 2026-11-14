@@ -35,6 +35,19 @@ def _cap_size(
     return size
 
 
+# Library code (np.histogram -> np.linspace(first, last, bins + 1), matplotlib,
+# scipy, jax) needs the exact size it asked for; only example code is capped.
+_LIBRARY_MODULES = ("matplotlib", "scipy", "numpy", "jax")
+
+
+def _capped_num(num, max_samples: int, depth: int = 2) -> int:
+    """Cap ``num`` unless the patched function was called from library code."""
+    caller_mod = sys._getframe(depth).f_globals.get("__name__", "")
+    if caller_mod.startswith(_LIBRARY_MODULES):
+        return int(num)
+    return min(int(num), max_samples)
+
+
 def _patch_numpy(max_samples: int) -> None:
     import numpy as np
 
@@ -67,11 +80,7 @@ def _patch_numpy(max_samples: int) -> None:
     linspace_orig = np.linspace
 
     def linspace_patched(start, stop, num=50, *args, **kwargs):
-        caller_mod = sys._getframe(1).f_globals.get("__name__", "")
-        if caller_mod.startswith(("matplotlib", "scipy")):
-            capped_num = int(num)
-        else:
-            capped_num = min(int(num), max_samples)
+        capped_num = _capped_num(num, max_samples)
         return linspace_orig(start, stop, capped_num, *args, **kwargs)
 
     np.linspace = linspace_patched
@@ -79,11 +88,7 @@ def _patch_numpy(max_samples: int) -> None:
     logspace_orig = np.logspace
 
     def logspace_patched(start, stop, num=50, *args, **kwargs):
-        caller_mod = sys._getframe(1).f_globals.get("__name__", "")
-        if caller_mod.startswith(("matplotlib", "scipy")):
-            capped_num = int(num)
-        else:
-            capped_num = min(int(num), max_samples)
+        capped_num = _capped_num(num, max_samples)
         return logspace_orig(start, stop, capped_num, *args, **kwargs)
 
     np.logspace = logspace_patched
@@ -91,11 +96,7 @@ def _patch_numpy(max_samples: int) -> None:
     geomspace_orig = np.geomspace
 
     def geomspace_patched(start, stop, num=50, *args, **kwargs):
-        caller_mod = sys._getframe(1).f_globals.get("__name__", "")
-        if caller_mod.startswith(("matplotlib", "scipy")):
-            capped_num = int(num)
-        else:
-            capped_num = min(int(num), max_samples)
+        capped_num = _capped_num(num, max_samples)
         return geomspace_orig(start, stop, capped_num, *args, **kwargs)
 
     np.geomspace = geomspace_patched
@@ -110,7 +111,7 @@ def _patch_jax(max_samples: int) -> None:
     linspace_orig = jnp.linspace
 
     def linspace_patched(start, stop, num=50, *args, **kwargs):
-        capped_num = min(int(num), max_samples)
+        capped_num = _capped_num(num, max_samples)
         return linspace_orig(start, stop, capped_num, *args, **kwargs)
 
     jnp.linspace = linspace_patched
@@ -118,7 +119,7 @@ def _patch_jax(max_samples: int) -> None:
     logspace_orig = jnp.logspace
 
     def logspace_patched(start, stop, num=50, *args, **kwargs):
-        capped_num = min(int(num), max_samples)
+        capped_num = _capped_num(num, max_samples)
         return logspace_orig(start, stop, capped_num, *args, **kwargs)
 
     jnp.logspace = logspace_patched
@@ -126,7 +127,7 @@ def _patch_jax(max_samples: int) -> None:
     geomspace_orig = jnp.geomspace
 
     def geomspace_patched(start, stop, num=50, *args, **kwargs):
-        capped_num = min(int(num), max_samples)
+        capped_num = _capped_num(num, max_samples)
         return geomspace_orig(start, stop, capped_num, *args, **kwargs)
 
     jnp.geomspace = geomspace_patched

@@ -33,13 +33,25 @@ def _build_env() -> dict[str, str]:
     return env
 
 
-def _get_output_log_path(script_path: Path) -> Path:
+def _relative_to_scripts(script_path: Path) -> Path:
+    """Path below examples/scripts; a script elsewhere keeps just its name."""
     try:
-        relative_path = script_path.resolve().relative_to(
-            Path("examples/scripts").resolve()
-        )
+        return script_path.resolve().relative_to(Path("examples/scripts").resolve())
     except ValueError:  # script outside examples/scripts: log next to the others
-        relative_path = Path(script_path.name)
+        return Path(script_path.name)
+
+
+def _script_id(script_path: Path) -> str:
+    """Artifact-directory name: unique per script, unlike ``path.stem``.
+
+    04_gallery/ and 09_gallery_advanced/ share 12 file names, so keying the
+    artifact directory on the stem made the second run overwrite the first.
+    """
+    return "__".join(_relative_to_scripts(script_path).with_suffix("").parts)
+
+
+def _get_output_log_path(script_path: Path) -> Path:
+    relative_path = _relative_to_scripts(script_path)
     output_dir = Path("examples/outputs/scripts") / relative_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir / (script_path.stem + ".log")
@@ -65,9 +77,9 @@ def main() -> int:
 
         # Set current script name for the patcher
         script_env = env.copy()
-        script_env["NLSQ_CURRENT_SCRIPT"] = script.stem
+        script_env["NLSQ_CURRENT_SCRIPT"] = _script_id(script)
 
-        with open(log_path, "w") as log_file:
+        with open(log_path, "w", encoding="utf-8") as log_file:
             try:
                 # We pipe both stdout and stderr to the log file
                 # Use script_runner.py wrapper
