@@ -252,7 +252,7 @@ JAX enables NLSQ's key features:
 
 - **Automatic Jacobians**: Exact derivatives, no manual math
 - **JIT compilation**: Fast execution after first call
-- **GPU acceleration**: Same code, massive speedups
+- **GPU acceleration**: Same code runs on CPU or GPU
 - **Numerical precision**: IEEE 754 exact derivatives
 
 Just remember to use ``jax.numpy`` in your model functions!

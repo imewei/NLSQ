@@ -104,7 +104,6 @@ Plots
 
 pyqtgraph-based scientific plotting widgets:
 
-- ``nlsq.gui_qt.plots.base_plot`` - Base plot widget class
 - ``nlsq.gui_qt.plots.fit_plot`` - Data and fit curve visualization
 - ``nlsq.gui_qt.plots.residuals_plot`` - Residuals visualization
 - ``nlsq.gui_qt.plots.histogram_plot`` - Residual histogram
@@ -118,7 +117,7 @@ Data adapters for the GUI workflow:
 - ``nlsq.gui_qt.adapters.data_adapter`` - Data loading and validation
 - ``nlsq.gui_qt.adapters.fit_adapter`` - Fit execution wrapper
 - ``nlsq.gui_qt.adapters.config_adapter`` - YAML configuration import/export
-- ``nlsq.gui_qt.adapters.export_adapter`` - Results export utilities
+- ``nlsq.gui_qt.adapters.model_adapter`` - Model selection and loading
 
 State Management
 ~~~~~~~~~~~~~~~~

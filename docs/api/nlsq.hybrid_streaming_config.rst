@@ -9,12 +9,12 @@ nlsq.hybrid\_streaming\_config module
 Overview
 --------
 
-The ``nlsq.hybrid_streaming_config`` module provides configuration options for the
+The ``nlsq.streaming.hybrid_config`` module provides configuration options for the
 four-phase adaptive hybrid streaming optimizer. This configuration controls all
 aspects of the optimization process including parameter normalization, L-BFGS warmup,
 streaming Gauss-Newton, and covariance computation.
 
-**New in version 0.3.0**: Complete configuration for adaptive hybrid streaming.
+Complete configuration for adaptive hybrid streaming.
 
 Key Features
 ------------
@@ -28,7 +28,7 @@ Key Features
 - **Multi-device**: GPU/TPU parallelism settings
 - **Presets**: Ready-to-use profiles for common use cases
 
-**New in version 0.3.6**: 4-layer defense strategy parameters and sensitivity presets.
+4-layer defense strategy parameters and sensitivity presets.
 
 Classes
 -------
@@ -90,8 +90,6 @@ Minimizes memory footprint:
 
 Defense Layer Sensitivity Presets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**New in version 0.3.6**
 
 Defense Strict
 ^^^^^^^^^^^^^^

@@ -41,12 +41,12 @@ The first fit includes JIT (Just-In-Time) compilation:
 
    import time
 
-   # First fit: includes JIT compilation (~1-5 seconds)
+   # First fit: includes JIT compilation
    start = time.time()
    popt1, pcov1 = fit(model, x1, y1, p0=[1, 0.5, 0])
    print(f"First fit: {time.time() - start:.2f}s")
 
-   # Subsequent fits: cached compilation (~10x faster)
+   # Subsequent fits: cached compilation, no recompilation for the same shapes
    start = time.time()
    popt2, pcov2 = fit(model, x2, y2, p0=[1, 0.5, 0])
    print(f"Second fit: {time.time() - start:.2f}s")

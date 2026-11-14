@@ -511,7 +511,7 @@ Next Steps
 Congratulations! You now have the tools to handle datasets of any size. Continue with:
 
 1. :doc:`../api/large_datasets_api` - Advanced fitting APIs and parameter constraints
-2. :doc:`../api/performance_benchmarks` - Performance analysis and optimization
+2. :doc:`../api/performance_benchmarks` - Measured timings (same-device comparisons)
 3. Browse the `examples directory <https://github.com/imewei/NLSQ/tree/main/examples>`_ for more complex scenarios
 
 Further Reading

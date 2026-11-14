@@ -9,14 +9,14 @@ nlsq.adaptive\_hybrid\_streaming module
 Overview
 --------
 
-The ``nlsq.adaptive_hybrid_streaming`` module implements a four-phase hybrid
+The ``nlsq.streaming.adaptive_hybrid`` module implements a four-phase hybrid
 optimizer that solves three fundamental issues in streaming optimization:
 
 1. **Weak gradient signals** from parameter scale imbalance (via normalization)
 2. **Slow convergence** near optimum (via Gauss-Newton)
 3. **Crude covariance estimation** (via exact J^T J accumulation)
 
-**New in version 0.3.0**: Complete adaptive hybrid streaming optimizer.
+Complete adaptive hybrid streaming optimizer.
 
 Key Features
 ------------
@@ -30,7 +30,7 @@ Key Features
 - **Multi-device support**: GPU/TPU parallelism for large datasets
 - **Defense telemetry**: Production monitoring of warmup protection layers
 
-**New in version 0.3.6**: 4-Layer Defense Strategy for warmup divergence prevention.
+4-Layer Defense Strategy for warmup divergence prevention.
 
 Optimization Phases
 -------------------
@@ -279,7 +279,7 @@ Monitor optimization progress:
 Defense Layer Telemetry
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-**New in version 0.3.6**: Monitor defense layer activations.
+Monitor defense layer activations.
 
 Track when defense layers trigger across multiple fits:
 
@@ -309,7 +309,7 @@ Track when defense layers trigger across multiple fits:
 Defense Layer Presets
 ~~~~~~~~~~~~~~~~~~~~~
 
-**New in version 0.3.6**: Sensitivity presets for defense layers.
+Sensitivity presets for defense layers.
 
 .. code-block:: python
 

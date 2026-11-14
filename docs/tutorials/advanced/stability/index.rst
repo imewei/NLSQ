@@ -4,29 +4,6 @@ Numerical Stability
 This chapter covers NLSQ's numerical stability features and how to handle
 ill-conditioned problems.
 
-.. toctree::
-   :maxdepth: 1
-
-   numerical_guards
-   svd_fallback
-   condition_monitoring
-   recovery
-
-Chapter Overview
-----------------
-
-**Numerical Guards** (10 min)
-   NumericalStabilityGuard for detecting and fixing issues.
-
-**SVD Fallback** (10 min)
-   Fallback strategies when standard methods fail.
-
-**Condition Monitoring** (5 min)
-   Tracking condition numbers during optimization.
-
-**Recovery** (10 min)
-   Automatic recovery from optimization failures.
-
 Stability Features
 ------------------
 

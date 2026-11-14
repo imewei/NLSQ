@@ -3,9 +3,6 @@ nlsq.core.trf_jit
 
 JIT-compiled Trust Region Reflective helper functions.
 
-.. versionadded:: 1.2.0
-   Extracted from ``nlsq.core.trf`` for better code organization.
-
 This module contains the JIT-compiled helper functions used by the Trust Region
 Reflective optimizer. These functions are performance-critical and benefit from
 JAX's just-in-time compilation.

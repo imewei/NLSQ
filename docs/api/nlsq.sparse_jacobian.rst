@@ -12,8 +12,8 @@ Overview
 
 The ``sparse_jacobian`` module provides automatic detection and exploitation of sparse Jacobian patterns for improved computational efficiency.
 
-Key Features (Task Group 6)
-----------------------------
+Key Features
+------------
 
 - **Sparsity Detection**: Automatic detection of sparse Jacobian patterns (>70% zeros)
 - **Auto-Selection**: Triggers sparse-aware optimizations when beneficial

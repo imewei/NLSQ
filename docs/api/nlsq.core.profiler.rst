@@ -3,9 +3,6 @@ nlsq.core.profiler
 
 Performance profiling for Trust Region Reflective optimization.
 
-.. versionadded:: 1.2.0
-   Extracted from ``nlsq.core.trf`` for modularity.
-
 This module provides profiling infrastructure for the TRF optimizer,
 enabling detailed performance analysis of optimization runs.
 

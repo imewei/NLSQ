@@ -9,7 +9,7 @@ nlsq.memory\_manager module
 Overview
 --------
 
-The ``nlsq.memory_manager`` module provides intelligent memory management capabilities for
+The ``nlsq.caching.memory_manager`` module provides intelligent memory management capabilities for
 optimization algorithms. It includes memory usage monitoring, prediction, array pooling, and
 automatic garbage collection to handle large-scale curve fitting problems efficiently.
 

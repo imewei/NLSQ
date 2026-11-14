@@ -160,29 +160,26 @@ When to Migrate
 
 **Migrate to NLSQ when:**
 
-- Dataset has > 10,000 points (GPU advantage)
+- You want the SciPy-compatible interface together with JAX automatic differentiation (no hand-written Jacobian)
 - Fitting multiple similar datasets (JIT compilation amortized)
-- Working with very large datasets (> 1M points)
+- Working with datasets of 1,000,000 points or more (``curve_fit_large``), or too large to hold in memory
 
 **Stay with SciPy when:**
 
-- Dataset < 1,000 points (JIT overhead not worth it)
+- Datasets have fewer than about 1,000,000 points and speed on the CPU is the only reason to switch
 - Need ``method='lm'`` specifically
 - One-off fits in simple scripts
 
 Expected Performance
 ~~~~~~~~~~~~~~~~~~~~
 
-============ ========== =============== ===========
-Dataset Size SciPy Time NLSQ Time (GPU) Speedup
-============ ========== =============== ===========
-1,000        0.05s      0.43s (first)   0.1x-1.7x
-10,000       0.18s      0.04s           4.5x
-100,000      2.1s       0.09s           23x
-1,000,000    40.5s      0.15s           270x
-============ ========== =============== ===========
-
-*First call includes JIT compilation. Subsequent calls are much faster.*
+On the CPU, SciPy's default ``method="lm"`` was faster than NLSQ ``curve_fit`` from 1,000 to 1,000,000 points on the
+one model checked (3.0x at 100,000 points), while NLSQ ``curve_fit_large`` was faster at 1,000,000 points (2.3x) and
+10,000,000 points (4.2x). Against SciPy ``method="trf"``, NLSQ was faster from 100,000 points (1.7x to 3.6x across
+four models) and from 1,000,000 points up (2.4x to 12.6x). SciPy has no GPU path, so there is no like-for-like GPU
+comparison with SciPy; NLSQ's own CPU and GPU runs are compared separately.
+Measured tables, the methodology and the limitations of the measurement are in
+:doc:`/api/performance_benchmarks`.
 
 ----
 

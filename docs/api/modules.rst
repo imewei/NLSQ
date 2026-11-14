@@ -43,7 +43,7 @@ Tools for fitting very large datasets (10M+ points):
    nlsq.memory_manager
    large_datasets_api
 
-Adaptive Hybrid Streaming (v0.3.0+)
+Adaptive Hybrid Streaming
 -----------------------------------
 
 Four-phase hybrid optimizer with parameter normalization, L-BFGS warmup,
@@ -61,7 +61,7 @@ streaming Gauss-Newton, and exact covariance computation:
    nlsq.streaming.exact_lm
    nlsq.streaming.large_fit
 
-Global Optimization (v0.3.3+)
+Global Optimization
 -----------------------------
 
 Multi-start optimization with Latin Hypercube Sampling (LHS) for finding global
@@ -74,7 +74,7 @@ optima in problems with multiple local minima:
    nlsq.global_optimization.config
    nlsq.global_optimization.sampling
 
-Workflow System (v0.5.5+)
+Workflow System
 -------------------------
 
 Memory-based workflow system with automatic strategy selection based on
@@ -85,7 +85,7 @@ available memory and dataset characteristics:
 
    nlsq.workflow
 
-Command-Line Interface (v0.4.1+)
+Command-Line Interface
 --------------------------------
 
 YAML-based workflow execution from the command line:
@@ -95,7 +95,7 @@ YAML-based workflow execution from the command line:
 
    nlsq.cli
 
-Qt Desktop GUI (v0.5.0+)
+Qt Desktop GUI
 ------------------------
 
 Native desktop application with PySide6 and pyqtgraph:
@@ -105,10 +105,10 @@ Native desktop application with PySide6 and pyqtgraph:
 
    nlsq.gui_qt
 
-Enhanced Features (v0.1.1)
---------------------------
+Feature Modules
+---------------
 
-New features added in version 0.1.1:
+Callbacks, numerical stability, fallbacks, recovery, bounds and parameter estimation:
 
 .. toctree::
    :maxdepth: 2
@@ -163,7 +163,7 @@ Support modules for configuration, caching, and diagnostics:
 Performance & Profiling
 -----------------------
 
-Performance analysis, profiling, and benchmarking tools (NEW in v0.3.0-beta.2+):
+Performance analysis, profiling, and benchmarking tools:
 
 .. toctree::
    :maxdepth: 2
@@ -188,68 +188,68 @@ Complete Module Listing
 - :doc:`nlsq.minpack` - Main ``curve_fit()`` API
 - :doc:`nlsq.least_squares` - ``least_squares()`` solver
 - :doc:`nlsq.trf` - Trust Region Reflective algorithm
-- :doc:`nlsq.core.trf_jit` - JIT-compiled TRF functions (NEW in v0.4.2)
-- :doc:`nlsq.core.profiler` - TRF performance profiling (NEW in v0.4.2)
+- :doc:`nlsq.core.trf_jit` - JIT-compiled TRF functions
+- :doc:`nlsq.core.profiler` - TRF performance profiling
 
 **Feature Modules**:
-- :doc:`nlsq.functions` - Pre-built fit functions (NEW in v0.1.1)
-- :doc:`nlsq.callbacks` - Progress monitoring & early stopping (NEW in v0.1.1)
-- :doc:`nlsq.stability` - Numerical stability analysis (NEW in v0.1.1)
+- :doc:`nlsq.functions` - Pre-built fit functions
+- :doc:`nlsq.callbacks` - Progress monitoring & early stopping
+- :doc:`nlsq.stability` - Numerical stability analysis
 - :doc:`nlsq.stability.guard` - Stability guard, condition estimation, collinearity detection
-- :doc:`nlsq.fallback` - Automatic retry strategies (NEW in v0.1.1)
-- :doc:`nlsq.recovery` - Optimization failure recovery (NEW in v0.1.1)
-- :doc:`nlsq.bound_inference` - Smart parameter bounds (NEW in v0.1.1)
-- :doc:`nlsq.parameter_estimation` - Initial parameter estimation (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.algorithm_selector` - Automatic algorithm selection (NEW in v0.3.0-beta.2)
+- :doc:`nlsq.fallback` - Automatic retry strategies
+- :doc:`nlsq.recovery` - Optimization failure recovery
+- :doc:`nlsq.bound_inference` - Smart parameter bounds
+- :doc:`nlsq.parameter_estimation` - Initial parameter estimation
+- :doc:`nlsq.algorithm_selector` - Automatic algorithm selection
 
 **Large Dataset Modules**:
 - :doc:`nlsq.large_dataset` - Chunked fitting for large data
-- :doc:`nlsq.memory_manager` - Intelligent memory management (NEW in v0.1.1)
+- :doc:`nlsq.memory_manager` - Intelligent memory management
 - :doc:`large_datasets_api` - Comprehensive large dataset guide
 
-**Adaptive Hybrid Streaming Modules** (NEW in v0.3.0+):
+**Adaptive Hybrid Streaming Modules**:
 - :doc:`nlsq.adaptive_hybrid_streaming` - Four-phase hybrid optimizer
 - :doc:`nlsq.hybrid_streaming_config` - Configuration with presets
 - :doc:`nlsq.parameter_normalizer` - Parameter normalization for gradient balance
-- :doc:`nlsq.streaming.telemetry` - Defense layer telemetry (NEW in v0.4.2)
-- :doc:`nlsq.streaming.validators` - Configuration validators (NEW in v0.4.2)
-- :doc:`nlsq.streaming.phases` - Phase classes (WarmupPhase, GaussNewtonPhase, etc.) (NEW in v0.4.3)
+- :doc:`nlsq.streaming.telemetry` - Defense layer telemetry
+- :doc:`nlsq.streaming.validators` - Configuration validators
+- :doc:`nlsq.streaming.phases` - Phase classes (WarmupPhase, GaussNewtonPhase, etc.)
 - :doc:`nlsq.streaming.exact_lm` - ``ExactSolverError`` for ``curve_fit_large(method="exact_streaming")``
 - :doc:`nlsq.streaming.large_fit` - Five strategy types (``Auto``, ``InMemory``, ``Chunked``, ``Hybrid``, ``Exact``), the ``Multistart`` settings object, and ``fit_with_strategy`` behind ``curve_fit_large(strategy=...)``
 
-**Global Optimization Modules** (NEW in v0.3.3+):
+**Global Optimization Modules**:
 - :doc:`nlsq.global_optimization` - Multi-start with LHS, Sobol, Halton samplers
 
-**Workflow System Modules** (NEW in v0.3.4+):
+**Workflow System Modules**:
 - :doc:`nlsq.workflow` - Unified fit() with auto-selection, presets, YAML config
 
-**Command-Line Interface Modules** (NEW in v0.4.1+):
+**Command-Line Interface Modules**:
 - :doc:`nlsq.cli` - CLI commands: ``nlsq fit``, ``nlsq batch``, ``nlsq info``, ``nlsq gui``
 
-**Qt Desktop GUI** (NEW in v0.5.0+):
+**Qt Desktop GUI**:
 - :doc:`nlsq.gui_qt` - Native desktop application with PySide6 and pyqtgraph
 
 **Utility Modules**:
 - :doc:`nlsq.config` - Configuration management
-- :doc:`nlsq.device` - GPU detection and warnings (NEW in v0.1.6)
-- :doc:`nlsq.validators` - Input validation (NEW in v0.1.1)
+- :doc:`nlsq.device` - GPU detection and warnings
+- :doc:`nlsq.validators` - Input validation
 - :doc:`nlsq.diagnostics` - Model Health Diagnostics System (identifiability, gradient health, parameter sensitivity)
 - :doc:`nlsq.utils.diagnostics` - Convergence monitoring (ConvergenceMonitor, OptimizationDiagnostics)
 - :doc:`nlsq.caching` - JIT and result caching
-- :doc:`nlsq.unified_cache` - Unified compilation cache (NEW in v0.3.0-beta.2)
+- :doc:`nlsq.unified_cache` - Unified compilation cache
 - :doc:`nlsq.logging` - Logging and debugging
-- :doc:`nlsq.error_messages` - Standardized error messages (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.constants` - Numerical constants (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.types` - Type definitions (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.result` - Result containers (NEW in v0.3.0-beta.2)
+- :doc:`nlsq.error_messages` - Standardized error messages
+- :doc:`nlsq.constants` - Numerical constants
+- :doc:`nlsq.types` - Type definitions
+- :doc:`nlsq.result` - Result containers
 - :doc:`nlsq.loss_functions` - Robust loss functions
-- :doc:`nlsq.svd_fallback` - SVD fallback strategies (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.sparse_jacobian` - Sparse Jacobian support (NEW in v0.3.0-beta.2)
+- :doc:`nlsq.svd_fallback` - SVD fallback strategies
+- :doc:`nlsq.sparse_jacobian` - Sparse Jacobian support
 - :doc:`nlsq.common_jax` - JAX utilities
 - :doc:`nlsq.common_scipy` - SciPy compatibility layer
 
 **Performance & Profiling**:
-- :doc:`nlsq.profiling` - JAX profiler integration and static analysis (v0.3.0-beta.2+)
-- :doc:`nlsq.profiler` - Performance profiler (NEW in v0.3.0-beta.2)
-- :doc:`nlsq.profiler_visualization` - Profiling visualization (NEW in v0.3.0-beta.2)
-- :doc:`performance_benchmarks` - Performance analysis tools
+- :doc:`nlsq.profiling` - JAX profiler integration and static analysis
+- :doc:`nlsq.profiler` - Performance profiler
+- :doc:`nlsq.profiler_visualization` - Profiling visualization
+- :doc:`performance_benchmarks` - Measured timings (same-device comparisons)

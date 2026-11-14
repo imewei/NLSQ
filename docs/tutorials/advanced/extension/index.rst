@@ -4,25 +4,6 @@ Extending NLSQ
 This chapter covers extending NLSQ with custom protocols, plugins, and
 testing strategies.
 
-.. toctree::
-   :maxdepth: 1
-
-   custom_protocols
-   plugin_development
-   testing_strategies
-
-Chapter Overview
-----------------
-
-**Custom Protocols** (10 min)
-   Implementing new protocols for custom components.
-
-**Plugin Development** (10 min)
-   Creating NLSQ extensions and plugins.
-
-**Testing Strategies** (10 min)
-   Testing custom components and extensions.
-
 Extension Points
 ----------------
 

@@ -14,7 +14,7 @@ failures. When curve fitting encounters problems like convergence failures, nume
 or ill-conditioned systems, the recovery system intelligently applies various strategies to
 achieve successful optimization.
 
-**New in version 0.1.1**: Complete recovery system with multi-strategy fallback chains.
+Complete recovery system with multi-strategy fallback chains.
 
 Key Features
 ------------

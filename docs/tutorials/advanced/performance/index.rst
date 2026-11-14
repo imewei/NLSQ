@@ -3,33 +3,10 @@ Performance Optimization
 
 This chapter covers techniques for maximizing NLSQ performance.
 
-.. toctree::
-   :maxdepth: 1
-
-   jit_caching
-   memory_management
-   sparse_jacobians
-   profiling
-
-Chapter Overview
-----------------
-
-**JIT Caching** (10 min)
-   Understanding and optimizing JIT compilation caching.
-
-**Memory Management** (10 min)
-   Memory pools, budgets, and efficient data handling.
-
-**Sparse Jacobians** (10 min)
-   Leveraging sparsity for large problems.
-
-**Profiling** (10 min)
-   Using TRFProfiler and identifying bottlenecks.
-
 Performance Quick Tips
 ----------------------
 
-1. **Use GPU**: 10-20x speedup for large datasets
+1. **Use GPU for large datasets**: it was faster than the CPU from 1M points on the four models measured, depended on the model at 100K points, and was slower below that (:doc:`/api/performance_benchmarks`)
 2. **Reuse CurveFit**: JIT cached between calls
 3. **Use streaming**: Memory-efficient for very large data
 4. **Loosen tolerances**: Trade precision for speed

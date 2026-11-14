@@ -54,13 +54,14 @@ nlsq/gui_qt/
 ├── plots/                 # pyqtgraph-based scientific plots
 │   ├── fit_plot.py
 │   ├── residuals_plot.py
+│   ├── histogram_plot.py
 │   └── live_cost_plot.py
 └── adapters/              # Bridge between GUI and core
     ├── __init__.py
     ├── fit_adapter.py
     ├── data_adapter.py
     ├── model_adapter.py
-    └── export_adapter.py
+    └── config_adapter.py
 ```
 
 ---

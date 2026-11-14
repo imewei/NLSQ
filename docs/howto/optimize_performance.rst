@@ -14,7 +14,8 @@ Top 5 Performance Tips
 ~~~~~~~~~~~~~~~~~~~~~~
 
 1. **Use CurveFit class for multiple fits** (reuses JIT compilation)
-2. **Enable GPU acceleration** (automatic, 10-270x faster)
+2. **Use the GPU for large datasets** (automatic; it helps from about 1M points and slows small fits down, see
+   :doc:`/api/performance_benchmarks`)
 3. **Batch similar fits together** (amortize JIT overhead)
 4. **Use appropriate solver** (``solver='auto'`` recommended)
 5. **Set memory limits for large datasets** (``memory_limit_gb``
@@ -23,44 +24,49 @@ Top 5 Performance Tips
 Quick Comparison: SciPy vs NLSQ
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+SciPy runs on the CPU only, so compare it with NLSQ on the CPU. Set ``JAX_PLATFORMS=cpu`` before importing JAX
+and time a second, warm call (the first call also compiles the kernel):
+
 .. code:: python
 
-   import numpy as np
+   import os
+
+   os.environ["JAX_PLATFORMS"] = "cpu"  # like-for-like with SciPy; remove to use the GPU
+
    import time
-   from scipy.optimize import curve_fit as scipy_curve_fit
-   from nlsq import curve_fit as nlsq_curve_fit
+
    import jax.numpy as jnp
+   import numpy as np
+   from scipy.optimize import curve_fit as scipy_curve_fit
+
+   from nlsq import curve_fit as nlsq_curve_fit
 
 
    def exponential(x, a, b):
        return a * jnp.exp(-b * x)
 
 
-   # Generate large dataset
    x = np.linspace(0, 10, 1_000_000)
    y = 2.5 * np.exp(-1.3 * x) + 0.01 * np.random.randn(1_000_000)
 
-   # SciPy (CPU-only)
-   start = time.time()
-   popt_scipy, _ = scipy_curve_fit(lambda x, a, b: a * np.exp(-b * x), x, y, p0=[2, 1])
-   scipy_time = time.time() - start
 
-   # NLSQ (GPU-accelerated)
-   start = time.time()
-   popt_nlsq, _ = nlsq_curve_fit(exponential, x, y, p0=[2, 1])
-   nlsq_time = time.time() - start
+   def timed(fit, *args):
+       fit(*args, p0=[2, 1])  # warm-up: compilation and caches
+       start = time.perf_counter()
+       fit(*args, p0=[2, 1])
+       return time.perf_counter() - start
 
-   print(f"SciPy time: {scipy_time:.2f}s")
-   print(f"NLSQ time: {nlsq_time:.2f}s")
-   print(f"Speedup: {scipy_time / nlsq_time:.1f}x")
 
-**Expected output (GPU):**
+   scipy_time = timed(scipy_curve_fit, lambda x, a, b: a * np.exp(-b * x), x, y)
+   nlsq_time = timed(nlsq_curve_fit, exponential, x, y)
 
-::
+   print(f"SciPy (CPU): {scipy_time:.3f}s")
+   print(f"NLSQ  (CPU): {nlsq_time:.3f}s")
 
-   SciPy time: 42.5s
-   NLSQ time: 0.15s
-   Speedup: 283x
+The result depends on the machine, the model and the dataset size. SciPy's default ``method="lm"`` is fast: on the
+benchmark's exponential decay it was faster than NLSQ ``curve_fit`` up to 1,000,000 points, and only
+``curve_fit_large`` (1,000,000 points and above) was faster than it. Measured CPU-to-CPU numbers, including SciPy
+``trf`` and the ``lm`` spot check, are in :doc:`/api/performance_benchmarks`.
 
 --------------
 
@@ -140,15 +146,30 @@ GPU Performance Optimization
 When to Use GPU vs CPU
 ~~~~~~~~~~~~~~~~~~~~~~
 
-=============== ========== ============== =======================
-Dataset Size    Parameters Recommendation Expected Speedup
-=============== ========== ============== =======================
-< 1,000 points  Any        **CPU**        0.1-0.5x (JIT overhead)
-1K-10K points   < 5        CPU or GPU     1-5x
-10K-100K points Any        **GPU**        10-50x
-100K-1M points  Any        **GPU**        50-150x
-> 1M points     Any        **GPU**        150-300x
-=============== ========== ============== =======================
+The table compares NLSQ on the GPU with the same NLSQ code on the CPU (RTX 4090 Laptop GPU and i9-13900H, four
+models, warm medians). The crossover moves with the model and the hardware, so measure your own problem.
+
+.. list-table::
+   :header-rows: 1
+   :widths: auto
+
+   * - Dataset size
+     - Recommendation
+     - GPU time compared with CPU time
+   * - Up to 10,000 points
+     - **CPU**
+     - GPU was 1.4x to 7.1x slower
+   * - About 100,000 points
+     - CPU or GPU
+     - GPU was 1.2x slower to 3.2x faster, depending on the model
+   * - 1,000,000 points
+     - **GPU**, ``curve_fit_large``
+     - GPU was 4.9x to 6.8x faster
+   * - 10,000,000 points and above
+     - **GPU**, ``curve_fit_large``
+     - GPU was 9.8x to 20.7x faster
+
+See :doc:`/api/performance_benchmarks` for the per-model numbers.
 
 --------------
 
@@ -216,7 +237,7 @@ For multiple fits with the same model, use ``CurveFit`` class:
        popt, pcov = fitter.curve_fit(model, x_data, y_data, p0=[2, 1, 0])
        results.append(popt)
 
-   # 10x faster for 10 datasets vs calling curve_fit() 10 times
+   # The compiled kernel is reused, so only the first call pays JIT compilation
 
 Pre-compilation Strategy
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -268,7 +289,8 @@ for every subsequent one:
    print(f"Fitted {n_datasets} datasets")
    print(f"Result shape: {popt_batch.shape}")  # (100, 3)
 
-**Performance:** 50-100x faster than sequential fitting.
+**Performance:** the compiled kernel is reused across datasets. The gain over repeated ``curve_fit`` calls
+depends on the model and the data shape and is not benchmarked on this page.
 
 Parallel Fitting with Different X-data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -480,7 +502,7 @@ Performance Troubleshooting
 Issue 1: Slow First Call
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Symptom:** First fit takes 10-100x longer than subsequent fits
+**Symptom:** First fit takes much longer than subsequent fits (it includes JIT compilation)
 
 **Solution:** Use ``CurveFit`` class to reuse compilation
 
@@ -622,7 +644,7 @@ JAX provides two automatic differentiation modes with different performance char
 - **Forward-mode (jacfwd)**: Efficient when n_params ≤ n_residuals (wide Jacobians)
 - **Reverse-mode (jacrev)**: Efficient when n_params > n_residuals (tall Jacobians)
 
-The computational cost difference can be 10-100x for high-parameter problems!
+The computational cost difference grows with the number of parameters.
 
 Automatic Mode Selection
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -725,7 +747,7 @@ Performance Guidelines
    # Automatic selection (uses jacrev)
    popt, pcov = curve_fit(high_param_model, xdata, ydata, p0=p0, jacobian_mode="auto")
 
-   # Expected: 10-100x faster Jacobian computation vs jacfwd on GPU
+   # Expected: reverse mode is the cheaper mode for this shape (n_params > n_residuals)
 
 **Standard fitting problem (2 params, 1000 residuals):**
 
@@ -874,26 +896,13 @@ Hands-on tutorials for performance optimization:
 Benchmarking Results
 --------------------
 
-Official Benchmarks (NVIDIA V100 GPU)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Measured Results
+~~~~~~~~~~~~~~~~
 
-============ ========== ========== =========== =======
-Dataset Size Parameters NLSQ (GPU) SciPy (CPU) Speedup
-============ ========== ========== =========== =======
-1,000        3          0.03s      0.05s       1.7x
-10,000       3          0.04s      0.18s       4.5x
-100,000      3          0.09s      2.1s        23x
-1,000,000    5          0.15s      40.5s       270x
-10,000,000   5          0.42s      480s        1143x
-============ ========== ========== =========== =======
+The tables, methodology and limitations are on one page: :doc:`/api/performance_benchmarks`. It compares NLSQ with
+SciPy, lmfit, JAXopt and Optimistix on the CPU, NLSQ with JAXopt and Optimistix on the GPU, and NLSQ on the CPU
+with NLSQ on the GPU. Comparisons are always within one device.
 
-*Benchmarks run on NVIDIA Tesla V100 32GB GPU, Intel Xeon Gold 6248R
-CPU*
-
-Scaling Characteristics
-~~~~~~~~~~~~~~~~~~~~~~~
-
--  **Near-linear scaling** up to 50M points on GPU
--  **Excellent batch performance**: 100 datasets in 2x time of single
-   dataset
--  **Memory efficient**: 1M points uses ~500MB GPU memory
+How the fit time grows with the dataset size (3-parameter exponential decay, ``curve_fit_large``, from 1M to 100M
+points): on the GPU 18.5 ms, 78.1 ms and 618.1 ms; on the CPU 90.8 ms, 977.2 ms and 6.08 s. Each 10x increase in
+data multiplied the time by 4.2x to 10.8x.
