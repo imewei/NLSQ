@@ -2,7 +2,8 @@
 
 Two bodies, moved unchanged from ``CurveFit._compute_covariance`` and
 ``exact_lm.compute_covariance``. Their rank cutoffs deliberately differ and are NOT
-unified: ``eps * max(n_eff, p) * s0`` on the Jacobian's singular values versus
+unified: ``eps * max(n_eff, p) * s0`` on the singular values of the column-equilibrated
+Jacobian versus
 ``p * eps * lambda_max`` on the eigenvalues of ``H = J^T J``.
 
 Both take ``cost = 0.5 * sum(r^2)`` (``OptimizeResult.cost``) and apply the factor 2
@@ -32,8 +33,8 @@ _logger = get_logger("curve_fit")
 def _column_norms(J: Any) -> Any:
     """Column 2-norms of ``J``, on ``J``'s own device (max-scaled: no over/underflow).
 
-    Only ``p`` scalars leave the device; reducing a GPU ``J`` on the host copies all of
-    it, ~46 ms at 1M x 3 against ~1 ms here.
+    Only ``p`` scalars leave the device. Reducing a GPU ``J`` on the host copies all of
+    it: measured 45.8 ms on the host against 0.9 ms here for a 1M x 3 float64 ``J``.
     """
     col_max = jnp.max(jnp.abs(J), axis=0, initial=0.0)
     return col_max * jnp.linalg.norm(J / jnp.where(col_max > 0, col_max, 1.0), axis=0)
@@ -55,9 +56,11 @@ def pcov_from_jacobian(
 ) -> tuple[np.ndarray, bool]:
     """Covariance from the SVD of ``J`` (Moore-Penrose, as ``scipy.optimize.curve_fit``).
 
-    ``svd(J) -> (s, VT)`` is injected so ``CurveFit.covariance_svd`` stays the hook.
-    ``n_eff`` is the true data count (``J`` may carry padded rows); it sets the
-    singular-value cutoff ``eps * max(n_eff, J.shape[1]) * s[0]`` and the degrees of
+    ``svd(J_eq) -> (s, VT)`` is injected so ``CurveFit.covariance_svd`` stays the hook;
+    it is called on ``J_eq = J / column_norms`` (columns equilibrated to unit norm) and
+    ``pcov`` is scaled back afterwards. ``n_eff`` is the true data count (``J`` may carry
+    padded rows); it sets the singular-value cutoff
+    ``eps * max(n_eff, J.shape[1]) * s[0]`` on the equilibrated ``s`` and the degrees of
     freedom ``n_eff - p``. Fallback messages go to ``logger`` (default: the
     ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is
     attributed to the first frame outside ``nlsq/``.

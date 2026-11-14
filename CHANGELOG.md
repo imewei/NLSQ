@@ -366,7 +366,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **GPU `curve_fit` slowdown**: since `1e5ed01c` (covariance column equilibration), `pcov_from_jacobian` reduced
-  the Jacobian on the host, copying all of a GPU `J` (24 MB at 1M x 3) and adding ~46 ms per fit. Column norms
+  the Jacobian on the host, copying all of a GPU `J` (24 MB at 1M x 3): ~46 ms for the reduction, ~54 ms per fit at 1M points. Column norms
   now run on `J`'s device and only `p` scalars come back. Interleaved A/B on the RTX 4090 laptop GPU, warm
   median: 1M points 96.8 -> 43.1 ms (baseline 44.3 ms), 100k points 24.5 -> 17.6 ms (baseline 16.9 ms); `popt`
   is bit-identical.
