@@ -15,11 +15,18 @@ import sys
 from collections.abc import Iterable
 
 
+def _quick_enabled() -> bool:
+    """NLSQ_EXAMPLES_QUICK is on unless unset/empty/0/false/no/off."""
+    flag = os.environ.get("NLSQ_EXAMPLES_QUICK", "").strip().lower()
+    return flag not in ("", "0", "false", "no", "off")
+
+
 def _get_max_samples() -> int:
     try:
-        return int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "5000"))
+        value = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "5000"))
     except ValueError:
         return 5000
+    return value if value >= 1 else 5000
 
 
 def _cap_size(
@@ -145,7 +152,7 @@ def _configure_matplotlib(tmp_dir: str | None) -> None:
     matplotlib.use("Agg")
 
 
-if os.environ.get("NLSQ_EXAMPLES_QUICK"):
+if _quick_enabled():
     max_samples = _get_max_samples()
     os.environ.setdefault("JAX_PLATFORM_NAME", "cpu")
     os.environ.setdefault("JAX_DISABLE_JIT", "1")

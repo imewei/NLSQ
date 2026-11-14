@@ -6,6 +6,7 @@ from typing import Literal, TypedDict
 class NotebookCell(TypedDict, total=False):
     """Jupyter notebook cell structure."""
 
+    id: str
     cell_type: Literal["code", "markdown", "raw"]
     execution_count: int | None
     metadata: dict

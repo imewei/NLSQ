@@ -59,9 +59,22 @@ def find_cell_with_pattern(cells: list[NotebookCell], pattern: str) -> int | Non
     return None
 
 
-def create_matplotlib_config_cell() -> NotebookCell:
-    """Create cell with matplotlib configuration."""
+def unique_cell_id(cells: list[NotebookCell] | None, base: str) -> str:
+    """Deterministic cell id: ``base``, suffixed ``-1``, ``-2``... if taken in ``cells``."""
+    taken = {c.get("id") for c in cells or ()}
+    cell_id, n = base, 0
+    while cell_id in taken:
+        n += 1
+        cell_id = f"{base}-{n}"
+    return cell_id
+
+
+def create_matplotlib_config_cell(
+    cells: list[NotebookCell] | None = None,
+) -> NotebookCell:
+    """Create cell with matplotlib configuration (id unique within ``cells``)."""
     return {
+        "id": unique_cell_id(cells, "matplotlib-inline"),
         "cell_type": "code",
         "execution_count": None,
         "metadata": {},
@@ -74,9 +87,12 @@ def create_matplotlib_config_cell() -> NotebookCell:
     }
 
 
-def create_ipython_display_import_cell() -> NotebookCell:
-    """Create cell with IPython.display import."""
+def create_ipython_display_import_cell(
+    cells: list[NotebookCell] | None = None,
+) -> NotebookCell:
+    """Create cell with IPython.display import (id unique within ``cells``)."""
     return {
+        "id": unique_cell_id(cells, "ipython-display-import"),
         "cell_type": "code",
         "execution_count": None,
         "metadata": {},

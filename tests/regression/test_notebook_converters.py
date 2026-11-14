@@ -21,6 +21,7 @@ NB_TOOLS = SCRIPTS_DIR / "notebooks"
 EXAMPLE_SCRIPTS = sorted((REPO_ROOT / "examples" / "scripts").rglob("*.py"))
 
 sys.path.insert(0, str(NB_TOOLS))
+sys.path.insert(0, str(SCRIPTS_DIR))
 
 import convert_examples as ce
 import regenerate_notebooks as rn
@@ -60,6 +61,48 @@ class TestScriptToNotebook:
         expected = [ast.unparse(node) for node in body]
         got = [ast.unparse(node) for node in ast.parse(_code(nb)).body]
         assert got == expected
+
+    def test_cells_carry_unique_ids(self, tmp_path):
+        script = tmp_path / "s.py"
+        script.write_text(
+            "import os\n# " + "=" * 70 + "\n# prose\n# " + "=" * 70 + "\nx = 1\n",
+            encoding="utf-8",
+        )
+        nb = json.loads(ce.script_to_notebook(script).read_text(encoding="utf-8"))
+        ids = [c["id"] for c in nb["cells"]]
+        assert len(ids) == 3 and len(set(ids)) == 3
+        import nbformat
+
+        nbformat.validate(nbformat.from_dict(nb))  # raw JSON: no id back-filling
+
+    def test_inserted_magic_cells_get_ids_unique_in_the_notebook(self):
+        from notebook_utils.cells import (
+            create_ipython_display_import_cell,
+            create_matplotlib_config_cell,
+        )
+
+        def code(cid):
+            return {
+                "id": cid,
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": ["import matplotlib.pyplot as plt\n"],
+            }
+
+        for _ in range(2):  # a taken id must be avoided, not reused
+            nb = {"cells": [code("matplotlib-inline")]}
+            modified, _msg = ce.configure_matplotlib_inline(nb)
+            assert modified
+            ids = [c["id"] for c in nb["cells"]]
+            assert len(set(ids)) == len(ids) == 2
+
+        first = create_matplotlib_config_cell()
+        assert first["id"]
+        again = create_matplotlib_config_cell([first])
+        assert again["id"] != first["id"]
+        assert create_ipython_display_import_cell([again])["id"]
 
     def test_closing_docstring_quotes_at_column_zero(self, tmp_path):
         script = tmp_path / "s.py"
@@ -451,13 +494,43 @@ class TestRunnerHelpers:
 # ----------------------------------------------------------------------------
 
 
+_QUICK_CODE = """
+import numpy as np
+import jax.numpy as jnp
+
+CAP = 10
+space = ("linspace", "logspace", "geomspace")
+
+# example code (__main__) is capped for every patched function
+for mod in (np, jnp):
+    for name in space:
+        n = len(getattr(mod, name)(1, 2, 100))
+        assert n == CAP, (mod.__name__, name, n)
+rng = np.random
+for call in (
+    lambda: rng.normal(0, 1, 100),
+    lambda: rng.normal(size=100),
+    lambda: rng.uniform(0, 1, 100),
+    lambda: rng.random(100),
+    lambda: rng.random_sample(100),
+    lambda: rng.rand(100),
+    lambda: rng.randn(100),
+):
+    assert len(call()) == CAP
+
+# library callers get exactly the size they asked for
+for lib in ("numpy._x", "jax._x", "scipy._x", "matplotlib._x"):
+    g = {"__name__": lib, "np": np, "jnp": jnp}
+    exec("sizes = [len(f(1, 2, 100)) for f in (np.linspace, np.logspace,"
+         " np.geomspace, jnp.linspace, jnp.logspace, jnp.geomspace)]", g)
+    assert g["sizes"] == [100] * 6, (lib, g["sizes"])
+# ... including through a real numpy-internal path
+assert len(np.histogram(np.arange(100.), bins=50)[1]) == 51
+"""
+
+
 @pytest.mark.serial  # subprocess imports JAX (see CLAUDE.md on parallel JAX inits)
-def test_quick_mode_does_not_cap_numpy_internal_linspace(tmp_path):
-    code = (
-        "import numpy as np\n"
-        "assert len(np.histogram(np.arange(100.), bins=50)[1]) == 51\n"
-        "assert len(np.linspace(0, 1, 100)) == 10  # example code is still capped\n"
-    )
+def test_quick_mode_caps_example_code_but_not_library_callers(tmp_path):
     env = {
         **os.environ,
         "NLSQ_EXAMPLES_QUICK": "1",
@@ -467,7 +540,7 @@ def test_quick_mode_does_not_cap_numpy_internal_linspace(tmp_path):
         "PYTHONPATH": str(SCRIPTS_DIR / "quick_sitecustomize"),
     }
     result = subprocess.run(
-        [sys.executable, "-c", code],
+        [sys.executable, "-c", _QUICK_CODE],
         env=env,
         capture_output=True,
         text=True,
@@ -475,6 +548,52 @@ def test_quick_mode_does_not_cap_numpy_internal_linspace(tmp_path):
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def _load_sitecustomize(monkeypatch):
+    import importlib.util
+
+    monkeypatch.delenv("NLSQ_EXAMPLES_QUICK", raising=False)  # no patches on import
+    spec = importlib.util.spec_from_file_location(
+        "_quick_sitecustomize_under_test",
+        SCRIPTS_DIR / "quick_sitecustomize" / "sitecustomize.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (None, False),
+        ("", False),
+        ("0", False),
+        ("False", False),
+        (" no ", False),
+        ("OFF", False),
+        ("1", True),
+        ("true", True),
+    ],
+)
+def test_quick_flag_parsing(monkeypatch, value, expected):
+    mod = _load_sitecustomize(monkeypatch)
+    if value is not None:
+        monkeypatch.setenv("NLSQ_EXAMPLES_QUICK", value)
+    assert mod._quick_enabled() is expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [("10", 10), ("1", 1), ("0", 5000), ("-3", 5000), ("abc", 5000), (None, 5000)],
+)
+def test_max_samples_rejects_non_positive(monkeypatch, value, expected):
+    mod = _load_sitecustomize(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("NLSQ_EXAMPLES_MAX_SAMPLES", raising=False)
+    else:
+        monkeypatch.setenv("NLSQ_EXAMPLES_MAX_SAMPLES", value)
+    assert mod._get_max_samples() == expected
 
 
 # ----------------------------------------------------------------------------
@@ -555,7 +674,9 @@ class TestBannerScriptToNotebook:
         nb = json.loads((tmp_path / "proj/notebooks/s.ipynb").read_text("utf-8"))
         assert nb["cells"][0]["cell_type"] == "markdown"
 
-    def test_quick_exit_guard_skips_later_cells_instead_of_failing(self, tmp_path):
+    def test_quick_exit_guard_skips_later_cells_instead_of_failing(
+        self, tmp_path, monkeypatch
+    ):
         src = (
             "import os, sys\n"
             'QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"\n'
@@ -572,4 +693,22 @@ class TestBannerScriptToNotebook:
         code = ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"]
         assert "sys.exit" not in code[0]
         assert "input_transformers_cleanup" in code[0]
-        compile(code[0].replace("get_ipython()", "g"), "c", "exec")
+
+        def run_all(quick: str | None):
+            from IPython.core.interactiveshell import InteractiveShell
+
+            if quick is None:
+                monkeypatch.delenv("NLSQ_EXAMPLES_QUICK", raising=False)
+            else:
+                monkeypatch.setenv("NLSQ_EXAMPLES_QUICK", quick)
+            InteractiveShell.clear_instance()  # the hook mutates the shell
+            shell = InteractiveShell.instance()
+            try:
+                return [shell.run_cell(c).error_in_exec for c in code]
+            finally:
+                InteractiveShell.clear_instance()
+
+        pytest.importorskip("IPython")
+        assert run_all("1") == [None, None]  # later cell skipped, nothing fails
+        errors = run_all(None)  # guard is not vacuously always on
+        assert errors[0] is None and isinstance(errors[1], RuntimeError)

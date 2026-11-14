@@ -41,9 +41,12 @@ def test_notebooks_found():
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=_rel)
 def test_notebook_is_valid_and_has_code(path: Path):
-    nb = nbformat.read(path, as_version=4)
-    nbformat.validate(nb)
-    assert any(c.cell_type == "code" for c in nb.cells), "no code cell"
+    # nbformat.read() would silently fill in missing cell ids; validate the raw JSON.
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    nbformat.validate(nbformat.from_dict(raw))
+    ids = [c.get("id") for c in raw["cells"]]
+    assert all(ids) and len(set(ids)) == len(ids), "cells need unique ids"
+    assert any(c["cell_type"] == "code" for c in raw["cells"]), "no code cell"
 
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=_rel)
@@ -101,3 +104,44 @@ def test_relative_markdown_links_resolve(path: Path):
             if file_part and not (path.parent / file_part).resolve().exists():
                 dead.append(f"cell {i}: {target}")
     assert not dead, f"{_rel(path)} has dead relative links: {dead}"
+
+
+def _cells(path: Path) -> list[dict]:
+    return json.loads(path.read_text(encoding="utf-8"))["cells"]
+
+
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_rel)
+def test_code_cells_have_no_stored_outputs(path: Path):
+    for i, cell in enumerate(_cells(path)):
+        if cell["cell_type"] == "code":
+            assert cell.get("outputs") == [], f"{_rel(path)} cell {i} has outputs"
+            assert cell.get("execution_count") is None, (
+                f"{_rel(path)} cell {i} has an execution_count"
+            )
+
+
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_rel)
+def test_no_empty_cells(path: Path):
+    for i, cell in enumerate(_cells(path)):
+        assert _source(cell).strip(), f"{_rel(path)} cell {i} is empty"
+
+
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_rel)
+def test_long_markdown_cells_keep_their_newlines(path: Path):
+    """A long markdown cell that is one line in one entry lost its newlines."""
+    for i, cell in enumerate(_cells(path)):
+        if cell["cell_type"] != "markdown" or len(_source(cell)) <= 300:
+            continue
+        src = cell["source"]
+        assert "\n" in _source(cell) or (isinstance(src, list) and len(src) >= 2), (
+            f"{_rel(path)} cell {i}: {len(_source(cell))} chars on a single line"
+        )
+
+
+@pytest.mark.parametrize("path", NOTEBOOKS, ids=_rel)
+def test_random_numbers_are_seeded(path: Path):
+    code = "\n".join(_source(c) for c in _cells(path) if c["cell_type"] == "code")
+    if "np.random." in code or "default_rng(" in code:
+        assert "seed(" in code or re.search(r"default_rng\(\s*\d", code), (
+            f"{_rel(path)} draws random numbers without a seed"
+        )

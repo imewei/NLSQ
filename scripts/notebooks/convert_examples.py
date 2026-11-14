@@ -82,7 +82,12 @@ def configure_matplotlib_inline(notebook_data):
                 return False, "Already has %matplotlib magic"
 
     # Insert magic comment cell before matplotlib import
+    taken = {c.get("id") for c in cells}
+    magic_id = "matplotlib-inline"
+    while magic_id in taken:  # keep ids unique within the notebook
+        magic_id += "-x"
     magic_cell = {
+        "id": magic_id,
         "cell_type": "code",
         "execution_count": None,
         "metadata": {},
@@ -407,6 +412,9 @@ def script_to_notebook(script_path: Path, output_path: Path | None = None) -> Pa
     cell = _code_cell(current_block)
     if cell:
         cells.append(cell)
+
+    for n, cell in enumerate(cells):  # nbformat 4.5 requires a unique id per cell
+        cell["id"] = f"cell-{n:03d}"
 
     notebook = {
         "cells": cells,

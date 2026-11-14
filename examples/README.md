@@ -12,28 +12,28 @@ Welcome to the NLSQ examples repository! This collection provides comprehensive,
 
 ## 📁 Directory Structure
 
-This directory contains **55 notebooks and 55 scripts** organized for optimal learning progression:
+This directory contains **54 notebooks and 61 scripts** organized for optimal learning progression:
 
 ```
 examples/
-├── notebooks/          # Interactive Jupyter notebooks (55 files)
+├── notebooks/          # Interactive Jupyter notebooks (54 files)
 │   ├── 00_learning_map.ipynb        # Navigation guide
 │   ├── 01_getting_started/          # 2 beginner tutorials
 │   ├── 02_core_tutorials/           # 4 intermediate tutorials
 │   ├── 03_advanced/                 # 7 advanced topics
-│   ├── 04_gallery/                  # 11 domain-specific examples
+│   ├── 04_gallery/                  # 12 domain-specific examples
 │   ├── 05_feature_demos/            # 5 feature demonstrations
-│   ├── 06_streaming/                # 5 streaming examples
-│   ├── 07_global_optimization/      # 5 multi-start tutorials (NEW v0.3.3)
-│   ├── 08_workflow_system/          # 7 unified fit() tutorials (NEW v0.3.4)
-│   └── 09_gallery_advanced/         # 11 advanced gallery with fit() API (NEW v0.3.4)
-├── scripts/            # Python scripts (mirrors notebooks/)
+│   ├── 06_streaming/                # 1 streaming example
+│   ├── 07_global_optimization/      # 6 global optimization tutorials (NEW v0.3.3)
+│   ├── 08_workflow_system/          # 4 unified fit() tutorials (NEW v0.3.4)
+│   └── 09_gallery_advanced/         # 12 advanced gallery with fit() API (NEW v0.3.4)
+├── scripts/            # Python scripts (mirrors notebooks/, plus 10_cli-commands/)
 │   └── [same structure as notebooks/]
 ├── _templates/         # Notebook templates for contributors
 └── README.md           # This file
 ```
 
-**Total**: 114 files (57 notebooks + 57 scripts)
+**Total**: 115 files (54 notebooks + 61 scripts)
 
 ---
 
@@ -246,10 +246,11 @@ Your complete navigation guide:
 - **Reaction Kinetics** - Rate laws, rate constants
 - **Titration Curves** - pH fitting, pKa determination
 
-#### ⚛️ Physics (3 notebooks)
+#### ⚛️ Physics (4 notebooks)
 - **Damped Oscillation** - Harmonic oscillator, pendulums
 - **Radioactive Decay** - Exponential decay, half-life
 - **Spectroscopy Peaks** - Peak fitting, Lorentzian shapes
+- **2D Surface Fitting** - 2D Gaussian beam profiles, spatial parameters
 
 #### 🔧 Engineering (3 notebooks)
 - **Sensor Calibration** - Calibration curves, polynomial regression
@@ -278,15 +279,11 @@ Your complete navigation guide:
 ### 06. Streaming Examples
 **Location**: `notebooks/06_streaming/` | `scripts/06_streaming/`
 
-**Advanced streaming optimization for unlimited datasets:**
+**Streaming optimization for datasets that do not fit in memory:**
 
-1. **Basic Fault Tolerance** - NaN/Inf detection, adaptive retry
-2. **Checkpoint & Resume** - Save and resume optimization state
-3. **Custom Retry Settings** - Custom retry strategies
-4. **Interpreting Diagnostics** - Performance metrics analysis
-5. **Hybrid Streaming API** - 4-phase optimizer with defense layers (v0.3.6+)
+1. **Hybrid Streaming API** (`05_hybrid_streaming_api.ipynb`) - 4-phase optimizer with defense layers (v0.3.6+)
 
-**Time**: 2-3 hours | **Level**: ●●● Advanced
+**Level**: ●●● Advanced
 
 ---
 
@@ -297,7 +294,7 @@ Your complete navigation guide:
 
 1. **Multi-Start Basics** (`01_multistart_basics.ipynb`)
    - Why local optimization fails (local minima trap)
-   - `GlobalOptimizationConfig` with `n_starts`, `sampling_method`
+   - `GlobalOptimizationConfig` with `n_starts`, `sampler`
    - Interpret multi-start results
    - **Time**: 20 min | **Level**: ●●○ Intermediate
 
@@ -386,7 +383,7 @@ popt, pcov = fit(model, x, y, p0=p0, workflow=HybridStreamingConfig())
 
 **Domain examples using `fit()` API with global optimization:** ⭐ NEW
 
-Same 11 domain examples as Section 04, updated to demonstrate:
+Same 12 domain examples as Section 04, updated to demonstrate:
 - Unified `fit()` API with presets
 - `GlobalOptimizationConfig` for multi-start optimization
 - Best practices for production workflows
@@ -400,10 +397,11 @@ Same 11 domain examples as Section 04, updated to demonstrate:
 - **Reaction Kinetics** - Rate constants with global search
 - **Titration Curves** - pKa with `preset="global"`
 
-#### ⚛️ Physics (3 notebooks)
+#### ⚛️ Physics (4 notebooks)
 - **Damped Oscillation** - Multi-start for oscillation parameters
 - **Radioactive Decay** - Robust fitting for decay constants
 - **Spectroscopy Peaks** - Global optimization for peak fitting (critical for local minima)
+- **2D Surface Fitting** - 2D Gaussian beam profile parameters
 
 #### 🔧 Engineering (3 notebooks)
 - **Sensor Calibration** - Robust calibration curves
@@ -628,7 +626,7 @@ If you use NLSQ in your research, please cite:
 
 ## 🌟 Summary
 
-✨ **55 comprehensive notebooks** covering basics to advanced optimization
+✨ **54 comprehensive notebooks** covering basics to advanced optimization
 ✨ **Production-ready** unified `fit()` API with automatic workflow selection
 ✨ **Global optimization** with multi-start for escaping local minima
 ✨ **GPU-accelerated** (speedup over SciPy depends on hardware and problem size; see `benchmarks/`)

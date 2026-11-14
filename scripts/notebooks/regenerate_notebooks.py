@@ -7,6 +7,10 @@ This handles Python scripts by:
 2. Creating import cells
 3. Creating function definition cells
 4. Creating the main logic cells from top-level code or main() body
+
+Usage: regenerate_notebooks.py <scripts directory> [--banners]. With --banners (flat
+tutorial scripts whose prose sits in ``# ====`` blocks) each block becomes a markdown
+cell instead; see ``banner_script_to_notebook``.
 """
 
 import ast
@@ -250,7 +254,7 @@ def split_script_sections(source: str) -> dict:
 
 
 def create_notebook_cell(
-    cell_type: str, source: str | list, cell_id: str = None
+    cell_type: str, source: str | list, cell_id: str | None = None
 ) -> dict:
     """Create a notebook cell."""
     if isinstance(source, list):
