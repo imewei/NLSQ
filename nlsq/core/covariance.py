@@ -18,12 +18,26 @@ import warnings
 from collections.abc import Callable
 from typing import Any
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from nlsq.result import OptimizeWarning
 from nlsq.utils.logging import get_logger
 
 _logger = get_logger("curve_fit")
+
+
+@jax.jit
+def _column_norms(J: Any) -> Any:
+    """Column 2-norms of ``J``, on ``J``'s own device (max-scaled: no over/underflow).
+
+    Only ``p`` scalars leave the device; reducing a GPU ``J`` on the host copies all of
+    it, ~46 ms at 1M x 3 against ~1 ms here.
+    """
+    col_max = jnp.max(jnp.abs(J), axis=0, initial=0.0)
+    return col_max * jnp.linalg.norm(J / jnp.where(col_max > 0, col_max, 1.0), axis=0)
+
 
 COND_WARN = 1e4  # warn when sqrt(cond(H)), the cond(J) estimate, exceeds this
 # warnings point at the user's call site, whether exact_lm_fit or curve_fit_large was called
@@ -53,13 +67,7 @@ def pcov_from_jacobian(
     # "dropped" and its variance collapse); pcov is scaled back below. Departs from
     # SciPy's unscaled cutoff on purpose. Zero columns are left unscaled; if any
     # column norm is non-finite, no column is scaled.
-    J_np = np.asarray(J)
-    col_max = np.max(
-        np.abs(J_np), axis=0, initial=0.0
-    )  # max-scaled norm: no over/underflow
-    col_norm = col_max * np.linalg.norm(
-        J_np / np.where(col_max > 0, col_max, 1.0), axis=0
-    )
+    col_norm = np.asarray(_column_norms(J))
     if not np.all(np.isfinite(col_norm)):
         col_norm = np.ones_like(col_norm)
     col_norm = np.where(col_norm > 0, col_norm, 1.0)

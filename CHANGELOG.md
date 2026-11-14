@@ -365,6 +365,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
 
 ### Fixed
+- **GPU `curve_fit` slowdown**: since `1e5ed01c` (covariance column equilibration), `pcov_from_jacobian` reduced
+  the Jacobian on the host, copying all of a GPU `J` (24 MB at 1M x 3) and adding ~46 ms per fit. Column norms
+  now run on `J`'s device and only `p` scalars come back. Interleaved A/B on the RTX 4090 laptop GPU, warm
+  median: 1M points 96.8 -> 43.1 ms (baseline 44.3 ms), 100k points 24.5 -> 17.6 ms (baseline 16.9 ms); `popt`
+  is bit-identical.
 - **`NLSQ_SAVE_ITERATIONS`**: setting the variable now works at the default log level. Both TRF solvers
   (bounded and unbounded) record per-iteration metrics when it is set, and each fit writes its own
   `optimization_history_*.npz` (history is cleared before every fit); a write error logs a warning instead

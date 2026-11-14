@@ -342,3 +342,26 @@ def test_pcov_from_normal_singular_h_keeps_moore_penrose_semantics():
     H = np.array([[1.0, 1e-9], [1e-9, 1e-18]])
     pcov, _ = pcov_from_normal(H, 1.0, 10, 2, True, False)
     np.testing.assert_allclose(pcov, np.linalg.pinv(H), rtol=1e-6, atol=1e-30)
+
+
+class TestColumnNorms:
+    """``_column_norms`` replaced a host-side NumPy reduction that copied all of a GPU J."""
+
+    def test_matches_numpy_and_does_not_overflow(self):
+        import jax.numpy as jnp
+        import numpy as np
+
+        from nlsq.core.covariance import _column_norms
+
+        rng = np.random.default_rng(0)
+        J = rng.normal(size=(50, 4)) * np.array([1.0, 1e-8, 1e8, 1.0])
+        J[:, 3] = 0.0  # zero column stays zero (the caller then leaves it unscaled)
+        np.testing.assert_allclose(
+            np.asarray(_column_norms(jnp.asarray(J))),
+            np.linalg.norm(J, axis=0),
+            rtol=1e-12,
+        )
+        big = np.full((4, 1), 1e200)  # a plain sum of squares would overflow
+        np.testing.assert_allclose(
+            np.asarray(_column_norms(jnp.asarray(big))), [2e200], rtol=1e-12
+        )
