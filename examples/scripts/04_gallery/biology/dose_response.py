@@ -189,12 +189,14 @@ else:
 print(f"  Potency:        {potency}")
 
 # Cooperativity
-if hill_slope_fit > 1.5:
-    cooperativity = "Positive cooperativity (steep, h > 1.5)"
-elif hill_slope_fit > 0.7:
-    cooperativity = "Non-cooperative (0.7 < h < 1.5)"
+# h = 1 is the non-cooperative (mass-action) value; call it cooperative only when
+# the fitted h differs from 1 by more than 2 standard errors
+if hill_slope_fit - 2 * hill_slope_err > 1:
+    cooperativity = "Positive cooperativity (steep, h > 1)"
+elif hill_slope_fit + 2 * hill_slope_err < 1:
+    cooperativity = "Negative cooperativity (shallow, h < 1)"
 else:
-    cooperativity = "Negative cooperativity (shallow, h < 0.7)"
+    cooperativity = "Non-cooperative (h = 1 within 2 sigma)"
 
 print(f"  Cooperativity:  {cooperativity}")
 
@@ -242,9 +244,12 @@ print(f"  EC50:     {EC50_fit:.2f} μM")
 print(f"  Efficacy: {dynamic_range:.1f} %")
 print(f"  Hill:     {hill_slope_fit:.2f}")
 
+# Lower EC50 means more potent; wording follows the fitted values
+potency_B = "more potent" if EC50_B_fit < EC50_fit else "less potent"
+efficacy_B = "lower efficacy" if dynamic_range_B < dynamic_range else "higher efficacy"
 print("\nDrug B (comparison):")
-print(f"  EC50:     {EC50_B_fit:.2f} μM (more potent)")
-print(f"  Efficacy: {dynamic_range_B:.1f} % (lower efficacy)")
+print(f"  EC50:     {EC50_B_fit:.2f} μM ({potency_B})")
+print(f"  Efficacy: {dynamic_range_B:.1f} % ({efficacy_B})")
 print(f"  Hill:     {hill_slope_B_fit:.2f}")
 
 print(f"\nPotency ratio (A/B):  {EC50_fit / EC50_B_fit:.1f}x")
@@ -453,13 +458,12 @@ ax6.text(
 ax6.set_title("Summary Table", fontsize=12, fontweight="bold")
 
 plt.tight_layout()
-plt.savefig("dose_response.png", dpi=150)
-print("\n✅ Plot saved as 'dose_response.png'")
 plt.tight_layout()
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "dose_response"
 fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+print(f"\n✅ Plot saved as {fig_dir / 'fig_01.png'}")
 plt.close()
 
 
@@ -473,9 +477,13 @@ print(f"    Efficacy:  {dynamic_range:.1f}% ({bottom_fit:.1f} to {top_fit:.1f}%)
 print(f"    Hill slope: {hill_slope_fit:.2f} ({cooperativity.split('(')[0].strip()})")
 print(f"    Potency:   {potency.split('(')[0].strip()}")
 print("\n  Drug B (comparison):")
-print(f"    EC50:      {EC50_B_fit:.2f} μM ({EC50_fit / EC50_B_fit:.1f}x less potent)")
 print(
-    f"    Efficacy:  {dynamic_range_B:.1f}% ({dynamic_range - dynamic_range_B:+.1f}%)"
+    f"    EC50:      {EC50_B_fit:.2f} μM "
+    f"({max(EC50_fit / EC50_B_fit, EC50_B_fit / EC50_fit):.1f}x {potency_B} than A)"
+)
+print(
+    f"    Efficacy:  {dynamic_range_B:.1f}% "
+    f"({dynamic_range_B - dynamic_range:+.1f} points vs A)"
 )
 print("\n  Key concentrations:")
 print(f"    EC20: {EC20:.2f} μM")

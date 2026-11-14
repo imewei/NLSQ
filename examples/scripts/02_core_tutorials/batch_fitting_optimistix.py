@@ -6,14 +6,17 @@ by vmapping a fixed-iteration Gauss-Newton step. Optimistix provides
 production-grade JAX-native least-squares solvers, so the obvious question is
 whether it is the better batch engine. On this problem it is, on both counts:
 
-- It is faster. 500 datasets of 100 points, three parameters, on one RTX 4090
-  in float64: Optimistix 11.4 us/dataset against 20.3 us for the hand solver
-  at 30 iterations and 65.4 us at 100. Its per-step cost is higher (trust
-  region plus a `lineax` solve), but it converges in a median of 8 steps and
-  stops, where a fixed-iteration scan always pays its full budget.
+- It is faster. 500 datasets of 100 points, three parameters, float64. On one
+  CPU run of this script: Optimistix 87 us/dataset against 755 us for the hand
+  solver at 33 iterations and 2252 us at 100. Absolute times depend on the
+  device (the script prints the numbers for yours); the ordering is what
+  matters. Its per-step cost is higher (trust region plus a `lineax` solve),
+  but it converges in a median of 8 steps and stops, where a fixed-iteration
+  scan always pays its full budget.
 - It is far more robust. From initial guesses off by 20x, the fixed-damping
-  hand solver diverges on every one of the 500 datasets (parameters reaching
-  1e32, finite rather than NaN), while Optimistix converges on all 500.
+  hand solver fails on every one of the 500 datasets (it ends at a finite but
+  wrong point, so a NaN check does not notice), while Optimistix converges on
+  all 500.
 
 Note what "adaptive termination" does and does not buy under `vmap`. A batched
 `while_loop` runs until the SLOWEST member converges, so the batch pays the
@@ -142,9 +145,9 @@ def make_optx(max_steps):
 def count_failures(popt, cost, y):
     """Flag datasets the solver did not actually fit.
 
-    Testing for NaN is not enough. In float64 a diverging Gauss-Newton step
-    overflows to enormous finite values (1e32 and beyond) rather than NaN, so a
-    NaN-only check reports a clean sweep on a batch that failed completely.
+    Testing for NaN is not enough. A failed fixed-damping Gauss-Newton run
+    can end at finite, wrong parameters rather than NaN, so a NaN-only check
+    reports a clean sweep on a batch that failed completely.
 
     The test is absolute rather than relative to the batch. A threshold like
     "cost above ten times the batch median" looks reasonable and breaks exactly
@@ -221,7 +224,7 @@ def main():
 
     worst = np.abs(np.asarray(bad_gn[0])).max()
     print(
-        f"     the hand solver's worst parameter is {worst:.2e} --"
+        f"     the hand solver's largest |parameter| is {worst:.2e} --"
         " finite, so a NaN check would call it a success"
     )
 

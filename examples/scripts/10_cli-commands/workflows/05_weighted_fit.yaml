@@ -45,7 +45,6 @@ model:
   path: "models/biology_models.py"
   function: "michaelis_menten"
 
-
   model_id: "michaelis_menten_v1"
 
 # ==============================================================================
@@ -70,13 +69,6 @@ fitting:
 export:
   results_file: "output/05_weighted_fit_results.json"
 
-  include:
-    parameters: true
-    covariance: true
-    uncertainties: true
-    statistics: true
-    convergence_info: true
-
 # ==============================================================================
 # VISUALIZATION CONFIGURATION
 # ==============================================================================
@@ -91,7 +83,6 @@ visualization:
   dpi: 150                        # Lower DPI for slides
   figure_size: [10.0, 5.625]      # 16:9 aspect ratio for slides
   style: "presentation"
-  layout: "combined"
 
   font:
     family: "sans-serif"
@@ -137,7 +128,6 @@ visualization:
       show_chi_squared: true
       location: "upper left"
       fontsize: 11
-      box_alpha: 0.85
 
   residuals_plot:
     enabled: true
@@ -154,8 +144,6 @@ visualization:
       levels: [1, 2]
       colors: ["#e8f4e8", "#d4e9d4"]
       alpha: 0.5
-
-    show_weighted: true           # Show weighted residuals
 
   histogram:
     enabled: true

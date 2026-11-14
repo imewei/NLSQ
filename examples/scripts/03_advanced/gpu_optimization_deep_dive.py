@@ -54,7 +54,8 @@ import numpy as np
 from jax import jit, vmap
 
 from nlsq import CurveFit
-from nlsq.utils.error_messages import OptimizationError
+
+np.random.seed(42)
 
 # Detect available devices
 devices = jax.devices()
@@ -131,7 +132,7 @@ print(
 )
 print()
 print("Key insight: First call is slow due to JIT compilation.")
-print("            Subsequent calls are much faster (10-100x).")
+print("            Subsequent calls reuse the compiled kernel and are much faster.")
 
 
 # Understanding what triggers recompilation
@@ -171,7 +172,7 @@ print("  → Keep array shapes consistent to avoid recompilation")
 # Trigger 2: Different dtypes
 print("\n2. Changing dtypes triggers recompilation:")
 print("  float32 vs float64 will trigger separate compilations")
-print("  → Use consistent dtype (float32 for GPU, float64 for high precision)")
+print("  → NLSQ requires float64 (enabled on import); keep dtypes consistent")
 
 # Trigger 3: Different parameter counts
 print("\n3. Different model signatures trigger recompilation:")
@@ -205,56 +206,45 @@ def complex_model(x, a, b, c, d):
 print(f"GPU Acceleration Benchmark (n_points={n_points}):")
 print("=" * 60)
 
-# Ensure compilation is done (use same settings as benchmark for consistency)
+# Warm up on the SAME shape and settings as the timed fits: XLA compiles per
+# input shape, so warming up on a slice would leave the compilation inside the
+# first timed run.
+n_runs = 3 if QUICK else 10
+bench_max_nfev = 20 if QUICK else 50
 cf_gpu = CurveFit()
-try:
-    _ = cf_gpu.curve_fit(
-        complex_model,
-        x_large[:100],
-        y_large[:100],
-        p0=[3, 0.5, 2, 1],
-        max_nfev=200 if QUICK else 1000,
-    )
-except OptimizationError:
-    try:
-        _ = cf_gpu.curve_fit(
-            complex_model,
-            x_large[:100],
-            y_large[:100],
-            p0=[3, 0.5, 2, 1],
-            max_nfev=600 if QUICK else 1000,
-            gtol=1e-6 if QUICK else 1e-8,
-        )
-    except OptimizationError:
-        print("⚠️  Quick-mode warmup failed to converge; continuing benchmark.")
+_ = cf_gpu.curve_fit(
+    complex_model, x_large, y_large, p0=[3.0, 0.5, 2.0, 1.0], max_nfev=bench_max_nfev
+)
 
 # Benchmark: 10 fits (reduced in quick mode)
-n_runs = 3 if QUICK else 10
 times = []
+n_converged = 0
 
 for i in range(n_runs):
     # Slightly vary initial guess to avoid trivial caching
     p0 = [3.0 + i * 0.1, 0.5, 2.0, 1.0]
     start = time.time()
-    popt, _ = cf_gpu.curve_fit(
-        complex_model, x_large, y_large, p0=p0, max_nfev=20 if QUICK else 50
+    result = cf_gpu.curve_fit(
+        complex_model, x_large, y_large, p0=p0, max_nfev=bench_max_nfev
     )
     times.append((time.time() - start) * 1000)
+    n_converged += bool(result.success)
 
 mean_time = np.mean(times)
 std_time = np.std(times)
 
 print(f"\nDevice: {jax.devices()[0]}")
 print(f"Average fit time: {mean_time:.1f} ± {std_time:.1f} ms")
+print(f"Converged within max_nfev={bench_max_nfev}: {n_converged}/{n_runs} fits")
 print(f"Throughput: {1000 / mean_time:.1f} fits/second")
 print()
 
 if has_gpu:
     print("✓ Running on GPU - performance is optimized")
-    print("  Expected speedup vs CPU: 5-20x for this problem size")
+    print("  Compare against a JAX_PLATFORMS=cpu run to measure the speedup")
 else:
     print("Running on CPU - results are valid but slower than GPU")
-    print("  With GPU: Expect 5-50x speedup for large datasets")
+    print("  Run on a GPU host to compare; speedups depend on hardware and size")
 
 
 # ======================================================================
@@ -294,15 +284,19 @@ print()
 
 # Method 1: Sequential (slow)
 print("Method 1: Sequential fitting (baseline)")
-start = time.time()
 results_sequential = []
 cf_seq = CurveFit()
 sequential_runs = min(20 if QUICK else 100, n_datasets)
+# Warm up on the same shape so compilation is not timed
+cf_seq.curve_fit(
+    exponential_model, x_batch_data, y_batch_data[0], p0=[3.0, 0.5], max_nfev=30
+)
+start = time.time()
 for i in range(sequential_runs):  # Only fit a subset for speed
     popt, _ = cf_seq.curve_fit(
         exponential_model, x_batch_data, y_batch_data[i], p0=[3.0, 0.5], max_nfev=30
     )
-    results_sequential.append(popt)
+    results_sequential.append(np.asarray(popt))
 time_sequential = time.time() - start
 
 print(
@@ -310,41 +304,47 @@ print(
     f"({time_sequential * 1000 / sequential_runs:.1f} ms/fit)"
 )
 print(
-    f"  Estimated time for {n_datasets}: {time_sequential * n_datasets / sequential_runs:.1f} s"
+    f"  Extrapolated time for {n_datasets}: {time_sequential * n_datasets / sequential_runs:.1f} s"
 )
 print()
 
-# Method 2: Vectorized with vmap (fast)
-print("Method 2: Batched fitting with vmap (optimized)")
+# Method 2: Vectorized with vmap
+print("Method 2: Batched fitting with vmap (damped Gauss-Newton, 30 iterations)")
 
 
-# Simplified optimizer for vectorization
 def fit_one_dataset(y_single):
-    """Fit single dataset (simplified gradient descent)."""
-    params = jnp.array([3.0, 0.5])
+    """Fit one dataset with a fixed number of damped Gauss-Newton steps.
 
-    def loss(p):
-        return jnp.sum((y_single - exponential_model(x_batch_data, *p)) ** 2)
+    Gauss-Newton converges on this smooth 2-parameter problem in a handful of
+    steps, unlike fixed-step gradient descent on an unnormalised SSE (which
+    diverges here). A fixed ``lax.scan`` length keeps the kernel vmap-friendly.
+    """
 
-    # A few gradient descent steps for demonstration
-    for _ in range(5 if QUICK else 20):
-        g = jax.grad(loss)(params)
-        params = params - 0.05 * g
+    def residual(p):
+        return exponential_model(x_batch_data, *p) - y_single
+
+    def step(p, _):
+        r = residual(p)
+        J = jax.jacobian(residual)(p)
+        JTJ = J.T @ J
+        damped = JTJ + 1e-3 * jnp.diag(jnp.diag(JTJ))
+        return p + jnp.linalg.solve(damped, -J.T @ r), None
+
+    params, _ = jax.lax.scan(step, jnp.array([3.0, 0.5]), None, length=30)
     return params
 
 
 # Vectorize over batch dimension
 fit_batch = jit(vmap(fit_one_dataset))
 
-# Warm up JIT
-warmup_size = min(10, n_datasets)
-_ = fit_batch(y_batch_data[:warmup_size])
+# Warm up JIT on the SAME shape as the timed call (XLA recompiles per shape)
+_ = fit_batch(y_batch_data).block_until_ready()
 
 # Benchmark
 start = time.time()
 results_batch = fit_batch(y_batch_data)
 # Block until computation completes (JAX is async)
-results_batch[0].block_until_ready()
+results_batch.block_until_ready()
 time_batch = time.time() - start
 
 print(
@@ -353,13 +353,31 @@ print(
 print(f"  Throughput: {n_datasets / time_batch:.0f} fits/second")
 print()
 
-# Speedup
-estimated_sequential_time = time_sequential * n_datasets / sequential_runs
-speedup = estimated_sequential_time / time_batch
-
-print(f"Speedup: {speedup:.0f}x faster with vmap + JIT ✓")
+# Accuracy: a speedup only means something if the fits agree
+true_params = np.stack([a_true_batch, b_true_batch], axis=1)
+seq_params = np.asarray(results_sequential)
+vmap_params = np.asarray(results_batch)
+err_seq = np.abs(seq_params - true_params[:sequential_runs]).max()
+err_vmap = np.abs(vmap_params - true_params).max()
+agree = np.abs(vmap_params[:sequential_runs] - seq_params).max()
+print("Accuracy check (max |fit - truth| over all parameters):")
+print(f"  Sequential NLSQ: {err_seq:.3f}")
+print(f"  vmap solver:     {err_vmap:.3f}")
+print(f"  max |vmap - sequential| on the same datasets: {agree:.2e}")
 print()
-print("Key insight: vmap parallelizes across datasets, JIT compiles once")
+
+# Speedup (per fit, since sequential fits only a subset)
+per_fit_seq = time_sequential / sequential_runs
+per_fit_batch = time_batch / n_datasets
+speedup = per_fit_seq / per_fit_batch
+
+if agree < 1e-3:
+    print(f"Speedup: {speedup:.0f}x per fit (fits agree to {agree:.1e}) ✓")
+else:
+    print(f"Speedup: {speedup:.0f}x per fit, BUT fits differ by {agree:.1e}")
+print()
+print("Key insight: vmap parallelizes across datasets, JIT compiles once.")
+print("Compare speed only between solvers that reach the same answer.")
 
 
 # ======================================================================
@@ -375,19 +393,17 @@ print("Memory Optimization Strategies:")
 print("=" * 60)
 print()
 
-print("1. Process data in chunks (streaming):")
-print("   # For very large datasets (millions of points)")
-print("   chunk_size = 100000")
-print("   for i in range(0, len(data), chunk_size):")
-print("       chunk = data[i:i+chunk_size]")
-print("       result = fit(chunk)")
-print("       results.append(result)\n")
+print("1. Use curve_fit_large for very large datasets (millions of points):")
+print("   from nlsq import curve_fit_large")
+print("   popt, pcov = curve_fit_large(model, x, y, p0=p0)")
+print("   # Exact full-data streaming fit above the size threshold; unlike")
+print("   # fitting chunks separately it equals the full-batch result.\n")
 
-print("3. Clear JAX cache if needed:")
+print("2. Clear JAX cache if needed:")
 print("   from jax import clear_caches")
 print("   clear_caches()  # Frees compilation cache\n")
 
-print("4. Monitor memory usage:")
+print("3. Monitor memory usage:")
 
 
 def get_array_memory_mb(arr):
@@ -400,7 +416,7 @@ print(
 )
 print()
 
-print("5. Typical memory requirements:")
+print("4. Typical memory requirements:")
 print("   10K points:     ~0.1 MB (negligible)")
 print("   1M points:      ~10 MB (easy)")
 print("   100M points:    ~1 GB (manageable)")
@@ -536,15 +552,16 @@ print("  - Superlinear scaling: May indicate memory issues or poor caching")
 # 1. ✅ **Use GPU** if available (5-50x speedup for large problems)
 # 2. ✅ **Keep array shapes consistent** to avoid recompilation
 # 3. ✅ **Use streaming optimizer** for large datasets (memory-efficient)
-# 4. ✅ **Batch process** with `vmap` for multiple datasets (10-100x faster)
+# 4. ✅ **Batch process** with `vmap` for many small datasets (see Part 3 for
+#    the speedup measured on your hardware)
 # 5. ✅ **Warm up JIT** with small dataset before benchmarking
 # 6. ✅ **Use `block_until_ready()`** when timing (JAX is async)
 #
 # **For Large Datasets:**
 #
-# 1. ✅ **Chunk data** if >100M points
+# 1. ✅ **Use `curve_fit_large`** (exact streaming) when data exceeds memory
 # 2. ✅ **Monitor memory** usage
-# 3. ✅ **Consider downsampling** for smooth, oversampled data
+# 3. ✅ **Avoid silent downsampling**; log it if you must subsample
 # 4. ✅ **Use streaming** for datasets that don't fit in memory
 #
 # ### Performance Expectations
@@ -566,7 +583,7 @@ print("  - Superlinear scaling: May indicate memory issues or poor caching")
 # - **Solution**: Check if recompiling each time (varying shapes/dtypes)
 #
 # **Problem**: Out of memory errors
-# - **Solution**: Use streaming optimizer, chunk data, or downsample
+# - **Solution**: Use `curve_fit_large` (streaming), not ad-hoc chunk fits
 #
 # **Problem**: GPU not being used
 # - **Solution**: Check `jax.devices()`, install jax[cuda] or jax[rocm]

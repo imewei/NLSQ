@@ -41,13 +41,11 @@ source ./venv/bin/activate
 # NLSQ Environment Configuration
 # ==============================================================================
 
-# Optimization goal: fast, robust, quality, memory_efficient
-export NLSQ_WORKFLOW_GOAL=robust
-
-# Memory limit per node (GB) - adjust based on available RAM
+# Memory limit per node (GB) - adjust based on available RAM (read by NLSQ)
 export NLSQ_MEMORY_LIMIT_GB=200
 
-# Checkpoint directory for fault tolerance
+# Checkpoint directory for fault tolerance. NLSQ does not read this variable;
+# it is a plain shell variable handed to your own script via --checkpoint-dir.
 export NLSQ_CHECKPOINT_DIR=$PBS_O_WORKDIR/checkpoints
 
 # Optional: Force CPU backend for debugging
@@ -76,7 +74,6 @@ echo "Node list:"
 cat $PBS_NODEFILE
 echo ""
 echo "NLSQ Configuration:"
-echo "  NLSQ_WORKFLOW_GOAL: $NLSQ_WORKFLOW_GOAL"
 echo "  NLSQ_MEMORY_LIMIT_GB: $NLSQ_MEMORY_LIMIT_GB"
 echo "  NLSQ_CHECKPOINT_DIR: $NLSQ_CHECKPOINT_DIR"
 echo "========================================"

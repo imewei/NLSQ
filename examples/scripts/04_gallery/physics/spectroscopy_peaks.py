@@ -397,13 +397,12 @@ ax5.legend()
 ax5.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("spectroscopy_peaks.png", dpi=150)
-print("\n✅ Plot saved as 'spectroscopy_peaks.png'")
 plt.tight_layout()
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "spectroscopy_peaks"
 fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+print(f"\n✅ Plot saved as {fig_dir / 'fig_01.png'}")
 plt.close()
 
 

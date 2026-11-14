@@ -48,6 +48,8 @@ from nlsq import CurveFit
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
 MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 
+np.random.seed(42)  # reproducible data and pass/fail branches
+
 
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
@@ -94,15 +96,24 @@ def exponential_decay(x, a, b):
 # Create fresh CurveFit instance (avoid lingering state from previous demos)
 cf = CurveFit()
 
-# PROBLEM: Bad initial guess
+# PROBLEM: Bad initial guess. With p0[1]=1000 the model is ~0 on the whole
+# grid, the gradient w.r.t. b vanishes, and the optimizer stalls at p0.
 print("❌ PROBLEM: Poor initial guess")
 try:
-    p0_bad = [0.1, 10.0]  # Far from true values [5.0, 0.5]
-    popt_bad, _ = cf.curve_fit(
+    p0_bad = [1.0, 1000.0]  # b is far from the true value 0.5
+    res_bad = cf.curve_fit(
         exponential_decay, jnp.array(x_data), jnp.array(y_data), p0=p0_bad, max_nfev=100
     )
+    popt_bad = res_bad.popt
     print(f"  Fitted params: a={popt_bad[0]:.2f}, b={popt_bad[1]:.2f}")
-    print("  True params: a=5.0, b=0.5 (likely poor fit!)\n")
+    print(f"  True params:   a=5.0, b=0.5   (success flag: {res_bad.success})")
+    if abs(popt_bad[1] - 0.5) > 0.25:
+        print(
+            "  → b never moved from p0: a True success flag is NOT proof of a good fit"
+        )
+        print("    (check parameters/residuals against the data)\n")
+    else:
+        print("  → recovered anyway; this p0 was not bad enough to fail\n")
 except Exception as e:
     print(f"  Error: {e}\n")
 
@@ -385,22 +396,23 @@ print("     fit(x, ...)  # Reuses compilation ✓")
 
 print("\n✓ SOLUTION 3: Strategies for large datasets (>1M points)\n")
 
-print("Option A: Downsample data (if appropriate)")
-print("  # For smooth, oversampled data")
-print("  stride = 10")
-print("  x_sub = x_data[::stride]  # Every 10th point")
-print("  y_sub = y_data[::stride]")
-print("  popt, pcov = cf.curve_fit(model, x_sub, y_sub, ...)\n")
+print("Option A (recommended): curve_fit_large")
+print("  from nlsq import curve_fit_large")
+print("  popt, pcov = curve_fit_large(model, x_data, y_data, p0=p0)")
+print("  # Exact full-data streaming fit above size_threshold (default 1M);")
+print("  # uses every point and matches the full-batch result.\n")
 
-print("Option B: Binning/averaging")
-print("  # Combine neighboring points")
+print("Option B: Binning (changes the data: use only if averaging is physical)")
+print("  # Contiguous bins; x must be sorted and len(x) divisible by n_bins")
 print("  n_bins = 10000")
-print("  x_binned = np.array([x_data[i::n_bins].mean() for i in range(n_bins)])")
-print("  y_binned = np.array([y_data[i::n_bins].mean() for i in range(n_bins)])\n")
+print("  x_binned = x_data.reshape(n_bins, -1).mean(axis=1)")
+print("  y_binned = y_data.reshape(n_bins, -1).mean(axis=1)")
+print("  # Each bin mean has sigma/sqrt(points_per_bin) uncertainty, so pass")
+print("  # sigma=sigma/np.sqrt(len(x_data) // n_bins) and log that you binned.\n")
 
-print("Option C: Streaming/chunked fitting")
-print("  # For distributed data, fit chunks separately then combine")
-print("  # See: examples/streaming/ directory")
+print("Option C: Streaming/hybrid fitting for data that does not fit in memory")
+print("  # See: examples/scripts/06_streaming/ directory")
+print("  # (avoid fitting chunks separately and averaging: not full-batch equivalent)")
 
 
 # ======================================================================

@@ -14,10 +14,16 @@ Plots are saved to the figures/ directory instead of displayed inline.
 #
 # ======================================================================
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import numpy as np
 
 from nlsq import curve_fit
+
+# Plots go next to the other generated outputs, not into the current directory
+OUT_DIR = Path(__file__).parent / "figures" / "result_enhancements_demo"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ======================================================================
 # ## Example 1: Basic Statistical Properties
@@ -230,15 +236,17 @@ def example5_visualization():
     # Plot with residuals
     print("\nGenerating plot with residuals...")
     result.plot(show_residuals=True)
-    plt.savefig("curve_fit_result.png", dpi=150, bbox_inches="tight")
-    print("  ✓ Plot saved to 'curve_fit_result.png'")
+    plt.savefig(OUT_DIR / "curve_fit_result.png", dpi=150, bbox_inches="tight")
+    print(f"  ✓ Plot saved to '{OUT_DIR / 'curve_fit_result.png'}'")
 
     # Plot without residuals
     print("\nGenerating plot without residuals...")
     fig, ax = plt.subplots(figsize=(8, 6))
     result.plot(ax=ax, show_residuals=False, color="blue", alpha=0.5)
-    plt.savefig("curve_fit_result_no_residuals.png", dpi=150, bbox_inches="tight")
-    print("  ✓ Plot saved to 'curve_fit_result_no_residuals.png'")
+    plt.savefig(
+        OUT_DIR / "curve_fit_result_no_residuals.png", dpi=150, bbox_inches="tight"
+    )
+    print(f"  ✓ Plot saved to '{OUT_DIR / 'curve_fit_result_no_residuals.png'}'")
 
     plt.close("all")
     print("\n✓ Visualization completed!")

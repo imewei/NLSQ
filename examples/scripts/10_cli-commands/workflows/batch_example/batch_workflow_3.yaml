@@ -35,10 +35,6 @@ fitting:
 
 export:
   results_file: "output/batch_results_3.json"
-  include:
-    parameters: true
-    uncertainties: true
-    statistics: true
 
 # Batch workflow visualization - high contrast for presentations
 visualization:
@@ -49,7 +45,6 @@ visualization:
   dpi: 300
   figure_size: [5.0, 4.0]
   style: "minimal"
-  layout: "combined"
 
   font:
     family: "sans-serif"

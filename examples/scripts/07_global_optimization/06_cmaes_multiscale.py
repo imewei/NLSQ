@@ -14,7 +14,8 @@ The fit(workflow='auto_global') API automatically selects CMA-ES when:
 - Parameter scale ratio > 1000 AND evosax is available
 
 Prerequisites:
-    pip install "nlsq[global]"  # Installs evosax dependency
+    evosax ships with nlsq (core dependency); no extra is required.
+    If it is missing, reinstall nlsq: pip install --force-reinstall nlsq
 
 Run this example:
     python examples/scripts/07_global_optimization/06_cmaes_multiscale.py
@@ -182,7 +183,7 @@ def main():
                 )
     else:
         print("  (Skipped - evosax not installed)")
-        print("  Install with: pip install 'nlsq[global]'")
+        print("  Install with: pip install 'evosax>=0.2.0' (core nlsq dependency)")
 
     # =========================================================================
     # 4. Scale invariance demonstration

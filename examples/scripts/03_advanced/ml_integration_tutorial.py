@@ -8,7 +8,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # ======================================================================
 # # NLSQ + JAX ML Ecosystem Integration
 #
-# [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/ml_integration_tutorial.ipynb)
+# [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/notebooks/03_advanced/ml_integration_tutorial.ipynb)
 #
 # **Level**: Advanced | **Time**: 45-60 min | **Prerequisites**: NLSQ Quickstart, JAX basics
 #
@@ -400,22 +400,27 @@ plt.close()
 # 2. ODE parameters (if partially mechanistic)
 # 3. Neural network parameters (jointly or in stages)
 #
-# ### Example 2.1: Damped Oscillator with Learned Damping
+# ### Example 2.1: Damped Oscillator (fitting ODE parameters)
+#
+# Here the ODE has known structure and NLSQ fits `omega` and `gamma`; replacing
+# the damping term with a small neural network gives the Neural ODE setting.
 # ======================================================================
 
 
 # Simple ODE solver (for demonstration; use diffrax in production)
 def euler_integrate(f, y0, t, *args):
-    """Simple Euler integration for demonstration."""
+    """Simple Euler integration for demonstration (uses lax.scan, so the
+    trace stays O(1) in the number of time steps)."""
+    t = jnp.asarray(t)
+    y0 = jnp.asarray(y0)
     dt = t[1] - t[0]
-    y = jnp.zeros((len(t), len(y0)))
-    y = y.at[0].set(y0)
 
-    for i in range(1, len(t)):
-        dydt = f(y[i - 1], t[i - 1], *args)
-        y = y.at[i].set(y[i - 1] + dt * dydt)
+    def step(y_prev, t_prev):
+        y_next = y_prev + dt * f(y_prev, t_prev, *args)
+        return y_next, y_next
 
-    return y
+    _, ys = jax.lax.scan(step, y0, t[:-1])
+    return jnp.concatenate([y0[None, :], ys], axis=0)
 
 
 # Damped harmonic oscillator ODE
@@ -927,8 +932,8 @@ plt.close()
 #
 # **Continue Learning**:
 # - [Research Workflow Case Study](research_workflow_case_study.ipynb) - Real experimental data
-# - [Advanced Features Demo](advanced_features_demo.ipynb) - Diagnostics and optimization
-# - [Performance Optimization Demo](performance_optimization_demo.ipynb) - Production-ready optimization
+# - [Advanced Features Demo](../02_core_tutorials/advanced_features_demo.ipynb) - Diagnostics and optimization
+# - [Performance Optimization Demo](../02_core_tutorials/performance_optimization_demo.ipynb) - Production-ready optimization
 #
 # ---
 # ======================================================================

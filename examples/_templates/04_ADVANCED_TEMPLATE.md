@@ -243,4 +243,4 @@ A: {Convergence properties, complexity guarantees, etc.}
 **{Algorithm abbreviation}:** {Full name, reference}
 **{Mathematical concept}:** {Definition with equations}
 
-[Complete glossary](../../docs/glossary.md)
+[Concepts and explanations](../../../docs/explanation/index.rst)

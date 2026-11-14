@@ -234,12 +234,14 @@ else:
 print(f"  Potency:        {potency}")
 
 # Cooperativity
-if hill_slope_fit > 1.5:
-    cooperativity = "Positive cooperativity (steep, h > 1.5)"
-elif hill_slope_fit > 0.7:
-    cooperativity = "Non-cooperative (0.7 < h < 1.5)"
+# h = 1 is the non-cooperative (mass-action) value; call it cooperative only when
+# the fitted h differs from 1 by more than 2 standard errors
+if hill_slope_fit - 2 * hill_slope_err > 1:
+    cooperativity = "Positive cooperativity (steep, h > 1)"
+elif hill_slope_fit + 2 * hill_slope_err < 1:
+    cooperativity = "Negative cooperativity (shallow, h < 1)"
 else:
-    cooperativity = "Negative cooperativity (shallow, h < 0.7)"
+    cooperativity = "Non-cooperative (h = 1 within 2 sigma)"
 
 print(f"  Cooperativity:  {cooperativity}")
 

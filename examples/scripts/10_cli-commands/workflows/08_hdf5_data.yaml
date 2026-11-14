@@ -41,7 +41,6 @@ model:
   type: "builtin"
   name: "exponential_decay"
 
-
   model_id: "exp_decay_hdf5"
 
 # ==============================================================================
@@ -59,13 +58,6 @@ fitting:
 export:
   results_file: "output/08_hdf5_data_results.json"
 
-  include:
-    parameters: true
-    covariance: true
-    uncertainties: true
-    statistics: true
-    convergence_info: true
-
 # ==============================================================================
 # VISUALIZATION CONFIGURATION
 # ==============================================================================
@@ -80,7 +72,6 @@ visualization:
   dpi: 300
   figure_size: [6.0, 4.5]
   style: "publication"
-  layout: "combined"
 
   font:
     family: "serif"
@@ -124,7 +115,6 @@ visualization:
       show_chi_squared: true
       location: "lower right"
       fontsize: 9
-      box_alpha: 0.8
 
   residuals_plot:
     enabled: true

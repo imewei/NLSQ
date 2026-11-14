@@ -375,16 +375,23 @@ forecast_std = np.std(forecast_samples, axis=0)
 forecast_lower = np.percentile(forecast_samples, 2.5, axis=0)  # 95% PI
 forecast_upper = np.percentile(forecast_samples, 97.5, axis=0)
 
-# Add residual uncertainty
+# Add residual (observation-noise) uncertainty by sampling it, so the variances
+# combine correctly instead of adding interval half-widths linearly.
 residual_std = np.std(residuals)
-forecast_lower_total = forecast_lower - 2 * residual_std
-forecast_upper_total = forecast_upper + 2 * residual_std
+forecast_total_samples = forecast_samples + np.random.default_rng(1).normal(
+    0, residual_std, size=forecast_samples.shape
+)
+forecast_lower_total = np.percentile(forecast_total_samples, 2.5, axis=0)
+forecast_upper_total = np.percentile(forecast_total_samples, 97.5, axis=0)
 
 print(f"✓ Generated {len(days_forecast) - len(days)} day forecast")
 print(
     f"  Forecast period: {len(days) / 365:.1f} - {len(days_forecast) / 365:.1f} years"
 )
-print(f"  Prediction interval width: {2 * residual_std:.1f} °C (±1σ residuals)")
+mean_width = np.mean(forecast_upper_total - forecast_lower_total)
+print(
+    f"  Mean 95% prediction interval width: {mean_width:.1f} °C (parameter + residual)"
+)
 
 
 # Visualize forecast with prediction intervals

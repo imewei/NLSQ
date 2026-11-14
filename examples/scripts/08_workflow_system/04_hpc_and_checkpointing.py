@@ -17,7 +17,7 @@ Run this example:
 
 import json
 import os
-import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -247,11 +247,19 @@ def main():
     print("3. Checkpointing Configuration:")
     print("-" * 50)
 
-    checkpoint_dir = create_checkpoint_directory()
+    # Everything below is written inside one scratch directory that this run
+    # creates and removes, so the caller's cwd (and any existing
+    # nlsq_checkpoints/ or nlsq_fit.pbs there) is never touched.
+    scratch = tempfile.TemporaryDirectory(prefix="nlsq_hpc_demo_")
+    scratch_root = Path(scratch.name)
+
+    checkpoint_dir = create_checkpoint_directory(
+        base_dir=str(scratch_root / "nlsq_checkpoints")
+    )
     print(f"  Created checkpoint directory: {checkpoint_dir}")
 
     custom_checkpoint_dir = create_checkpoint_directory(
-        base_dir="./my_project_checkpoints"
+        base_dir=str(scratch_root / "my_project_checkpoints")
     )
     print(f"  Custom checkpoint directory: {custom_checkpoint_dir}")
 
@@ -262,7 +270,9 @@ def main():
     print("4. Checkpoint Resume Workflow:")
     print("-" * 50)
 
-    demo_dir = create_checkpoint_directory(base_dir="./demo_checkpoints")
+    demo_dir = create_checkpoint_directory(
+        base_dir=str(scratch_root / "demo_checkpoints")
+    )
 
     # Simulate saving checkpoints
     print("\n  Simulating optimization with checkpoints...")
@@ -331,8 +341,8 @@ module load cudnn/8.9
 # Activate virtual environment
 source ./venv/bin/activate
 
-# Set NLSQ environment variables
-export NLSQ_WORKFLOW_GOAL=robust
+# NLSQ reads NLSQ_MEMORY_LIMIT_GB; NLSQ_CHECKPOINT_DIR is only a shell variable
+# that is passed to your own script via --checkpoint-dir below
 export NLSQ_MEMORY_LIMIT_GB=200
 export NLSQ_CHECKPOINT_DIR=$PBS_O_WORKDIR/checkpoints
 
@@ -361,10 +371,13 @@ echo "Job Completed: $(date)"
 echo "========================================"
 """
 
-    pbs_script_path = Path("nlsq_fit.pbs")
+    pbs_script_path = scratch_root / "nlsq_fit.pbs"
     pbs_script_path.write_text(pbs_script)
 
-    print("  Created PBS job script: nlsq_fit.pbs")
+    print(f"  Wrote PBS job script (temporary): {pbs_script_path.name}")
+    print(
+        "  The committed template is examples/scripts/08_workflow_system/nlsq_fit.pbs"
+    )
     print("  Key directives:")
     print("    #PBS -l select=4:ncpus=32:ngpus=8:mem=256gb")
     print("    #PBS -l walltime=24:00:00")
@@ -404,19 +417,8 @@ echo "========================================"
     print()
     print("Cleaning up...")
 
-    for path_str in [
-        "nlsq_checkpoints",
-        "demo_checkpoints",
-        "my_project_checkpoints",
-    ]:
-        path = Path(path_str)
-        if path.exists():
-            shutil.rmtree(path)
-            print(f"  Removed: {path_str}")
-
-    if pbs_script_path.exists():
-        pbs_script_path.unlink()
-        print("  Removed: nlsq_fit.pbs")
+    scratch.cleanup()
+    print(f"  Removed scratch directory: {scratch_root}")
 
     # =========================================================================
     # Summary
@@ -437,8 +439,8 @@ echo "========================================"
     print()
     print("PBS Pro Job Scripts:")
     print("  - #PBS -l select=N:ncpus=C:ngpus=G:mem=Mgb")
-    print("  - Environment variables: NLSQ_WORKFLOW_GOAL, NLSQ_MEMORY_LIMIT_GB")
-    print("  - Checkpoint directory: NLSQ_CHECKPOINT_DIR")
+    print("  - Environment variable read by NLSQ: NLSQ_MEMORY_LIMIT_GB")
+    print("  - Checkpoint directory: pass your own path to your fitting script")
     print()
     print("Defense Layers for Checkpoint Resume (v0.3.6+):")
     print("  - Checkpoint resume = warm-start scenario (parameters near optimal)")

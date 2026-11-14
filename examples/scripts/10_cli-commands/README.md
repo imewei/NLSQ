@@ -6,8 +6,17 @@ This directory contains comprehensive examples demonstrating all NLSQ command-li
 
 ```bash
 cd examples/scripts/10_cli-commands
+
+# Step 0: generate the sample data. polynomial_data.npz and large_dataset.h5
+# (workflows 04 and 08) are gitignored and only exist after this step.
+python data/generate_sample_data.py
+
 ./run_all_demos.sh
 ```
+
+The generator is seeded (`np.random.seed(42)`), so it reproduces the committed
+CSV/TXT files byte for byte. `run_all_demos.sh` runs it automatically when
+`data/polynomial_data.npz` or `data/large_dataset.h5` is missing.
 
 ## Directory Structure
 
@@ -17,27 +26,29 @@ cd examples/scripts/10_cli-commands
 ├── run_all_demos.sh          # Master script running all demos
 ├── aggregate_batch_results.py  # Collect batch results into one table
 ├── data/                     # Sample datasets
-│   ├── generate_sample_data.py
+│   ├── generate_sample_data.py   # Seeded generator for everything below
 │   ├── exponential_decay.csv
-│   ├── gaussian_peak.csv
-│   ├── damped_oscillation.txt
-│   ├── polynomial_data.npz
+│   ├── gaussian_peak.txt
+│   ├── damped_oscillation.csv
 │   ├── enzyme_kinetics.csv
-│   ├── double_gaussian.csv
-│   ├── beam_profile_2d.csv
-│   ├── large_dataset.h5
-│   └── batch_data_*.csv
+│   ├── radioactive_decay.csv
+│   ├── reaction_kinetics.csv
+│   ├── surface_2d.txt
+│   ├── batch_data_*.csv
+│   ├── polynomial_data.npz       # generated (gitignored)
+│   └── large_dataset.h5          # generated (gitignored)
 ├── models/                   # Custom model definitions
 │   ├── physics_models.py
 │   ├── biology_models.py
-│   └── engineering_models.py
+│   ├── engineering_models.py
+│   └── custom_models.py
 ├── workflows/                # YAML workflow configurations
 │   ├── 01_basic_fit.yaml
 │   ├── 02_builtin_models.yaml
 │   ├── 03_custom_model.yaml
 │   ├── 04_polynomial_fit.yaml
 │   ├── 05_weighted_fit.yaml
-│   ├── 06_global_optimization.yaml
+│   ├── 06_global_optimization.yaml  # historical name: bounded local fit
 │   ├── 07_2d_surface_fit.yaml
 │   ├── 08_hdf5_data.yaml
 │   └── batch_example/
@@ -392,7 +403,6 @@ visualization:
   dpi: 300
   figure_size: [6.0, 4.5]
   style: "publication"
-  layout: "combined"
 
   font:
     family: "serif"
@@ -457,40 +467,46 @@ Each demo showcases different visualization options:
 | 02_builtin_models | `nature` | `colorblind` | Nature journal format |
 | 03_custom_model | `science` | `science` | LaTeX math labels |
 | 04_polynomial | `minimal` | `high_contrast` | No grid, square markers |
-| 05_weighted_fit | `presentation` | `default` | 16:9 slides, weighted residuals |
-| 06_global_opt | `publication` | `grayscale` | B&W printing |
-| 07_2d_surface | `publication` | `colorblind` | Dense data visualization |
+| 05_weighted_fit | `presentation` | `default` | 16:9 slides |
+| 06_global_opt | `publication` | none set (library default) | Bounded fit, combined plot only |
+| 07_2d_surface | `publication` | `colorblind` | Plots disabled (the CLI plotter is 1D only) |
 | 08_hdf5_data | `publication` | `default` | Large dataset (10K points) |
 
 ## Output Format
 
-Results are saved as JSON with the following structure:
+Results are saved as JSON (real output of `workflows/01_basic_fit.yaml`, with
+`pcov` trimmed):
 
 ```json
 {
-  "metadata": {
-    "workflow_name": "basic_fit",
-    "timestamp": "2024-01-15T10:30:00",
-    "nlsq_version": "1.0.0"
-  },
-  "parameters": {
-    "names": ["amplitude", "decay_rate", "offset"],
-    "values": [10.5, 0.15, 0.5],
-    "uncertainties": [0.1, 0.005, 0.02]
-  },
+  "popt": [5.0176, 0.50042, 1.0079],
+  "pcov": [[0.00147, 0.00012, -6.2e-05], [0.00012, 7.0e-05, 0.00011], [-6.2e-05, 0.00011, 0.00030]],
+  "uncertainties": [0.0384, 0.00837, 0.0173],
   "statistics": {
-    "chi_squared": 45.2,
-    "reduced_chi_squared": 1.02,
-    "r_squared": 0.998,
-    "rmse": 0.12
+    "chi_squared": 77.199,
+    "rmse": 0.08786,
+    "r_squared": 0.99518,
+    "cost": 38.600
   },
   "convergence": {
-    "success": true,
-    "iterations": 15,
-    "termination_reason": "ftol"
+    "iterations": 4,
+    "function_evals": 5,
+    "jacobian_evals": 5,
+    "status": "success",
+    "message": "`ftol` termination condition is satisfied.",
+    "final_cost": 38.600
+  },
+  "metadata": {
+    "workflow_name": "basic_fit_example",
+    "dataset_id": "unknown",
+    "model_id": "exponential_decay"
   }
 }
 ```
+
+`popt` is ordered like the model's parameters. The export section accepts
+`results_file` (and `format`); there is no key that selects which of the blocks
+above are written.
 
 ## Batch Summary
 
@@ -501,6 +517,10 @@ When using `nlsq batch --summary`, a JSON summary is generated:
   "total": 4,
   "succeeded": 3,
   "failed": 1,
+  "skipped": 0,
+  "skipped_workflows": [],
+  "cancelled": 0,
+  "cancelled_workflows": [],
   "duration_seconds": 4.07,
   "start_time": "2026-09-03T18:12:02.723038",
   "end_time": "2026-09-03T18:12:07.671942",

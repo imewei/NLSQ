@@ -229,8 +229,18 @@ if np.sum(mask_exp) > 5:
     print(f"  μ (specific growth rate): {mu_exp:.3f} ± {mu_err:.3f} hr⁻¹")
     print(f"  Doubling time:            {doubling_time_exp:.2f} hours")
     print(f"  N0 (extrapolated):        {N0_exp:.4f}")
+    # Logistic: dlnN/dt = r (1 - N/K) falls from r (N << K) to r/2 at N = K/2, so a
+    # window reaching K/2 has a log-slope below r. Compare with the OLS slope of ln N_fit.
+    mu_model = np.polyfit(t_exp, np.log(logistic_growth(t_exp, *popt)), 1)[0]
     print(f"\nCompare with logistic r:    {r_fit:.3f} hr⁻¹")
-    print("(Should be similar in exponential phase)")
+    print(
+        f"Logistic model's own log-slope over this window: {mu_model:.3f} hr⁻¹ "
+        f"(difference {(mu_exp - mu_model) / mu_err:+.1f} sigma)"
+    )
+    print(
+        "(mu < r is expected: the window extends to OD = 0.6 = K/2, where the "
+        "specific growth rate has already dropped to r/2)"
+    )
 
 
 print("\n" + "-" * 70)
@@ -436,13 +446,12 @@ ax6.legend()
 ax6.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("growth_curves.png", dpi=150)
-print("\n✅ Plot saved as 'growth_curves.png'")
 plt.tight_layout()
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "growth_curves"
 fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+print(f"\n✅ Plot saved as {fig_dir / 'fig_01.png'}")
 plt.close()
 
 

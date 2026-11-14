@@ -34,7 +34,8 @@ echo ""
 # Create output directory
 mkdir -p output
 
-# Sample data files are gitignored; generate them on a fresh clone
+# Sample data files (npz/h5) are gitignored; generate them on a fresh clone with
+#   python data/generate_sample_data.py
 if [ ! -f data/polynomial_data.npz ] || [ ! -f data/large_dataset.h5 ]; then
     python3 data/generate_sample_data.py
 fi
@@ -150,18 +151,18 @@ echo -e "${GREEN}Results saved to: output/05_weighted_fit_results.json${NC}"
 echo ""
 
 # ==============================================================================
-# Demo 8: Global optimization
+# Demo 8: Bounded fit
 # ==============================================================================
 echo -e "${YELLOW}============================================================${NC}"
-echo -e "${YELLOW}Demo 8: nlsq fit - Multi-Start Global Optimization${NC}"
+echo -e "${YELLOW}Demo 8: nlsq fit - Bounded Fit with Explicit p0${NC}"
 echo -e "${YELLOW}============================================================${NC}"
 echo ""
-echo "Fitting with multi-start global optimization (15 starts)..."
+echo "Bounded local fit (the CLI calls curve_fit; multi-start/CMA-ES need the Python API)..."
 echo "Command: nlsq fit workflows/06_global_optimization.yaml"
 echo ""
 nlsq fit workflows/06_global_optimization.yaml
 echo ""
-echo -e "${GREEN}Results saved to: output/06_global_optimization_results.json${NC}"
+echo -e "${GREEN}Results saved to: output/06_bounded_fit_results.json${NC}"
 echo ""
 
 # ==============================================================================
@@ -274,7 +275,7 @@ echo "  - Polynomial models"
 echo ""
 echo "Features Demonstrated:"
 echo "  - Weighted fitting with uncertainties"
-echo "  - Multi-start global optimization"
+echo "  - Bounded fitting with explicit p0 and bounds"
 echo "  - 2D surface fitting"
 echo "  - Batch processing"
 echo ""

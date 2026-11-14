@@ -14,6 +14,8 @@ Plots are saved to the figures/ directory instead of displayed inline.
 #
 # ======================================================================
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -25,6 +27,10 @@ from nlsq.callbacks import (
     IterationLogger,
     ProgressBar,
 )
+
+# Log files go next to the other generated outputs, not into the current directory
+OUT_DIR = Path(__file__).parent / "figures" / "callbacks_demo"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def exponential_decay(x, amplitude, rate, offset):
@@ -90,7 +96,7 @@ def example2_iteration_logging():
 
     # Create logging callback
     callback = IterationLogger(
-        filename="optimization.log",
+        filename=str(OUT_DIR / "optimization.log"),
         mode="w",
         log_params=True,  # Include parameter values
     )
@@ -102,12 +108,12 @@ def example2_iteration_logging():
 
     callback.close()
 
-    print("✓ Log written to 'optimization.log'")
+    print(f"✓ Log written to '{OUT_DIR / 'optimization.log'}'")
     print(
         f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}"
     )
     print("\nFirst few lines of log:\n")
-    with open("optimization.log") as f:
+    with open(OUT_DIR / "optimization.log") as f:
         lines = f.readlines()
         print("".join(lines[:10]))  # Show first 10 lines
 
@@ -168,7 +174,7 @@ def example4_callback_chain():
     # Combine multiple callbacks
     callback = CallbackChain(
         ProgressBar(max_nfev=50, desc="Optimizing"),
-        IterationLogger("combined.log", log_params=False),
+        IterationLogger(str(OUT_DIR / "combined.log"), log_params=False),
         EarlyStopping(patience=10, verbose=False),  # Silent for cleaner demo
     )
 
@@ -183,7 +189,7 @@ def example4_callback_chain():
     print(
         f"Fitted parameters: amplitude={popt[0]:.2f}, rate={popt[1]:.3f}, offset={popt[2]:.2f}"
     )
-    print("Check 'combined.log' for detailed iteration history.")
+    print(f"Check '{OUT_DIR / 'combined.log'}' for detailed iteration history.")
 
 
 # ======================================================================

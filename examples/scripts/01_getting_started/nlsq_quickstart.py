@@ -24,11 +24,11 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # Import NLSQ before importing JAX since we need NLSQ to set all the JAX computation to use 64 rather than 32 bit arrays.
 # ======================================================================
 import os
-import sys
 
 # Check Python version
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 
 # Import NLSQ before importing JAX since NLSQ configures JAX to use 64-bit precision
@@ -80,6 +80,19 @@ MAX_SAMPLES = int(os.environ.get("NLSQ_EXAMPLES_MAX_SAMPLES", "300000"))
 
 def cap_samples(n: int) -> int:
     return min(n, MAX_SAMPLES) if QUICK else n
+
+
+np.random.seed(42)  # reproducible data and timings-independent output
+
+FIG_DIR = Path(__file__).parent / "figures" / "nlsq_quickstart"
+
+
+def save_figure(number: int) -> None:
+    """Save the current figure as fig_<number>.png and close it."""
+    plt.tight_layout()
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    plt.savefig(FIG_DIR / f"fig_{number:02d}.png", dpi=300, bbox_inches="tight")
+    plt.close()
 
 
 # make the synthetic data
@@ -189,10 +202,6 @@ def get_random_parameters(mmin=1, mmax=10, bmin=0, bmax=10):
     return m, b
 
 
-if QUICK:
-    print("⏩ Quick mode: skipping extended speed benchmark.")
-    sys.exit(0)
-
 length = cap_samples(3 * 10**5)
 x = np.linspace(0, 10, length)
 
@@ -209,11 +218,16 @@ for i in range(nsamples):
     popt1, pcov1 = jcf.curve_fit(linear, x, y, p0=(1, 1))
     nlsq_fit_times.append(time.time() - start_time)
 
+print(
+    f"First fit: {nlsq_fit_times[0]:.3f} s; later fits: {np.mean(nlsq_fit_times[1:]):.3f} s"
+)
+
 plt.figure()
 plt.title("Fit Speeds")
 plt.plot(nlsq_fit_times, label="NLSQ")
 plt.xlabel("Fit Iteration")
 plt.ylabel("Fit Time (seconds)")
+save_figure(4)
 
 
 # ======================================================================
@@ -241,7 +255,7 @@ def get_random_data(length):
 
 lmin = min(10**3, MAX_SAMPLES)
 lmax = cap_samples(10**6)
-nlengths = 20
+nlengths = 4 if QUICK else 20
 lengths = np.linspace(lmin, lmax, nlengths, dtype=int)
 
 jcf = CurveFit()
@@ -260,6 +274,7 @@ plt.title("Fit Speeds")
 plt.plot(lengths, nlsq_fit_times, label="NLSQ")
 plt.xlabel("Data Length")
 plt.ylabel("Fit Time (seconds)")
+save_figure(5)
 
 
 # ======================================================================
@@ -287,6 +302,7 @@ plt.title("Fit Speeds")
 plt.plot(lengths, nlsq_fit_times, label="NLSQ")
 plt.xlabel("Data Length")
 plt.ylabel("Fit Time (seconds)")
+save_figure(6)
 
 
 # ======================================================================
@@ -298,7 +314,7 @@ plt.ylabel("Fit Time (seconds)")
 
 lmin = min(10**3, MAX_SAMPLES)
 lmax = cap_samples(10**6)
-nlengths = 20
+nlengths = 4 if QUICK else 20
 lengths1 = np.linspace(
     min(10**3, MAX_SAMPLES), min(5 * 10**4, MAX_SAMPLES), nlengths, dtype=int
 )
@@ -333,12 +349,13 @@ plt.legend()
 
 plt.xlabel("Fit Iteration")
 plt.ylabel("Fit Time (seconds)")
+save_figure(7)
 
 
 # ======================================================================
 # ## Fitting Multiple Functions
 #
-# It's important to instantiate a CurveFit object for each different function you're fitting as well to avoid JAX needing to retrace any underlying functions. First we show what happens if we use the same CurveFit object for two functions.
+# A CurveFit object caches the compiled kernels for each function it sees. First we alternate between two functions on a single CurveFit object and look at the fit times.
 # ======================================================================
 
 
@@ -396,7 +413,7 @@ plt.close()
 
 
 # ======================================================================
-# And we see that by using the same fit object retracing is occurring for every fit. Now we instantiate two separate CurveFit objects for the two functions.
+# With one shared object, only the first fit of each function is slow (it compiles that function); later fits of either function reuse their cached kernel, so alternating does not retrace on every fit. Now we instantiate two separate CurveFit objects for comparison.
 # ======================================================================
 
 
@@ -444,7 +461,7 @@ plt.close()
 
 
 # ======================================================================
-# And now retracing is only occurring for the first fit for each CurveFit object.
+# With separate objects, tracing again happens only for the first fit of each object. Separate instances help mainly when the same function is fit with different array shapes (each shape compiles once per object), so give each distinct workload its own CurveFit.
 # ======================================================================
 
 
@@ -489,8 +506,20 @@ plt.plot(scipy_fit_times, label="SciPy")
 plt.legend()
 plt.xlabel("Fit Iteration")
 plt.ylabel("Fit Time (seconds)")
+save_figure(8)
+
+nlsq_total = np.sum(nlsq_fit_times)
+scipy_total = np.sum(scipy_fit_times)
+nlsq_warm = np.mean(nlsq_fit_times[1:])
+scipy_warm = np.mean(scipy_fit_times)
+print(f"NLSQ total: {nlsq_total:.3f} s (first fit {nlsq_fit_times[0]:.3f} s)")
+print(f"SciPy total: {scipy_total:.3f} s")
+print(
+    f"Mean per fit after the first: NLSQ {nlsq_warm * 1e3:.1f} ms, SciPy {scipy_warm * 1e3:.1f} ms"
+)
+print(f"Backend: {jax.default_backend()}")
 
 
 # ======================================================================
-# And we see it's so much faster minus the first fit in which tracing is occurring. Thus, by avoiding retracing and utilizing the GPU we get super fast fitting.
+# Compare the per-fit times printed above: on a CPU, SciPy is typically as fast or faster for a simple 3-parameter model like this one, while NLSQ's advantage comes from GPU/TPU execution, very large datasets, and automatic differentiation of the Jacobian. Measure on your own hardware before drawing conclusions.
 # ======================================================================

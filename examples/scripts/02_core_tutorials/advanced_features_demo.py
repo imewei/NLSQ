@@ -395,7 +395,14 @@ def demonstrate_algorithm_selection():
                     print(f"{key}: {value}")
 
             # Test the recommendation
-            cf_optimized = CurveFit()  # Use recommended settings if supported
+            cf_optimized = CurveFit()
+            # Apply the recommended settings that curve_fit understands
+            fit_kwargs = {
+                k: recommendations[k]
+                for k in ("ftol", "xtol", "gtol", "loss", "x_scale", "max_nfev")
+                if recommendations.get(k) is not None
+            }
+            print(f"Applying: {fit_kwargs}")
             start_time = time.time()
 
             p0 = [p * 0.9 for p in data["true_params"]]  # Slightly off initial guess
@@ -404,7 +411,7 @@ def demonstrate_algorithm_selection():
                 data["x"],
                 data["y"],
                 p0=p0,
-                ftol=recommendations.get("ftol", 1e-8),
+                **fit_kwargs,
             )
 
             fit_time = time.time() - start_time
@@ -413,8 +420,11 @@ def demonstrate_algorithm_selection():
             errors = np.abs(popt - np.array(data["true_params"]))
             rel_errors = errors / np.abs(np.array(data["true_params"])) * 100
 
-            print(f"✅ Optimized fit completed in {fit_time:.4f}s")
+            marker = "✅" if np.max(rel_errors) < 10 else "⚠️ "
+            print(f"{marker} Fit with recommended settings finished in {fit_time:.4f}s")
             print(f"Max relative error: {np.max(rel_errors):.3f}%")
+            if np.max(rel_errors) >= 10:
+                print("   Recommended settings alone did not fix this problem.")
 
         except Exception as e:
             print(f"❌ Algorithm selection failed: {e}")
@@ -464,7 +474,12 @@ def test_robustness():
                 np.max(errors / np.abs(np.array(test_data["true_params"]))) * 100
             )
 
-            status = "✅ Recovered" if max_error < 10 else "⚠️  Partial recovery"
+            if max_error < 10:
+                status = "✅ Recovered"
+            elif max_error < 50:
+                status = "⚠️  Partial recovery"
+            else:
+                status = "❌ Failed (wrong solution)"
             print(f"  Bad guess {i + 1}: {status} (max error: {max_error:.1f}%)")
 
         except Exception as e:

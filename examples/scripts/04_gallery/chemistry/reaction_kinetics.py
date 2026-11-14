@@ -536,13 +536,12 @@ ax9.text(
 ax9.set_title("Summary Table", fontsize=12, fontweight="bold")
 
 plt.tight_layout()
-plt.savefig("reaction_kinetics.png", dpi=150)
-print("\n✅ Plot saved as 'reaction_kinetics.png'")
 plt.tight_layout()
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "reaction_kinetics"
 fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+print(f"\n✅ Plot saved as {fig_dir / 'fig_01.png'}")
 plt.close()
 
 

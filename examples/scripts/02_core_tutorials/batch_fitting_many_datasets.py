@@ -5,14 +5,16 @@ Batch Fitting Many Small Datasets From Python (No YAML)
 hundreds of small datasets. Two patterns work directly from the Python API:
 
 1. Reuse a single `CurveFit` instance across datasets. Full NLSQ machinery -
-   bounds, robust loss, covariance, diagnostics - at ~26 ms per fit here.
-   Hoisting the instance out of the loop is worth ~14-18x on its own, because
-   a bare `nlsq.curve_fit(...)` call builds a fresh instance every time and
-   re-traces for each dataset.
-2. `jax.vmap` one compiled solver over all datasets at once. ~800x faster
-   (0.034 ms/dataset) because every dataset is solved inside a single XLA
-   kernel, at the cost of writing the solver yourself and needing equal-length
-   (padded) datasets.
+   bounds, robust loss, covariance, diagnostics - at roughly 8 ms per fit on
+   one CPU run (the script prints the figure for your device). Same-shape fits
+   after the first are served from JAX's compilation cache either way; the
+   instance is what lets `flength` pin the padded length so datasets of
+   different sizes also avoid recompiling.
+2. `jax.vmap` one compiled solver over all datasets at once. About 9x faster
+   per dataset on that CPU run (0.87 ms/dataset), because every dataset is
+   solved inside a single XLA kernel, at the cost of writing the solver
+   yourself and needing equal-length (padded) datasets. The gap is larger on
+   a GPU; measure on your hardware.
 
 Pattern 2 agrees with pattern 1 to 2.6e-07 on parameters and 1.9e-09 on
 standard errors, so on a smooth unbounded model the speed costs no accuracy.

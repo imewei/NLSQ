@@ -132,14 +132,16 @@ g_band_signal = lorentzian(
 )
 clean_signal = d_band_signal + g_band_signal + baseline_true
 
-# Add realistic noise (Poisson + Gaussian)
+# Add Gaussian measurement noise (homoscedastic, sigma = noise_level)
 np.random.seed(42)  # Reproducibility
 noise_level = 30.0
 noise = np.random.normal(0, noise_level, len(wavenumber))
 intensity_measured = clean_signal + noise
 
-# Simulate uncertainty (shot noise scales with sqrt(signal))
-sigma_measured = np.sqrt(np.abs(intensity_measured)) + noise_level / 10
+# Per-point uncertainty. It must match the noise that was generated, because
+# the fits below use absolute_sigma=True and the reduced chi-squared check
+# assumes sigma is the true noise level.
+sigma_measured = np.full(len(wavenumber), noise_level)
 
 print(f"✓ Generated {len(wavenumber)} data points")
 print(f"  Wavenumber range: {wavenumber.min():.0f} - {wavenumber.max():.0f} cm⁻¹")
@@ -166,8 +168,9 @@ print(
     f"  Negative points: {np.sum(intensity_corrected < 0)} / {len(intensity_corrected)}"
 )
 
-# Clip small negative values (common in baseline-corrected spectra)
-intensity_corrected = np.maximum(intensity_corrected, 1.0)
+# Negative points are expected in a noisy baseline-corrected spectrum; they are
+# kept (clipping them would bias the tails upward and the fit assumes Gaussian
+# noise around the model).
 
 print("\n✓ Baseline correction applied")
 

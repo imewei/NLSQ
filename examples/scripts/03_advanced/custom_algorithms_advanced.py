@@ -86,6 +86,8 @@ if QUICK:
 
 # Exploring NLSQ internals
 
+np.random.seed(42)  # reproducible data and printed results
+
 # Simple problem: fit exponential
 x_data = jnp.linspace(0, 5, 30)
 y_true = 3.0 * jnp.exp(-0.5 * x_data)
@@ -289,14 +291,15 @@ def asymmetric_loss(params, x, y, alpha=2.0):
     Parameters
     ----------
     alpha : float
-        Asymmetry parameter (alpha > 1 penalizes positive residuals more)
+        Asymmetry parameter (alpha > 1 penalizes negative residuals,
+        i.e. model > data, more)
     """
     a, b = params
     residuals = y - linear_model(x, a, b)
 
     # Asymmetric penalty
     loss = jnp.where(
-        residuals > 0,  # Overestimation (model too low)
+        residuals < 0,  # Overestimation (model above the data)
         alpha * residuals**2,  # Higher penalty
         residuals**2,  # Normal penalty
     )
@@ -314,8 +317,17 @@ if OPTAX_AVAILABLE:
 
     print("Asymmetric Loss (penalizes overestimation 3x):")
     print(f"  a={params_asym[0]:.3f}, b={params_asym[1]:.3f}")
+    # Compare with an ordinary least-squares fit of the same data
+    params_ls, _ = optimize_custom(
+        lambda p, x, y: jnp.sum((y - linear_model(x, *p)) ** 2),
+        [1.0, 0.0],
+        x_robust,
+        y_robust,
+    )
+    print(f"  least squares (alpha=1): a={params_ls[0]:.3f}, b={params_ls[1]:.3f}")
     print(
-        "  → Fit is conservative (tends to underestimate to avoid costly overestimation)"
+        "  → Fit is conservative: the model sits lower (smaller intercept) "
+        "than least squares to avoid costly overestimation"
     )
 
 
@@ -408,7 +420,7 @@ params_gd, history_gd = gradient_descent_momentum(
 )
 
 print(f"  Final params: a={params_gd[0]:.3f}, b={params_gd[1]:.3f}")
-print(f"  Optimization steps: {len(history_gd['loss'])}")
+print(f"  History samples recorded (every 50 steps): {len(history_gd['loss'])}")
 
 # Compare with NLSQ
 popt_nlsq, _ = cf.curve_fit(exponential, x_data, y_data, p0=[0.0, 0.0])
@@ -594,8 +606,11 @@ if OPTAX_AVAILABLE:
         f"  a={params_constr[0]:.4f}, b={params_constr[1]:.4f}, sum={params_constr[0] + params_constr[1]:.4f}"
     )
     print(f"\nTrue values: a={a_true_const}, b={b_true_const}, sum=1.0")
+    sum_constr = params_constr[0] + params_constr[1]
     print(
-        f"→ Constraint enforced: sum = {params_constr[0] + params_constr[1]:.6f} ≈ 1.0 ✓"
+        f"→ Constraint approximately enforced by the penalty: sum = {sum_constr:.6f} "
+        f"(|sum - 1| = {abs(sum_constr - 1.0):.1e}; a penalty is not exact, "
+        "reparameterize with b = 1 - a for an exact constraint)"
     )
 
 

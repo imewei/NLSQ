@@ -71,13 +71,6 @@ fitting:
 export:
   results_file: "output/03_custom_model_results.json"
 
-  include:
-    parameters: true
-    covariance: true
-    uncertainties: true
-    statistics: true
-    convergence_info: true
-
 # ==============================================================================
 # VISUALIZATION CONFIGURATION
 # ==============================================================================
@@ -92,7 +85,6 @@ visualization:
   dpi: 300
   figure_size: [5.0, 4.0]
   style: "science"
-  layout: "combined"
 
   font:
     family: "sans-serif"
@@ -137,7 +129,6 @@ visualization:
       show_chi_squared: true
       location: "lower right"
       fontsize: 8
-      box_alpha: 0.8
 
   residuals_plot:
     enabled: true
