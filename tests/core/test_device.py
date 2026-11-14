@@ -79,7 +79,7 @@ class TestCheckGPUAvailability:
                 assert "===========================" in output_str
                 assert "GPU: Tesla V100-SXM2-16GB (SM 7.0)" in output_str
                 assert "JAX backend: CPU-only" in output_str
-                assert "Enable 20-100x speedup:" in output_str
+                assert "Enable GPU acceleration:" in output_str
                 assert "make install-jax-gpu" in output_str
                 assert 'pip install "jax[cuda12-local]"' in output_str
                 assert "See README.md for details." in output_str
