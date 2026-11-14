@@ -35,10 +35,6 @@ fitting:
 
 export:
   results_file: "output/batch_results_1.json"
-  include:
-    parameters: true
-    uncertainties: true
-    statistics: true
 
 # Batch workflow visualization - compact style for batch processing
 visualization:
@@ -49,7 +45,6 @@ visualization:
   dpi: 300
   figure_size: [5.0, 4.0]
   style: "minimal"
-  layout: "combined"
 
   font:
     family: "sans-serif"

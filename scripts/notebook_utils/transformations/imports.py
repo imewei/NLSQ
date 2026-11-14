@@ -45,7 +45,7 @@ class IPythonDisplayImportTransformer(NotebookTransformer):
             # Fallback: add at beginning
             insert_idx = 0
 
-        import_cell = create_ipython_display_import_cell()
+        import_cell = create_ipython_display_import_cell(result)
         result.insert(insert_idx, import_cell)
 
         stats["import_added"] = 1

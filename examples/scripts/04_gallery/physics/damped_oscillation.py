@@ -229,8 +229,9 @@ print(f"\nEstimated pendulum length: {length_estimated:.3f} meters")
 print("(Assuming simple pendulum: T = 2π√(L/g))")
 
 # Damping regime classification
-critical_damping = 2 * omega_fit
-damping_ratio = gamma_fit / critical_damping
+# x ~ exp(-gamma t) cos(omega t): x'' + 2 gamma x' + omega0^2 x = 0 with
+# omega0^2 = omega^2 + gamma^2, so zeta = gamma / omega0 (and Q = 1 / (2 zeta))
+damping_ratio = gamma_fit / np.hypot(omega_fit, gamma_fit)
 print("\nDamping classification:")
 print(f"  Damping ratio (ζ): {damping_ratio:.4f}")
 if damping_ratio < 0.1:
@@ -383,13 +384,12 @@ ax6.legend()
 ax6.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("damped_oscillation.png", dpi=150)
-print("\n✅ Plot saved as 'damped_oscillation.png'")
 plt.tight_layout()
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "damped_oscillation"
 fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+print(f"\n✅ Plot saved as {fig_dir / 'fig_01.png'}")
 plt.close()
 
 

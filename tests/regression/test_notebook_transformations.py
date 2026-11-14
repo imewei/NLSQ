@@ -970,3 +970,124 @@ class TestIntegration:
 
         # Third run - should process again due to changes
         assert tracker.needs_processing(notebook_path, transform_names) is True
+
+
+# ============================================================================
+# Regression tests: pipeline ordering, source normalisation, figure lookup,
+# file-mode preservation (scripts/notebook_utils review, 2026-11)
+# ============================================================================
+
+
+def _write_nb(path: Path, sources: list) -> None:
+    cells = [
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": src,
+        }
+        for src in sources
+    ]
+    path.write_text(
+        json.dumps(
+            {"cells": cells, "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
+        ),
+        encoding="utf-8",
+    )
+
+
+class TestNotebookUtilsReviewRegressions:
+    def test_plt_show_handles_list_source_with_embedded_newlines(self):
+        """The converters emit [whole_cell + "\\n"]: one element, many lines."""
+        cells = [
+            {
+                "cell_type": "code",
+                "metadata": {},
+                "outputs": [],
+                "source": ["x = 1\nplt.show()\n"],
+            }
+        ]
+        result, stats = PltShowReplacementTransformer().transform(cells)
+        assert stats["replacements"] == 1
+        assert "display(plt.gcf())" in "".join(result[0]["source"])
+
+    def test_find_figure_variable_stops_at_previous_show(self):
+        source = [
+            "fig, ax = plt.subplots()\n",
+            "ax.plot([1])\n",
+            "plt.show()\n",
+            "plt.figure()\n",
+            "plt.plot([2])\n",
+            "plt.show()\n",
+        ]
+        assert find_figure_variable(source, 5) == "plt.gcf()"
+        assert find_figure_variable(source, 2) == "fig"
+
+    def test_replace_plt_show_second_figure_not_attributed_to_first(self):
+        source = [
+            "fig, ax = plt.subplots()\n",
+            "plt.show()\n",
+            "plt.figure()\n",
+            "plt.show()\n",
+        ]
+        modified, n = replace_plt_show(source)
+        assert n == 2
+        text = "".join(modified)
+        assert text.count("display(fig)") == 1
+        assert "display(plt.gcf())" in text
+
+    def test_configure_pipeline_order_is_idempotent(self, tmp_path):
+        """plt-show introduces display(); the import must follow it in one run."""
+        scripts = Path(__file__).parent.parent.parent / "scripts" / "notebooks"
+        sys.path.insert(0, str(scripts))
+        try:
+            from configure_notebooks import build_pipeline
+        finally:
+            sys.path.remove(str(scripts))
+
+        nb = tmp_path / "nb.ipynb"
+        _write_nb(
+            nb,
+            [["import matplotlib.pyplot as plt\n"], ["plt.plot([1])\nplt.show()\n"]],
+        )
+        pipeline = build_pipeline(["all"])
+        names = [t.name() for t in pipeline.get_transformers()]
+        assert names.index("plt_show_replacement") < names.index(
+            "ipython_display_import"
+        )
+        # An explicit, differently ordered request is normalised too.
+        reordered = build_pipeline(["imports", "plt-show"])
+        assert [t.name() for t in reordered.get_transformers()] == [
+            "plt_show_replacement",
+            "ipython_display_import",
+        ]
+
+        pipeline.run(nb)
+        again = pipeline.run(nb, dry_run=True)
+        assert not any(sum(s.values()) for s in again.values() if isinstance(s, dict))
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+    def test_write_notebook_preserves_file_mode(self, tmp_path):
+        from notebook_utils.core import write_notebook
+
+        nb = tmp_path / "nb.ipynb"
+        _write_nb(nb, [["x = 1\n"]])
+        nb.chmod(0o644)
+        notebook = json.loads(nb.read_text(encoding="utf-8"))
+        assert write_notebook(nb, notebook)
+        assert (nb.stat().st_mode & 0o777) == 0o644
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+    def test_write_notebook_new_file_follows_umask(self, tmp_path):
+        import os
+
+        from notebook_utils.core import write_notebook
+
+        old = os.umask(0o022)
+        try:
+            nb = tmp_path / "new.ipynb"
+            assert write_notebook(nb, {"cells": []})
+        finally:
+            os.umask(old)
+        assert (nb.stat().st_mode & 0o777) == 0o644

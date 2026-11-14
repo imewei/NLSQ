@@ -94,7 +94,7 @@ from nlsq import curve_fit
 
 **Software setup:**
 - Python 3.12+ installed
-- NLSQ package installed: `pip install nlsq` ([Full guide](../../README.md#installation))
+- NLSQ package installed: `pip install nlsq` ([Full guide](../../../README.md#installation))
 
 ---
 
@@ -183,11 +183,10 @@ A: NLSQ is much more powerful! It can fit custom equations, handle millions of d
 
 **Continue your learning journey:**
 1. [Interactive Tutorial](nlsq_interactive_tutorial.ipynb) - Hands-on practice (30 min)
-2. [Basic Curve Fitting](basic_curve_fitting.ipynb) - More examples (20 min)
 
 **Got a specific need?**
 - Large dataset? → [Large Dataset Guide](../02_core_tutorials/large_dataset_demo.ipynb)
-- Specific field? → [Gallery](../04_gallery/README.md) - Choose your domain
+- Specific field? → [Gallery](../04_gallery/) - Choose your domain
 
 **Resources:**
 - [Complete documentation](https://nlsq.readthedocs.io/)
@@ -203,4 +202,4 @@ A: NLSQ is much more powerful! It can fit custom equations, handle millions of d
 **Residuals:** The difference between your data and the fitted curve
 **Covariance:** A measure of how uncertain we are about the fitted parameters
 
-[See complete glossary](../../docs/glossary.md)
+[Concepts and explanations](../../../docs/explanation/index.rst)

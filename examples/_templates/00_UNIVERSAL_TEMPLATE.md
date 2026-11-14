@@ -48,7 +48,7 @@ Getting Started → Core Tutorials → [You are here] → Advanced
 - [ ] {Prerequisite skill/concept 2} ([Learn here](link))
 
 **Required software:**
-- NLSQ >= {version} ([Installation guide](../../README.md#installation))
+- NLSQ >= {version} ([Installation guide](../../../README.md#installation))
 - Python >= 3.12
 - {GPU note if applicable}
 
@@ -144,7 +144,7 @@ A: {Clear answer}
 **Q: {Anticipated question 3}?**
 A: {Clear answer}
 
-💬 [See all FAQs](../../docs/faq.md) | [Ask a question](https://github.com/imewei/NLSQ/discussions)
+💬 [Troubleshooting guide](../../../docs/howto/troubleshooting.rst) | [Ask a question](https://github.com/imewei/NLSQ/discussions)
 
 ---
 
@@ -171,4 +171,4 @@ A: {Clear answer}
 **{Term 2}:** {Definition}
 **{Term 3}:** {Definition}
 
-[Complete glossary](../../docs/glossary.md)
+[Concepts and explanations](../../../docs/explanation/index.rst)

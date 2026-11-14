@@ -39,10 +39,8 @@ def benchmark_large_dataset_fit() -> dict[str, Any]:
     def model(x: jax.Array, a: float, b: float) -> jax.Array:
         return a * jnp.exp(-b * x)
 
-    # Warmup with small dataset to trigger JIT compilation
-    x_small = x[:1000]
-    y_small = y[:1000]
-    nlsq.curve_fit(model, x_small, y_small, p0=[1.0, 1.0])
+    # Warmup on the exact timed shape so compilation is not counted as fit time
+    nlsq.curve_fit(model, x, y, p0=[1.0, 1.0])
 
     # Benchmark full dataset
     start = time.perf_counter()
@@ -70,8 +68,8 @@ def benchmark_svd_iterations() -> dict[str, Any]:
     def model(x: jax.Array, a: float, b: float, c: float) -> jax.Array:
         return jnp.exp(-a * x) + c * jnp.sin(b * x)
 
-    # Warmup
-    nlsq.curve_fit(model, x[:100], y[:100], p0=[1.0, 1.0, 0.001])
+    # Warmup on the exact timed shape so compilation is not counted as fit time
+    nlsq.curve_fit(model, x, y, p0=[1.0, 1.0, 0.001])
 
     # Benchmark
     start = time.perf_counter()
@@ -97,8 +95,8 @@ def benchmark_memory_manager_overhead() -> dict[str, Any]:
     def model(x: jax.Array, a: float, b: float) -> jax.Array:
         return a * jnp.exp(-b * x)
 
-    # Warmup
-    nlsq.curve_fit(model, x[:1000], y[:1000], p0=[1.0, 1.0])
+    # Warmup on the exact timed shape so compilation is not counted in the variance
+    nlsq.curve_fit(model, x, y, p0=[1.0, 1.0])
 
     # Benchmark multiple runs
     times = []

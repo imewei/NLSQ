@@ -208,7 +208,7 @@ When {condition}, consider:
 
 **NLSQ resources:**
 - [API Documentation](https://nlsq.readthedocs.io/)
-- [Performance guide](../../docs/performance_guide.md) for large datasets
+- [Performance guide](../../../docs/howto/optimize_performance.rst) for large datasets
 
 ---
 
@@ -231,4 +231,4 @@ A: {Applicability discussion with caveats}
 **{Domain term 2}:** {Definition in domain context}
 **{Technique abbreviation}:** {Full name and explanation}
 
-[Complete glossary](../../docs/glossary.md)
+[Concepts and explanations](../../../docs/explanation/index.rst)

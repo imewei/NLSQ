@@ -404,16 +404,16 @@ else:
 
 
 # ======================================================================
-# ## 3. Combined Example: All Features Together
+# ## 3. Combined Example: Sparsity Analysis + Standard Fit
 #
-# Let's demonstrate how to combine sparse Jacobians with streaming for maximum performance on a large, sparse problem.
+# Analyse the Jacobian sparsity of a large multi-peak problem, then fit it with the standard `CurveFit` path. The sparsity analysis only informs memory planning here; the fit itself does not use a sparse Jacobian.
 # ======================================================================
 
 
 def demo_combined_optimization():
-    """Combine SparseJacobian and smart chunking."""
+    """Sparsity analysis followed by a standard fit of a multi-peak model."""
     print("=" * 70)
-    print("COMBINED OPTIMIZATION DEMO")
+    print("SPARSITY ANALYSIS + STANDARD FIT DEMO")
     print("=" * 70)
 
     # Large, sparse problem: Multi-peak Gaussian
@@ -476,7 +476,7 @@ def demo_combined_optimization():
 
     # Step 2: Fit with standard NLSQ (for comparison)
     print("\n--- Step 2: Fitting ---")
-    print("Using standard NLSQ curve fitting...")
+    print("Using standard NLSQ curve fitting (the sparse Jacobian is not used here)...")
 
     # Initial guess (slightly off)
     p0 = [p * np.random.uniform(0.9, 1.1) for p in true_params]
@@ -556,14 +556,17 @@ def demo_combined_optimization():
 
     # Summary
     print("\n" + "=" * 70)
-    print("COMBINED OPTIMIZATION SUMMARY")
+    print("SUMMARY")
     print("=" * 70)
     print(
-        f"\n✓ Sparse Jacobian: {sparsity:.1%} sparsity, {memory_info['reduction_factor']:.1f}x memory reduction"
+        f"\n✓ Jacobian sparsity analysis: {sparsity:.1%} sparsity, "
+        f"{memory_info['reduction_factor']:.1f}x estimated memory reduction"
     )
     print(f"✓ Fit Quality: {np.max(rel_errors):.2%} max error on {n_params} parameters")
     print(f"✓ Performance: {fit_time:.2f}s for {n_points:,} points")
-    print("\n🎯 All optimizations working together for maximum performance!")
+    print(
+        "\nℹ️ The fit used the dense standard path; the sparsity estimate is for planning."
+    )
 
 
 if not QUICK:

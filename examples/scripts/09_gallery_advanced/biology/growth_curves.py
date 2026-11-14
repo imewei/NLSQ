@@ -299,7 +299,18 @@ if np.sum(mask_exp) > 5:
     print(f"  mu (specific growth rate): {mu_exp:.3f} +/- {mu_err:.3f} hr^-1")
     print(f"  Doubling time:            {doubling_time_exp:.2f} hours")
     print(f"  N0 (extrapolated):        {N0_exp:.4f}")
+    # Logistic: dlnN/dt = r (1 - N/K) falls from r (N << K) to r/2 at N = K/2, so a
+    # window reaching K/2 has a log-slope below r. Compare with the OLS slope of ln N_fit.
+    mu_model = np.polyfit(t_exp, np.log(logistic_growth(t_exp, *popt_robust)), 1)[0]
     print(f"\nCompare with logistic r:    {r_fit:.3f} hr^-1")
+    print(
+        f"Logistic model's own log-slope over this window: {mu_model:.3f} hr^-1 "
+        f"(difference {(mu_exp - mu_model) / mu_err:+.1f} sigma)"
+    )
+    print(
+        "(mu < r is expected: the window extends to OD = 0.6 = K/2, where the "
+        "specific growth rate has already dropped to r/2)"
+    )
 
 
 # =============================================================================

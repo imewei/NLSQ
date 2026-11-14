@@ -291,8 +291,8 @@ Before deploying to production, verify:
 - [{Troubleshooting guide}](../03_advanced/troubleshooting_guide.ipynb)
 
 **Documentation:**
-- [Production deployment guide](../../docs/production.md)
-- [Monitoring integration](../../docs/monitoring.md)
+- [Streaming checkpoints guide](../../../docs/howto/streaming_checkpoints.rst)
+- [Debugging fits and diagnostics](../../../docs/howto/debug_bad_fits.rst)
 - [API Reference](https://nlsq.readthedocs.io/)
 
 ---
@@ -316,4 +316,4 @@ A: {Upgrade strategy}
 **Checkpoint:** {Definition and purpose}
 **Graceful Degradation:** {Definition and implementation}
 
-[Complete glossary](../../docs/glossary.md)
+[Concepts and explanations](../../../docs/explanation/index.rst)

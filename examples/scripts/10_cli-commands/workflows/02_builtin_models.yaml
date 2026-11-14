@@ -72,12 +72,6 @@ fitting:
 export:
   results_file: "output/02_builtin_models_results.json"
 
-  include:
-    parameters: true
-    covariance: true
-    uncertainties: true
-    statistics: true
-
 # ==============================================================================
 # VISUALIZATION CONFIGURATION
 # ==============================================================================
@@ -92,7 +86,6 @@ visualization:
   dpi: 300
   figure_size: [3.5, 2.625]       # Nature single-column width
   style: "nature"
-  layout: "combined"
 
   font:
     family: "sans-serif"          # Arial for Nature
@@ -136,7 +129,6 @@ visualization:
       show_chi_squared: false
       location: "upper left"
       fontsize: 7
-      box_alpha: 0.7
 
   residuals_plot:
     enabled: true

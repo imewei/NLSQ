@@ -2,8 +2,9 @@
 """Benchmark script for User Story 1: Large Dataset Fitting Performance.
 
 This script validates the following success criteria:
-- SC-001: No JIT recompilation on final chunk (via chunk timing comparison)
-- SC-005: 2-3x improvement in final chunk processing time (vs first chunk)
+- SC-001: No JIT recompilation on a bucket-padded final chunk (XLA compile count)
+- SC-005: Padding the final chunk removes the recompilation an unpadded final
+  chunk triggers (compile counts; wall times are informational)
 
 The key insight: SC-001 and SC-005 are about chunked processing where the
 final chunk might have a different size than earlier chunks. With power-of-2
@@ -17,8 +18,10 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -27,19 +30,55 @@ import jax.numpy as jnp
 import numpy as np
 
 
+class _CompileCounter(logging.Handler):
+    """Count XLA compilations reported by ``jax.log_compiles``."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.getMessage().startswith("Compiling"):
+            self.messages.append(record.getMessage())
+
+
+def _count_compiles(fn: Callable[[], Any], shape_token: str) -> tuple[int, int, float]:
+    """Run ``fn``; return (all compiles, compiles mentioning ``shape_token``, seconds).
+
+    Total compile counts include a few small data-dependent kernels from the
+    optimizer trajectory, so shape-specific recompilation is counted separately.
+    """
+    counter = _CompileCounter()
+    jax_logger = logging.getLogger("jax")
+    jax_logger.addHandler(counter)
+    try:
+        with jax.log_compiles(True):
+            start = time.perf_counter()
+            fn()
+            elapsed = time.perf_counter() - start
+    finally:
+        jax_logger.removeHandler(counter)
+    n_shape = sum(shape_token in m for m in counter.messages)
+    return len(counter.messages), n_shape, elapsed
+
+
 def test_chunked_processing() -> dict[str, Any]:
-    """Test chunked processing to verify JIT caching with static shapes.
+    """Test that bucket padding of a final chunk reuses a compiled kernel.
 
-    Measures chunk processing times to verify:
-    - SC-001: Final chunk doesn't trigger recompilation (consistent timing)
-    - SC-005: Padded final chunk is 2-3x faster than unpadded (which triggers recompilation)
-
-    The key insight: Without bucket padding, a chunk of 127 points would trigger
-    a fresh JIT compilation because that shape wasn't seen before. With padding
-    to 1024 (a pre-compiled bucket), no recompilation occurs.
+    - SC-001: the final chunk, padded by ``ChunkBuffer.from_array`` (the same
+      bucket padding ``DataChunker.create_chunks`` applies), triggers no XLA
+      compilation for the unpadded tail shape once its bucket has been warmed.
+    - SC-005: the same final chunk left unpadded does compile for the tail
+      shape, and the padded run compiles less overall, so padding removes real
+      recompilation work. Counts are compared, not cold vs
+      warm wall time; times are reported for information only.
     """
     import nlsq
-    from nlsq.streaming.large_dataset import CHUNK_BUCKETS, get_bucket_size
+    from nlsq.streaming.large_dataset import (
+        CHUNK_BUCKETS,
+        ChunkBuffer,
+        get_bucket_size,
+    )
 
     rng = np.random.default_rng(42)
 
@@ -53,35 +92,38 @@ def test_chunked_processing() -> dict[str, Any]:
         y_warm = 2.5 * np.exp(-0.3 * x_warm) + rng.normal(0, 0.01, bucket)
         nlsq.curve_fit(model, x_warm, y_warm, p0=[1.0, 1.0])
 
-    # Step 2: Test A/B comparison for SC-005
-    # A: Without padding (odd size 127 → triggers recompilation)
-    # B: With padding (127 → padded to 1024 → uses cached JIT)
+    # Step 2: final chunk of 127 points, unpadded vs bucket-padded
     print("    Testing A/B: unpadded vs padded final chunk...")
-
     odd_size = 127  # Simulates a final chunk with leftover data
-
-    # A: Unpadded (will trigger recompilation)
     x_odd = np.linspace(0, 10, odd_size)
     y_odd = 2.5 * np.exp(-0.3 * x_odd) + rng.normal(0, 0.01, odd_size)
 
-    start = time.perf_counter()
-    nlsq.curve_fit(model, x_odd, y_odd, p0=[1.0, 1.0])
-    unpadded_time = time.perf_counter() - start
+    # B first: padded via the library's own bucket padding. Its bucket (1024) is
+    # already compiled, and it must run before A so A cannot warm anything for B.
+    x_buf = ChunkBuffer.from_array(x_odd)
+    y_buf = ChunkBuffer.from_array(y_odd)
+    bucket_size = get_bucket_size(odd_size)
+    tail_token = f"[{odd_size}]"  # shape fragment in JAX compile log lines
+    padding_applied = bool(
+        x_buf.bucket_size == bucket_size
+        and len(x_buf.data) == bucket_size
+        and x_buf.valid_length == odd_size
+        and np.array_equal(x_buf.data[:odd_size], x_odd)
+        and int(x_buf.mask.sum()) == odd_size
+    )
+    padded_compiles, padded_tail_compiles, padded_time = _count_compiles(
+        lambda: nlsq.curve_fit(model, x_buf.data, y_buf.data, p0=[1.0, 1.0]),
+        tail_token,
+    )
 
-    # B: Padded to bucket size (should use cached JIT)
-    bucket_size = get_bucket_size(odd_size)  # 1024
-    x_padded = np.resize(x_odd, bucket_size)
-    y_padded = np.resize(y_odd, bucket_size)
+    # A: unpadded 127-point shape, never seen before
+    unpadded_compiles, unpadded_tail_compiles, unpadded_time = _count_compiles(
+        lambda: nlsq.curve_fit(model, x_odd, y_odd, p0=[1.0, 1.0]),
+        tail_token,
+    )
 
-    start = time.perf_counter()
-    nlsq.curve_fit(model, x_padded, y_padded, p0=[1.0, 1.0])
-    padded_time = time.perf_counter() - start
-
-    # Speedup: unpadded time / padded time
-    # If unpadded triggers recompilation, it will be 2-3x slower
-    speedup = unpadded_time / padded_time if padded_time > 0 else 0
-
-    # Step 3: Test SC-001 - consistent timing for same bucket
+    # Step 3: SC-001 supporting evidence - warm timings in one bucket are stable
+    # (the 1024 bucket was warmed in step 1 with the same shape).
     print("    Testing bucket consistency...")
     bucket_1024_times = []
     for _ in range(5):
@@ -93,19 +135,21 @@ def test_chunked_processing() -> dict[str, Any]:
         bucket_1024_times.append(elapsed)
 
     cv = np.std(bucket_1024_times) / np.mean(bucket_1024_times)
-    sc_001_passed = cv < 0.3  # <30% variation = consistent
 
-    # SC-005: Padded should be faster than unpadded (by 2-3x if recompilation happened)
-    # Even if both are warm, padded should be at least as fast
-    # The key is that speedup > 1.0 shows padding helps
-    sc_005_passed = speedup >= 1.0
+    sc_001_passed = padding_applied and padded_tail_compiles == 0
+    # unpadded_tail_compiles == 0 would mean the counter is blind: fail loudly.
+    sc_005_passed = unpadded_tail_compiles > 0 and padded_compiles < unpadded_compiles
 
     return {
         "odd_size": odd_size,
         "bucket_size": bucket_size,
+        "padding_applied": padding_applied,
+        "unpadded_compiles": unpadded_compiles,
+        "unpadded_tail_shape_compiles": unpadded_tail_compiles,
+        "padded_compiles": padded_compiles,
+        "padded_tail_shape_compiles": padded_tail_compiles,
         "unpadded_time": float(unpadded_time),
         "padded_time": float(padded_time),
-        "speedup": float(speedup),
         "bucket_1024_times": bucket_1024_times,
         "bucket_1024_cv": float(cv),
         "sc_001_passed": bool(sc_001_passed),
@@ -209,25 +253,34 @@ def main() -> None:
     results["chunked_processing"] = test_chunked_processing()
 
     cp = results["chunked_processing"]
-    print(f"    Unpadded ({cp['odd_size']} pts): {cp['unpadded_time']:.4f}s")
     print(
-        f"    Padded ({cp['odd_size']} -> {cp['bucket_size']}): {cp['padded_time']:.4f}s"
+        f"    Unpadded ({cp['odd_size']} pts): {cp['unpadded_compiles']} compiles "
+        f"({cp['unpadded_tail_shape_compiles']} for the tail shape), "
+        f"{cp['unpadded_time']:.4f}s"
     )
-    print(f"    Speedup (unpadded/padded): {cp['speedup']:.2f}x")
-    print(f"    Bucket 1024 CV: {cp['bucket_1024_cv']:.2f}")
+    print(
+        f"    Padded ({cp['odd_size']} -> {cp['bucket_size']}): "
+        f"{cp['padded_compiles']} compiles "
+        f"({cp['padded_tail_shape_compiles']} for the tail shape), {cp['padded_time']:.4f}s"
+    )
+    print(f"    Bucket padding applied by ChunkBuffer: {cp['padding_applied']}")
+    print(f"    Bucket 1024 warm CV: {cp['bucket_1024_cv']:.2f}")
 
     if cp["sc_001_passed"]:
-        print("    SC-001: PASSED - No recompilation detected on final chunk")
+        print("    SC-001: PASSED - No recompilation on bucket-padded final chunk")
     else:
-        print("    SC-001: FAILED - Recompilation detected (final chunk too slow)")
+        print("    SC-001: FAILED - Padded final chunk recompiled or was not padded")
 
     if cp["sc_005_passed"]:
         print(
-            f"    SC-005: PASSED - Padded speedup {cp['speedup']:.2f}x >= 1.0x "
-            "(target 2-3x, see docstring)"
+            f"    SC-005: PASSED - padding avoided {cp['unpadded_compiles']} "
+            "compilations the unpadded chunk triggered"
         )
     else:
-        print(f"    SC-005: FAILED - Speedup {cp['speedup']:.2f}x < 1.0x")
+        print(
+            f"    SC-005: FAILED - unpadded {cp['unpadded_compiles']} vs "
+            f"padded {cp['padded_compiles']} compiles"
+        )
 
     print()
     print("3/3 Baseline comparison (informational)...")
@@ -242,6 +295,7 @@ def main() -> None:
         / "002-performance-optimizations"
         / "us1_benchmark.json"
     )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
 
@@ -259,7 +313,7 @@ def main() -> None:
         f"SC-001 (No recompilation on final chunk): {'PASSED' if sc_001 else 'FAILED'}"
     )
     print(
-        f"SC-005 (Padded speedup >= 1.0x, target 2-3x): "
+        f"SC-005 (Padding avoids unpadded recompiles): "
         f"{'PASSED' if sc_005 else 'FAILED'}"
     )
 

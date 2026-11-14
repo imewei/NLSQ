@@ -242,4 +242,4 @@ A: {Stability/maturity assessment}
 **{Feature-specific term 1}:** {Definition}
 **{Feature-specific term 2}:** {Definition}
 
-[Complete glossary](../../docs/glossary.md)
+[Concepts and explanations](../../../docs/explanation/index.rst)

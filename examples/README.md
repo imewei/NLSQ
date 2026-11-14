@@ -12,28 +12,28 @@ Welcome to the NLSQ examples repository! This collection provides comprehensive,
 
 ## 📁 Directory Structure
 
-This directory contains **55 notebooks and 55 scripts** organized for optimal learning progression:
+This directory contains **54 notebooks and 61 scripts** organized for optimal learning progression:
 
 ```
 examples/
-├── notebooks/          # Interactive Jupyter notebooks (55 files)
+├── notebooks/          # Interactive Jupyter notebooks (54 files)
 │   ├── 00_learning_map.ipynb        # Navigation guide
 │   ├── 01_getting_started/          # 2 beginner tutorials
 │   ├── 02_core_tutorials/           # 4 intermediate tutorials
 │   ├── 03_advanced/                 # 7 advanced topics
-│   ├── 04_gallery/                  # 11 domain-specific examples
+│   ├── 04_gallery/                  # 12 domain-specific examples
 │   ├── 05_feature_demos/            # 5 feature demonstrations
-│   ├── 06_streaming/                # 5 streaming examples
-│   ├── 07_global_optimization/      # 5 multi-start tutorials (NEW v0.3.3)
-│   ├── 08_workflow_system/          # 7 unified fit() tutorials (NEW v0.3.4)
-│   └── 09_gallery_advanced/         # 11 advanced gallery with fit() API (NEW v0.3.4)
-├── scripts/            # Python scripts (mirrors notebooks/)
+│   ├── 06_streaming/                # 1 streaming example
+│   ├── 07_global_optimization/      # 6 global optimization tutorials (NEW v0.3.3)
+│   ├── 08_workflow_system/          # 4 unified fit() tutorials (NEW v0.3.4)
+│   └── 09_gallery_advanced/         # 12 advanced gallery with fit() API (NEW v0.3.4)
+├── scripts/            # Python scripts (mirrors notebooks/, plus 10_cli-commands/)
 │   └── [same structure as notebooks/]
 ├── _templates/         # Notebook templates for contributors
 └── README.md           # This file
 ```
 
-**Total**: 114 files (57 notebooks + 57 scripts)
+**Total**: 115 files (54 notebooks + 61 scripts)
 
 ---
 
@@ -98,19 +98,19 @@ START → Quickstart → Multi-Start Basics → Sampling Strategies → Integrat
 1. [NLSQ Quickstart](notebooks/01_getting_started/nlsq_quickstart.ipynb)
 2. [Multi-Start Basics](notebooks/07_global_optimization/01_multistart_basics.ipynb) ⭐ NEW
 3. [Sampling Strategies](notebooks/07_global_optimization/02_sampling_strategies.ipynb) ⭐ NEW
-4. [Multi-Start Integration](notebooks/07_global_optimization/05_multistart_integration.ipynb) ⭐ NEW
+4. [Multi-Start Integration](notebooks/07_global_optimization/04_multistart_integration.ipynb) ⭐ NEW
 
 ### Path 4: Workflow System (90 min)
 **Best for**: Production workflows, automatic optimization selection
 
 ```
-START → fit() Quickstart → Workflow Tiers → Optimization Goals → Presets
+START → fit() Quickstart → Workflow Tiers → Auto Selection → HPC & Checkpointing
 ```
 
 1. [fit() Quickstart](notebooks/08_workflow_system/01_fit_quickstart.ipynb) ⭐ NEW
 2. [Workflow Tiers](notebooks/08_workflow_system/02_workflow_tiers.ipynb) ⭐ NEW
-3. [Optimization Goals](notebooks/08_workflow_system/03_optimization_goals.ipynb) ⭐ NEW
-4. [Workflow Presets](notebooks/08_workflow_system/04_workflow_presets.ipynb) ⭐ NEW
+3. [Auto Selection](notebooks/08_workflow_system/03_auto_selection.ipynb) ⭐ NEW
+4. [HPC & Checkpointing](notebooks/08_workflow_system/04_hpc_and_checkpointing.ipynb) ⭐ NEW
 
 ### Path 5: Domain Expert (60 min)
 **Best for**: Scientists with specific applications
@@ -127,13 +127,13 @@ START → Quickstart (15 min) → Your Domain (20 min) → Advanced Gallery (25 
 **Best for**: Large-scale computing, fault-tolerant fitting
 
 ```
-START → fit() Quickstart → Workflow Tiers → YAML Config → HPC & Checkpointing
+START → fit() Quickstart → Workflow Tiers → Auto Selection → HPC & Checkpointing
 ```
 
 1. [fit() Quickstart](notebooks/08_workflow_system/01_fit_quickstart.ipynb) ⭐ NEW
 2. [Workflow Tiers](notebooks/08_workflow_system/02_workflow_tiers.ipynb) ⭐ NEW
-3. [YAML Configuration](notebooks/08_workflow_system/05_yaml_configuration.ipynb) ⭐ NEW
-4. [HPC & Checkpointing](notebooks/08_workflow_system/07_hpc_and_checkpointing.ipynb) ⭐ NEW
+3. [Auto Selection](notebooks/08_workflow_system/03_auto_selection.ipynb) ⭐ NEW
+4. [HPC & Checkpointing](notebooks/08_workflow_system/04_hpc_and_checkpointing.ipynb) ⭐ NEW
 
 ---
 
@@ -194,22 +194,22 @@ Your complete navigation guide:
    - **Time**: 30-40 min | **Level**: ●●○ Intermediate
 
 4. **Performance Optimization** (`performance_optimization_demo.ipynb`)
-   - MemoryPool (2-5x speedup)
-   - SparseJacobian (10-100x memory reduction)
+   - Sparse Jacobian detection and sparse-aware optimization
+   - SparseJacobian memory reduction (depends on the sparsity pattern)
    - AdaptiveHybridStreamingOptimizer (huge datasets)
    - **Time**: 40-50 min | **Level**: ●●● Advanced
 
 5. **Batch Fitting Many Datasets** (`batch_fitting_many_datasets.py`, script only)
    - Hundreds of small datasets from Python, without `nlsq batch` YAML files
-   - Reusing one `CurveFit` instance (~14-18x over per-call `curve_fit`)
-   - `jax.vmap` over a single compiled solver (~600-800x), with covariance
+   - Reusing one `CurveFit` instance (`flength` avoids recompiling for ragged sizes)
+   - `jax.vmap` over a single compiled solver (~9x on CPU, more on GPU), with covariance
    - Ragged datasets via zero-weighted padding
    - **Time**: 15-20 min | **Level**: ●●● Advanced
 
 6. **Batch Fitting With Optimistix** (`batch_fitting_optimistix.py`, script only)
    - Optimistix `LevenbergMarquardt` vs a hand-written vmapped solver
-   - Optimistix wins on speed (11.6 vs 21.9-65.0 us/dataset) and on robustness
-   - Why a diverged float64 fit is finite, not NaN, and how to detect it
+   - Optimistix wins on speed (87 vs 755-2252 us/dataset on CPU) and on robustness
+   - Why a failed float64 fit is finite, not NaN, and how to detect it
    - The float32 trap: an unreachable `rtol` makes an adaptive solver look slow
    - **Time**: 15-20 min | **Level**: ●●● Advanced
 
@@ -246,10 +246,11 @@ Your complete navigation guide:
 - **Reaction Kinetics** - Rate laws, rate constants
 - **Titration Curves** - pH fitting, pKa determination
 
-#### ⚛️ Physics (3 notebooks)
+#### ⚛️ Physics (4 notebooks)
 - **Damped Oscillation** - Harmonic oscillator, pendulums
 - **Radioactive Decay** - Exponential decay, half-life
 - **Spectroscopy Peaks** - Peak fitting, Lorentzian shapes
+- **2D Surface Fitting** - 2D Gaussian beam profiles, spatial parameters
 
 #### 🔧 Engineering (3 notebooks)
 - **Sensor Calibration** - Calibration curves, polynomial regression
@@ -278,15 +279,11 @@ Your complete navigation guide:
 ### 06. Streaming Examples
 **Location**: `notebooks/06_streaming/` | `scripts/06_streaming/`
 
-**Advanced streaming optimization for unlimited datasets:**
+**Streaming optimization for datasets that do not fit in memory:**
 
-1. **Basic Fault Tolerance** - NaN/Inf detection, adaptive retry
-2. **Checkpoint & Resume** - Save and resume optimization state
-3. **Custom Retry Settings** - Custom retry strategies
-4. **Interpreting Diagnostics** - Performance metrics analysis
-5. **Hybrid Streaming API** - 4-phase optimizer with defense layers (v0.3.6+)
+1. **Hybrid Streaming API** (`05_hybrid_streaming_api.ipynb`) - 4-phase optimizer with defense layers (v0.3.6+)
 
-**Time**: 2-3 hours | **Level**: ●●● Advanced
+**Level**: ●●● Advanced
 
 ---
 
@@ -297,7 +294,7 @@ Your complete navigation guide:
 
 1. **Multi-Start Basics** (`01_multistart_basics.ipynb`)
    - Why local optimization fails (local minima trap)
-   - `GlobalOptimizationConfig` with `n_starts`, `sampling_method`
+   - `GlobalOptimizationConfig` with `n_starts`, `sampler`
    - Interpret multi-start results
    - **Time**: 20 min | **Level**: ●●○ Intermediate
 
@@ -307,23 +304,24 @@ Your complete navigation guide:
    - Sampler selection guidance
    - **Time**: 25 min | **Level**: ●●○ Intermediate
 
-3. **Presets and Config** (`03_presets_and_config.ipynb`)
-   - All `GlobalOptimizationConfig` parameters
-   - Built-in presets: 'fast', 'robust', 'global', 'thorough'
-   - Custom configuration patterns
+3. **CMA-ES Configuration** (`03_cmaes_configuration.ipynb`)
+   - `CMAESConfig` and the method-selection criteria
+   - `MethodSelector`: CMA-ES vs multi-start
    - **Time**: 20 min | **Level**: ●●○ Intermediate
 
-4. **Tournament Selection** (`04_tournament_selection.ipynb`)
-   - `TournamentSelector` for streaming scenarios
-   - Memory-efficient global optimization
-   - Tournament parameters configuration
-   - **Time**: 30 min | **Level**: ●●● Advanced
-
-5. **Multi-Start Integration** (`05_multistart_integration.ipynb`)
+4. **Multi-Start Integration** (`04_multistart_integration.ipynb`)
    - Integration with `curve_fit()` workflows
    - Bounds handling with multi-start
-   - Combine with `curve_fit_large()`
+   - Peak-fitting example
    - **Time**: 25 min | **Level**: ●●○ Intermediate
+
+5. **CMA-ES Basic** (`05_cmaes_basic.ipynb`)
+   - `CMAESOptimizer`, presets, diagnostics
+   - **Time**: 20 min | **Level**: ●●● Advanced
+
+6. **CMA-ES Multi-Scale** (`06_cmaes_multiscale.ipynb`)
+   - Multi-scale parameters and scale invariance
+   - **Time**: 25 min | **Level**: ●●● Advanced
 
 **Key APIs:**
 ```python
@@ -346,37 +344,18 @@ popt, pcov = curve_fit(model, x, y, p0=p0, multistart=True, n_starts=10)
    - Comparison with `curve_fit()` and `curve_fit_large()`
    - **Time**: 15 min | **Level**: ●○○ Beginner
 
-2. **Workflow Tiers** (`02_workflow_tiers.ipynb`)
-   - STANDARD, CHUNKED, STREAMING, STREAMING_CHECKPOINT
-   - Automatic tier selection thresholds
-   - Manual tier override
+2. **Workflow Tiers / Memory-Based Strategy Selection** (`02_workflow_tiers.ipynb`)
+   - `MemoryBudget` and `MemoryBudgetSelector`
+   - Standard, chunked and streaming strategies
+   - Strategy decision tree
    - **Time**: 20 min | **Level**: ●●○ Intermediate
 
-3. **Optimization Goals** (`03_optimization_goals.ipynb`)
-   - FAST, ROBUST, GLOBAL, MEMORY_EFFICIENT, QUALITY
-   - Internal settings for each goal
-   - Combining goals with tiers
-   - **Time**: 20 min | **Level**: ●●○ Intermediate
-
-4. **Workflow Presets** (`04_workflow_presets.ipynb`)
-   - `WORKFLOW_PRESETS` dictionary
-   - All 7 named configurations
-   - Customizing presets
-   - **Time**: 15 min | **Level**: ●○○ Beginner
-
-5. **YAML Configuration** (`05_yaml_configuration.ipynb`)
-   - `nlsq.yaml` file structure
-   - Environment variable overrides
-   - Production deployment patterns
-   - **Time**: 20 min | **Level**: ●●○ Intermediate
-
-6. **Auto Selection** (`06_auto_selection.ipynb`)
-   - `WorkflowSelector` decision logic
-   - `DatasetSizeTier` and `MemoryTier` classification
+3. **Auto Selection** (`03_auto_selection.ipynb`)
+   - `auto_global` method selection (CMA-ES vs multi-start)
    - Custom selection scenarios
    - **Time**: 25 min | **Level**: ●●● Advanced
 
-7. **HPC & Checkpointing** (`07_hpc_and_checkpointing.ipynb`)
+4. **HPC & Checkpointing** (`04_hpc_and_checkpointing.ipynb`)
    - PBS Pro cluster detection
    - Checkpointing for fault tolerance
    - Resume from checkpoints
@@ -404,7 +383,7 @@ popt, pcov = fit(model, x, y, p0=p0, workflow=HybridStreamingConfig())
 
 **Domain examples using `fit()` API with global optimization:** ⭐ NEW
 
-Same 11 domain examples as Section 04, updated to demonstrate:
+Same 12 domain examples as Section 04, updated to demonstrate:
 - Unified `fit()` API with presets
 - `GlobalOptimizationConfig` for multi-start optimization
 - Best practices for production workflows
@@ -418,10 +397,11 @@ Same 11 domain examples as Section 04, updated to demonstrate:
 - **Reaction Kinetics** - Rate constants with global search
 - **Titration Curves** - pKa with `preset="global"`
 
-#### ⚛️ Physics (3 notebooks)
+#### ⚛️ Physics (4 notebooks)
 - **Damped Oscillation** - Multi-start for oscillation parameters
 - **Radioactive Decay** - Robust fitting for decay constants
 - **Spectroscopy Peaks** - Global optimization for peak fitting (critical for local minima)
+- **2D Surface Fitting** - 2D Gaussian beam profile parameters
 
 #### 🔧 Engineering (3 notebooks)
 - **Sensor Calibration** - Robust calibration curves
@@ -646,10 +626,10 @@ If you use NLSQ in your research, please cite:
 
 ## 🌟 Summary
 
-✨ **55 comprehensive notebooks** covering basics to advanced optimization
+✨ **54 comprehensive notebooks** covering basics to advanced optimization
 ✨ **Production-ready** unified `fit()` API with automatic workflow selection
 ✨ **Global optimization** with multi-start for escaping local minima
-✨ **GPU-accelerated** with 150-270x speedup over SciPy
+✨ **GPU-accelerated** (speedup over SciPy depends on hardware and problem size; see `benchmarks/`)
 ✨ **Memory-efficient** with chunking, streaming, and checkpointing
 ✨ **Well-documented** with clear learning paths
 ✨ **Domain-specific** examples for biology, chemistry, physics, engineering

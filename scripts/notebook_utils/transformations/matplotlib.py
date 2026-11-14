@@ -37,7 +37,7 @@ class MatplotlibInlineTransformer(NotebookTransformer):
         result = cells.copy()
 
         # Insert magic at first code cell
-        config_cell = create_matplotlib_config_cell()
+        config_cell = create_matplotlib_config_cell(result)
         first_code_idx = find_first_code_cell_index(result)
         result.insert(first_code_idx, config_cell)
 

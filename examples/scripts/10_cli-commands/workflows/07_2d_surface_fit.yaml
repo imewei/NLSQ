@@ -76,13 +76,6 @@ fitting:
 export:
   results_file: "output/07_2d_surface_fit_results.json"
 
-  include:
-    parameters: true
-    covariance: true
-    uncertainties: true
-    statistics: true
-    convergence_info: true
-
 # ==============================================================================
 # VISUALIZATION CONFIGURATION
 # ==============================================================================
@@ -98,7 +91,6 @@ visualization:
   dpi: 300
   figure_size: [7.0, 5.25]        # Double-column width
   style: "publication"
-  layout: "combined"
 
   font:
     family: "serif"
@@ -142,7 +134,6 @@ visualization:
       show_chi_squared: true
       location: "upper left"
       fontsize: 9
-      box_alpha: 0.8
 
   residuals_plot:
     enabled: true

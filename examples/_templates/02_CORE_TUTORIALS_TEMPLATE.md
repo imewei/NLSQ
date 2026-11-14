@@ -203,7 +203,7 @@ A: {Detailed technical answer with code example if needed}
 **Q: How does this compare to {alternative approach}?**
 A: {Comparison with trade-offs}
 
-[Complete FAQ](../../docs/faq.md)
+[Troubleshooting guide](../../../docs/howto/troubleshooting.rst)
 
 ---
 
@@ -230,4 +230,4 @@ A: {Comparison with trade-offs}
 **{Technical term 2}:** {Precise definition}
 **{Acronym}:** {Full form and definition}
 
-[Complete glossary](../../docs/glossary.md)
+[Concepts and explanations](../../../docs/explanation/index.rst)

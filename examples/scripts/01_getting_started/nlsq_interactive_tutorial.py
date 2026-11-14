@@ -715,14 +715,23 @@ print(
     f"Dataset size: {n_huge:,} points ({(x_huge.nbytes + y_huge.nbytes) / 1024**2:.1f} MB)"
 )
 
-# Fit with automatic chunking
-print("\nFitting with automatic chunking...")
+# curve_fit_large only chunks at or above `size_threshold` (default 1M points);
+# below it the data is fit in memory and chunk_size has no effect. We lower the
+# threshold so this 500K-point demo takes the chunked, full-data path.
+size_threshold = 100_000
+path = (
+    "chunked exact fit (every point, bounded memory)"
+    if n_huge >= size_threshold
+    else "in-memory fit (below size_threshold; chunk_size unused)"
+)
+print(f"\nFitting with curve_fit_large -> {path}...")
 start = time.time()
 popt_huge, pcov_huge = curve_fit_large(
     exponential_decay,
     x_huge,
     y_huge,
     p0=[5, 0.3, 1],
+    size_threshold=size_threshold,
     chunk_size=50000,  # Process 50K points at a time
 )
 elapsed = time.time() - start
@@ -730,7 +739,7 @@ elapsed = time.time() - start
 print(f"✅ Fit complete in {elapsed:.3f} seconds")
 print(f"Fitted: a={popt_huge[0]:.4f}, b={popt_huge[1]:.4f}, c={popt_huge[2]:.4f}")
 print(f"Processing rate: {n_huge / elapsed:,.0f} points/second")
-print("\n💡 curve_fit_large() automatically manages memory for huge datasets!")
+print("\n💡 curve_fit_large() bounds memory for huge datasets while using all points.")
 
 
 # ======================================================================

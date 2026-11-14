@@ -161,10 +161,7 @@ def gaussian2d(coords, n0, x0, y0, sigma_x, sigma_y, theta, offset):
 # ======================================================================
 
 
-# Advanced fitting with optimized settings - placeholder for now
-print("=== Advanced Fitting with Optimized Settings ===")
-print("This section will be populated after data generation and algorithm selection.")
-print("Advanced fitting demonstration will appear after the main fitting section.")
+# (The advanced fitting comparison appears after the main fitting section.)
 
 
 # Configure matplotlib for inline plotting in VS Code/Jupyter
@@ -175,6 +172,8 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+np.random.seed(42)  # reproducible data and comparison output
 
 
 def get_coordinates(width, height):
@@ -319,7 +318,7 @@ if flat_data is not None and len(flat_data) > 0:
             jcf_optimized = CurveFit()
 
         # Performance comparison with different settings
-        print("\\nComparing different optimization approaches:")
+        print("\nComparing different optimization approaches:")
 
         approaches = [
             ("Default", CurveFit()),
@@ -373,9 +372,21 @@ if flat_data is not None and len(flat_data) > 0:
         # Show best result
         if results_comparison:
             best_result = min(results_comparison, key=lambda x: x["mse"])
-            print(
-                f"\\nBest approach: {best_result['name']} (lowest MSE: {best_result['mse']:.6f})"
-            )
+            tied = [
+                r["name"]
+                for r in results_comparison
+                if r["mse"] <= best_result["mse"] * (1 + 1e-3) + 1e-12
+            ]
+            if len(tied) > 1:
+                print(
+                    f"\nApproaches tie on MSE ({', '.join(tied)}; "
+                    f"MSE: {best_result['mse']:.6f})"
+                )
+            else:
+                print(
+                    f"\nBest approach: {best_result['name']} "
+                    f"(lowest MSE: {best_result['mse']:.6f})"
+                )
             print(f"True parameters:  {params}")
             print(f"Fitted parameters: {list(best_result['params'])}")
 

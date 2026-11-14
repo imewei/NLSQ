@@ -26,6 +26,7 @@ from pathlib import Path
 # ======================================================================
 # Configure matplotlib for inline plotting in VS Code/Jupyter
 # MUST come before importing matplotlib
+import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -57,6 +58,11 @@ def steinhart_hart(R, A, B, C):
     ln_R = jnp.log(R)
     T_inv = A + B * ln_R + C * ln_R**3
     return 1.0 / T_inv
+
+
+def thermistor_model(V, A, B, C):
+    """Steinhart-Hart temperature in degrees Celsius; the sensor voltage plays the role of R."""
+    return steinhart_hart(V, A, B, C) - 273.15
 
 
 def polynomial_calibration(x, *coeffs):
@@ -107,7 +113,9 @@ voltage_measured = voltage_true + np.random.normal(0, 5, size=len(temp_reference
 
 # Measurement uncertainties
 sigma_voltage = 5.0 * np.ones_like(voltage_measured)  # mV
-sigma_temp = 0.1 * np.ones_like(temp_reference)  # °C (reference uncertainty)
+# Voltage noise referred to temperature: V = V_ref exp(beta (1/T - 1/T_ref)) gives
+# dT/dV = T^2 / (beta V), so sigma_T = T^2 sigma_V / (beta V) (nominal beta)
+sigma_temp = (T_kelvin_true**2 / beta) * sigma_voltage / voltage_measured
 
 
 print("=" * 70)
@@ -173,9 +181,9 @@ rmse_quad = np.sqrt(np.mean(residuals_quad**2))
 print(f"  y = {c0:.4f} + {c1:.6f}*V + {c2:.3e}*V²")
 print(f"  RMSE: {rmse_quad:.2f} °C")
 
-# Model 3: Cubic calibration (best fit for strong non-linearity)
+# Model 3: Cubic calibration (polynomial in V, kept as a contrast to the physical model)
 print("\n" + "-" * 70)
-print("Model 3: Cubic Calibration (Recommended)")
+print("Model 3: Cubic Calibration")
 print("-" * 70)
 
 
@@ -203,27 +211,73 @@ print(f"  y = {d0:.4f} + {d1:.6f}*V + {d2:.3e}*V² + {d3:.3e}*V³")
 print(f"  RMSE: {rmse_cubic:.2f} °C")
 print(f"  Max residual: {np.max(np.abs(residuals_cubic)):.2f} °C")
 
+# Model 4: Steinhart-Hart (physical model)
+print("\n" + "-" * 70)
+print("Model 4: Steinhart-Hart Calibration (Recommended)")
+print("-" * 70)
+
+# A thermistor obeys 1/T = A + B*ln(R) + C*ln(R)^3, so the calibration is linear in
+# ln(V), not a polynomial in V. Initial guess: linear fit of 1/T against ln(V).
+B0, A0 = np.polyfit(np.log(voltage_measured), 1.0 / (temp_reference + 273.15), 1)
+
+popt_sh, pcov_sh = curve_fit(
+    thermistor_model,
+    voltage_measured,
+    temp_reference,
+    p0=[A0, B0, 0.0],
+    sigma=sigma_temp,
+    absolute_sigma=True,
+)
+
+A_sh, B_sh, C_sh = popt_sh
+perr_sh = np.sqrt(np.diag(pcov_sh))
+temp_pred_sh = np.asarray(thermistor_model(voltage_measured, *popt_sh))
+residuals_sh = temp_reference - temp_pred_sh
+rmse_sh = np.sqrt(np.mean(residuals_sh**2))
+
+print(f"  1/T[K] = {A_sh:.5e} + {B_sh:.5e}*ln(V) + {C_sh:.3e}*ln(V)³")
+# beta model: ln V = ln V_ref + beta (1/T - 1/T_ref)  =>  A = 1/T_ref - ln(V_ref)/beta, B = 1/beta, C = 0
+print(
+    f"  True (beta model): A = {1 / T_ref - np.log(V_ref) / beta:.5e}, B = {1 / beta:.5e}, C = 0"
+)
+print(f"  Fitted B +/- sigma: {B_sh:.5e} +/- {perr_sh[1]:.1e} (true {1 / beta:.5e})")
+print(f"  RMSE: {rmse_sh:.3f} °C")
+print(f"  Max residual: {np.max(np.abs(residuals_sh)):.3f} °C")
+
 
 print("\n" + "=" * 70)
 print("MODEL COMPARISON")
 print("=" * 70)
-print(f"{'Model':<20} {'RMSE (°C)':<15} {'Max Error (°C)':<15} {'Parameters':<10}")
+
+
+def reduced_chi2(residuals, n_par):
+    return np.sum((residuals / sigma_temp) ** 2) / (len(residuals) - n_par)
+
+
+rows = [
+    ("Linear", residuals_linear, 2),
+    ("Quadratic", residuals_quad, 3),
+    ("Cubic", residuals_cubic, 4),
+    ("Steinhart-Hart", residuals_sh, 3),
+]
+print(
+    f"{'Model':<20} {'RMSE (°C)':<12} {'Max Error (°C)':<16} {'chi2/dof':<11} {'Parameters':<10}"
+)
+print("-" * 70)
+for label, res, n_par in rows:
+    print(
+        f"{label:<20} {np.sqrt(np.mean(res**2)):<12.3f} {np.max(np.abs(res)):<16.3f} "
+        f"{reduced_chi2(res, n_par):<11.2f} {n_par:<10}"
+    )
 print("-" * 70)
 print(
-    f"{'Linear':<20} {rmse_linear:<15.2f} {np.max(np.abs(residuals_linear)):<15.2f} {2:<10}"
+    f"✓ Recommended: Steinhart-Hart model (chi2/dof = {reduced_chi2(residuals_sh, 3):.2f}); "
+    "polynomials in V cannot follow the exponential thermistor response"
 )
-print(
-    f"{'Quadratic':<20} {rmse_quad:<15.2f} {np.max(np.abs(residuals_quad)):<15.2f} {3:<10}"
-)
-print(
-    f"{'Cubic':<20} {rmse_cubic:<15.3f} {np.max(np.abs(residuals_cubic)):<15.3f} {4:<10}"
-)
-print("-" * 70)
-print(f"✓ Recommended: Cubic model (best accuracy for {len(temp_reference)} points)")
 
 
 print("\n" + "=" * 70)
-print("UNCERTAINTY ANALYSIS (Cubic Model)")
+print("UNCERTAINTY ANALYSIS (Steinhart-Hart Model)")
 print("=" * 70)
 
 # Example: Measure unknown temperature
@@ -231,22 +285,20 @@ V_unknown = 3500.0  # mV (sensor reading)
 V_unknown_err = 5.0  # mV (measurement uncertainty)
 
 # Predict temperature
-T_predicted = cubic_model(V_unknown, *popt_cubic)
-
-# Propagate uncertainty using covariance matrix
-# Simplified: use numerical derivative
-dV = 1.0  # mV (small perturbation)
-dT_dV = (
-    cubic_model(V_unknown + dV, *popt_cubic) - cubic_model(V_unknown - dV, *popt_cubic)
-) / (2 * dV)
-
-# Total uncertainty (measurement + calibration)
-# Calibration uncertainty from RMSE
-T_uncertainty = np.sqrt((dT_dV * V_unknown_err) ** 2 + rmse_cubic**2)
+T_predicted = float(thermistor_model(V_unknown, *popt_sh))
+dT_dV = float(jax.grad(thermistor_model)(V_unknown, *popt_sh))
+# Calibration (parameter) uncertainty propagated through the model Jacobian
+J_p = np.asarray(
+    jax.jacfwd(lambda p: thermistor_model(V_unknown, *p))(jnp.asarray(popt_sh))
+)
+T_cal_err = float(np.sqrt(J_p @ pcov_sh @ J_p))
+T_read_err = abs(dT_dV) * V_unknown_err
+T_uncertainty = np.sqrt(T_read_err**2 + T_cal_err**2)
 
 print("\nExample measurement:")
 print(f"  Sensor voltage: {V_unknown:.1f} ± {V_unknown_err:.1f} mV")
 print(f"  Predicted temperature: {T_predicted:.2f} ± {T_uncertainty:.2f} °C")
+print(f"  (reading noise {T_read_err:.3f} °C, calibration fit {T_cal_err:.3f} °C)")
 print(f"  Sensitivity: dT/dV = {dT_dV:.4f} °C/mV")
 
 
@@ -285,9 +337,17 @@ ax1.plot(
 ax1.plot(
     V_fine,
     cubic_model(V_fine, *popt_cubic),
+    "--",
+    linewidth=2,
+    label=f"Cubic (RMSE={rmse_cubic:.2f}°C)",
+    alpha=0.7,
+)
+ax1.plot(
+    V_fine,
+    thermistor_model(V_fine, *popt_sh),
     "-",
     linewidth=2.5,
-    label=f"Cubic (RMSE={rmse_cubic:.3f}°C)",
+    label=f"Steinhart-Hart (RMSE={rmse_sh:.3f}°C)",
     color="green",
 )
 ax1.set_xlabel("Sensor Voltage (mV)", fontsize=12)
@@ -298,11 +358,12 @@ ax1.grid(True, alpha=0.3)
 
 # Plot 2: Residuals comparison
 ax2 = plt.subplot(3, 2, 2)
-width = 0.25
+width = 0.2
 x_pos = np.arange(len(temp_reference))
-ax2.bar(x_pos - width, residuals_linear, width, label="Linear", alpha=0.7)
-ax2.bar(x_pos, residuals_quad, width, label="Quadratic", alpha=0.7)
-ax2.bar(x_pos + width, residuals_cubic, width, label="Cubic", alpha=0.7, color="green")
+ax2.bar(x_pos - 1.5 * width, residuals_linear, width, label="Linear", alpha=0.7)
+ax2.bar(x_pos - 0.5 * width, residuals_quad, width, label="Quadratic", alpha=0.7)
+ax2.bar(x_pos + 0.5 * width, residuals_cubic, width, label="Cubic", alpha=0.7)
+ax2.bar(x_pos + 1.5 * width, residuals_sh, width, label="Steinhart-Hart", color="green")
 ax2.axhline(0, color="r", linestyle="--", linewidth=1.5)
 ax2.axhline(0.5, color="gray", linestyle=":", alpha=0.5)
 ax2.axhline(-0.5, color="gray", linestyle=":", alpha=0.5)
@@ -312,11 +373,11 @@ ax2.set_title("Residuals: Model Comparison")
 ax2.legend()
 ax2.grid(True, alpha=0.3, axis="y")
 
-# Plot 3: Residuals vs temperature (cubic model)
+# Plot 3: Residuals vs temperature (Steinhart-Hart model)
 ax3 = plt.subplot(3, 2, 3)
 ax3.errorbar(
     temp_reference,
-    residuals_cubic,
+    residuals_sh,
     yerr=sigma_temp,
     fmt="o",
     capsize=4,
@@ -328,14 +389,14 @@ ax3.axhline(0.2, color="gray", linestyle=":", alpha=0.5)
 ax3.axhline(-0.2, color="gray", linestyle=":", alpha=0.5)
 ax3.set_xlabel("Reference Temperature (°C)")
 ax3.set_ylabel("Residual (°C)")
-ax3.set_title("Cubic Model Residuals vs Temperature")
+ax3.set_title("Steinhart-Hart Model Residuals vs Temperature")
 ax3.grid(True, alpha=0.3)
 
-# Plot 4: Residuals vs voltage (cubic model)
+# Plot 4: Residuals vs voltage (Steinhart-Hart model)
 ax4 = plt.subplot(3, 2, 4)
 ax4.errorbar(
     voltage_measured,
-    residuals_cubic,
+    residuals_sh,
     xerr=sigma_voltage,
     fmt="o",
     capsize=4,
@@ -347,23 +408,23 @@ ax4.axhline(0.2, color="gray", linestyle=":", alpha=0.5)
 ax4.axhline(-0.2, color="gray", linestyle=":", alpha=0.5)
 ax4.set_xlabel("Sensor Voltage (mV)")
 ax4.set_ylabel("Residual (°C)")
-ax4.set_title("Cubic Model Residuals vs Voltage")
+ax4.set_title("Steinhart-Hart Model Residuals vs Voltage")
 ax4.grid(True, alpha=0.3)
 
-# Plot 5: Histogram of residuals (cubic model)
+# Plot 5: Histogram of residuals (Steinhart-Hart model)
 ax5 = plt.subplot(3, 2, 5)
-ax5.hist(residuals_cubic, bins=8, alpha=0.7, edgecolor="black", color="green")
+ax5.hist(residuals_sh, bins=8, alpha=0.7, edgecolor="black", color="green")
 ax5.axvline(0, color="r", linestyle="--", linewidth=2)
 ax5.axvline(
-    np.mean(residuals_cubic),
+    np.mean(residuals_sh),
     color="blue",
     linestyle=":",
     linewidth=2,
-    label=f"Mean: {np.mean(residuals_cubic):.3f}°C",
+    label=f"Mean: {np.mean(residuals_sh):.3f}°C",
 )
 ax5.set_xlabel("Residual (°C)")
 ax5.set_ylabel("Frequency")
-ax5.set_title("Residual Distribution (Cubic Model)")
+ax5.set_title("Residual Distribution (Steinhart-Hart Model)")
 ax5.legend()
 ax5.grid(True, alpha=0.3, axis="y")
 
@@ -372,9 +433,9 @@ ax6 = plt.subplot(3, 2, 6)
 # Calculate sensitivity dT/dV across voltage range
 V_sens = np.linspace(voltage_measured.min(), voltage_measured.max(), 100)
 dV_small = 1.0  # mV
-sensitivity = (
-    cubic_model(V_sens + dV_small, *popt_cubic)
-    - cubic_model(V_sens - dV_small, *popt_cubic)
+sensitivity = np.asarray(
+    thermistor_model(V_sens + dV_small, *popt_sh)
+    - thermistor_model(V_sens - dV_small, *popt_sh)
 ) / (2 * dV_small)
 ax6.plot(V_sens, sensitivity, "g-", linewidth=2)
 ax6.set_xlabel("Sensor Voltage (mV)")
@@ -383,33 +444,33 @@ ax6.set_title("Calibration Sensitivity (dT/dV)")
 ax6.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("sensor_calibration.png", dpi=150)
-print("\n✅ Plot saved as 'sensor_calibration.png'")
 plt.tight_layout()
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "sensor_calibration"
 fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+print(f"\n✅ Plot saved as {fig_dir / 'fig_01.png'}")
 plt.close()
 
 
 print("\n" + "=" * 70)
 print("SUMMARY")
 print("=" * 70)
-print("Calibration complete using cubic polynomial model:")
-print(f"  T(°C) = {d0:.4f} + {d1:.6f}*V + {d2:.3e}*V² + {d3:.3e}*V³")
+print("Calibration complete using the Steinhart-Hart model:")
+print(f"  1/T(K) = {A_sh:.5e} + {B_sh:.5e}*ln(V) + {C_sh:.3e}*ln(V)³")
 print("\nCalibration quality:")
-print(f"  RMSE: {rmse_cubic:.3f} °C")
-print(f"  Max error: {np.max(np.abs(residuals_cubic)):.3f} °C")
-print(f"  Mean residual: {np.mean(residuals_cubic):.3f} °C")
-print(f"  Std residual: {np.std(residuals_cubic):.3f} °C")
+print(f"  RMSE: {rmse_sh:.3f} °C")
+print(f"  Max error: {np.max(np.abs(residuals_sh)):.3f} °C")
+print(f"  Mean residual: {np.mean(residuals_sh):.3f} °C")
+print(f"  Std residual: {np.std(residuals_sh):.3f} °C")
+print(f"  chi2/dof: {reduced_chi2(residuals_sh, 3):.2f}")
 print(f"\nValid range: {temp_reference.min():.0f} to {temp_reference.max():.0f} °C")
 print(
     f"                ({voltage_measured.min():.0f} to {voltage_measured.max():.0f} mV)"
 )
 print("\nThis example demonstrates:")
-print("  ✓ Non-linear sensor calibration with polynomial models")
-print("  ✓ Model comparison (linear, quadratic, cubic)")
+print("  ✓ Non-linear sensor calibration with a physical (Steinhart-Hart) model")
+print("  ✓ Model comparison (linear, quadratic, cubic, Steinhart-Hart)")
 print("  ✓ Residual analysis for calibration quality")
 print("  ✓ Uncertainty propagation to measurements")
 print("  ✓ Sensitivity analysis")

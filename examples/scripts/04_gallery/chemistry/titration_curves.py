@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+import jax
+
 # ======================================================================
 # # Acid-Base Titration Curve Analysis
 #
@@ -121,9 +123,30 @@ def simplified_titration(V, pKa, Ve):
     return pH
 
 
+_KW = 1e-14  # water ion product
+_C_ACID = 0.1  # analytical H2A concentration (M), fixed; titrant dilution neglected
+
+
+def _base_equivalents(pH, pKa1, pKa2):
+    """Base added per mole of acid at a given pH (charge balance).
+
+    [Na+] + [H+] = [HA-] + 2[A2-] + [OH-]  ->  x = n_bar(pH) + ([OH-] - [H+]) / C
+    with n_bar = (K1 h + 2 K1 K2) / (h^2 + K1 h + K1 K2), the mean number of protons removed.
+    x increases monotonically with pH, so pH(x) is well defined.
+    """
+    h = 10.0**-pH
+    K1, K2 = 10.0**-pKa1, 10.0**-pKa2
+    n_bar = (K1 * h + 2 * K1 * K2) / (h * h + K1 * h + K1 * K2)
+    return n_bar + (_KW / h - h) / _C_ACID
+
+
 def diprotic_titration(V, pKa1, pKa2, Ve1, Ve2):
     """
-    Diprotic acid titration model (e.g., H2CO3, H2SO3).
+    Diprotic acid titration model (e.g., H2CO3, H2SO3) from the charge balance.
+
+    Unlike a piecewise Henderson-Hasselbalch model, this reproduces the pH
+    inflection at each equivalence point (x = 1 at Ve1, x = 2 at Ve2) and the
+    strong-base plateau after Ve2.
 
     Parameters
     ----------
@@ -143,31 +166,25 @@ def diprotic_titration(V, pKa1, pKa2, Ve1, Ve2):
     pH : array_like
         pH at each titration point
     """
-    # Avoid division by zero
-    V_safe = jnp.maximum(V, 0.01)
+    V = jnp.asarray(V)
+    # Equivalents of base per acid: 1 at Ve1, 2 at Ve2 (piecewise linear in V)
+    x = jnp.where(Ve1 >= V, V / Ve1, 1.0 + (V - Ve1) / jnp.maximum(Ve2 - Ve1, 1e-3))
 
-    # Determine which region we're in
-    # Region 1: 0 < V < Ve1 (first proton)
-    # Region 2: Ve1 < V < Ve2 (second proton)
+    def bisect(_, lo_hi):
+        lo, hi = lo_hi
+        mid = 0.5 * (lo + hi)
+        below = _base_equivalents(mid, pKa1, pKa2) < x
+        return jnp.where(below, mid, lo), jnp.where(below, hi, mid)
 
-    # Simplified approach: use weighted combination
-    f1 = V_safe / jnp.maximum(Ve1, V_safe + 0.1)
-    f1 = jnp.clip(f1, 0.01, 0.99)
-
-    f2 = jnp.maximum(0, (V_safe - Ve1)) / jnp.maximum(Ve2 - Ve1, 0.1)
-    f2 = jnp.clip(f2, 0.01, 0.99)
-
-    # First equilibrium
-    pH1 = pKa1 + jnp.log10(jnp.maximum(f1 / (1 - f1), 1e-10))
-
-    # Second equilibrium
-    pH2 = pKa2 + jnp.log10(jnp.maximum(f2 / (1 - f2), 1e-10))
-
-    # Weighted combination based on which region dominates
-    weight = jnp.where(V_safe < Ve1, 1.0, 0.0)
-    pH = weight * pH1 + (1 - weight) * pH2
-
-    return pH
+    lo, hi = jax.lax.fori_loop(
+        0, 55, bisect, (jnp.zeros_like(x), jnp.full_like(x, 14.0))
+    )
+    pH0 = jax.lax.stop_gradient(0.5 * (lo + hi))
+    # One Newton step from the converged root carries the implicit-function gradient
+    dF = jax.lax.stop_gradient(
+        jax.vmap(jax.grad(_base_equivalents), (0, None, None))(pH0, pKa1, pKa2)
+    )
+    return pH0 - (_base_equivalents(pH0, pKa1, pKa2) - x) / dF
 
 
 def buffer_capacity(pH, pKa, C_total):
@@ -419,12 +436,14 @@ print(f"  χ²/dof = {chi_squared_di / dof_di:.3f}")
 dpH_dV_di = np.gradient(pH_di_measured, V_di[1] - V_di[0])
 
 # First inflection (around Ve1)
-mask_first = V_di < 35
+# Search +/-5 mL around each fitted equivalence point: the initial pH rise of a weak acid
+# is also steep, so a global argmax would pick the start of the curve
+mask_first = np.abs(V_di - Ve1_fitted) < 5
 idx_first = np.argmax(dpH_dV_di[mask_first])
 Ve1_inflection = V_di[mask_first][idx_first]
 
 # Second inflection (around Ve2)
-mask_second = V_di > 35
+mask_second = np.abs(V_di - Ve2_fitted) < 5
 dpH_dV_second = dpH_dV_di[mask_second]
 idx_second = np.argmax(dpH_dV_second)
 Ve2_inflection = V_di[mask_second][idx_second]
@@ -636,13 +655,12 @@ ax9.legend(fontsize=9)
 ax9.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("titration_curves_analysis.png", dpi=150, bbox_inches="tight")
-print("\n✓ Plot saved as 'titration_curves_analysis.png'")
 plt.tight_layout()
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "titration_curves"
 fig_dir.mkdir(parents=True, exist_ok=True)
 plt.savefig(fig_dir / "fig_01.png", dpi=300, bbox_inches="tight")
+print(f"\n✅ Plot saved as {fig_dir / 'fig_01.png'}")
 plt.close()
 
 
@@ -681,7 +699,7 @@ print(
 
 print("\n3. KEY INSIGHTS:")
 print("   ├─ Henderson-Hasselbalch equation accurately models buffer region")
-print("   ├─ Equivalence points identified from inflection points (max dpH/dV)")
+print("   ├─ Equivalence points located by max dpH/dV within +/-5 mL of the fitted Ve")
 print("   ├─ Buffer capacity maximized at pH = pKa")
 print("   ├─ Effective buffering occurs within pKa ± 1 pH unit")
 print("   └─ Diprotic acids show two distinct equivalence points")

@@ -47,8 +47,8 @@ Otherwise → Multi-Start
 # Run a single script
 python examples/scripts/07_global_optimization/01_multistart_basics.py
 
-# Run with quick mode (reduced iterations)
-NLSQ_EXAMPLES_QUICK=1 python examples/scripts/07_global_optimization/05_cmaes_basic.py
+# Run with quick mode (reduced iterations; honored by 02, 03 and 04 only)
+NLSQ_EXAMPLES_QUICK=1 python examples/scripts/07_global_optimization/04_multistart_integration.py
 ```
 
 ---

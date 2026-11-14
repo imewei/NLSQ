@@ -325,7 +325,10 @@ true_gaussian = 100 * np.exp(-((x_spec - 510) ** 2) / (2 * 3**2))
 y_spec = true_gaussian + np.random.normal(0, 5, len(x_spec))
 
 # Add 3 outliers
-y_spec[[5, 12, 22]] += np.array([40, -30, 50])  # Bad measurements
+outlier_idx = (
+    np.array([5, 12, 22]) * len(x_spec) // 30
+)  # same spots at any sample count
+y_spec[outlier_idx] += np.array([40, -30, 50])  # Bad measurements
 
 plt.figure(figsize=(10, 5))
 plt.plot(x_spec, y_spec, "o", ms=6)

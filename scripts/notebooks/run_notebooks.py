@@ -22,8 +22,9 @@ def _patch_localinterfaces() -> None:
 
 def _kernel_env() -> dict[str, str]:
     env = os.environ.copy()
-    scripts_dir = Path(__file__).parent
-    sitecustomize_dir = scripts_dir / "notebook_sitecustomize"
+    scripts_dir = Path(__file__).resolve().parent
+    # notebook_sitecustomize/ is a sibling of notebooks/, not a child of it
+    sitecustomize_dir = scripts_dir.parent / "notebook_sitecustomize"
     # Add both sitecustomize (for other potential future uses) and scripts_dir (for io_patch)
     env["PYTHONPATH"] = (
         f"{scripts_dir}{os.pathsep}{sitecustomize_dir}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(
@@ -45,8 +46,21 @@ def _kernel_env() -> dict[str, str]:
     return env
 
 
+def _relative_to_notebooks(notebook_path: Path) -> Path:
+    """Path below examples/notebooks; a notebook elsewhere keeps just its name."""
+    try:
+        return notebook_path.resolve().relative_to(Path("examples/notebooks").resolve())
+    except ValueError:
+        return Path(notebook_path.name)
+
+
+def _notebook_id(notebook_path: Path) -> str:
+    """Artifact-directory name: unique per notebook, unlike ``path.stem``."""
+    return "__".join(_relative_to_notebooks(notebook_path).with_suffix("").parts)
+
+
 def _get_output_path(notebook_path: Path) -> Path:
-    relative_path = notebook_path.relative_to("examples/notebooks")
+    relative_path = _relative_to_notebooks(notebook_path)
     output_dir = Path("examples/outputs/notebooks") / relative_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir / notebook_path.name
@@ -57,7 +71,7 @@ def _execute_notebook(notebook_path: Path, env: dict[str, str]) -> bool:
     output_path = _get_output_path(notebook_path)
 
     # Load notebook
-    with open(notebook_path) as f:
+    with open(notebook_path, encoding="utf-8") as f:
         nb = nbformat.read(f, as_version=4)
 
     # Inject patch cell
@@ -77,7 +91,7 @@ except Exception as e:
     # Set current notebook name for patcher
     # We must copy env to avoid polluting the global env for other notebooks
     run_env = env.copy()
-    run_env["NLSQ_CURRENT_SCRIPT"] = notebook_path.stem
+    run_env["NLSQ_CURRENT_SCRIPT"] = _notebook_id(notebook_path)
 
     client = NotebookClient(
         nb,
@@ -95,7 +109,7 @@ except Exception as e:
         success = False
     finally:
         # Save the executed notebook
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             nbformat.write(nb, f)
             print(f"Saved executed notebook to {output_path}")
 

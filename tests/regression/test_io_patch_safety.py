@@ -138,3 +138,40 @@ class TestPatchSavefigContainment:
 
     def test_empty_script_name_falls_back(self, savefig_spy, monkeypatch):
         self._run(savefig_spy, monkeypatch, "", "fig.png")
+
+
+class TestFileLikeTargets:
+    """savefig(<buffer>) has no path to redirect and must pass through."""
+
+    def test_figure_savefig_to_buffer(self, savefig_spy, monkeypatch):
+        import io
+
+        import io_patch
+        from matplotlib.figure import Figure
+
+        _, tmp_path = savefig_spy
+        monkeypatch.setenv("NLSQ_CURRENT_SCRIPT", "myscript")
+        io_patch.patch_savefig()
+
+        buf = io.BytesIO()
+        Figure().savefig(buf, format="png")
+        assert buf.getvalue().startswith(b"\x89PNG")
+        assert list(tmp_path.iterdir()) == []  # nothing redirected to disk
+
+    def test_pyplot_savefig_to_buffer(self, savefig_spy, monkeypatch):
+        import io
+
+        import io_patch
+        import matplotlib.pyplot as plt
+
+        _, tmp_path = savefig_spy
+        seen: list = []
+        # replace the fixture's path-only spy so a buffer can be recorded as-is
+        monkeypatch.setattr(plt, "savefig", lambda f, *a, **k: seen.append(f))
+        monkeypatch.setenv("NLSQ_CURRENT_SCRIPT", "myscript")
+        io_patch.patch_savefig()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png")
+        assert seen == [buf]  # the buffer itself, not a redirected path
+        assert list(tmp_path.iterdir()) == []

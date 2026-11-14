@@ -58,16 +58,21 @@ def build_pipeline(transformations: list[str]) -> TransformationPipeline:
     Returns:
         TransformationPipeline with requested transformers
     """
+    # Fixed order, whatever order was requested: plt-show introduces display(),
+    # so the import transformer must run after it or the pipeline is not
+    # idempotent (the import would only appear on a second run).
     available_transformers = {
         "matplotlib": MatplotlibInlineTransformer(),
-        "imports": IPythonDisplayImportTransformer(),
         "plt-show": PltShowReplacementTransformer(),
+        "imports": IPythonDisplayImportTransformer(),
     }
 
     if "all" in transformations:
         transformers = list(available_transformers.values())
     else:
-        transformers = [available_transformers[name] for name in transformations]
+        transformers = [
+            t for name, t in available_transformers.items() if name in transformations
+        ]
 
     return TransformationPipeline(transformers)
 
@@ -102,9 +107,13 @@ def process_single_notebook(
 @click.command()
 @click.option(
     "--dir",
-    default="examples/notebooks",
+    default=None,
     type=click.Path(exists=True, path_type=Path),
-    help="Directory containing notebooks to process",
+    help=(
+        "Directory containing notebooks to process "
+        "(default: <repo>/examples/notebooks; a relative path is taken from the "
+        "current directory)"
+    ),
 )
 @click.option(
     "--transform",
@@ -155,7 +164,7 @@ def process_single_notebook(
     help="Only process notebooks that have changed (uses checksum tracking)",
 )
 def main(
-    dir: Path,
+    dir: Path | None,
     transforms: tuple[str],
     dry_run: bool,
     backup: bool,
@@ -180,10 +189,10 @@ def main(
         logging.getLogger().setLevel(logging.DEBUG)
         logging.getLogger("notebook_utils").setLevel(logging.DEBUG)
 
-    # Resolve directory
-    if not dir.is_absolute():
-        repo_root = Path(__file__).parent.parent
-        dir = repo_root / dir
+    # Resolve directory: the default is anchored at the repo root, an explicit
+    # relative --dir stays relative to the cwd (click already checked it exists).
+    if dir is None:
+        dir = Path(__file__).resolve().parents[2] / "examples" / "notebooks"
 
     if not dir.exists():
         click.echo(f"❌ Directory not found: {dir}", err=True)

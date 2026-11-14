@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 
 import matplotlib
@@ -55,11 +54,15 @@ def patch_savefig():
         return final_path
 
     def _patched_fig_savefig(self, fname, *args, **kwargs):
+        if not isinstance(fname, (str, os.PathLike)):  # file-like object: no path
+            return _orig_fig_savefig(self, fname, *args, **kwargs)
         target_path = _resolve_target(fname)
         print(f"Redirecting figure {fname} to {target_path}")
         return _orig_fig_savefig(self, target_path, *args, **kwargs)
 
     def _patched_plt_savefig(fname, *args, **kwargs):
+        if not isinstance(fname, (str, os.PathLike)):  # file-like object: no path
+            return _orig_plt_savefig(fname, *args, **kwargs)
         target_path = _resolve_target(fname)
         print(f"Redirecting figure {fname} to {target_path}")
         return _orig_plt_savefig(target_path, *args, **kwargs)

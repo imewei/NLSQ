@@ -3,7 +3,9 @@
 import contextlib
 import json
 import logging
+import os
 import shutil
+import stat
 import tempfile
 from pathlib import Path
 
@@ -143,8 +145,18 @@ def write_notebook(path: Path, notebook: dict, backup: bool = False) -> bool:
             backup_path = path.with_suffix(".ipynb.bak")
             shutil.copy2(str(path), str(backup_path))
 
+        # mkstemp creates 0600; keep the original file's mode (or the umask
+        # default for a new file) so a rewrite does not lock out other readers.
+        if path.exists():
+            mode = stat.S_IMODE(path.stat().st_mode)
+        else:
+            umask = os.umask(0)
+            os.umask(umask)
+            mode = 0o666 & ~umask
+        os.chmod(temp_path, mode)
+
         # Atomic move
-        shutil.move(str(temp_path), str(path))
+        os.replace(temp_path, path)
         temp_path = None  # Prevent cleanup of successfully moved file
 
         return True

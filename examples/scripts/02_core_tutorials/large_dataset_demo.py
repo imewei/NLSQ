@@ -20,7 +20,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # - **Removed**: Subsampling (which caused data loss)
 # - **Added**: Streaming optimization (processes 100% of data)
 #
-# All large datasets now use streaming optimization for 100% data utilization.
+# Large datasets are fit on 100% of the data, either by chunk-accumulated exact streaming (`curve_fit_large`) or by chunked fitting (`LargeDatasetFitter`).
 #
 # ---
 #
@@ -55,7 +55,6 @@ from nlsq import (
     CurveFit,
     LargeDatasetConfig,
     LargeDatasetFitter,
-    LDMemoryConfig,
     # New advanced features
     MemoryConfig,
     __version__,
@@ -140,7 +139,7 @@ def demo_memory_estimation():
 
         # For very large datasets, suggest streaming
         if n_points > 50_000_000:
-            print("  💡 Consider: Streaming optimization for zero accuracy loss")
+            print("  💡 Consider: curve_fit_large (exact full-data streaming)")
 
 
 demo_memory_estimation()
@@ -199,9 +198,7 @@ def demo_advanced_configuration():
 
             print(f"  Recommended algorithm: {recommendations['algorithm']}")
             print(f"  Recommended tolerance: {recommendations['ftol']}")
-            print(
-                f"  Problem complexity: {recommendations.get('complexity', 'Unknown')}"
-            )
+            print(f"  Recommended loss: {recommendations['loss']}")
 
             # Estimate memory for full dataset
             large_n = 1_000_000  # 1M points
@@ -317,6 +314,11 @@ def demo_context_managers():
         memory_limit_gb=0.5,  # Very low limit
     )
 
+    # Warm-up fit so JIT compilation is not attributed to the first test below
+    fit_large_dataset(
+        exponential_decay, x_data, y_data, p0=[3.5, 1.3, 0.25], show_progress=False
+    )
+
     with memory_context(constrained_config):
         temp_config = get_memory_config()
         print(f"Inside context memory limit: {format_limit(temp_config)}")
@@ -342,7 +344,7 @@ def demo_context_managers():
     ld_config = LargeDatasetConfig()
 
     with large_dataset_context(ld_config):
-        print("Inside large dataset context - chunking optimized")
+        print("Inside large dataset context")
 
         start_time = time.time()
         result2 = fit_large_dataset(
@@ -394,6 +396,12 @@ def demo_context_managers():
     # Compare all approaches
     if result1.success and result2.success:
         print("\n=== Performance Comparison ===")
+        print(
+            "All three fits are the same single-chunk fit (500K points fit in "
+            "memory even at 0.5 GB),\nso the memory settings change nothing here;\n"
+            "time differences are run-to-run noise (the algorithm-optimized fit also "
+            "uses a fresh CurveFit instance)."
+        )
         print(f"Constrained memory: {time1:.3f}s")
         print(f"Chunking optimized: {time2:.3f}s")
         print(f"Algorithm optimized: {time3:.3f}s")
@@ -409,7 +417,9 @@ def demo_context_managers():
         print(f"Chunking:    {errors2}")
         print(f"Algorithm:   {errors3}")
 
-    print("\n✓ Context managers allow flexible, temporary configuration changes!")
+    print(
+        "\n✓ Context managers apply temporary configuration changes (restored on exit)"
+    )
 
 
 # Run the demo
@@ -494,68 +504,67 @@ demo_chunked_processing()
 # ======================================================================
 # ## 4. Streaming Optimization for Unlimited Datasets
 #
-# For datasets too large to fit in memory, NLSQ uses streaming optimization with mini-batch gradient descent. **Unlike subsampling (deprecated), streaming processes 100% of data with zero accuracy loss.**
+# For datasets too large to fit in memory, `curve_fit_large` runs an exact chunk-accumulated Levenberg-Marquardt fit: every pass visits 100% of the data, so the result matches the full-batch fit (no subsampling).
 #
 # ======================================================================
 
 
 def demo_streaming_optimization():
-    """Demonstrate streaming optimization for unlimited datasets."""
+    """Demonstrate exact full-data streaming through curve_fit_large."""
     print("\n" + "=" * 60)
     print("STREAMING OPTIMIZATION DEMO")
     print("=" * 60)
 
-    # Simulate a very large dataset scenario
-    print("Simulating extremely large dataset (100M points)...")
-    print("Using streaming optimization for zero data loss\n")
-
     n_points_full = 100_000_000  # 100M points
     true_params = [3.0, 0.8, 0.2]
 
-    # For demo purposes, generate a representative dataset
-    # In production, streaming would process full dataset in batches
-    print("Generating representative dataset for demo...")
+    # Memory estimation for the full-size problem (nothing is allocated)
+    stats = estimate_memory_requirements(n_points_full, len(true_params))
+    print(
+        f"100M-point problem memory estimate: {stats.total_memory_estimate_gb:.1f} GB"
+    )
+    print(f"Chunks needed at the default memory limit: {stats.n_chunks}")
+
+    # 1M points stand in for the full-size problem
+    print("\nGenerating a 1M point stand-in dataset...")
     np.random.seed(777)
-    n_demo = 1_000_000  # 1M points for demo
+    n_demo = 1_000_000
     x_data = np.linspace(0, 10, n_demo)
     y_data = exponential_decay(x_data, *true_params) + np.random.normal(0, 0.1, n_demo)
 
-    # Memory estimation
-    stats = estimate_memory_requirements(n_points_full, len(true_params))
-    print(f"\nFull dataset memory estimate: {stats.total_memory_estimate_gb:.1f} GB")
-    print(f"Number of chunks required: {stats.n_chunks}")
-
-    # Configure streaming optimization
-    print("\nConfiguring streaming optimization...")
-    config = LDMemoryConfig(
-        memory_limit_gb=4.0,
-        use_streaming=True,  # Enable streaming
-        streaming_batch_size=50000,  # Process 50K points per batch
+    # curve_fit_large takes the exact full-data streaming path (every point is
+    # visited on every pass; chunks only bound memory) once the dataset has at
+    # least `size_threshold` points. Lower it so this 1M-point demo takes that
+    # path; by default it starts at 1M points.
+    print(
+        "\nFitting with curve_fit_large (size_threshold=100_000 -> exact streaming)..."
     )
+    # Warm-up fit so the timing below excludes JIT compilation
+    curve_fit_large(
+        exponential_decay,
+        x_data[:200_000],
+        y_data[:200_000],
+        p0=[2.5, 0.6, 0.15],
+        size_threshold=100_000,
+    )
+    start_time = time.time()
+    popt, pcov = curve_fit_large(
+        exponential_decay,
+        x_data,
+        y_data,
+        p0=[2.5, 0.6, 0.15],
+        size_threshold=100_000,
+    )
+    fit_time = time.time() - start_time
 
-    fitter = LargeDatasetFitter(config=config)
-
-    print("\nFitting with streaming optimization...")
-    print("(Processing 100% of data in batches)\n")
-
-    try:
-        start_time = time.time()
-        result = fitter.fit(exponential_decay, x_data, y_data, p0=[2.5, 0.6, 0.15])
-        fit_time = time.time() - start_time
-
-        if result.success:
-            print(f"\n✅ Streaming fit completed in {fit_time:.2f} seconds")
-            print(f"\nFitted parameters: {result.x}")
-            print(f"True parameters:    {true_params}")
-            errors = np.abs(result.x - np.array(true_params))
-            rel_errors = errors / np.abs(np.array(true_params)) * 100
-            print(f"Relative errors:    {[f'{e:.2f}%' for e in rel_errors]}")
-            print("\nℹ️ Streaming processed 100% of data (zero accuracy loss)")
-        else:
-            print(f"❌ Streaming fit failed: {result.message}")
-
-    except Exception as e:
-        print(f"❌ Error during streaming fit: {e}")
+    errors = np.abs(popt - np.array(true_params))
+    rel_errors = errors / np.abs(np.array(true_params)) * 100
+    print(f"\n✅ Exact streaming fit of {n_demo:,} points in {fit_time:.2f} seconds")
+    print(f"Fitted parameters: {popt}")
+    print(f"True parameters:   {true_params}")
+    print(f"Relative errors:   {[f'{e:.2f}%' for e in rel_errors]}")
+    print(f"Standard errors:   {np.sqrt(np.diag(pcov))}")
+    print("\nℹ️ All data points are used on every pass (full-batch equivalent)")
 
 
 demo_streaming_optimization()
@@ -598,9 +607,10 @@ def demo_curve_fit_large():
         x_data,
         y_data,
         p0=[4.5, 4.8, 1.3, 0.4],
-        memory_limit_gb=1.0,  # Force chunking with low memory limit
+        memory_limit_gb=1.0,
         show_progress=True,
-        auto_size_detection=True,  # Automatically detect large dataset
+        # 3M points >= size_threshold (1M): exact full-data streaming fit
+        auto_size_detection=True,
     )
 
     fit_time = time.time() - start_time
@@ -638,6 +648,7 @@ def compare_approaches():
     # Test different dataset sizes
     sizes = [10_000, 100_000, 500_000]
 
+    print("(times exclude JIT compilation; 0.5 GB limit)")
     print(f"\n{'Size':>10} {'Time (s)':>12} {'Memory (GB)':>12} {'Strategy':>20}")
     print("-" * 55)
 
@@ -652,10 +663,19 @@ def compare_approaches():
 
         # Determine strategy
         if stats.n_chunks == 1:
-            # Streaming handles all large datasets
-            strategy = "Streaming"
+            strategy = "Single pass"
         else:
             strategy = f"Chunked ({stats.n_chunks} chunks)"
+
+        # Warm-up fit (same shape) so the timing excludes JIT compilation
+        fit_large_dataset(
+            exponential_decay,
+            x,
+            y,
+            p0=[2.5, 0.6, 0.2],
+            memory_limit_gb=0.5,
+            show_progress=False,
+        )
 
         # Time the fit
         start = time.time()
@@ -664,7 +684,7 @@ def compare_approaches():
             x,
             y,
             p0=[2.5, 0.6, 0.2],
-            memory_limit_gb=0.5,  # Small limit to test chunking
+            memory_limit_gb=0.5,
             show_progress=False,
         )
         elapsed = time.time() - start
@@ -687,7 +707,7 @@ compare_approaches()
 # 2. **Improved Chunking Algorithm**: Advanced exponential moving average approach achieves <1% error for well-conditioned problems
 # 3. **JAX Tracing Compatibility**: Supports functions with up to 15+ parameters without TracerArrayConversionError
 # 4. **curve_fit_large Function**: Automatic dataset size detection and intelligent processing strategy selection
-# 5. **Streaming Optimization **: For unlimited dataset sizes, streaming optimization processes 100% of data with zero accuracy loss
+# 5. **Exact streaming**: `curve_fit_large` at or above `size_threshold` processes 100% of the data per pass and matches the full-batch fit
 # 6. **Progress Reporting**: Long-running fits provide progress updates
 # 7. **Memory Estimation**: Predict memory requirements before fitting
 #
@@ -697,7 +717,7 @@ compare_approaches()
 # - Use `estimate_memory_requirements()` to understand dataset requirements
 # - Use `fit_large_dataset()` when you need explicit control over large dataset processing
 # - Set appropriate `memory_limit_gb` based on your system
-# - Enable streaming for very large datasets that exceed memory limits
+# - Rely on `curve_fit_large`'s exact streaming path for datasets that exceed memory
 # - Use progress reporting for long-running fits
 #
 # ### Recent Improvements (v810dc5c):
@@ -717,7 +737,6 @@ print("\nKey takeaways:")
 print("• NLSQ automatically handles memory management for large datasets")
 print("• Chunked processing works for datasets that don't fit in memory")
 print("• curve_fit_large provides automatic dataset size detection")
-print("• Improved chunking algorithm achieves <1% error for well-conditioned problems")
-print("• Streaming optimization handles unlimited datasets with zero accuracy loss ")
+print("• curve_fit_large's exact streaming path uses 100% of the data")
 print("• Progress reporting helps track long-running fits")
 print("• Memory estimation helps plan processing strategies")

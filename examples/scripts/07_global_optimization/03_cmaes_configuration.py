@@ -11,7 +11,8 @@ Features demonstrated:
 - CMA-ES vs Multi-Start selection criteria
 
 Prerequisites:
-    pip install "nlsq[global]"  # Installs evosax dependency
+    evosax ships with nlsq (core dependency); no extra is required.
+    If it is missing, reinstall nlsq: pip install --force-reinstall nlsq
 
 Run this example:
     python examples/scripts/07_global_optimization/03_cmaes_configuration.py
@@ -57,7 +58,9 @@ def main():
     print(f"  evosax installed: {evosax_available}")
 
     if not evosax_available:
-        print("  Note: Install evosax with: pip install 'nlsq[global]'")
+        print(
+            "  Note: Install evosax with: pip install 'evosax>=0.2.0' (core nlsq dependency)"
+        )
         print("  CMA-ES will fall back to Multi-Start without evosax.")
     print()
 
