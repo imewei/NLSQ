@@ -170,7 +170,8 @@ points and below, plain ``curve_fit`` is faster than ``exact_streaming`` for the
 problems (``exp_decay`` at 1M: 53 ms vs 451 ms; not for ``bounded_exp``), and
 ``exact_streaming`` has a fixed cost of about 60-140 ms at 1K. The first fit also pays JIT
 compilation. The full comparison against SciPy, lmfit, JAXopt and Optimistix is in
-``benchmarks/baselines/2026-11-01-library-comparison-1k-1M-10M-100M.md``.
+``benchmarks/baselines/2026-11-13-library-comparison-1k-100M.md`` (the figures above are from
+the earlier 2026-11-01 run, kept in git history).
 
 GPU Acceleration
 ----------------

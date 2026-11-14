@@ -7,16 +7,16 @@ across different optimization phases.
 
 Usage:
     # Run all benchmarks
-    pytest benchmarks/test_performance_regression.py --benchmark-only
+    pytest benchmarks/ci/ --benchmark-enable --benchmark-only
 
     # Save baseline
-    pytest benchmarks/test_performance_regression.py --benchmark-save=baseline
+    pytest benchmarks/ci/ --benchmark-enable --benchmark-save=baseline
 
     # Compare against baseline
-    pytest benchmarks/test_performance_regression.py --benchmark-compare=baseline
+    pytest benchmarks/ci/ --benchmark-enable --benchmark-compare=baseline
 
     # Generate JSON report for CI
-    pytest benchmarks/test_performance_regression.py --benchmark-json=report.json
+    pytest benchmarks/ci/ --benchmark-enable --benchmark-json=report.json
 
 CI/CD Regression Gates:
     - Cold JIT: >10% slowdown → FAIL
@@ -45,16 +45,21 @@ BASELINE_FILE = Path(__file__).parent.parent / "baselines" / "linux-py312-beta1.
 
 
 def load_baseline():
-    """Load v0.3.0-beta.1 baseline for regression testing"""
+    """Load the regression baseline; an empty dict means "no gates, just run".
+
+    ``pytest.skip`` outside a test fails collection of the whole module, so a
+    missing or unreadable file degrades to no baseline with a warning instead.
+    """
     if not BASELINE_FILE.exists():
-        pytest.skip(f"Baseline file not found: {BASELINE_FILE}")
+        warnings.warn(f"Baseline file not found: {BASELINE_FILE}", stacklevel=2)
+        return {}
 
     try:
         with open(BASELINE_FILE) as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        pytest.skip(f"Failed to load baseline: {e}")
-    return None
+        warnings.warn(f"Failed to load baseline: {e}", stacklevel=2)
+        return {}
 
 
 BASELINE = load_baseline()
@@ -78,13 +83,17 @@ def check_performance_regression(metric_name, current_value, metric_type="cold_j
         threshold_pct = config.get("cold_jit_slowdown_threshold_percent", 10)
         action = config.get("cold_jit_slowdown_action", "FAIL")
         baseline_val = (
-            BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_cold_jit_ms")
+            BASELINE.get("benchmarks", {})
+            .get(metric_name, {})
+            .get("nlsq_trf_cold_jit_ms")
         )
     elif metric_type == "hot_path":
         threshold_pct = config.get("hot_path_slowdown_threshold_percent", 5)
         action = config.get("hot_path_slowdown_action", "FAIL")
         baseline_val = (
-            BASELINE["benchmarks"].get(metric_name, {}).get("nlsq_trf_hot_path_ms")
+            BASELINE.get("benchmarks", {})
+            .get(metric_name, {})
+            .get("nlsq_trf_hot_path_ms")
         )
     elif metric_type == "memory":
         threshold_pct = config.get("memory_regression_threshold_percent", 10)
@@ -245,7 +254,7 @@ def test_regression_cold_jit_exponential_100(benchmark, small_linear_data):
     p0 = [2.0, 0.5, 0.3]
 
     # Measure time including JIT compilation
-    timer = benchmark.pedantic(
+    benchmark.pedantic(
         curve_fit,
         args=(exponential, x, y),
         kwargs={"p0": p0},
@@ -253,10 +262,8 @@ def test_regression_cold_jit_exponential_100(benchmark, small_linear_data):
         rounds=3,
     )
 
-    # Extract measured time (ms)
-    current_time_ms = (
-        timer[1] * 1000 if isinstance(timer, tuple) else benchmark.stats.mean * 1000
-    )
+    # Measured mean time (ms); pedantic() returns the fit result, not a timing
+    current_time_ms = benchmark.stats.stats.mean * 1000
 
     # Check against baseline
     passed, message = check_performance_regression(
