@@ -15,6 +15,7 @@ Serial execution prevents resource contention with pytest-xdist.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -84,6 +85,14 @@ def test_example_script_runs(
     script_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     """Execute a script and verify it completes without errors."""
+    # optimistix lives in the bench dependency group, not in the core install.
+    if (
+        "import optimistix" in script_path.read_text(encoding="utf-8")
+        and importlib.util.find_spec("optimistix") is None
+    ):
+        if os.environ.get("CI"):
+            pytest.fail(f"{script_path.name} needs optimistix (uv sync --group bench)")
+        pytest.skip("needs optimistix (uv sync --group bench)")
     env = os.environ.copy()
     env["NLSQ_EXAMPLES_QUICK"] = "1"
     env["MPLBACKEND"] = "Agg"

@@ -206,7 +206,7 @@ Your complete navigation guide:
    - Ragged datasets via zero-weighted padding
    - **Time**: 15-20 min | **Level**: ●●● Advanced
 
-6. **Batch Fitting With Optimistix** (`batch_fitting_optimistix.py`, script only)
+6. **Batch Fitting With Optimistix** (`batch_fitting_optimistix.py`, script only; needs `pip install optimistix` or `uv sync --group bench`)
    - Optimistix `LevenbergMarquardt` vs a hand-written vmapped solver
    - Optimistix wins on speed (87 vs 755-2252 us/dataset on CPU) and on robustness
    - Why a failed float64 fit is finite, not NaN, and how to detect it

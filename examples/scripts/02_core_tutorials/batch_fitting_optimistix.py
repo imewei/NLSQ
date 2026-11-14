@@ -25,6 +25,9 @@ maximum (29) is well under a fixed budget chosen conservatively.
 
 Section 3 covers the precision trap that makes all of this easy to get wrong.
 
+Requires optimistix, which is not installed with nlsq: `uv sync --group bench`
+or `pip install optimistix`.
+
 Run this example:
     python examples/scripts/02_core_tutorials/batch_fitting_optimistix.py
 """

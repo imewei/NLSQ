@@ -299,7 +299,7 @@ def _print_gpu_warning(
         print("  3. Run: make install-jax-gpu")
     else:
         pkg = f"jax[cuda{cuda_major}-local]"
-        print("Enable 20-100x speedup:")
+        print("Enable GPU acceleration:")
         print("  make install-jax-gpu")
         print()
         print("Or manually:")

@@ -2917,7 +2917,6 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "optax" },
-    { name = "optimistix" },
     { name = "psutil" },
     { name = "pyyaml" },
     { name = "scipy" },
@@ -2943,6 +2942,7 @@ gui = [
 bench = [
     { name = "jaxopt" },
     { name = "lmfit" },
+    { name = "optimistix" },
 ]
 dev = [
     { name = "asv" },
@@ -2996,7 +2996,6 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "numpy", specifier = ">=2.2" },
     { name = "optax", specifier = ">=0.2.6" },
-    { name = "optimistix", specifier = ">=0.1.0" },
     { name = "psutil", specifier = ">=7.2.0" },
     { name = "pyqtgraph", marker = "extra == 'gui'", specifier = ">=0.14.0" },
     { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.10.0" },
@@ -3011,6 +3010,7 @@ provides-extras = ["gui", "gpu-cuda13", "gpu-cuda12"]
 bench = [
     { name = "jaxopt", specifier = ">=0.8.5" },
     { name = "lmfit", specifier = ">=1.3.4" },
+    { name = "optimistix", specifier = ">=0.1.0" },
 ]
 dev = [
     { name = "asv", specifier = ">=0.6.5" },
