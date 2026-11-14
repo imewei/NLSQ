@@ -315,12 +315,12 @@ Source Files
 
 The implementation spans two files:
 
-**nlsq/hybrid_streaming_config.py**
+**nlsq/streaming/hybrid_config.py**
     - Configuration dataclass with three new fields
     - Validation for ``group_variance_lambda > 0``
     - Validation for valid ``(start, end)`` tuples
 
-**nlsq/adaptive_hybrid_streaming.py**
+**nlsq/streaming/adaptive_hybrid.py**
     - ``_create_warmup_loss_fn()`` (line ~817): Adds variance penalty to loss
     - ``_gauss_newton_iteration()`` (line ~1690): Adds gradient and Hessian terms
 

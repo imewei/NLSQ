@@ -265,18 +265,60 @@ See [Architecture Documentation](https://nlsq.readthedocs.io/en/latest/developer
 
 ## Performance
 
-NLSQ shows increasing speedups as dataset size grows:
+Every comparison below is made on one device: CPU results against CPU results, GPU results against GPU results.
+SciPy and lmfit have no GPU path, so they appear only in the CPU table. Times are warm medians of end-to-end fits
+of a 3-parameter exponential decay (`a*exp(-b*x) + c`), measured once on an Intel i9-13900H and an
+NVIDIA RTX 4090 Laptop GPU, with all libraries at a tolerance of 1e-8. SciPy ran `method="trf"` (its faster default `lm` is covered below) and lmfit ran MINPACK `leastsq`; stopping rules differ between libraries. **Bold** marks the fastest entry in a row.
+`curve_fit_large` runs exact full-data streaming at and above 1M points; `—` means not run at that size.
 
-| Dataset Size | SciPy (CPU) | NLSQ (GPU) | Speedup |
-|--------------|-------------|------------|---------|
-| 10K points | 15ms | 2ms | 7x |
-| 100K points | 150ms | 3ms | 50x |
-| 1M points | 1.5s | 8ms | 190x |
-| 10M points | 15s | 55ms | 270x |
+### CPU
 
-> **Note**: First call includes JIT compilation (~500ms). Subsequent calls reuse compiled kernels.
+| Points | SciPy (`trf`) | lmfit | NLSQ `curve_fit` | NLSQ `curve_fit_large` | JAXopt | Optimistix |
+|---|---|---|---|---|---|---|
+| 1,000 | 1.1 ms | 4.6 ms | 4.0 ms | — | **0.4 ms** | 0.5 ms |
+| 10,000 | 3.9 ms | 3.8 ms | 11.8 ms | — | **1.4 ms** | 3.8 ms |
+| 100,000 | 111.2 ms | 24.5 ms | 44.4 ms | — | **8.6 ms** | 19.3 ms |
+| 1,000,000 | 1.14 s | 464.0 ms | 362.3 ms | 90.8 ms | **82.8 ms** | 159.7 ms |
+| 10,000,000 | 5.26 s | 4.45 s | — | 977.2 ms | **945.4 ms** | 2.25 s |
+| 100,000,000 | 65.94 s | 53.46 s | — | **6.08 s** | 7.70 s | 12.91 s |
 
-See [Performance Guide](https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html) for benchmarks.
+### GPU
+
+| Points | NLSQ `curve_fit` | NLSQ `curve_fit_large` | JAXopt | Optimistix |
+|---|---|---|---|---|
+| 1,000 | 24.8 ms | — | **2.0 ms** | 3.0 ms |
+| 10,000 | 30.9 ms | — | 5.0 ms | **3.9 ms** |
+| 100,000 | 48.0 ms | — | **4.1 ms** | 11.1 ms |
+| 1,000,000 | 140.5 ms | 18.5 ms | **11.6 ms** | 62.6 ms |
+| 10,000,000 | — | 78.1 ms | **77.3 ms** | 657.0 ms |
+| 100,000,000 | — | **618.1 ms** | 801.0 ms | fails |
+
+### What the numbers show
+
+- **CPU, versus SciPy and lmfit:** SciPy (`method="trf"`) was faster than NLSQ up to 10K points. NLSQ was 2.5x faster at 100K points
+  and 5-13x faster from 1M to 100M points on this model. Across four models the range from 1M points up is
+  2.4-12.6x versus SciPy and 1.4-10.8x versus lmfit.
+- **SciPy's default method:** the table above uses SciPy `trf`. In a separate spot check on this model, SciPy's
+  default `lm` was faster than NLSQ `curve_fit` from 1K to 1M points (3.0x at 100K, 1.8x at 1M) and slower than
+  `curve_fit_large` at 1M points (2.3x) and 10M points (4.2x); see
+  [`benchmarks/baselines/2026-11-14-scipy-lm-spot-check.md`](benchmarks/baselines/2026-11-14-scipy-lm-spot-check.md).
+- **JAXopt and Optimistix:** both were faster than NLSQ on small problems, on CPU and GPU. JAXopt stayed
+  faster or level through 10M points on this model. NLSQ was faster at 100M points (1.3-1.9x on GPU, across
+  three models). NLSQ was 1.8-14.7x faster than Optimistix from 1M points, and Optimistix fails on GPU at 100M points.
+- **NLSQ on its own CPU versus its own GPU:** the GPU was slower below 100K points and 4.9-20.7x faster from
+  1M points (across four models, `curve_fit_large`).
+- **Not like for like:** JAXopt and Optimistix return no covariance matrix and do not support bounds; NLSQ
+  supports bounds and returns a covariance matrix. NLSQ's case is the SciPy-compatible interface, bounds, and fits to datasets that do not fit in memory,
+  not the fastest time on small problems.
+
+> **Caveats.** One run on a laptop whose load average was 10-30 during the run; treat differences under about
+> 25% as ties and compare entries within one table only. First-call compilation is not included (the persistent
+> JAX cache at `~/.cache/nlsq/jax_cache` reduces it on later runs). The full tables for four models,
+> methodology, limitations and reproduction commands are in
+> [Performance Benchmarks](https://nlsq.readthedocs.io/en/latest/api/performance_benchmarks.html) and in
+> [`benchmarks/baselines/2026-11-13-library-comparison-1k-100M.md`](benchmarks/baselines/2026-11-13-library-comparison-1k-100M.md).
+
+See the [Performance Optimization guide](https://nlsq.readthedocs.io/en/latest/howto/optimize_performance.html) for tuning advice.
 
 ## Large Dataset Example
 

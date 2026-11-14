@@ -1,6 +1,29 @@
 # Documentation Changelog
 
 ## Unreleased
+- Architecture documentation refreshed (`/dev-suite:docs update ... --full`), checked against the code.
+  - `developer/architecture.rst`: package tree and layer diagram regenerated (equal-width rows); large-data
+    story now starts from the routing (`curve_fit_large` spec, `Auto` at `size_threshold`, exact default,
+    chunked fallback with a warning, `ValueError` for data reasons, `fit(workflow=...)` via
+    `MemoryBudgetSelector`) with the hybrid 4-phase optimizer described as one opt-in engine; the two
+    standard-optimization flows merged (`prepare_problem` includes `InputValidator`; the TRF loop is a
+    Python loop over JIT kernels); `TrustRegionOptimizerBase` removed from the class hierarchy
+    (`LeastSquares` accepts `trf` and `lm`, an alias); the fallback chain is Cholesky then eigendecomposition
+    only (diagonal regularization belongs to the stability guard); the global-optimization "by dataset size"
+    text replaced (selection is memory-based); `HealthReport` and `BoundInference` renamed
+    `ModelHealthReport` and `BoundsInference`; CLI data formats (ASCII/CSV/NPZ/HDF5), exports (JSON/CSV) and
+    the `gui` subcommand corrected; GUI documented as the optional `nlsq[gui]` extra with `param_config.py`;
+    previously unnamed modules added; two environment variables added.
+  - Line counts: ~78,000 became ~83,400; per-package totals are recursive and rounded to the nearest
+    hundred, and the ~25 per-file counts were dropped because they drift.
+  - `README.md` architecture diagram regenerated (equal-width rows, ~83,400 lines, routing, optional GUI).
+  - `tutorials/advanced/architecture/index.rst` and `overview.rst`: module hierarchy, "Protocol-Based DI"
+    claim (only five `Protocol` classes exist), dependency graph.
+  - `developer/gui_development_guide.md`, `api/nlsq.gui_qt.rst`: removed the non-existent `export_adapter` and
+    `base_plot`; `explanation/regularization.rst`: source paths under `nlsq/streaming/`.
+  - Not changed: `CLAUDE.md` is gitignored (it still says JAX tested on 0.9.1 and that the GUI ships in the
+    main dependencies); `nlsq/global_optimization/__init__.py` docstring still carries the size-based
+    integration text; `optimistix` is declared in `pyproject.toml` but not imported under `nlsq/`.
 - Performance and benchmark documentation rewritten (`/dev-suite:docs update --readme`, then the Sphinx pages).
   An earlier pass in this cycle compared NLSQ on GPU with SciPy on CPU; the earlier README table, the
   150-270x claim and the V100-era tables had no recorded source. Every comparison is now within one device
