@@ -1,8 +1,8 @@
 GPU Architecture and Acceleration
 ==================================
 
-This guide explains how NLSQ leverages GPU hardware for massive speedups
-and when GPU acceleration is most beneficial.
+This guide explains how NLSQ uses GPU hardware and when GPU acceleration helps. Measured timings are in
+:doc:`/api/performance_benchmarks`; the GPU is faster than the CPU for large problems and slower for small ones.
 
 Why GPUs for Curve Fitting?
 ---------------------------
@@ -31,73 +31,50 @@ Curve fitting benefits because:
 2. **Matrix operations**: Jacobian computation, SVD
 3. **Batch processing**: Multiple function evaluations
 
-Where Speedups Come From
-------------------------
+What Differs Between CPU and GPU
+--------------------------------
 
-**Residual computation**:
+NLSQ runs the same JAX code on both devices. Residuals and the Jacobian (computed by automatic
+differentiation, not finite differences) are XLA-compiled and vectorized on the CPU as well as on the GPU, so
+the comparison is between two compiled paths, not between a Python loop and a kernel.
 
-.. code-block:: text
+**What the GPU adds**: the work that scales with the number of points (evaluating the model and its Jacobian
+at every point, and reducing them to the small ``J^T J`` and ``J^T r`` matrices) is spread over thousands of
+cores, which pays off once there are enough points to keep them busy.
 
-   CPU: Process each point sequentially
-   for i in range(1_000_000):
-       r[i] = y[i] - f(x[i])
-
-   GPU: Process all points in parallel
-   r = y - f(x)  # All 1M points at once
-
-**Jacobian computation**:
-
-.. code-block:: text
-
-   CPU: Finite differences (2m function evaluations)
-   GPU: Single reverse-mode AD pass
-
-**Matrix operations**:
-
-.. code-block:: text
-
-   CPU: Sequential SVD
-   GPU: Parallel SVD with cuBLAS/cuSOLVER
+**What does not shrink**: the fit loop itself runs on the host. Each iteration launches device work and reads
+back small results, and each new problem shape is compiled once. These costs do not depend on the dataset size,
+which is why the GPU was slower than the CPU for small fits in the measurements below.
 
 Performance Scaling
 -------------------
 
-Expected speedups by dataset size:
+These are NLSQ's own CPU and GPU runs, compared with each other (RTX 4090 Laptop GPU and i9-13900H, four
+models, warm medians). They are not a comparison with another library; those, made within one device, are in
+:doc:`/api/performance_benchmarks`.
 
 .. list-table::
    :header-rows: 1
-   :widths: 25 25 25 25
+   :widths: auto
 
-   * - Dataset Size
-     - SciPy (CPU)
-     - NLSQ (V100)
-     - Speedup
-   * - 1,000
-     - 0.05s
-     - 0.43s (JIT)
-     - 0.1x (JIT cost)
-   * - 10,000
-     - 0.18s
-     - 0.04s
-     - 4.5x
-   * - 100,000
-     - 2.1s
-     - 0.09s
-     - 23x
-   * - 1,000,000
-     - 40.5s
-     - 0.15s
-     - 270x
-   * - 10,000,000
-     - ~7 min
-     - 1.5s
-     - ~280x
+   * - Dataset size
+     - GPU time compared with CPU time
+   * - 1,000 and 10,000 points
+     - GPU 1.4x to 7.1x slower
+   * - 100,000 points
+     - GPU 1.2x slower to 3.2x faster, depending on the model
+   * - 1,000,000 points
+     - GPU 4.9x to 6.8x faster (``curve_fit_large``)
+   * - 10,000,000 and 100,000,000 points
+     - GPU 9.8x to 20.7x faster (``curve_fit_large``)
 
 Key observations:
 
-1. **JIT compilation overhead**: First call is slower
-2. **Crossover point**: GPU wins at ~5,000 points
-3. **Scaling advantage**: GPU speedup increases with size
+1. **Fixed per-fit overhead**: JIT dispatch and host/device transfers dominate small problems, and the
+   first call for a new shape also compiles the kernel
+2. **Crossover point**: on this hardware the GPU starts to pay off at about 100,000 points; below that the
+   CPU is faster
+3. **Scaling advantage**: the GPU's advantage over the CPU grows with the dataset size
 
 Memory Considerations
 ---------------------
@@ -249,13 +226,13 @@ Summary
 
 GPU acceleration in NLSQ provides:
 
-1. **Massive parallelism**: Thousands of cores for data operations
+1. **Data parallelism**: Thousands of cores for per-point operations
 2. **Automatic optimization**: JAX handles GPU placement
-3. **Scaling advantage**: Speedup grows with dataset size
+3. **Scaling advantage**: the GPU's advantage over the CPU grows with dataset size
 4. **Memory management**: Automatic chunking and streaming
 
 Best for:
-- Large datasets (>10K points)
+- Large datasets (about 100K points and above; the CPU is faster for small fits)
 - Repeated fits (amortize JIT)
 - Production pipelines
 

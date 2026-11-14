@@ -252,4 +252,4 @@ Complete Module Listing
 - :doc:`nlsq.profiling` - JAX profiler integration and static analysis (v0.3.0-beta.2+)
 - :doc:`nlsq.profiler` - Performance profiler (NEW in v0.3.0-beta.2)
 - :doc:`nlsq.profiler_visualization` - Profiling visualization (NEW in v0.3.0-beta.2)
-- :doc:`performance_benchmarks` - Performance analysis tools
+- :doc:`performance_benchmarks` - Measured timings (same-device comparisons)

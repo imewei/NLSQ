@@ -29,7 +29,7 @@ Chapter Overview
 Performance Quick Tips
 ----------------------
 
-1. **Use GPU**: 10-20x speedup for large datasets
+1. **Use GPU for large datasets**: it is faster than the CPU from about 100K points and slower below that (:doc:`/api/performance_benchmarks`)
 2. **Reuse CurveFit**: JIT cached between calls
 3. **Use streaming**: Memory-efficient for very large data
 4. **Loosen tolerances**: Trade precision for speed

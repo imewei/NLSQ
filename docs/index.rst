@@ -6,8 +6,9 @@ NLSQ: GPU/TPU-Accelerated Curve Fitting
 **Fast, production-ready nonlinear least squares for scientific computing**
 
 NLSQ is a JAX-powered library that brings GPU/TPU acceleration to curve fitting.
-It provides a drop-in replacement for SciPy's ``curve_fit`` with 150-270x speedups
-on modern hardware.
+It provides a drop-in replacement for SciPy's ``curve_fit`` that runs on CPU
+and GPU and handles datasets of 100M+ points. Measured, same-device comparisons with SciPy, lmfit, JAXopt
+and Optimistix are in :doc:`api/performance_benchmarks`.
 
 .. code-block:: python
 

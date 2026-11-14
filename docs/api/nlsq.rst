@@ -5,12 +5,12 @@ Package Overview
 ----------------
 
 NLSQ (Nonlinear Least Squares) is a JAX-powered library that provides GPU/TPU-accelerated curve fitting
-with automatic differentiation. It offers a drop-in replacement for SciPy's ``curve_fit`` function with
-significant performance improvements on modern hardware (150-270x speedup on GPUs).
+with automatic differentiation. It offers a drop-in replacement for SciPy's ``curve_fit`` function that runs on CPU and GPU. Measured
+timings, compared within one device, are in :doc:`performance_benchmarks`.
 
 Key Features:
 
-* **GPU/TPU Acceleration**: JAX JIT compilation to XLA for massive speedups
+* **GPU/TPU Acceleration**: JAX JIT compilation to XLA, on CPU or GPU
 * **Automatic Differentiation**: No manual Jacobian calculations required
 * **Large Dataset Support**: Automatic chunking and memory management for 100M+ points
 * **Production-Ready**: 3819 tests, 100% pass rate

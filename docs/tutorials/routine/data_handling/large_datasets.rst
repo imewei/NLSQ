@@ -134,49 +134,49 @@ any size and also accepts memmap/HDF5/Zarr sources.
 Performance Benchmarks
 ----------------------
 
-Measured on an i9-13900H (20 logical cores, 62 GB RAM) and an RTX 4090 Laptop GPU (16 GB),
-3-parameter ``exp_decay`` model, warm median (2026-11-01, JAX 0.12.0.1). The
-``exact_streaming`` columns are what ``curve_fit_large`` runs by default only at or above
-``size_threshold`` (1M points); the 1K row runs in-memory ``curve_fit``. Timings on a laptop
-vary by up to about 50% between sessions.
+``curve_fit_large`` runs exact full-data streaming at or above ``size_threshold`` (1M points). At 1M points it
+was 2.2x to 11x faster than in-memory ``curve_fit`` on both devices (warm medians, i9-13900H and RTX 4090 Laptop
+GPU, run of 2026-11-13):
 
 .. list-table::
    :header-rows: 1
-   :widths: 16 28 28 28
+   :widths: auto
 
-   * - Points
-     - ``strategy=Chunked()`` (former default), CPU
-     - ``exact_streaming``, CPU
-     - ``exact_streaming``, GPU
-   * - 1K
-     - 3.8 ms
-     - 60 ms
-     - 92 ms
-   * - 1M
-     - 0.58 s
-     - 0.19 s
-     - 0.45 s
-   * - 10M
-     - 3.1 s
-     - 1.3 s
-     - 0.26 s
-   * - 100M
-     - 29 s
-     - 8.7 s
-     - 0.60 s
+   * - Model
+     - ``curve_fit`` CPU
+     - ``curve_fit_large`` CPU
+     - ``curve_fit`` GPU
+     - ``curve_fit_large`` GPU
+   * - Exponential decay
+     - 362.3 ms
+     - 90.8 ms
+     - 140.5 ms
+     - 18.5 ms
+   * - Gaussian
+     - 562.0 ms
+     - 252.5 ms
+     - 165.8 ms
+     - 43.5 ms
+   * - Two exponentials
+     - 930.4 ms
+     - 328.2 ms
+     - 115.5 ms
+     - 48.4 ms
+   * - Bounded exponential
+     - 1.28 s
+     - 293.3 ms
+     - 538.6 ms
+     - 49.0 ms
 
-Plain ``curve_fit`` runs out of memory on the 16 GB GPU at 100M points. On the GPU at 1M
-points and below, plain ``curve_fit`` is faster than ``exact_streaming`` for the unbounded
-problems (``exp_decay`` at 1M: 53 ms vs 451 ms; not for ``bounded_exp``), and
-``exact_streaming`` has a fixed cost of about 60-140 ms at 1K. The first fit also pays JIT
-compilation. The full comparison against SciPy, lmfit, JAXopt and Optimistix is in
-``benchmarks/baselines/2026-11-13-library-comparison-1k-100M.md`` (the figures above are from
-the earlier 2026-11-01 run, kept in git history).
+``curve_fit`` was not run at 10M points and above; ``curve_fit_large`` fitted 100M points on both devices (for
+example 6.08 s on the CPU and 618 ms on the GPU for the exponential decay). The comparison with SciPy, lmfit, JAXopt
+and Optimistix, made within one device, the methodology and the limitations are in
+:doc:`/api/performance_benchmarks`. Timings on a laptop vary between sessions.
 
 GPU Acceleration
 ----------------
 
-GPUs provide significant speedup for large datasets:
+GPUs run large fits faster than the CPU:
 
 .. code-block:: python
 
@@ -188,7 +188,8 @@ GPUs provide significant speedup for large datasets:
    # Automatically uses GPU if available
    popt, pcov = fit(model, x, y, p0=[...])
 
-GPU speedup is most significant for 100K+ points.
+NLSQ on the GPU was faster than NLSQ on the CPU from about 100K points and slower below that
+(:doc:`/api/performance_benchmarks`).
 
 Complete Example
 ----------------

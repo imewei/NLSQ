@@ -1,6 +1,30 @@
 # Documentation Changelog
 
 ## Unreleased
+- Performance and benchmark documentation rewritten (`/dev-suite:docs update --readme`, then the Sphinx pages).
+  An earlier pass in this cycle compared NLSQ on GPU with SciPy on CPU; the earlier README table, the
+  150-270x claim and the V100-era tables had no recorded source. Every comparison is now within one device
+  (CPU against CPU, GPU against GPU, or NLSQ CPU against NLSQ GPU) and is generated from
+  `benchmarks/baselines/2026-11-13-library-comparison-1k-100M.md`.
+  - `api/performance_benchmarks.rst` is the single benchmark page: summary, methodology, CPU, GPU and
+    device-scaling tables for four models, device guidance, limitations and reproduction commands. Its
+    unsourced content (A100/EPYC tables, memory-savings, solver, chunking, sparse, streaming and "real-world"
+    figures, JAX 0.4.35 setup) was removed.
+  - README: headline, GPU-install note and Performance section (two same-device tables, caveats).
+  - `howto/optimize_performance.rst` (comparison recipe with warm-up and `JAX_PLATFORMS=cpu`, CPU/GPU
+    guidance, results section), `howto/migration.rst`, `explanation/gpu_architecture.rst` (the CPU-versus-GPU
+    description now states that NLSQ uses autodiff and compiled code on both devices),
+    `tutorials/routine/gpu_acceleration/index.rst`, `tutorials/advanced/performance/index.rst`,
+    `tutorials/routine/data_handling/large_datasets.rst`, `index.rst`, `api/nlsq.rst`, `api/nlsq.device.rst`,
+    `explanation/index.rst`, `explanation/jax_autodiff.rst` and `developer/performance_tuning_guide.md` no
+    longer quote speedup multipliers of their own; they link to the benchmark page.
+  - SciPy comparison: the harness runs SciPy with `method="trf"`. A spot check of SciPy's default `lm` on the
+    exponential decay (`benchmarks/baselines/2026-11-14-scipy-lm-spot-check.md`) shows SciPy faster than NLSQ
+    `curve_fit` up to 1M points; the pages state both and name the method.
+  - Unverified claims removed: the "283x" expected output, batch-fitting "10x" and "50-100x", "10-100x"
+    Jacobian and first-call figures, and the capacity bullets (near-linear scaling to 50M points, batch time,
+    ~500 MB at 1M points). `developer/optimization_case_study.md` keeps its historical 150-270x claim.
+    `nlsq/device.py` still prints "Enable 20-100x speedup:" (code, not changed here).
 - `/dev-suite:docs update --full` pass after PR #68 (audit hardening): `CHANGELOG.md` Fixed gains the
   PR's user-visible fixes (only the export file mode and an earlier `NLSQ_SAVE_ITERATIONS` note existed); `reference/configuration.rst` names the
   `optimization_history_*.npz` file `NLSQ_SAVE_ITERATIONS` now writes per fit; `reference/cli.rst` lists

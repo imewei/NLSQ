@@ -29,7 +29,7 @@ Key Features
 - **JAX device inspection** to check current compute backend
 - **Plugin conflict detection** for dual cuda12/cuda13 and version mismatches
 - **User-friendly warnings** with actionable installation instructions
-- **20-100x speedup recommendations** for GPU-enabled configurations
+- **GPU installation recommendations** when no GPU backend is active
 - **Silent failure handling** to avoid disrupting workflow
 - **Environment variable control** for CI/CD and intentional CPU-only usage
 - **Minimal overhead** (~6ms total: 5ms nvidia-smi + 1ms JAX query)

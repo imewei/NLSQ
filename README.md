@@ -3,7 +3,7 @@
 
 # NLSQ: GPU-Accelerated Curve Fitting
 
-**Drop-in replacement for `scipy.optimize.curve_fit` with 150-270x speedup on GPU**
+**Drop-in replacement for `scipy.optimize.curve_fit`, built on JAX for CPU and GPU, with fits to 100M+ points**
 
 [![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
 [![Documentation](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/)
@@ -47,7 +47,7 @@ Package published at [anaconda.org/imewei/nlsq](https://anaconda.org/imewei/nlsq
 
 ### GPU Installation (Linux + System CUDA)
 
-**Performance Impact:** 20-100x speedup for large datasets (>1M points)
+**Performance Impact:** for NLSQ itself, the GPU was slower than the CPU up to 10K points and 4.9-20.7x faster from 1M to 100M points; see [Performance](#performance)
 
 **Prerequisites:**
 - NVIDIA GPU with SM >= 5.2 (Maxwell or newer)
@@ -209,46 +209,55 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 
 ## Architecture
 
-NLSQ is organized into well-separated layers (~74,000 lines):
+NLSQ is organized into well-separated layers (~83,400 lines):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                             USER INTERFACES                                 │
-│  Qt GUI (PySide6)       CLI (argparse)          Python API                   │
-│  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()       │
-│  ├── pyqtgraph plots    ├── Security auditing  ├── CurveFit class           │
-│  └── Native desktop     └── Export formats     └── LargeDatasetFitter       │
+│                               USER INTERFACES                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                        OPTIMIZATION ORCHESTRATION                           │
-│  Workflow System         Global Optimization      Streaming Optimizer       │
-│  ├── MemoryBudgetSel.    ├── MultiStartOrch.     ├── AdaptiveHybrid         │
-│  ├── Strategy: STANDARD/ ├── TournamentSelect    ├── 4-Phase Pipeline:      │
-│  │   CHUNKED/STREAMING   ├── LHS/Sobol/Halton    │   0: Normalization       │
-│  └── Memory-based auto   └── Sampling            │   1: L-BFGS warmup       │
-│                                                  │   2: Gauss-Newton        │
-│                                                  └── 3: Denormalization     │
+│ Qt GUI (nlsq[gui] extra)  CLI (argparse)             Python API             │
+│ ├── 5-page workflow       ├── fit, batch, info       ├── curve_fit(), fit() │
+│ └── pyqtgraph plots       └── config, gui            └── curve_fit_large()  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                          CORE OPTIMIZATION ENGINE                           │
-│  curve_fit() ─→ CurveFit ─→ LeastSquares ─→ TrustRegionReflective           │
-│       │              │            │                │                        │
-│       ▼              ▼            ▼                ▼                        │
-│  API Wrapper    Cache+State  Orchestrator+AD   SVD-based TRF                │
-│  (SciPy-compat) (UnifiedCache) (AutoDiffJac)   (JIT-compiled)               │
+│                           ENTRY POINTS AND ROUTING                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                          SUPPORT SUBSYSTEMS                                 │
-│  stability/           precision/          caching/          diagnostics/    │
-│  ├── NumericalGuard   ├── AlgorithmSel.   ├── UnifiedCache  ├── Identifiab. │
-│  ├── SVD fallback     ├── ParamNormalizer └── MemoryMgr     ├── GradientMon │
-│  └── Recovery         └── BoundsInfer.                      └── PluginSys.  │
+│ fit(workflow=auto|auto_global|hpc) curve_fit_large(strategy=Auto)           │
+│ └── MemoryBudgetSelector:          ├── < size_threshold: in memory          │
+│     standard / chunked / streaming ├── ≥ size_threshold: exact LM (default) │
+│                                    └── Chunked / Hybrid on request          │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                            INFRASTRUCTURE                                   │
-│  config.py (Singleton)              Security                               │
-│  ├── JAXConfig                      ├── safe_serialize                     │
-│  ├── MemoryConfig                   ├── model_validation                   │
-│  └── LargeDatasetConfig             └── resource_limits                    │
+│                             OPTIMIZATION ENGINES                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                         JAX RUNTIME (≥0.8.0)                                │
-│  x64 enabled │ JIT compilation │ Autodiff │ GPU/TPU backend (optional)      │
+│ Global optimization        Exact streaming LM      Hybrid (opt-in)          │
+│ ├── CMAESOptimizer         ├── exact_lm.py         ├── 0: Normalization     │
+│ ├── MultiStartOrchestrator └── J^T J, J^T r over   ├── 1: L-BFGS warmup     │
+│ ├── TournamentSelector         data chunks         ├── 2: Gauss-Newton      │
+│ └── LHS/Sobol/Halton                               └── 3: Denormalization   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           CORE OPTIMIZATION ENGINE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ curve_fit() ─→ CurveFit ─→ prepare_problem() ─→ LeastSquares                │
+│   ─→ TrustRegionReflective (Python loop over JIT kernels) ─→ pcov           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                              SUPPORT SUBSYSTEMS                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ stability/                         precision/                               │
+│ ├── NumericalStabilityGuard        ├── AlgorithmSelector                    │
+│ ├── SVD fallback, recovery         ├── BoundsInference, ParameterNormalizer │
+│ └── FallbackOrchestrator           └── parameter estimation                 │
+│ caching/                           diagnostics/                             │
+│ ├── UnifiedCache                   ├── IdentifiabilityAnalyzer              │
+│ └── MemoryManager                  ├── GradientMonitor, ModelHealthReport   │
+│                                    └── PluginRegistry                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                INFRASTRUCTURE                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ config.py (singleton)              Security                                 │
+│ ├── JAXConfig, MemoryConfig        ├── safe_serialize, model_validation     │
+│ └── LargeDatasetConfig             └── resource limits, audit log           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                            JAX RUNTIME (>=0.8.0)                            │
+│ x64 enabled │ JIT compilation │ Autodiff │ CPU, GPU or TPU backend          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
