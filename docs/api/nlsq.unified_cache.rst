@@ -26,7 +26,7 @@ Performance Goals
 -----------------
 
 - 80%+ cache hit rate on typical batch fitting workflows
-- 2-5x reduction in cold-start compile time through better cache reuse
+- Reuse of compiled functions across calls with the same model and input shapes
 - Backward compatibility with existing cache APIs
 - Zero breaking changes to curve_fit API
 

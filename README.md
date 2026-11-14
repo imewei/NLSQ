@@ -3,7 +3,7 @@
 
 # NLSQ: GPU-Accelerated Curve Fitting
 
-**Drop-in replacement for `scipy.optimize.curve_fit` with 150-270x speedup on GPU**
+**Drop-in replacement for `scipy.optimize.curve_fit`, built on JAX for CPU and GPU, with fits to 100M+ points**
 
 [![PyPI version](https://badge.fury.io/py/nlsq.svg)](https://badge.fury.io/py/nlsq)
 [![Documentation](https://readthedocs.org/projects/nlsq/badge/?version=latest)](https://nlsq.readthedocs.io/)
@@ -11,7 +11,7 @@
 [![JAX ≥0.8.0](https://img.shields.io/badge/JAX-≥0.8.0-green.svg)](https://github.com/google/jax)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[**Documentation**](https://nlsq.readthedocs.io/) | [**Examples**](examples/) | [**API Reference**](https://nlsq.readthedocs.io/en/latest/api.html) | [**ArXiv Paper**](https://doi.org/10.48550/arXiv.2208.12187)
+[**Documentation**](https://nlsq.readthedocs.io/) | [**Examples**](examples/) | [**API Reference**](https://nlsq.readthedocs.io/en/latest/api/index.html) | [**ArXiv Paper**](https://doi.org/10.48550/arXiv.2208.12187)
 
 </div>
 
@@ -47,7 +47,7 @@ Package published at [anaconda.org/imewei/nlsq](https://anaconda.org/imewei/nlsq
 
 ### GPU Installation (Linux + System CUDA)
 
-**Performance Impact:** 20-100x speedup for large datasets (>1M points)
+**Performance Impact:** for NLSQ itself, the GPU was slower than the CPU up to 10K points and 4.9-20.7x faster from 1M to 100M points; see [Performance](#performance)
 
 **Prerequisites:**
 - NVIDIA GPU with SM >= 5.2 (Maxwell or newer)
@@ -178,14 +178,8 @@ print(f"Uncertainties: {np.sqrt(np.diag(pcov))}")
 
 ## Graphical User Interface
 
-NLSQ includes an interactive GUI for curve fitting without writing code:
-
-```bash
-# Launch the GUI
-nlsq-gui
-```
-
-The GUI provides:
+NLSQ includes an interactive GUI for curve fitting without writing code. Install the `gui` extra and
+launch it as shown under [With GUI Support](#with-gui-support) (`nlsq-gui` or `nlsq gui`). It provides:
 - **Data Loading**: Import CSV, ASCII, NPZ, or HDF5 files, or paste from clipboard
 - **Model Selection**: Choose from 8 built-in models, polynomials, or custom Python functions
 - **Fitting Options**: Guided presets (Fast/Robust/Quality) or advanced parameter control
@@ -199,7 +193,7 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 | Feature | Description |
 |---------|-------------|
 | **Automatic Jacobians** | JAX's autodiff eliminates manual derivatives |
-| **Bounded optimization** | Trust Region Reflective and Levenberg-Marquardt |
+| **Bounded optimization** | Trust Region Reflective; exact Levenberg-Marquardt for full-data streaming fits |
 | **Large datasets** | `curve_fit_large` runs an exact full-data streaming fit by default from 1M points (100M+ supported); chunked and hybrid streaming fits via `strategy=` |
 | **Multi-start** | Global optimization with LHS/Sobol sampling |
 | **Workflow system** | 3 smart workflows: `auto`, `auto_global`, `hpc` with memory-aware strategy |
@@ -209,46 +203,55 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 
 ## Architecture
 
-NLSQ is organized into well-separated layers (~74,000 lines):
+NLSQ is organized into well-separated layers (~83,400 lines):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                             USER INTERFACES                                 │
-│  Qt GUI (PySide6)       CLI (argparse)          Python API                   │
-│  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()       │
-│  ├── pyqtgraph plots    ├── Security auditing  ├── CurveFit class           │
-│  └── Native desktop     └── Export formats     └── LargeDatasetFitter       │
+│                               USER INTERFACES                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                        OPTIMIZATION ORCHESTRATION                           │
-│  Workflow System         Global Optimization      Streaming Optimizer       │
-│  ├── MemoryBudgetSel.    ├── MultiStartOrch.     ├── AdaptiveHybrid         │
-│  ├── Strategy: STANDARD/ ├── TournamentSelect    ├── 4-Phase Pipeline:      │
-│  │   CHUNKED/STREAMING   ├── LHS/Sobol/Halton    │   0: Normalization       │
-│  └── Memory-based auto   └── Sampling            │   1: L-BFGS warmup       │
-│                                                  │   2: Gauss-Newton        │
-│                                                  └── 3: Denormalization     │
+│ Qt GUI (nlsq[gui] extra)  CLI (argparse)             Python API             │
+│ ├── 5-page workflow       ├── fit, batch, info       ├── curve_fit(), fit() │
+│ └── pyqtgraph plots       └── config, gui            └── curve_fit_large()  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                          CORE OPTIMIZATION ENGINE                           │
-│  curve_fit() ─→ CurveFit ─→ LeastSquares ─→ TrustRegionReflective           │
-│       │              │            │                │                        │
-│       ▼              ▼            ▼                ▼                        │
-│  API Wrapper    Cache+State  Orchestrator+AD   SVD-based TRF                │
-│  (SciPy-compat) (UnifiedCache) (AutoDiffJac)   (JIT-compiled)               │
+│                           ENTRY POINTS AND ROUTING                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                          SUPPORT SUBSYSTEMS                                 │
-│  stability/           precision/          caching/          diagnostics/    │
-│  ├── NumericalGuard   ├── AlgorithmSel.   ├── UnifiedCache  ├── Identifiab. │
-│  ├── SVD fallback     ├── ParamNormalizer └── MemoryMgr     ├── GradientMon │
-│  └── Recovery         └── BoundsInfer.                      └── PluginSys.  │
+│ fit(workflow=auto|auto_global|hpc) curve_fit_large(strategy=Auto)           │
+│ └── MemoryBudgetSelector:          ├── < size_threshold: in memory          │
+│     standard / chunked / streaming ├── ≥ size_threshold: exact LM (default) │
+│                                    └── Chunked / Hybrid on request          │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                            INFRASTRUCTURE                                   │
-│  config.py (Singleton)              Security                               │
-│  ├── JAXConfig                      ├── safe_serialize                     │
-│  ├── MemoryConfig                   ├── model_validation                   │
-│  └── LargeDatasetConfig             └── resource_limits                    │
+│                             OPTIMIZATION ENGINES                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                         JAX RUNTIME (≥0.8.0)                                │
-│  x64 enabled │ JIT compilation │ Autodiff │ GPU/TPU backend (optional)      │
+│ Global optimization        Exact streaming LM      Hybrid (opt-in)          │
+│ ├── CMAESOptimizer         ├── exact_lm.py         ├── 0: Normalization     │
+│ ├── MultiStartOrchestrator └── J^T J, J^T r over   ├── 1: L-BFGS warmup     │
+│ ├── TournamentSelector         data chunks         ├── 2: Gauss-Newton      │
+│ └── LHS/Sobol/Halton                               └── 3: Denormalization   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           CORE OPTIMIZATION ENGINE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ curve_fit() ─→ CurveFit ─→ prepare_problem() ─→ LeastSquares                │
+│   ─→ TrustRegionReflective (Python loop over JIT kernels) ─→ pcov           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                              SUPPORT SUBSYSTEMS                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ stability/                         precision/                               │
+│ ├── NumericalStabilityGuard        ├── AlgorithmSelector                    │
+│ ├── SVD fallback, recovery         ├── BoundsInference, ParameterNormalizer │
+│ └── FallbackOrchestrator           └── parameter estimation                 │
+│ caching/                           diagnostics/                             │
+│ ├── UnifiedCache                   ├── IdentifiabilityAnalyzer              │
+│ └── MemoryManager                  ├── GradientMonitor, ModelHealthReport   │
+│                                    └── PluginRegistry                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                INFRASTRUCTURE                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ config.py (singleton)              Security                                 │
+│ ├── JAXConfig, MemoryConfig        ├── safe_serialize, model_validation     │
+│ └── LargeDatasetConfig             └── resource limits, audit log           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                            JAX RUNTIME (>=0.8.0)                            │
+│ x64 enabled │ JIT compilation │ Autodiff │ CPU, GPU or TPU backend          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -256,18 +259,60 @@ See [Architecture Documentation](https://nlsq.readthedocs.io/en/latest/developer
 
 ## Performance
 
-NLSQ shows increasing speedups as dataset size grows:
+Every comparison below is made on one device: CPU results against CPU results, GPU results against GPU results.
+SciPy and lmfit have no GPU path, so they appear only in the CPU table. Times are warm medians of end-to-end fits
+of a 3-parameter exponential decay (`a*exp(-b*x) + c`), measured once on an Intel i9-13900H and an
+NVIDIA RTX 4090 Laptop GPU, with all libraries at a tolerance of 1e-8. SciPy ran `method="trf"` (its faster default `lm` is covered below) and lmfit ran MINPACK `leastsq`; stopping rules differ between libraries. **Bold** marks the fastest entry in a row.
+`curve_fit_large` runs exact full-data streaming at and above 1M points; `—` means not run at that size.
 
-| Dataset Size | SciPy (CPU) | NLSQ (GPU) | Speedup |
-|--------------|-------------|------------|---------|
-| 10K points | 15ms | 2ms | 7x |
-| 100K points | 150ms | 3ms | 50x |
-| 1M points | 1.5s | 8ms | 190x |
-| 10M points | 15s | 55ms | 270x |
+### CPU
 
-> **Note**: First call includes JIT compilation (~500ms). Subsequent calls reuse compiled kernels.
+| Points | SciPy (`trf`) | lmfit | NLSQ `curve_fit` | NLSQ `curve_fit_large` | JAXopt | Optimistix |
+|---|---|---|---|---|---|---|
+| 1,000 | 1.1 ms | 4.6 ms | 4.0 ms | — | **0.4 ms** | 0.5 ms |
+| 10,000 | 3.9 ms | 3.8 ms | 11.8 ms | — | **1.4 ms** | 3.8 ms |
+| 100,000 | 111.2 ms | 24.5 ms | 44.4 ms | — | **8.6 ms** | 19.3 ms |
+| 1,000,000 | 1.14 s | 464.0 ms | 362.3 ms | 90.8 ms | **82.8 ms** | 159.7 ms |
+| 10,000,000 | 5.26 s | 4.45 s | — | 977.2 ms | **945.4 ms** | 2.25 s |
+| 100,000,000 | 65.94 s | 53.46 s | — | **6.08 s** | 7.70 s | 12.91 s |
 
-See [Performance Guide](https://nlsq.readthedocs.io/en/latest/guides/performance_guide.html) for benchmarks.
+### GPU
+
+| Points | NLSQ `curve_fit` | NLSQ `curve_fit_large` | JAXopt | Optimistix |
+|---|---|---|---|---|
+| 1,000 | 24.8 ms | — | **2.0 ms** | 3.0 ms |
+| 10,000 | 30.9 ms | — | 5.0 ms | **3.9 ms** |
+| 100,000 | 48.0 ms | — | **4.1 ms** | 11.1 ms |
+| 1,000,000 | 140.5 ms | 18.5 ms | **11.6 ms** | 62.6 ms |
+| 10,000,000 | — | 78.1 ms | **77.3 ms** | 657.0 ms |
+| 100,000,000 | — | **618.1 ms** | 801.0 ms | fails |
+
+### What the numbers show
+
+- **CPU, versus SciPy and lmfit:** SciPy (`method="trf"`) was faster than NLSQ up to 10K points. NLSQ was 2.5x faster at 100K points
+  and 5-13x faster from 1M to 100M points on this model. Across four models the range from 1M points up is
+  2.4-12.6x versus SciPy and 1.4-10.8x versus lmfit.
+- **SciPy's default method:** the table above uses SciPy `trf`. In a separate spot check on this model, SciPy's
+  default `lm` was faster than NLSQ `curve_fit` from 1K to 1M points (3.0x at 100K, 1.8x at 1M) and slower than
+  `curve_fit_large` at 1M points (2.3x) and 10M points (4.2x); see
+  [`benchmarks/baselines/2026-11-14-scipy-lm-spot-check.md`](benchmarks/baselines/2026-11-14-scipy-lm-spot-check.md).
+- **JAXopt and Optimistix:** both were faster than NLSQ on small problems, on CPU and GPU. JAXopt stayed
+  faster or level through 10M points on this model. NLSQ was faster at 100M points (1.3-1.9x on GPU, across
+  three models). NLSQ was 1.8-14.7x faster than Optimistix from 1M points, and Optimistix fails on GPU at 100M points.
+- **NLSQ on its own CPU versus its own GPU:** the GPU was slower below 100K points and 4.9-20.7x faster from
+  1M points (across four models, `curve_fit_large`).
+- **Not like for like:** JAXopt and Optimistix return no covariance matrix and do not support bounds; NLSQ
+  supports bounds and returns a covariance matrix. NLSQ's case is the SciPy-compatible interface, bounds, and fits to datasets that do not fit in memory,
+  not the fastest time on small problems.
+
+> **Caveats.** One run on a laptop whose load average was 10-30 during the run; treat differences under about
+> 25% as ties and compare entries within one table only. First-call compilation is not included (the persistent
+> JAX cache at `~/.cache/nlsq/jax_cache` reduces it on later runs). The full tables for four models,
+> methodology, limitations and reproduction commands are in
+> [Performance Benchmarks](https://nlsq.readthedocs.io/en/latest/api/performance_benchmarks.html) and in
+> [`benchmarks/baselines/2026-11-13-library-comparison-1k-100M.md`](benchmarks/baselines/2026-11-13-library-comparison-1k-100M.md).
+
+See the [Performance Optimization guide](https://nlsq.readthedocs.io/en/latest/howto/optimize_performance.html) for tuning advice.
 
 ## Large Dataset Example
 
@@ -331,14 +376,12 @@ config = CMAESConfig(
 optimizer = CMAESOptimizer(config=config)
 ```
 
-Requires: `pip install nlsq`
-
 </details>
 
 <details>
-<summary><b>Workflow presets (v0.6.3)</b></summary>
+<summary><b>Workflows</b></summary>
 
-NLSQ v0.6.3 simplifies workflows to 3 smart options:
+`fit()` offers three workflows:
 
 ```python
 from nlsq import fit
@@ -493,7 +536,7 @@ See [Advanced User Guide](https://nlsq.readthedocs.io/en/latest/advanced_guide.h
 
 ## Examples
 
-Start with the [Interactive Tutorial](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ_Interactive_Tutorial.ipynb) on Google Colab.
+Start with the [Interactive Tutorial](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/notebooks/01_getting_started/nlsq_interactive_tutorial.ipynb) on Google Colab.
 
 **By topic:**
 - [Getting Started](examples/notebooks/01_getting_started/) - Basic usage and quickstart

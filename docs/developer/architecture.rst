@@ -1,9 +1,9 @@
 Architecture Overview
 =====================
 
-This document provides a comprehensive architectural overview of NLSQ, a GPU/TPU-accelerated
-nonlinear least squares curve fitting library built on JAX. The codebase consists of
-approximately 78,000 lines of Python code organized into well-separated modules.
+This document provides an architectural overview of NLSQ, a nonlinear least squares curve
+fitting library built on JAX that runs on CPU, GPU and TPU backends. The package consists of
+approximately 83,400 lines of Python code organized into well-separated modules.
 
 Package Structure
 -----------------
@@ -12,92 +12,114 @@ The ``nlsq`` package is organized into logical subpackages:
 
 .. code-block:: text
 
-   nlsq/ (~78,000 lines)
-   ├── core/           15,149 lines - Core optimization (curve_fit, TRF, LeastSquares)
-   │   ├── minpack.py        curve_fit(), fit(), CurveFit
-   │   ├── problem.py        prepare_problem(): input validation, p0/bounds, padding
+   nlsq/ (~83,400 lines)
+   ├── core/            16,000 lines - Core optimization (curve_fit, TRF, LeastSquares)
+   │   ├── minpack.py        curve_fit(), CurveFit, fit() workflow dispatch
+   │   ├── problem.py        prepare_problem(): validation, p0/bounds, NaN handling, padding
    │   ├── covariance.py     pcov_from_jacobian() / pcov_from_normal()
-   │   ├── least_squares.py  LeastSquares, AutoDiffJacobian
+   │   ├── least_squares.py  LeastSquares, AutoDiffJacobian, compiled-wrapper cache
    │   ├── trf.py, trf_jit.py  Trust Region Reflective optimizer and JIT kernels
-   │   ├── workflow.py       Workflow system (auto / auto_global / hpc)
+   │   ├── workflow.py       Workflow configuration (auto / auto_global / hpc)
+   │   ├── loss_functions.py, functions.py  Robust losses, built-in model functions
+   │   ├── sparse_jacobian.py, profiler.py  Sparse Jacobian support, TRF profiling
+   │   ├── _option_checks.py Shared option validators for the fitting entry points
    │   └── device_policy.py  Host-device placement for small SVDs under a GPU backend
-   ├── streaming/      14,680 lines - Large dataset handling, 4-phase optimizer
+   ├── streaming/      15,900 lines - Large dataset handling
+   │   ├── large_fit.py      fit_with_strategy(): runs the strategy chosen by curve_fit_large
    │   ├── specs.py, strategy.py  Strategy specs and build_large_strategy()
    │   ├── normal_equations.py, exact_lm.py  Exact chunk-accumulated LM
-   │   └── phases/      2,748 lines - WarmupPhase, GaussNewtonPhase, Checkpoint
-   ├── gui_qt/         12,348 lines - Native Qt desktop GUI (PySide6/pyqtgraph)
-   ├── cli/             8,085 lines - Command-line interface with security
-   │   ├── commands/     Subcommands (fit, batch, config, info)
+   │   ├── large_dataset.py  LargeDatasetFitter (chunked fit)
+   │   ├── adaptive_hybrid.py, hybrid_config.py  Hybrid 4-phase streaming optimizer
+   │   ├── telemetry.py, validators.py  Defense-layer telemetry, config validation
+   │   └── phases/      3,000 lines - WarmupPhase, GaussNewtonPhase, Checkpoint
+   ├── gui_qt/         13,000 lines - Optional Qt desktop GUI (nlsq[gui] extra)
+   ├── cli/             9,200 lines - Command-line interface with security
+   │   ├── commands/     Subcommands (fit, batch, config, info); gui is handled in main.py
    │   └── templates/    Custom model scaffolding
-   ├── utils/           5,446 lines - Validators, logging, profiling, serialization
-   ├── global_optimization/ 5,501 lines - CMA-ES, multi-start, tournament selection
-   ├── diagnostics/     4,665 lines - Model health analysis, plugin system
-   ├── stability/       2,598 lines - Numerical robustness, fallbacks, recovery
-   ├── precision/       2,200 lines - Algorithm selection, parameter normalization
-   ├── caching/         1,521 lines - JIT caching, memory management
-   ├── result/          1,180 lines - OptimizeResult, CurveFitResult
-   └── (root)          ~4,911 lines - Config, callbacks, types, device, constants
+   ├── utils/           5,500 lines - Validators, logging, profiling, serialization
+   ├── global_optimization/ 5,900 lines - CMA-ES, multi-start, tournament selection
+   ├── diagnostics/     4,800 lines - Model health analysis, plugin system
+   ├── stability/       2,700 lines - Numerical robustness, fallbacks, recovery
+   ├── precision/       2,200 lines - Algorithm selection, parameter normalization/estimation
+   ├── caching/         1,500 lines - JIT caching, memory management
+   ├── result/          1,300 lines - OptimizeResult, CurveFitResult
+   └── (root)          ~5,200 lines - Config, callbacks, types, device, constants,
+                                      common_jax / common_scipy
+
+Line counts are recursive per package, rounded to the nearest hundred
+(``find nlsq/<pkg> -name '*.py' | xargs wc -l``). They are not tracked per file because
+they drift with every change.
+
 
 
 Architectural Layers
 --------------------
 
-The following diagram illustrates the layered architecture of NLSQ:
+The following diagram illustrates the layered architecture of NLSQ. Large-data routing is
+described in :ref:`large-dataset-routing`.
 
 .. code-block:: text
 
    ┌──────────────────────────────────────────────────────────────────────────────┐
-   │                             USER INTERFACES                                  │
+   │                               USER INTERFACES                                │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │  Qt GUI (PySide6)       CLI (argparse)         Python API                    │
-   │  ├── 5-page workflow    ├── Model validation   ├── curve_fit(), fit()        │
-   │  ├── pyqtgraph plots    ├── Batch fitting      ├── CurveFit class            │
-   │  └── Native desktop     └── Export formats     └── LargeDatasetFitter        │
+   │ Qt GUI (nlsq[gui] extra)  CLI (argparse)              Python API             │
+   │ ├── 5-page workflow       ├── fit, batch, info        ├── curve_fit(), fit() │
+   │ ├── pyqtgraph plots       ├── config, gui             ├── curve_fit_large()  │
+   │ └── PySide6 desktop       └── Model validation (AST)  └── CurveFit class     │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │                        OPTIMIZATION ORCHESTRATION                            │
+   │                           ENTRY POINTS AND ROUTING                           │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │  Problem preparation      Global Optimization    Streaming Optimizer         │
-   │  ├── prepare_problem()    ├── CMAESOptimizer     ├── AdaptiveHybrid          │
-   │  └── pcov_from_*()        ├── MultiStartOrch.    ├── 4-Phase Pipeline:       │
-   │                           ├── TournamentSelect   │   0: Normalization        │
-   │  Large-fit strategies     ├── LHS/Sobol/Halton   │   1: L-BFGS warmup       │
-   │  ├── specs.py             └── MethodSelector      │   2: Gauss-Newton         │
-   │  ├── strategy.py          Presets: fast/robust/   └── 3: Denormalization      │
-   │  └── exact_lm.py          global/thorough/streaming                          │
+   │ fit(workflow=...)                  curve_fit_large(strategy=...)             │
+   │ ├── auto, auto_global, hpc         Auto: InMemory < size_threshold,          │
+   │ └── MemoryBudgetSelector picks:          else Exact (default)                │
+   │     standard  → curve_fit          Chunked → LargeDatasetFitter              │
+   │     chunked   → LargeDatasetFitter Hybrid → AdaptiveHybridStreamingOptimizer │
+   │     streaming → hybrid             all via fit_with_strategy()               │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │                          CORE OPTIMIZATION ENGINE                            │
+   │                             OPTIMIZATION ENGINES                             │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │  curve_fit() ──→ CurveFit ──→ LeastSquares ──→ TrustRegionReflective        │
-   │  (minpack.py)    (minpack.py)  (least_squares.py)  (trf.py)                  │
-   │       │                │                │                │                    │
-   │       ▼                ▼                ▼                ▼                    │
-   │  API Wrapper      Cache + State   Orchestrator + AD   SVD-based TRF          │
-   │  (SciPy-compat)   (UnifiedCache)  (AutoDiffJacobian)  (trf_jit.py)           │
+   │ Global optimization        Exact streaming LM      Hybrid (opt-in)           │
+   │ ├── MethodSelector         ├── exact_lm.py         ├── 0: normalization      │
+   │ ├── CMAESOptimizer         ├── normal_equations.py ├── 1: L-BFGS             │
+   │ ├── MultiStartOrchestrator └── sums J^T J, J^T r   ├── 2: Gauss-Newton       │
+   │ ├── TournamentSelector         over data chunks    └── 3: denormalization    │
+   │ └── LHS / Sobol / Halton                                                     │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │                          SUPPORT SUBSYSTEMS                                  │
+   │                           CORE OPTIMIZATION ENGINE                           │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │  stability/           precision/          caching/          diagnostics/     │
-   │  ├── guard.py         ├── algorithm_sel   ├── unified_cache ├── identifiab.  │
-   │  │   NumericalStab.   │   Problem-size    │   Shape-relaxed ├── gradient     │
-   │  │   Guard (3 modes)  │   aware selection │   LRU, weak refs├── param_sens.  │
-   │  ├── svd_fallback     ├── bound_inference ├── memory_mgr    ├── health_rep.  │
-   │  ├── fallback         └── normalizer      └── closure keys  └── plugin sys.  │
-   │  └── recovery                                                                │
+   │ 1. curve_fit() / CurveFit              core/minpack.py                       │
+   │ 2. prepare_problem()                   core/problem.py                       │
+   │ 3. LeastSquares + AutoDiffJacobian     core/least_squares.py                 │
+   │ 4. TrustRegionReflective (Python loop) core/trf.py, trf_jit.py               │
+   │ 5. pcov_from_jacobian()                core/covariance.py                    │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │                            INFRASTRUCTURE                                    │
+   │                              SUPPORT SUBSYSTEMS                              │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │  config.py (Singleton)       Security                                        │
-   │  ├── JAXConfig               ├── safe_serialize (JSON-based)                 │
-   │  │   (x64, GPU config)       ├── model_validation (AST-based)                │
-   │  ├── MemoryConfig            └── resource limits                             │
-   │  └── LargeDatasetConfig                                                      │
+   │ stability/                             precision/                            │
+   │ ├── guard.py (3 modes)                 ├── algorithm_selector                │
+   │ ├── svd_fallback, fallback             ├── bound_inference                   │
+   │ └── recovery                           ├── parameter_normalizer              │
+   │                                        └── parameter_estimation              │
+   │ caching/                               diagnostics/                          │
+   │ ├── unified_cache                      ├── identifiability                   │
+   │ ├── memory_manager                     ├── gradient_health                   │
+   │ └── _closure_serial                    ├── parameter_sensitivity             │
+   │                                        ├── health_report                     │
+   │                                        └── plugin                            │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │                         JAX RUNTIME (0.8.0)                                  │
+   │                                INFRASTRUCTURE                                │
    ├──────────────────────────────────────────────────────────────────────────────┤
-   │  ├── x64 enabled (double precision)  ├── JIT compilation with cache          │
-   │  ├── Automatic differentiation       └── GPU/TPU backend (optional)          │
+   │ config.py (singleton)                Security                                │
+   │ ├── JAXConfig (x64, GPU)             ├── utils/safe_serialize (JSON)         │
+   │ ├── MemoryConfig                     ├── cli/model_validation (AST denylist) │
+   │ └── LargeDatasetConfig               └── path/resource limits, audit         │
+   ├──────────────────────────────────────────────────────────────────────────────┤
+   │                  JAX RUNTIME (>=0.8.0, tested on 0.12.0.1)                   │
+   ├──────────────────────────────────────────────────────────────────────────────┤
+   │ ├── x64 enabled (double precision)     ├── JIT compilation, persistent cache │
+   │ └── Automatic differentiation          └── CPU, GPU or TPU backend           │
    └──────────────────────────────────────────────────────────────────────────────┘
-
 
 Core Optimization Pipeline
 --------------------------
@@ -109,7 +131,7 @@ The core optimization pipeline follows this class hierarchy:
 
 .. code-block:: text
 
-   curve_fit() / fit()           Entry points (minpack.py)
+   curve_fit() / fit()           Entry points (nlsq/__init__.py, core/minpack.py)
             │
             ▼
        CurveFit                  Main curve fitting class (minpack.py)
@@ -117,19 +139,21 @@ The core optimization pipeline follows this class hierarchy:
             ├── UnifiedCache     - Fixed-length padding for JIT
             │                    - Stability/recovery options
             ▼
-       LeastSquares              Optimization orchestrator (least_squares.py)
-            │                    - Algorithm selection (TRF, LM)
-            ├── AutoDiffJacobian - Three Jacobian handlers (no sigma, 1D sigma, 2D cov)
-            ├── LossFunctionsJIT - Bound constraint processing
+       prepare_problem()         Validation, p0/bounds, NaN handling (problem.py)
             │
             ▼
-       TrustRegionReflective     Main optimizer (trf.py)
-            │                    - Inherits: TrustRegionJITFunctions + TrustRegionOptimizerBase
-            ├── CommonJIT        - Variable scaling for bounds
-            ├── trf_jit.py       - Exact (SVD) and iterative (CG) solvers
-            │   (493 lines)
+       LeastSquares              Optimization orchestrator (least_squares.py)
+            │                    - method 'trf' (default); 'lm' is an alias for TRF
+            ├── AutoDiffJacobian - Three Jacobian handlers (no sigma, 1D sigma, 2D cov)
+            ├── LossFunctionsJIT - Robust loss functions (loss_functions.py)
+            ├── _wrapper_cache   - LRU cache (32 entries) of compiled wrappers
             ▼
-       SVD-based trust region subproblem solver
+       TrustRegionReflective     Main optimizer (trf.py)
+            │                    - Inherits TrustRegionJITFunctions (trf_jit.py)
+            ├── CommonJIT        - Variable scaling for bounds (common_jax.py)
+            │                    - tr_solver: None / 'exact' (SVD, default) / 'lsmr' / 'cg'
+            ▼                    - Python ``while`` loop over JIT-compiled kernels
+       Trust-region step         (SVD-based by default)
 
 Problem Preparation and Covariance
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -143,7 +167,7 @@ Two single-purpose modules sit on either side of the optimizer:
        ▼
    prepare_problem()          core/problem.py
        │                      Fixed step order: parameter count / p0 / bounds,
-       │                      validation and NaN handling, method selection,
+       │                      validation (``InputValidator``) and NaN handling, method selection,
        │                      mask construction and padding → PreparedProblem
        ▼
    LeastSquares.least_squares()  → OptimizeResult
@@ -162,45 +186,127 @@ Key Files
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 15 55
+   :widths: 35 65
 
    * - File
-     - Lines
      - Purpose
    * - ``core/minpack.py``
-     - 4,922
-     - curve_fit(), CurveFit class, fit() unified entry point
-   * - ``core/trf.py``
-     - 2,676
-     - TrustRegionReflective algorithm
-   * - ``core/least_squares.py``
-     - 2,188
-     - LeastSquares orchestrator
-   * - ``core/workflow.py``
-     - 1,318
-     - Workflow system for automatic strategy selection
-   * - ``core/trf_jit.py``
-     - 493
-     - JIT-compiled TRF helper functions
+     - curve_fit(), CurveFit class, fit() workflow dispatch
    * - ``core/problem.py``
-     - 1,037
      - ``prepare_problem()``: input validation, p0/bounds, NaN handling, padding
+   * - ``core/least_squares.py``
+     - LeastSquares orchestrator, AutoDiffJacobian, compiled-wrapper cache
+   * - ``core/trf.py``
+     - TrustRegionReflective algorithm
+   * - ``core/trf_jit.py``
+     - JIT-compiled TRF helper functions
    * - ``core/covariance.py``
-     - 169
      - ``pcov_from_jacobian()`` / ``pcov_from_normal()``
+   * - ``core/workflow.py``
+     - Workflow configuration for automatic strategy selection
    * - ``core/loss_functions.py``
-     - 405
-     - JIT-compiled loss functions
+     - JIT-compiled robust loss functions
+   * - ``core/sparse_jacobian.py``
+     - Sparse Jacobian detection and construction
+   * - ``core/_option_checks.py``
+     - Option validators shared by ``curve_fit``, ``fit`` and ``curve_fit_large``
+   * - ``streaming/large_fit.py``
+     - ``fit_with_strategy()``: runs the engine chosen for ``curve_fit_large``
 
 
-Streaming Optimization
-----------------------
+.. _large-dataset-routing:
+
+Large-Dataset Routing
+---------------------
+
+Two public entry points decide how a large problem is run. Both build on the engines
+described below.
+
+Entry Points
+~~~~~~~~~~~~
+
+- ``curve_fit_large(f, x, y, ..., strategy=...)`` (``nlsq/__init__.py``) translates its
+  options into a spec from ``streaming/specs.py`` and calls ``fit_with_strategy()``
+  (``streaming/large_fit.py``), which runs the engine for that spec.
+- ``fit(f, x, y, workflow=...)`` (``core/minpack.py``):
+
+  - ``auto``: ``MemoryBudgetSelector`` picks standard (``curve_fit``), chunked
+    (``build_large_strategy("chunked")``, ``LargeDatasetFitter``) or streaming
+    (``build_large_strategy("hybrid")``, ``AdaptiveHybridStreamingOptimizer``) from the
+    memory budget.
+  - ``auto_global``: ``MemoryBudgetSelector`` plus ``MethodSelector`` (CMA-ES or
+    multi-start; requires bounds).
+  - ``hpc``: ``auto_global`` plus checkpointing and cluster detection.
+  - ``fit()`` never selects the exact engine and rejects ``method="exact_streaming"``.
+  - The deprecated ``preset=`` argument (fast, robust, global, streaming, large) emits a
+    ``FutureWarning`` and is scheduled for removal in v0.8.0.
+
+Strategy Specs and Builder
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``streaming/specs.py``: frozen dataclasses (``Multistart``, ``InMemory``,
+  ``Chunked``, ``Hybrid``, ``Exact``, ``Auto``) that only declare configuration and
+  import no engines.
+- ``streaming/strategy.py``: ``build_large_strategy(kind, config, **common)``
+  constructs the engine for a path the caller has already chosen and never decides
+  routing:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - ``kind``
+     - Engine
+   * - ``"hybrid"``
+     - ``AdaptiveHybridStreamingOptimizer``
+   * - ``"chunked"``
+     - ``LargeDatasetFitter``
+   * - ``"exact"``
+     - ``exact_lm_fit`` (exact chunk-accumulated LM)
+   * - ``"in_memory"``
+     - ``nlsq.curve_fit``
+
+``curve_fit_large`` Routing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``Auto`` (the default) resolves on the number of points: ``InMemory`` below
+  ``size_threshold`` (default 1,000,000), ``Exact`` at or above it.
+- An explicit ``Chunked()`` runs ``LargeDatasetFitter``; an explicit ``Hybrid()`` runs
+  ``AdaptiveHybridStreamingOptimizer``.
+- ``method="exact_streaming"`` selects the exact engine explicitly, at any size.
+- When the exact engine cannot honor the request for an *engine* reason (non-default
+  ``method``, multistart, unsupported keyword arguments), it emits a ``UserWarning``
+  and falls back to the chunked fit.
+- When the cause is the *data* (2-D ``xdata``, a model that is not pointwise, non-finite
+  values with ``check_finite=False``, invalid ``sigma``), it raises ``ValueError``
+  naming ``strategy=Chunked()``.
+
+Exact Engine
+~~~~~~~~~~~~
+
+``exact_lm.py`` is a Levenberg-Marquardt solver over the full data. Each iteration runs
+one pass over the chunks (``normal_equations.py``, shared with the hybrid Gauss-Newton
+phase) accumulating ``J^T J`` and ``J^T r``.
+
+- ``max_nfev`` counts full-data passes; a stalled solve raises ``ExactSolverError``.
+- ``pcov`` is adaptive: from the normal equations when ``sqrt(cond(H)) <= TSQR_KAPPA``
+  (1e3), otherwise from one TSQR pass; ``compute_covariance=False`` skips it.
+- The chunk kernel is cached by jaxpr digest in ``_wrapper_cache``. Models with a custom
+  derivative rule (``custom_jvp`` / ``custom_vjp``) or more than 64 MiB of captured
+  constants are never cached.
+
+
+Hybrid Streaming Optimizer
+--------------------------
+
+``AdaptiveHybridStreamingOptimizer`` is one of the engines above, selected with
+``strategy=Hybrid()`` or by the streaming workflow of ``fit()``. It is not the default
+path of ``curve_fit_large``.
 
 Four-Phase Pipeline
 ~~~~~~~~~~~~~~~~~~~
 
-The streaming subsystem implements a sophisticated four-phase optimization strategy
-for datasets up to 100M+ points:
+The optimizer runs four phases for datasets up to 100M+ points:
 
 .. list-table::
    :header-rows: 1
@@ -230,18 +336,19 @@ for datasets up to 100M+ points:
 Key Components
 ~~~~~~~~~~~~~~
 
-- **AdaptiveHybridStreamingOptimizer** (``adaptive_hybrid.py``, 4,498 lines): Main 4-phase optimizer
-- **LargeDatasetFitter** (``large_dataset.py``, 3,245 lines): Memory-aware automatic chunking
-- **HybridStreamingConfig** (``hybrid_config.py``, 881 lines): Extensive configuration
-- **exact_streaming** (``exact_lm.py``, 29K; ``normal_equations.py``): exact full-data
-  Levenberg-Marquardt that accumulates ``J^T J`` and ``J^T r`` over chunks
-  (``curve_fit_large(..., method="exact_streaming")``)
-- **streaming/phases/** subpackage (2,748 lines):
+- **AdaptiveHybridStreamingOptimizer** (``adaptive_hybrid.py``): Main 4-phase optimizer
+- **LargeDatasetFitter** (``large_dataset.py``): Memory-aware automatic chunking (the chunked engine)
+- **HybridStreamingConfig** (``hybrid_config.py``): Extensive configuration
+- **DefenseLayerTelemetry** (``telemetry.py``): Monitoring of the four defense layers
+- **streaming/phases/** subpackage:
 
   - ``WarmupPhase``: L-BFGS warmup with adaptive switching
   - ``GaussNewtonPhase``: Chunked J^T J accumulation
   - ``CheckpointManager``: Fault-tolerant state persistence
   - ``PhaseOrchestrator``: Phase transition management
+
+- **TournamentSelector** (``global_optimization/tournament.py``): runs inside the warmup
+  when multistart is enabled
 
 Memory Management
 ~~~~~~~~~~~~~~~~~
@@ -251,39 +358,10 @@ Memory Management
 - Automatic chunk size calculation based on available memory
 
 
-Large-Dataset Strategies
-------------------------
-
-Large problems run through one of several engines; two small modules describe and
-build the chosen path:
-
-- ``streaming/specs.py``: frozen dataclasses (``Multistart``, ``InMemory``,
-  ``Chunked``, ``Hybrid``, ``Exact``, ``Auto``) that only declare configuration and
-  import no engines.
-- ``streaming/strategy.py``: ``build_large_strategy(kind, config, **common)``
-  constructs the engine for a path the caller has already chosen and never decides
-  routing:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 80
-
-   * - ``kind``
-     - Engine
-   * - ``"hybrid"``
-     - ``AdaptiveHybridStreamingOptimizer``
-   * - ``"chunked"``
-     - ``LargeDatasetFitter``
-   * - ``"exact"``
-     - ``exact_lm_fit`` (exact chunk-accumulated LM)
-   * - ``"in_memory"``
-     - ``nlsq.curve_fit``
-
-
 Result Types
 ------------
 
-The ``result/`` package (1,180 lines) provides optimization result containers:
+The ``result/`` package provides optimization result containers:
 
 .. list-table::
    :header-rows: 1
@@ -305,18 +383,26 @@ Caching and Performance
 Multi-Tier Caching
 ~~~~~~~~~~~~~~~~~~
 
-**UnifiedCache** (``unified_cache.py``, 543 lines):
+**UnifiedCache** (``unified_cache.py``):
 
 - Shape-relaxed cache keys: ``(func_hash, dtype, rank)`` instead of full shapes
 - LRU eviction with configurable maxsize (default: 128)
 - Weak references to prevent memory leaks
 - Target: 80%+ cache hit rate
 
-**MemoryManager** (``memory_manager.py``, 895 lines):
+**MemoryManager** (``memory_manager.py``):
 
 - LRU array pooling via OrderedDict
 - psutil for system memory detection
 - Telemetry circular buffer (deque maxlen=1000) for multi-day runs
+
+**Compiled-wrapper cache** (``core/least_squares.py``):
+
+- ``_wrapper_cache`` is an LRU ``OrderedDict`` limited to 32 entries; it holds the hot-path
+  compiled wrappers, and the exact streaming kernel is cached in it by jaxpr digest
+- ``NLSQ_DISABLE_WRAPPER_CACHE`` disables it
+- ``caching/_closure_serial.py`` supplies the per-object identity used when closures are
+  hashed into cache keys
 
 
 Numerical Stability
@@ -325,7 +411,7 @@ Numerical Stability
 Stability Guard
 ~~~~~~~~~~~~~~~
 
-``NumericalStabilityGuard`` (``stability/guard.py``, 1,259 lines) provides three modes:
+``NumericalStabilityGuard`` (``stability/guard.py``) provides three modes:
 
 - ``stability=False``: No checks (maximum performance)
 - ``stability='check'``: Warn only, no modifications
@@ -335,28 +421,29 @@ Key thresholds:
 
 - Condition number threshold: 1e12
 - SVD skip for >10M Jacobian elements
-- Tikhonov regularization factor: 1e-10
+- Diagonal regularization of ill-conditioned Jacobians (``check_and_fix_jacobian``):
+  factor 1e-10 times the largest singular value
 
 Fallback Chain
 ~~~~~~~~~~~~~~
 
-The solver uses a JAX JIT-compatible fallback chain:
+The JIT-compatible linear solve (``solve_with_cholesky_fallback``) has two stages:
 
 .. code-block:: text
 
    Cholesky decomposition
           │
-          ▼ (if fails via NaN detection)
+          ▼ (if it fails, detected via NaN)
    Eigenvalue decomposition
-          │
-          ▼ (if ill-conditioned)
-   Tikhonov regularization
+
+Diagonal regularization belongs to the guard (``check_and_fix_jacobian``, and
+``regularize_hessian`` for Hessians) and is not a stage of this chain.
 
 Additional stability components:
 
-- **SVD Fallback** (``svd_fallback.py``, 185 lines): GPU/CPU fallback SVD
-- **Recovery** (``recovery.py``, 433 lines): Optimization recovery after trust region failures
-- **FallbackOrchestrator** (``fallback.py``, 684 lines): Ordered retry strategies (alternative method, perturbed ``p0``, adjusted tolerances, bounds, robust loss, rescaling)
+- **SVD Fallback** (``svd_fallback.py``): GPU/CPU fallback SVD
+- **Recovery** (``recovery.py``): Optimization recovery after trust region failures
+- **FallbackOrchestrator** (``fallback.py``): Ordered retry strategies (alternative method, perturbed ``p0``, adjusted tolerances, bounds, robust loss, rescaling)
 
 
 Precision Modules
@@ -364,9 +451,11 @@ Precision Modules
 
 The ``precision/`` package provides solver selection and parameter management:
 
-- **AlgorithmSelector** (``algorithm_selector.py``, 625 lines): Problem-size-aware solver selection
-- **BoundInference** (``bound_inference.py``, 548 lines): Automatic bound inference
+- **AlgorithmSelector** (``algorithm_selector.py``): Problem-size-aware solver selection
+- **BoundsInference** (``bound_inference.py``): Automatic bound inference
 - **ParameterNormalizer** (``parameter_normalizer.py``): Parameter scaling for numerical stability
+- **parameter_estimation.py**: Automatic initial parameter estimation for the built-in models
+
 
 
 Global Optimization
@@ -377,23 +466,24 @@ GPU-accelerated global optimization for escaping local minima:
 CMA-ES Optimizer
 ~~~~~~~~~~~~~~~~
 
-- **CMAESOptimizer** (``cmaes_optimizer.py``, 936 lines): evosax-based CMA-ES with BIPOP restart strategy
+- **CMAESOptimizer** (``cmaes_optimizer.py``): evosax-based CMA-ES with BIPOP restart strategy
 - CMA-ES global search followed by TRF local refinement for proper covariance estimation
 - Presets: ``'cmaes-fast'``, ``'cmaes'``, ``'cmaes-global'``
-- Sigmoid bounds transform for unbounded CMA-ES to bounded parameter space
+- Sigmoid bounds transform (``bounds_transform.py``) maps unbounded CMA-ES to the bounded parameter space
+- ``bipop.py`` (restart strategy), ``checkpoint.py`` (resume state), ``cmaes_config.py`` and ``cmaes_diagnostics.py``
 
 Multi-Start Search
 ~~~~~~~~~~~~~~~~~~
 
-- **MultiStartOrchestrator** (``multi_start.py``, 679 lines): Parallel evaluation of starting points
+- **MultiStartOrchestrator** (``multi_start.py``): Parallel evaluation of starting points
 - Thread-safe with per-thread CurveFit isolation
-- Adaptive worker count based on hardware (GPU count, CPU cores)
+- Worker count by hardware: one per device on multi-GPU, ``min(n, 4)`` on a single GPU, ``min(n, cpu_count, 16)`` on CPU
 - Presets: ``'fast'``, ``'robust'``, ``'global'``, ``'thorough'``, ``'streaming'``
 
 Tournament Selection
 ~~~~~~~~~~~~~~~~~~~~
 
-- **TournamentSelector** (``tournament.py``, 559 lines): Progressive N to N/2 to top M elimination
+- **TournamentSelector** (``tournament.py``): Progressive N to N/2 to top M elimination
 - Memory-efficient evaluation on data batches without loading full dataset
 - Checkpoint/resume support for fault tolerance
 
@@ -407,11 +497,10 @@ Samplers
 **MethodSelector** (``method_selector.py``): Auto-selects CMA-ES vs multi-start based on
 parameter scale ratio and evosax availability.
 
-Integration strategy by dataset size:
+Dataset size does not choose the global strategy. ``MemoryBudgetSelector`` picks the local
+fit engine from the memory budget, and tournament selection runs inside the hybrid
+streaming warmup when multistart is enabled for that engine.
 
-- Small (<1M points): Full multi-start on complete data
-- Medium (1M-100M): Full multi-start, then chunked fit
-- Large (>100M): Tournament selection during streaming warmup
 
 
 Security Architecture
@@ -459,7 +548,7 @@ and other dangerous builtins and module calls.
 Diagnostics System
 ------------------
 
-Post-fit model health analysis via the ``diagnostics/`` package (4,039 lines):
+Post-fit model health analysis via the ``diagnostics/`` package:
 
 .. list-table::
    :header-rows: 1
@@ -473,7 +562,7 @@ Post-fit model health analysis via the ``diagnostics/`` package (4,039 lines):
      - Vanishing, imbalance, stagnation detection
    * - ``ParameterSensitivityAnalyzer``
      - Eigenvalue spectrum, stiff/sloppy directions
-   * - ``HealthReport``
+   * - ``ModelHealthReport``
      - Aggregated health summary from all analyzers
    * - ``PluginRegistry``
      - Domain-specific extensions
@@ -489,23 +578,24 @@ Usage:
 CLI System
 ----------
 
-The ``cli/`` package (8,085 lines) provides an argparse-based command-line interface:
+The ``cli/`` package provides an argparse-based command-line interface with the
+subcommands ``fit``, ``batch``, ``info``, ``config`` and ``gui``:
 
 .. code-block:: text
 
    cli/
-   ├── main.py              - argparse entry point (nlsq)
+   ├── main.py              - argparse entry point (nlsq); also handles the gui subcommand
    ├── commands/
    │   ├── fit.py            - Single fit command
    │   ├── batch.py          - Batch fitting (multiple datasets)
    │   ├── config.py         - Configuration management
    │   └── info.py           - Environment/GPU info
-   ├── data_loaders.py       - CSV/JSON/HDF5 data loading
+   ├── data_loaders.py       - ASCII (.txt/.dat/.asc), CSV, NPZ and HDF5 data loading
    ├── model_registry.py     - Built-in + custom model discovery
-   ├── model_validation.py   - AST-based security validation
+   ├── model_validation.py   - AST denylist validation, path/resource limits, audit log
    ├── workflow_runner.py     - Orchestration of fit workflows
    ├── visualization.py      - Terminal/matplotlib result display
-   ├── result_exporter.py    - JSON/CSV/ZIP export
+   ├── result_exporter.py    - JSON/CSV export
    ├── errors.py             - Structured error handling
    └── templates/            - Custom model scaffolding
 
@@ -513,12 +603,14 @@ The ``cli/`` package (8,085 lines) provides an argparse-based command-line inter
 Qt GUI System
 -------------
 
-The ``gui_qt/`` package (~12,300 lines) provides a native Qt desktop application:
+The ``gui_qt/`` package (~13,000 lines) provides a native Qt desktop application. It is an
+optional extra (``pip install "nlsq[gui]"``; PySide6 and pyqtgraph):
 
 .. code-block:: text
 
    gui_qt/
    ├── __init__.py         - run_desktop() entry point
+   ├── __main__.py         - python -m nlsq.gui_qt
    ├── main_window.py      - MainWindow with sidebar navigation
    ├── app_state.py        - AppState (Qt signals wrapping SessionState)
    ├── session_state.py    - SessionState dataclass
@@ -535,6 +627,7 @@ The ``gui_qt/`` package (~12,300 lines) provides a native Qt desktop application
    │   ├── code_editor.py
    │   ├── advanced_options.py
    │   ├── column_selector.py
+   │   ├── param_config.py
    │   ├── param_results.py
    │   ├── iteration_table.py
    │   └── fit_statistics.py
@@ -578,7 +671,7 @@ Design Patterns
    * - Singleton
      - ``JAXConfig``, global caches
    * - Phased Pipeline
-     - 4-phase streaming optimizer
+     - 4-phase hybrid streaming optimizer
    * - Lazy Loading
      - ``__getattr__`` in ``nlsq/__init__.py`` (specialty modules load on first access)
    * - Adapter
@@ -595,31 +688,52 @@ Standard Optimization
 
    User Input → curve_fit(f, x, y, p0)
        → CurveFit.curve_fit()
-       → InputValidator.validate()
+       → prepare_problem()                   → PreparedProblem
+           (InputValidator, p0/bounds, NaN handling, method selection, padding)
        → LeastSquares.least_squares()
        → AutoDiffJacobian (JAX autodiff)
        → TrustRegionReflective.trf()
-           → JIT-compiled iteration loop
-           → SVD for trust region subproblems
-       → OptimizeResult → (popt, pcov)
-
-Problem Preparation Path
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: text
-
-   User Input → curve_fit(f, x, y, p0)
-       → prepare_problem()                   → PreparedProblem
-       → LeastSquares.least_squares()        → OptimizeResult
+           → Python while loop over JIT-compiled kernels
+           → trust-region subproblem: SVD (default), LSMR or CG
+       → OptimizeResult
        → pcov_from_jacobian()                → pcov
        → CurveFitResult (popt, pcov, statistics)
 
-Large Dataset (Streaming)
-~~~~~~~~~~~~~~~~~~~~~~~~~
+``fit()`` Workflow Dispatch
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: text
+
+   User Input → fit(f, x, y, p0, workflow='auto')
+       → core.minpack.fit()
+       → MemoryBudgetSelector
+           ├── standard  → curve_fit()
+           ├── chunked   → build_large_strategy('chunked') → LargeDatasetFitter
+           └── streaming → build_large_strategy('hybrid')
+                           → AdaptiveHybridStreamingOptimizer
+
+Large Dataset (``curve_fit_large``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    User Input → curve_fit_large(f, x, y, p0)
+       → spec from strategy= (default Auto)
+           Auto.resolve(n_points): InMemory below size_threshold, else Exact
+       → fit_with_strategy()                 streaming/large_fit.py
+           ├── InMemory → curve_fit()
+           ├── Exact    → exact_lm_fit(): one pass over chunks per iteration,
+           │              accumulating J^T J and J^T r; adaptive pcov
+           ├── Chunked  → LargeDatasetFitter
+           └── Hybrid   → AdaptiveHybridStreamingOptimizer (flow below)
+       → CurveFitResult
+
+Hybrid Streaming
+~~~~~~~~~~~~~~~~
+
+.. code-block:: text
+
+   User Input → curve_fit_large(f, x, y, p0, strategy=Hybrid())
        → build_large_strategy('hybrid', config)
        → AdaptiveHybridStreamingOptimizer
            Phase 0: ParameterNormalizer.setup()
@@ -638,6 +752,7 @@ Global Optimization
 .. code-block:: text
 
    User Input → fit(f, x, y, p0, bounds=bounds, workflow='auto_global')
+       → MemoryBudgetSelector (local fit engine)
        → MethodSelector.select()
            ├── CMAESOptimizer (evosax)
            │   ├── Sigmoid bounds transform
@@ -680,14 +795,19 @@ Environment Variables
      - Disable JAX compilation cache
    * - ``NLSQ_DEBUG=1``
      - Enable debug logging
+   * - ``NLSQ_DISABLE_WRAPPER_CACHE=1``
+     - Disable the compiled-wrapper cache
+   * - ``NLSQ_SAVE_ITERATIONS=1``
+     - Record and save per-fit iteration history
 
-See :doc:`/reference/configuration` for the complete environment-variable reference.
+Only the variables most relevant to the architecture are listed. See
+:doc:`/reference/configuration` for the complete environment-variable reference.
 
 
 Configuration System
 --------------------
 
-The ``config.py`` module (904 lines) provides a singleton ``JAXConfig`` that manages:
+The ``config.py`` module provides a singleton ``JAXConfig`` that manages:
 
 - **JAX initialization**: x64 enabled, GPU memory configuration
 - **MemoryConfig**: Memory limits, chunk sizes, out-of-memory strategies
@@ -701,4 +821,4 @@ See Also
 
 - :doc:`optimization_case_study` — Performance optimization deep dive
 - :doc:`performance_tuning_guide` — Practical tuning recommendations
-- `Architecture Decision Records <adr/README.html>`_
+- :doc:`Architecture Decision Records <adr/README>`

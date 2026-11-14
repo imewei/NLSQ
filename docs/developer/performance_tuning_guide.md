@@ -58,13 +58,9 @@ manager.optimize_memory_pool(max_arrays=10)
 
 NLSQ is already highly optimized and should provide excellent performance out of the box. In most cases, **no tuning is needed**.
 
-**Typical Performance**:
-- 100-point fit: ~30ms (after initial JIT compilation)
-- 1000-point fit: ~110ms
-- 10000-point fit: ~134ms
-- 50000-point fit: ~120ms
-
-**Scaling**: 50x more data → only 1.2x slower [PASS]
+**Typical Performance**: measured fit times for four models from 1K to 100M points, on CPU and GPU, are in
+[Performance Benchmarks](../api/performance_benchmarks.rst). Fit time grew by 4.2x to 10.8x for each 10x increase in
+data for `curve_fit_large` on a 3-parameter exponential decay (1M to 100M points).
 
 ---
 
@@ -130,7 +126,7 @@ for dataset in datasets:
     popt, pcov = cf.curve_fit(model, dataset.x, dataset.y)  # Fast!
 ```
 
-**Speedup**: 10-100x for batch fitting (avoids repeated JIT compilation)
+**Benefit**: avoids repeated JIT compilation across fits (not benchmarked here)
 
 ### 2. Batch Processing
 
@@ -174,7 +170,7 @@ p0 = [max(y), 1.0, min(y)]  # Amplitude, decay rate, offset
 popt, pcov = curve_fit(exponential, x, y, p0=p0)  # Faster convergence
 ```
 
-**Speedup**: 2-5x for well-conditioned problems
+**Benefit**: fewer iterations when the starting point is close to the optimum (not benchmarked here)
 
 ### 4. Use Bounds When Appropriate
 
@@ -457,28 +453,29 @@ Before claiming "NLSQ is slow":
 
 ### What is Fast?
 
-For reference, here are typical performance numbers on modern CPU:
+Measured on an i9-13900H (CPU only), 3-parameter exponential decay, warm median of end-to-end fits; the
+host was not idle, so treat small values as indicative. Four models, both devices and the methodology are in
+[Performance Benchmarks](../api/performance_benchmarks.rst).
 
-| Problem Size | Points | Parameters | Expected Time (after JIT) |
-|--------------|--------|------------|---------------------------|
-| Small | 100 | 2-5 | 10-30ms |
-| Medium | 1,000 | 2-5 | 50-150ms |
-| Large | 10,000 | 2-5 | 100-200ms |
-| XLarge | 50,000 | 2-5 | 100-300ms |
-| Huge | 100,000+ | 2-5 | Use large_dataset module |
+| Points | API | CPU time (warm) |
+|---|---|---|
+| 1,000 | `curve_fit` | 4.0 ms |
+| 10,000 | `curve_fit` | 11.8 ms |
+| 100,000 | `curve_fit` | 44.4 ms |
+| 1,000,000 | `curve_fit_large` | 90.8 ms |
 
-**GPU acceleration** can provide 2-10x additional speedup for large problems.
+**GPU acceleration** is faster than the CPU for large problems (4.9x to 20.7x for NLSQ from 1M points) and slower for small ones; see [Performance Benchmarks](../api/performance_benchmarks.rst).
 
 ### When to Use GPU
 
 **GPU is beneficial when**:
-- Problem size > 10,000 points
+- Problem size of 1,000,000 points or more (at 100,000 points the result depended on the model)
 - Batch fitting many curves
 - Complex model functions
 - Large Jacobian matrices
 
 **GPU may not help when**:
-- Problem size < 1,000 points (overhead dominates)
+- Problem size below 1,000,000 points (the CPU was faster up to 10,000 points; at 100,000 points the GPU ranged from 1.2x slower to 3.2x faster)
 - Simple model functions
 - JIT compilation dominates (first run)
 

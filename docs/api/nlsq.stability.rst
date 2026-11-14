@@ -3,18 +3,12 @@ nlsq.stability module
 
 .. currentmodule:: nlsq.stability.guard
 
-.. automodule:: nlsq.stability.guard
-   :noindex:
-   :exclude-members: eps, max_float, min_float, condition_threshold, regularization_factor
-
 Overview
 --------
 
 The ``nlsq.stability`` module provides numerical stability analysis and automatic fixes
 for common numerical issues in curve fitting. It helps prevent and resolve problems like
 ill-conditioning, singular matrices, and overflow/underflow.
-
-**New in version 0.1.1**: Complete numerical stability system with automatic detection and fixes.
 
 Key Features
 ------------

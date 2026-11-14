@@ -29,16 +29,17 @@ Package Structure
    │   ├── minpack.py         # fit(), curve_fit(), CurveFit
    │   ├── least_squares.py   # LeastSquares orchestrator
    │   └── trf.py             # Trust Region Reflective
-   ├── streaming/      # Large dataset handling
+   ├── streaming/      # Large dataset handling (specs, large_fit, exact LM, hybrid)
    ├── caching/        # Performance optimization
    ├── stability/      # Numerical stability
-   └── gui_qt/         # Desktop application
+   ├── global_optimization/  # CMA-ES, multi-start, tournament selection
+   └── gui_qt/         # Desktop application (optional nlsq[gui] extra)
 
 Key Design Principles
 ---------------------
 
 1. **Layered Architecture**: High-level API → Mid-level → Low-level
-2. **Protocol-Based DI**: Loose coupling via interfaces
+2. **Protocol Interfaces**: ``typing.Protocol`` classes for plugins, strategies and callbacks
 3. **Lazy Loading**: Minimize import time and memory
 4. **Memory Awareness**: Automatic strategy selection
 5. **JAX-First**: GPU acceleration by default

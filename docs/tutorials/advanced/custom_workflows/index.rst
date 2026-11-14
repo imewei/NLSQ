@@ -4,29 +4,6 @@ Custom Workflows
 This chapter covers building your own optimization pipelines using NLSQ's
 components.
 
-.. toctree::
-   :maxdepth: 1
-
-   custom_optimizer
-   custom_preprocessing
-   two_stage_optimization
-   integration_patterns
-
-Chapter Overview
-----------------
-
-**Custom Optimizer** (15 min)
-   Implement your own optimizer using NLSQ protocols.
-
-**Custom Preprocessing** (10 min)
-   Create specialized data preprocessing pipelines.
-
-**Two-Stage Optimization** (15 min)
-   Combine global search with local refinement.
-
-**Integration Patterns** (10 min)
-   Integrate NLSQ with external tools and frameworks.
-
 Quick Example
 -------------
 

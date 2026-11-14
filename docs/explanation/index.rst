@@ -61,8 +61,8 @@ Overview
     in memory using streaming optimization techniques.
 
 **GPU Architecture**
-    :doc:`gpu_architecture` describes how NLSQ leverages GPU hardware
-    for massive speedups and when GPU acceleration is most beneficial.
+    :doc:`gpu_architecture` describes how NLSQ uses GPU hardware
+    and when GPU acceleration is most beneficial.
 
 See Also
 --------

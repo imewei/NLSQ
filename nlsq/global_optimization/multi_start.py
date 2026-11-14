@@ -46,7 +46,7 @@ See Also
 --------
 GlobalOptimizationConfig : Configuration for multi-start optimization
 latin_hypercube_sample : LHS sampling function
-TournamentSelector : Tournament selection for large datasets (Task Group 4)
+TournamentSelector : Tournament selection for large datasets
 """
 
 import copy

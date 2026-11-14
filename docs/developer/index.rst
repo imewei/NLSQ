@@ -14,6 +14,8 @@ release management, development best practices, and Architecture Decision Record
    documentation_quality
    pypi_setup
    notebook_utilities
+   gui_development_guide
+   svd_removal_technical_note
    ci_cd/index
    adr/README
 

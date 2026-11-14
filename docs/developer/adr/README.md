@@ -61,3 +61,11 @@ Create an ADR when making decisions about:
 
 - [ADR GitHub Organization](https://adr.github.io/)
 - [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+
+```{toctree}
+:hidden:
+
+003-streaming-over-subsampling
+004-parameter-unpacking-simplification
+005-jax-autodiff-gradients
+```

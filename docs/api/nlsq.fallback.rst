@@ -9,7 +9,7 @@ nlsq.fallback module
 Overview
 --------
 
-The ``nlsq.fallback`` module (located at ``nlsq.stability.fallback``) provides
+The ``nlsq.stability.fallback`` module provides
 automatic fallback strategies for recovering from failed optimizations. When
 curve fitting fails, the module intelligently tries alternative approaches to
 achieve convergence.

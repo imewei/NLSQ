@@ -10,12 +10,12 @@ nlsq.parameter\_normalizer module
 Overview
 --------
 
-The ``nlsq.parameter_normalizer`` module provides automatic parameter scaling to
+The ``nlsq.precision.parameter_normalizer`` module provides automatic parameter scaling to
 address gradient signal weakness caused by parameter scale imbalance. Parameters
 spanning many orders of magnitude can cause slow convergence and numerical
 instability in optimization.
 
-**New in version 0.3.0**: Parameter normalization for adaptive hybrid streaming.
+Parameter normalization for adaptive hybrid streaming.
 
 Key Features
 ------------

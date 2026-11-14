@@ -12,8 +12,10 @@
 #
 import logging
 import os
+import posixpath
 import sys
 import warnings
+from pathlib import Path
 
 # Filter out specific warnings that we can't easily suppress
 warnings.filterwarnings("ignore", category=UserWarning, module="sphinx")
@@ -126,7 +128,6 @@ suppress_warnings = [
     "ref.footnote",  # Many unreferenced footnotes in numpy/scipy docstrings
     "ref.python",  # Suppress ambiguous cross-reference warnings for classes in multiple modules
     "toc.excluded",  # Suppress toctree warnings for documents in multiple toctrees
-    "toc.not_readable",  # Suppress toctree readability warnings
     "toc.not_included",  # Suppress warnings for autosummary-generated files not in explicit toctree
     "autosummary",  # Suppress autosummary warnings
     "autodoc",  # Suppress autodoc warnings including duplicate object descriptions
@@ -438,7 +439,7 @@ html_show_copyright = True
 html_last_updated_fmt = "%b %d, %Y"
 
 # Logo and favicon
-# html_logo = "_static/NLSQ_logo.png"  # File not yet in repo
+# html_logo = "_static/NLSQ_logo.png"
 # html_favicon = "_static/favicon.ico"
 
 # -- Linkcheck configuration -------------------------------------------------
@@ -507,9 +508,38 @@ mathjax3_config = {
 }
 
 
+# -- Redirects for removed pages ---------------------------------------------
+# Published URL (no suffix) -> replacement page. Written as meta-refresh pages after an HTML build.
+REMOVED_PAGE_REDIRECTS = {
+    "tutorials/01_first_fit": "tutorials/routine/getting_started/first_fit",
+    "tutorials/02_understanding_results": "tutorials/routine/getting_started/understanding_results",
+    "tutorials/03_fitting_with_bounds": "tutorials/routine/data_handling/bounds",
+    "tutorials/05_large_datasets": "tutorials/routine/data_handling/large_datasets",
+    "tutorials/06_gpu_acceleration": "tutorials/routine/gpu_acceleration/gpu_usage",
+    "gui/user_guide": "tutorials/routine/gui_desktop/index",
+}
+
+
+def _write_removed_page_redirects(app, exception):
+    if exception is not None or app.builder.format != "html":
+        return
+    for old, new in REMOVED_PAGE_REDIRECTS.items():
+        target = posixpath.relpath(new, start=posixpath.dirname(old)) + ".html"
+        page = Path(app.outdir) / f"{old}.html"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text(
+            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            f"<meta http-equiv='refresh' content='0; url={target}'>"
+            f"<link rel='canonical' href='{target}'><title>Moved</title></head>"
+            f"<body>This page moved to <a href='{target}'>{new}</a>.</body></html>",
+            encoding="utf-8",
+        )
+
+
 # -- Sphinx setup hook -------------------------------------------------------
 def setup(app):
     """Configure Sphinx after initialization."""
+    app.connect("build-finished", _write_removed_page_redirects)
     import logging as _logging
     import re
 

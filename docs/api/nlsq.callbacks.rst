@@ -13,7 +13,7 @@ The ``nlsq.callbacks`` module provides callback functions for monitoring and con
 optimization progress. Callbacks can display progress bars, log iterations, implement early
 stopping, and save intermediate results.
 
-**New in version 0.1.1**: Complete callback system with progress bars and early stopping.
+Complete callback system with progress bars and early stopping.
 
 Key Features
 ------------
