@@ -12,7 +12,6 @@ RUNTIME = {
     "jax",
     "jaxlib",
     "optax",
-    "optimistix",
     "matplotlib",
     "psutil",
     "tqdm",
@@ -74,7 +73,7 @@ def test_dev_group_has_test_lint_docs_build_tools():
 
 def test_bench_group_has_comparison_libraries():
     bench = _load_pyproject()["dependency-groups"]["bench"]
-    assert {_dist_name(r) for r in bench} == {"lmfit", "jaxopt"}
+    assert {_dist_name(r) for r in bench} == {"lmfit", "jaxopt", "optimistix"}
 
 
 def test_no_upper_caps():
