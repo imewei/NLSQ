@@ -7,9 +7,14 @@
   - Deleted: `tutorials/01_first_fit`, `02_understanding_results`, `03_fitting_with_bounds`,
     `05_large_datasets`, `06_gpu_acceleration` and `gui/user_guide`. Each was a seven-line "deprecated"
     redirect whose content lives in `tutorials/routine/getting_started/first_fit` and
-    `tutorials/routine/gui_desktop/index`; old links to those URLs on the published site will no longer resolve.
+    `tutorials/routine/gui_desktop/index`. `conf.py` (`REMOVED_PAGE_REDIRECTS`) writes meta-refresh pages at the six
+    old URLs after an HTML build, so published links still resolve.
     The hidden "Legacy Redirects" toctree in `tutorials/index.rst` went with them, and
     `tutorials/04_multiple_parameters` is retitled "Multi-Parameter Models" with its prerequisite repointed.
+  - Unsourced multipliers: `api/nlsq.validators.rst` "~30-50% faster" replaced by a measurement (one CPU, median of
+    7 calls: 0.0002 s against 0.0019 s at 100,000 points, 0.0024 s against 0.0218 s at 1,000,000);
+    `api/nlsq.unified_cache.rst` "2-5x" compile-time goal removed. The "3-25x" in `api/nlsq.svd_fallback.rst`
+    matches its own table and is kept.
   - Removed 13 toctree entries and their "Chapter Overview" write-ups (with time estimates) for chapters that
     were never written, in `tutorials/advanced/{stability,performance,extension,custom_workflows}/index.rst`.
     `toc.not_readable` is no longer suppressed in `conf.py`, so a dangling toctree entry now warns.
