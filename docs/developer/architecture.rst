@@ -821,4 +821,4 @@ See Also
 
 - :doc:`optimization_case_study` — Performance optimization deep dive
 - :doc:`performance_tuning_guide` — Practical tuning recommendations
-- `Architecture Decision Records <adr/README.html>`_
+- :doc:`Architecture Decision Records <adr/README>`

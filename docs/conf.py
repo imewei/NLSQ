@@ -126,7 +126,6 @@ suppress_warnings = [
     "ref.footnote",  # Many unreferenced footnotes in numpy/scipy docstrings
     "ref.python",  # Suppress ambiguous cross-reference warnings for classes in multiple modules
     "toc.excluded",  # Suppress toctree warnings for documents in multiple toctrees
-    "toc.not_readable",  # Suppress toctree readability warnings
     "toc.not_included",  # Suppress warnings for autosummary-generated files not in explicit toctree
     "autosummary",  # Suppress autosummary warnings
     "autodoc",  # Suppress autodoc warnings including duplicate object descriptions
@@ -438,7 +437,7 @@ html_show_copyright = True
 html_last_updated_fmt = "%b %d, %Y"
 
 # Logo and favicon
-# html_logo = "_static/NLSQ_logo.png"  # File not yet in repo
+# html_logo = "_static/NLSQ_logo.png"
 # html_favicon = "_static/favicon.ico"
 
 # -- Linkcheck configuration -------------------------------------------------

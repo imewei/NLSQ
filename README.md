@@ -11,7 +11,7 @@
 [![JAX ≥0.8.0](https://img.shields.io/badge/JAX-≥0.8.0-green.svg)](https://github.com/google/jax)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[**Documentation**](https://nlsq.readthedocs.io/) | [**Examples**](examples/) | [**API Reference**](https://nlsq.readthedocs.io/en/latest/api.html) | [**ArXiv Paper**](https://doi.org/10.48550/arXiv.2208.12187)
+[**Documentation**](https://nlsq.readthedocs.io/) | [**Examples**](examples/) | [**API Reference**](https://nlsq.readthedocs.io/en/latest/api/index.html) | [**ArXiv Paper**](https://doi.org/10.48550/arXiv.2208.12187)
 
 </div>
 
@@ -178,14 +178,8 @@ print(f"Uncertainties: {np.sqrt(np.diag(pcov))}")
 
 ## Graphical User Interface
 
-NLSQ includes an interactive GUI for curve fitting without writing code:
-
-```bash
-# Launch the GUI
-nlsq-gui
-```
-
-The GUI provides:
+NLSQ includes an interactive GUI for curve fitting without writing code. Install the `gui` extra and
+launch it as shown under [With GUI Support](#with-gui-support) (`nlsq-gui` or `nlsq gui`). It provides:
 - **Data Loading**: Import CSV, ASCII, NPZ, or HDF5 files, or paste from clipboard
 - **Model Selection**: Choose from 8 built-in models, polynomials, or custom Python functions
 - **Fitting Options**: Guided presets (Fast/Robust/Quality) or advanced parameter control
@@ -199,7 +193,7 @@ See the [GUI User Guide](https://nlsq.readthedocs.io/en/latest/gui/index.html) f
 | Feature | Description |
 |---------|-------------|
 | **Automatic Jacobians** | JAX's autodiff eliminates manual derivatives |
-| **Bounded optimization** | Trust Region Reflective and Levenberg-Marquardt |
+| **Bounded optimization** | Trust Region Reflective; exact Levenberg-Marquardt for full-data streaming fits |
 | **Large datasets** | `curve_fit_large` runs an exact full-data streaming fit by default from 1M points (100M+ supported); chunked and hybrid streaming fits via `strategy=` |
 | **Multi-start** | Global optimization with LHS/Sobol sampling |
 | **Workflow system** | 3 smart workflows: `auto`, `auto_global`, `hpc` with memory-aware strategy |
@@ -382,14 +376,12 @@ config = CMAESConfig(
 optimizer = CMAESOptimizer(config=config)
 ```
 
-Requires: `pip install nlsq`
-
 </details>
 
 <details>
-<summary><b>Workflow presets (v0.6.3)</b></summary>
+<summary><b>Workflows</b></summary>
 
-NLSQ v0.6.3 simplifies workflows to 3 smart options:
+`fit()` offers three workflows:
 
 ```python
 from nlsq import fit
@@ -544,7 +536,7 @@ See [Advanced User Guide](https://nlsq.readthedocs.io/en/latest/advanced_guide.h
 
 ## Examples
 
-Start with the [Interactive Tutorial](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/NLSQ_Interactive_Tutorial.ipynb) on Google Colab.
+Start with the [Interactive Tutorial](https://colab.research.google.com/github/imewei/NLSQ/blob/main/examples/notebooks/01_getting_started/nlsq_interactive_tutorial.ipynb) on Google Colab.
 
 **By topic:**
 - [Getting Started](examples/notebooks/01_getting_started/) - Basic usage and quickstart

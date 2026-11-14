@@ -1,5 +1,5 @@
-Tutorial 4: Multi-Parameter Models
-===================================
+Multi-Parameter Models
+======================
 
 In this tutorial, you'll learn how to fit complex models with many parameters,
 handle parameter correlations, and work with multi-component models.
@@ -15,7 +15,7 @@ What You'll Learn
 Prerequisites
 -------------
 
-- Completed tutorials 1-3
+- Completed :doc:`/tutorials/routine/getting_started/index`
 
 The Challenge of Multi-Parameter Fitting
 ----------------------------------------

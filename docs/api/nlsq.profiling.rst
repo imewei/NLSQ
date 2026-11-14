@@ -12,8 +12,8 @@ Overview
 
 The ``profiling`` module provides JAX profiler integration for monitoring host-device transfers in the TRF solver, enabling measurement of transfer bytes and counts per iteration.
 
-Performance Targets (Task Group 2)
------------------------------------
+Performance Targets
+-------------------
 
 - **Host-device transfer bytes**: 80% reduction (current ~80KB → <16KB per iteration)
 - **Transfer count**: Reduce from 24+ → <5 per iteration

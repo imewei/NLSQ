@@ -81,6 +81,15 @@ Choose your path:
    developer/index
    CHANGELOG
 
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Section Indexes
+
+   api/index
+   howto/index
+   tutorials/index
+
 ----
 
 Resources

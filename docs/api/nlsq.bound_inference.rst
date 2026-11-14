@@ -9,11 +9,11 @@ nlsq.bound\_inference module
 Overview
 --------
 
-The ``nlsq.bound_inference`` module provides intelligent automatic inference of parameter
+The ``nlsq.precision.bound_inference`` module provides intelligent automatic inference of parameter
 bounds from data. Instead of manually specifying bounds, the module analyzes your data
 and model to determine reasonable constraints automatically.
 
-**New in version 0.1.1**: Complete bounds inference system with smart defaults.
+Complete bounds inference system with smart defaults.
 
 Key Features
 ------------

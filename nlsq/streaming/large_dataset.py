@@ -1071,22 +1071,24 @@ class LargeDatasetFitter:
 
     Multi-Start Optimization
     ------------------------
-    For medium-sized datasets (1M-100M points), multi-start optimization explores
-    multiple starting points on full data, and the best starting point is then
-    used for the full chunked optimization.
+    When ``multistart=True`` and the dataset needs more than one chunk, multi-start
+    optimization explores ``n_starts`` starting points on the full data, and the best
+    starting point seeds the chunked optimization. A dataset that fits in a single
+    chunk bypasses the exploration (``bypass_reason="single_chunk_dataset"``).
 
     Performance Characteristics
     ---------------------------
-    - Maintains <1% parameter error for well-conditioned problems using chunking
-    - Achieves 5-50x speedup over naive approaches through memory optimization
+    - Combines per-chunk fits by precision weighting; exact only for linear models and
+      an approximation for nonlinear ones
+    - Bounds memory use by processing the data in chunks sized from the available memory
     - Scales to datasets of unlimited size using streaming (processes all data)
     - Provides linear time complexity with respect to chunk count
 
-    Model Validation Caching (Task Group 7 - 5.1a)
-    ----------------------------------------------
+    Model Validation Caching
+    ------------------------
     Model functions are validated once per unique function identity using a cache
     keyed by (id(func), id(func.__code__)). This avoids redundant validation
-    across chunks, providing 1-5% performance gain in chunked processing.
+    across chunks.
 
     Parameters
     ----------

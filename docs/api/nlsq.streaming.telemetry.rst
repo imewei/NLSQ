@@ -3,9 +3,6 @@ nlsq.streaming.telemetry
 
 Telemetry and monitoring for the defense layer strategy.
 
-.. versionadded:: 1.2.0
-   Extracted from ``nlsq.streaming.adaptive_hybrid`` for modularity.
-
 This module provides telemetry infrastructure for the 4-layer defense strategy
 used in adaptive hybrid streaming optimization. It tracks activation counts,
 timing, and effectiveness metrics for each defense layer.

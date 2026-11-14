@@ -3,29 +3,6 @@ Performance Optimization
 
 This chapter covers techniques for maximizing NLSQ performance.
 
-.. toctree::
-   :maxdepth: 1
-
-   jit_caching
-   memory_management
-   sparse_jacobians
-   profiling
-
-Chapter Overview
-----------------
-
-**JIT Caching** (10 min)
-   Understanding and optimizing JIT compilation caching.
-
-**Memory Management** (10 min)
-   Memory pools, budgets, and efficient data handling.
-
-**Sparse Jacobians** (10 min)
-   Leveraging sparsity for large problems.
-
-**Profiling** (10 min)
-   Using TRFProfiler and identifying bottlenecks.
-
 Performance Quick Tips
 ----------------------
 

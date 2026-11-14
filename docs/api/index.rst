@@ -57,28 +57,28 @@ Module Organization
 Core Modules
 ~~~~~~~~~~~~
 
-- ``nlsq.minpack`` - Main curve_fit implementation
-- ``nlsq.least_squares`` - Least squares solver
-- ``nlsq.trf`` - Trust Region Reflective algorithm
+- ``nlsq.core.minpack`` - Main curve_fit implementation
+- ``nlsq.core.least_squares`` - Least squares solver
+- ``nlsq.core.trf`` - Trust Region Reflective algorithm
 
 Advanced Features
 ~~~~~~~~~~~~~~~~~
 
-- ``nlsq.large_dataset`` - Large dataset handling
-- ``nlsq.memory_manager`` - Memory management
-- ``nlsq.unified_cache`` - JIT compilation caching
+- ``nlsq.streaming.large_dataset`` - Large dataset handling
+- ``nlsq.caching.memory_manager`` - Memory management
+- ``nlsq.caching.unified_cache`` - JIT compilation caching
 - ``nlsq.diagnostics`` - Model Health Diagnostics System (identifiability, gradient health, sloppy model analysis)
-- ``nlsq.adaptive_hybrid_streaming`` - Four-phase hybrid optimizer
-- ``nlsq.hybrid_streaming_config`` - Hybrid streaming configuration
-- ``nlsq.parameter_normalizer`` - Parameter normalization
+- ``nlsq.streaming.adaptive_hybrid`` - Four-phase hybrid optimizer
+- ``nlsq.streaming.hybrid_config`` - Hybrid streaming configuration
+- ``nlsq.precision.parameter_normalizer`` - Parameter normalization
 
 Utilities
 ~~~~~~~~~
 
-- ``nlsq.validators`` - Input validation
-- ``nlsq.loss_functions`` - Loss function library
+- ``nlsq.utils.validators`` - Input validation
+- ``nlsq.core.loss_functions`` - Loss function library
 - ``nlsq.config`` - Configuration management
-- ``nlsq.logging`` - Logging utilities
+- ``nlsq.utils.logging`` - Logging utilities
 
 See :doc:`modules` for complete documentation of all modules.
 
@@ -99,4 +99,4 @@ See :doc:`notebook_utils` for complete API documentation and :doc:`../developer/
 Performance Benchmarks
 ----------------------
 
-See :doc:`../developer/optimization_case_study` for detailed performance analysis.
+See :doc:`performance_benchmarks` for measured timings (same-device comparisons).

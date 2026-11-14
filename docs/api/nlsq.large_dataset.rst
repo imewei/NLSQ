@@ -9,7 +9,7 @@ nlsq.large\_dataset module
 Overview
 --------
 
-The ``nlsq.large_dataset`` module provides specialized tools for fitting curves to datasets
+The ``nlsq.streaming.large_dataset`` module provides specialized tools for fitting curves to datasets
 that are too large to fit in memory or require chunking for efficient processing. This module
 is essential for working with datasets containing millions or billions of points.
 

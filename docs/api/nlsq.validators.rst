@@ -9,13 +9,13 @@ nlsq.validators module
 Overview
 --------
 
-The ``nlsq.validators`` module provides comprehensive input validation for curve fitting
+The ``nlsq.utils.validators`` module provides comprehensive input validation for curve fitting
 and optimization functions. It catches common errors early, provides helpful error messages,
 and ensures data quality before expensive optimization operations begin.
 
-**New in version 0.1.1**: Complete validation system with fast mode and extensive checks.
+Complete validation system with fast mode and extensive checks.
 
-**New in version 0.3.1**: Added security-focused validation (array size limits, bounds checking,
+Added security-focused validation (array size limits, bounds checking,
 parameter validation).
 
 Key Features

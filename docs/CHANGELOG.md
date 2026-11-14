@@ -1,6 +1,34 @@
 # Documentation Changelog
 
 ## Unreleased
+- Obsolete, unused and duplicate documentation removed (`/dev-suite:docs ... --full`). Candidates were found from
+  an unmuted Sphinx build (`-D suppress_warnings=`), the toctree and cross-reference graph, a shingle-overlap
+  scan for duplicate prose, and a sweep of the repository outside `docs/` for references.
+  - Deleted: `tutorials/01_first_fit`, `02_understanding_results`, `03_fitting_with_bounds`,
+    `05_large_datasets`, `06_gpu_acceleration` and `gui/user_guide`. Each was a seven-line "deprecated"
+    redirect whose content lives in `tutorials/routine/getting_started/first_fit` and
+    `tutorials/routine/gui_desktop/index`; old links to those URLs on the published site will no longer resolve.
+    The hidden "Legacy Redirects" toctree in `tutorials/index.rst` went with them, and
+    `tutorials/04_multiple_parameters` is retitled "Multi-Parameter Models" with its prerequisite repointed.
+  - Removed 13 toctree entries and their "Chapter Overview" write-ups (with time estimates) for chapters that
+    were never written, in `tutorials/advanced/{stability,performance,extension,custom_workflows}/index.rst`.
+    `toc.not_readable` is no longer suppressed in `conf.py`, so a dangling toctree entry now warns.
+  - `api/modules.rst`: removed 32 "NEW in v0.x" tags and the "Enhanced Features (v0.1.1)" heading; "New in
+    version 0.x" lead-ins removed from eight API pages; "Task Group" markers removed from two; three
+    `.. versionadded:: 1.2.0` directives removed (no such release; the latest tag is v0.7.6).
+  - Duplicate: `api/nlsq.stability.rst` rendered `nlsq.stability.guard` a second time; it now links to
+    `api/nlsq.stability.guard.rst`.
+  - Stale values and paths: `api/nlsq.rst` "3819 tests" claim; `api/index.rst` benchmark pointer (now
+    `api/performance_benchmarks`) and flat module names (`nlsq.minpack` and similar, now the real
+    `nlsq.core.minpack`, `nlsq.streaming.hybrid_config`, ...); seven API pages that named a non-existent import path.
+  - Linked from toctrees so they are no longer orphans: `developer/gui_development_guide`,
+    `developer/svd_removal_technical_note` and ADRs 003-005.
+  - README: broken `api.html` link and a Colab link to a notebook path that no longer exists; the GUI launch
+    block duplicated under "With GUI Support"; "Levenberg-Marquardt" claim in the feature table; stale "v0.6.3"
+    workflow wording; a redundant `Requires: pip install nlsq` line.
+  - Kept after checking (not duplicates): the profiler, profiling and profiler_visualization pages (three
+    different modules), `howto/index` (the only route to `howto/domain_applications/*`), `tutorials/index`.
+    `api/index`, `howto/index` and `tutorials/index` are now in a hidden "Section Indexes" toctree in `index.rst`.
 - Architecture documentation refreshed (`/dev-suite:docs update ... --full`), checked against the code.
   - `developer/architecture.rst`: package tree and layer diagram regenerated (equal-width rows); large-data
     story now starts from the routing (`curve_fit_large` spec, `Auto` at `size_threshold`, exact default,
@@ -22,8 +50,7 @@
   - `developer/gui_development_guide.md`, `api/nlsq.gui_qt.rst`: removed the non-existent `export_adapter` and
     `base_plot`; `explanation/regularization.rst`: source paths under `nlsq/streaming/`.
   - Not changed: `CLAUDE.md` is gitignored (it still says JAX tested on 0.9.1 and that the GUI ships in the
-    main dependencies); `nlsq/global_optimization/__init__.py` docstring still carries the size-based
-    integration text; `optimistix` is declared in `pyproject.toml` but not imported under `nlsq/`.
+    main dependencies); `optimistix` is declared in `pyproject.toml` but not imported under `nlsq/`.
 - Performance and benchmark documentation rewritten (`/dev-suite:docs update --readme`, then the Sphinx pages).
   An earlier pass in this cycle compared NLSQ on GPU with SciPy on CPU; the earlier README table, the
   150-270x claim and the V100-era tables had no recorded source. Every comparison is now within one device
