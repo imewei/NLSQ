@@ -22,7 +22,7 @@ def test_second_order_half_life_uncertainty_includes_covariance(kind, gallery, s
         / gallery
         / f"chemistry/reaction_kinetics.{suffix}"
     )
-    source = path.read_text()
+    source = path.read_text(encoding="utf-8")
     if suffix == "ipynb":
         source = "\n".join(
             "".join(cell["source"])
