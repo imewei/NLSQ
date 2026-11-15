@@ -24,9 +24,6 @@ deep-copied when recorded and the caller's config is compared before/after);
 list/tuple/ndarray conversions (``same`` is strict about container types); and
 dropped result metadata or identity of results the production code returns as-is.
 
-Public vs direct: every ``WORKFLOW_PRESETS`` key is rejected before
-``_fit_with_preset`` (see ``test_legacy_preset_keys_rejected_publicly``), so its
-two constructors are driven through the module-level helper directly.
 ``LargeDatasetFitter._fit_with_streaming`` has no caller anywhere; it is driven
 directly and ``test_fitter_fit_never_builds_hybrid`` pins that it stays unwired.
 """
@@ -434,101 +431,6 @@ class Row:
 SLOW = (pytest.mark.slow,)
 # Enters nlsq.config.memory_context/large_dataset_context (process-global state).
 SERIAL = (pytest.mark.serial,)
-
-
-def _call_preset(key: str, *, n_points: int = N, **overrides: Any) -> Any:
-    args: dict[str, Any] = {
-        "f": MODEL,
-        "xdata": X,
-        "ydata": Y,
-        "p0": P0,
-        "sigma": None,
-        "absolute_sigma": False,
-        "check_finite": True,
-        "bounds": INF_BOUNDS,
-        "method": None,
-        "preset": minpack.WORKFLOW_PRESETS[key],
-        "goal": None,
-        "n_points": n_points,
-    }
-    args.update(overrides)
-    return minpack._fit_with_preset(**args)
-
-
-# ---- nlsq.fit (preset="streaming") ----------------------------------------
-
-
-def _drive_fit_preset_streaming(ctx: SimpleNamespace, **kw: Any) -> Any:
-    with pytest.warns(FutureWarning, match="preset"):
-        if "ftol" in kw or "xtol" in kw:
-            # no hybrid equivalent: warned about, not silently dropped
-            with pytest.warns(UserWarning, match="ftol"):
-                return nlsq.fit(MODEL, X, Y, p0=P0, preset="streaming", **kw)
-        return nlsq.fit(MODEL, X, Y, p0=P0, preset="streaming", **kw)
-
-
-def _drive_fit_preset_streaming_full(ctx: SimpleNamespace) -> Any:
-    return _drive_fit_preset_streaming(
-        ctx,
-        sigma=SIG,
-        absolute_sigma=True,
-        bounds=FINITE_BOUNDS,
-        callback=_CALLBACK,
-        verbose=0,
-        multistart=True,
-        n_starts=4,
-        sampler="sobol",
-        gtol=1e-3,
-        ftol=1e-3,
-        xtol=1e-3,
-    )
-
-
-def _check_fit_preset_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
-    # gtol maps to gauss_newton_tol; ftol/xtol have no hybrid equivalent (warned,
-    # not forwarded). Multistart settings reach the config, and
-    # sigma/absolute_sigma/callback/verbose/bounds reach fit().
-    expect_hybrid_ctor(
-        rec,
-        HybridStreamingConfig(
-            enable_multistart=True,
-            n_starts=4,
-            multistart_sampler="sobol",
-            gauss_newton_tol=1e-3,
-        ),
-        "fit(preset=streaming) config",
-    )
-    expect_hybrid_fit(
-        rec.only_fit(HYBRID),
-        p0=np.array(P0),
-        bounds=FINITE_BOUNDS_ARR,
-        sigma=SIG,
-        sigma_is=True,
-        absolute_sigma=True,
-        callback=_CALLBACK,
-        verbose=0,
-    )
-    # No model/xdata/ydata on this route; engine metadata is kept.
-    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META, model=False)
-    expect(
-        result["multistart_diagnostics"],
-        {"n_starts_configured": 4, "bypassed": False, "preset": "streaming"},
-        "multistart_diagnostics",
-    )
-
-
-def _check_fit_preset_streaming_off(rec: Recorder, result: Any, ctx: Any) -> None:
-    expect_hybrid_ctor(
-        rec,
-        HybridStreamingConfig(enable_multistart=False, n_starts=10),
-        "multistart=False config",
-    )
-    expect_hybrid_fit(rec.only_fit(HYBRID), p0=np.array(P0), bounds=None, sigma=None)
-    expect(
-        result["multistart_diagnostics"],
-        {"n_starts_configured": 10, "bypassed": True, "preset": "streaming"},
-        "multistart_diagnostics",
-    )
 
 
 # ---- nlsq.curve_fit_large --------------------------------------------------
@@ -1142,142 +1044,6 @@ def _check_auto_standard(rec: Recorder, result: Any, ctx: Any) -> None:
     close_to_truth(result["popt"] if "popt" in result else result["x"])
 
 
-# ---- nlsq.core.minpack._fit_with_preset (direct helper) --------------------
-
-
-def _drive_preset_chunked(ctx: SimpleNamespace) -> Any:
-    return _call_preset(
-        "large_robust",
-        n_points=1_000_000,
-        method="lm",
-        sigma=SIG,
-        absolute_sigma=True,
-        check_finite=False,
-        max_nfev=7,
-    )
-
-
-def _check_preset_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
-    expect_fitter_ctor(
-        rec,
-        memory_limit_gb=8.0,
-        config=LDMemoryConfig(
-            memory_limit_gb=8.0, min_chunk_size=1000, max_chunk_size=100_000
-        ),
-    )
-    # sigma, absolute_sigma and check_finite are dropped on this route; method,
-    # the preset's multistart settings and tolerances and extra kwargs are forwarded.
-    expect_fitter_fit(
-        rec.only_fit(FITTER),
-        p0=np.array(P0),
-        bounds=INF_BOUNDS,
-        bounds_is=True,
-        method="lm",
-        extra={
-            "multistart": True,
-            "n_starts": 10,
-            "gtol": 1e-8,
-            "ftol": 1e-8,
-            "xtol": 1e-8,
-            "max_nfev": 7,
-        },
-    )
-    expect_curve_fit_result(result, x=FIT_X, pcov=FIT_PCOV, meta=FIT_META)
-
-
-def _drive_preset_chunked_passthrough(ctx: SimpleNamespace) -> Any:
-    return _call_preset("large_robust", n_points=1_000_000)
-
-
-def _drive_preset_streaming(ctx: SimpleNamespace) -> Any:
-    return _call_preset(
-        "streaming",
-        sigma=SIG,
-        absolute_sigma=True,
-        bounds=FINITE_BOUNDS,
-        callback=_CALLBACK,
-        verbose=0,
-        ftol=1e-4,
-        xtol=1e-5,
-    )
-
-
-def _check_preset_streaming(rec: Recorder, result: Any, ctx: Any) -> None:
-    # gauss_newton_tol comes from the preset's gtol (1e-7); explicit ftol/xtol are
-    # dropped; sigma/absolute_sigma/callback/verbose/bounds reach the engine.
-    expect_hybrid_ctor(
-        rec,
-        HybridStreamingConfig(
-            normalize=True,
-            warmup_iterations=200,
-            gauss_newton_tol=1e-7,
-            enable_checkpoints=False,
-            enable_multistart=False,
-            n_starts=0,
-        ),
-        "streaming preset config",
-    )
-    expect_hybrid_fit(
-        rec.only_fit(HYBRID),
-        p0=np.array(P0),
-        bounds=FINITE_BOUNDS_ARR,
-        sigma=SIG,
-        absolute_sigma=True,
-        callback=_CALLBACK,
-        verbose=0,
-    )
-    expect_curve_fit_result(result, x=HYB_X, pcov=HYB_PCOV, meta=HYB_META)
-
-
-def _drive_preset_hpc(ctx: SimpleNamespace) -> Any:
-    return _call_preset(
-        "hpc_distributed",
-        sigma=SIG,
-        absolute_sigma=True,
-        bounds=FINITE_BOUNDS,
-        gtol=1e-5,
-    )
-
-
-def _check_preset_hpc(rec: Recorder, result: Any, ctx: Any) -> None:
-    expect_hybrid_ctor(
-        rec,
-        HybridStreamingConfig(
-            normalize=True,
-            warmup_iterations=200,
-            gauss_newton_tol=1e-5,  # explicit gtol beats the preset's 1e-6
-            enable_checkpoints=True,
-            enable_multistart=True,
-            n_starts=10,
-        ),
-        "hpc_distributed preset config",
-    )
-    expect_hybrid_fit(
-        rec.only_fit(HYBRID),
-        p0=np.array(P0),
-        bounds=FINITE_BOUNDS_ARR,
-        sigma=SIG,
-        absolute_sigma=True,
-    )
-
-
-def _check_preset_goal_tolerance(rec: Recorder, result: Any, ctx: Any) -> None:
-    gtol = calculate_adaptive_tolerances(N, OptimizationGoal.QUALITY)["gtol"]
-    assert gtol != 1e-7
-    expect_hybrid_ctor(
-        rec,
-        HybridStreamingConfig(
-            normalize=True,
-            warmup_iterations=200,
-            gauss_newton_tol=gtol,
-            enable_checkpoints=False,
-            enable_multistart=False,
-            n_starts=0,
-        ),
-        "goal-derived gtol overrides the preset's",
-    )
-
-
 # ---- nlsq.core.minpack._fit_global_multistart ------------------------------
 
 
@@ -1692,23 +1458,6 @@ def _check_cf_auto_chunked_real(rec: Recorder, result: Any, ctx: Any) -> None:
 
 
 ROWS: list[Row] = [
-    # --- nlsq.fit (preset=streaming) --------------------------------------
-    Row(
-        "init.fit[preset=streaming]",
-        "nlsq.fit",
-        HYBRID,
-        _drive_fit_preset_streaming_full,
-        _check_fit_preset_streaming,
-        {HYBRID: hybrid_ok},
-    ),
-    Row(
-        "init.fit[preset=streaming,multistart=False]",
-        "nlsq.fit",
-        HYBRID,
-        lambda ctx: _drive_fit_preset_streaming(ctx, multistart=False),
-        _check_fit_preset_streaming_off,
-        {HYBRID: hybrid_ok},
-    ),
     # --- nlsq.curve_fit_large ---------------------------------------------
     Row(
         "init.curve_fit_large[hybrid_streaming,real]",
@@ -1905,47 +1654,6 @@ ROWS: list[Row] = [
         lambda ctx: nlsq.fit(MODEL, X, Y, p0=P0, workflow="auto"),
         _check_auto_standard,
     ),
-    # --- minpack._fit_with_preset (direct helper only) ----------------------
-    Row(
-        "minpack._fit_with_preset[large_robust,n_points=1M,direct]",
-        "_fit_with_preset (chunked tier)",
-        FITTER,
-        _drive_preset_chunked,
-        _check_preset_chunked,
-        {FITTER: fitter_ok},
-    ),
-    Row(
-        "minpack._fit_with_preset[large_robust,curvefitresult-passthrough]",
-        "_fit_with_preset (chunked tier)",
-        FITTER,
-        _drive_preset_chunked_passthrough,
-        _check_workflow_ld_passthrough,
-        {FITTER: fitter_curve_fit_result},
-    ),
-    Row(
-        "minpack._fit_with_preset[streaming,direct]",
-        "_fit_with_preset (streaming tier)",
-        HYBRID,
-        _drive_preset_streaming,
-        _check_preset_streaming,
-        {HYBRID: hybrid_ok},
-    ),
-    Row(
-        "minpack._fit_with_preset[hpc_distributed,direct]",
-        "_fit_with_preset (streaming tier)",
-        HYBRID,
-        _drive_preset_hpc,
-        _check_preset_hpc,
-        {HYBRID: hybrid_ok},
-    ),
-    Row(
-        "minpack._fit_with_preset[streaming,goal-overrides-preset-gtol]",
-        "_fit_with_preset (streaming tier)",
-        HYBRID,
-        lambda ctx: _call_preset("streaming", goal=OptimizationGoal.QUALITY),
-        _check_preset_goal_tolerance,
-        {HYBRID: hybrid_ok},
-    ),
     # --- minpack._fit_global_multistart -------------------------------------
     Row(
         "minpack._fit_global_multistart[auto_global->chunked]",
@@ -2128,14 +1836,10 @@ def test_routing_table(row: Row, rec: Recorder) -> None:
 
 
 def test_legacy_preset_keys_rejected_publicly(rec: Recorder) -> None:
-    """Every WORKFLOW_PRESETS key is rejected before _fit_with_preset can run.
-
-    So the two constructors inside _fit_with_preset have no public path; the
-    rows above drive them through the helper directly. (If
-    _fit_with_preset is restructured, this behavioural gate must keep holding.)
-    """
-    assert set(minpack.WORKFLOW_PRESETS) == set(minpack.REMOVED_PRESETS)
-    for key in minpack.WORKFLOW_PRESETS:
+    """Every removed preset key is rejected with migration advice, before any
+    engine is built."""
+    assert not hasattr(minpack, "WORKFLOW_PRESETS")
+    for key in minpack.REMOVED_PRESETS:
         for spelling in (key, key.upper()):
             with pytest.raises(ValueError, match=r"removed in v0\.6\.3"):
                 nlsq.fit(MODEL, X, Y, p0=P0, workflow=spelling, bounds=FINITE_BOUNDS)
@@ -2235,24 +1939,6 @@ def test_curve_fit_auto_chunked_failure_and_guards(rec: Recorder) -> None:
             data_mask=np.ones(N, bool),
         )
     assert rec.ctors() == []
-
-
-def test_preset_chunked_below_1m_points_uses_curve_fit(
-    rec: Recorder, monkeypatch
-) -> None:
-    """Below 1M points the 'chunked' preset tier never builds the chunked engine."""
-    seen: list[dict[str, Any]] = []
-
-    def fake_curve_fit(**kwargs: Any) -> str:
-        seen.append(kwargs)
-        return "curve_fit-result"
-
-    monkeypatch.setattr(minpack, "curve_fit", fake_curve_fit)
-    assert _call_preset("large_robust", n_points=999_999) == "curve_fit-result"
-    assert rec.ctors() == []
-    (kwargs,) = seen
-    assert kwargs["multistart"] is True and kwargs["n_starts"] == 10
-    assert kwargs["gtol"] == kwargs["ftol"] == kwargs["xtol"] == 1e-8
 
 
 def test_multistart_standard_strategy_uses_curve_fit(

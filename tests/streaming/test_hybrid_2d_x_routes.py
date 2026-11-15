@@ -80,10 +80,9 @@ def test_strategy_fit_1d_x_unchanged():
     assert all(len(s) == 1 for s in seen)
 
 
-@pytest.mark.filterwarnings("ignore:The .preset. parameter:FutureWarning")
-def test_fit_streaming_preset_2d_x():
+def test_fit_streaming_workflow_2d_x():
     X, y = _data(2000)
-    r = fit(_model, X, y, p0=[1, 1, 1], preset="streaming", verbose=0)
+    r = fit(_model, X, y, p0=[1, 1, 1], workflow=_cfg(), verbose=0)
     assert r["success"]
     np.testing.assert_allclose(np.asarray(r["x"]), [2.0, 1.5, 3.0], rtol=0.1)
     assert np.all(np.isfinite(np.asarray(r["pcov"])))

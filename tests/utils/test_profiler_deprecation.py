@@ -1,16 +1,15 @@
-"""Deprecation of the top-level profiler exports and removal of nlsq.facades."""
+"""Removal of the top-level profiler exports and of nlsq.facades."""
 
 import importlib
 import importlib.util
 import subprocess
 import sys
-import warnings
 
 import pytest
 
 import nlsq
 
-DEPRECATED = [
+REMOVED = [
     "PerformanceProfiler",
     "ProfileMetrics",
     "clear_profiling_data",
@@ -19,43 +18,34 @@ DEPRECATED = [
     "ProfilingDashboard",
 ]
 
-
-@pytest.fixture(autouse=True)
-def _reset_seen():
-    nlsq._deprecation_seen.clear()
-    yield
-    nlsq._deprecation_seen.clear()
-
-
-@pytest.mark.parametrize("name", DEPRECATED)
-def test_deprecated_names_warn_once(name):
-    with pytest.warns(DeprecationWarning, match="next minor release"):
-        first = getattr(nlsq, name)
-    with warnings.catch_warnings(record=True) as rec:
-        warnings.simplefilter("always")
-        second = getattr(nlsq, name)
-    assert not [w for w in rec if issubclass(w.category, DeprecationWarning)]
-    assert first is second
+DEFINING_MODULE = {
+    "PerformanceProfiler": "nlsq.utils.profiler",
+    "ProfileMetrics": "nlsq.utils.profiler",
+    "clear_profiling_data": "nlsq.utils.profiler",
+    "get_global_profiler": "nlsq.utils.profiler",
+    "ProfilerVisualization": "nlsq.utils.profiler_visualization",
+    "ProfilingDashboard": "nlsq.utils.profiler_visualization",
+}
 
 
-def test_deprecation_keeps_raising_under_error_filter():
-    name = DEPRECATED[0]
-    for _ in range(2):  # a failed warn must not mark the name as seen
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            with pytest.raises(DeprecationWarning, match="next minor release"):
-                getattr(nlsq, name)
-    with pytest.warns(DeprecationWarning):
+@pytest.mark.parametrize("name", REMOVED)
+def test_removed_names_are_gone_from_top_level(name):
+    with pytest.raises(AttributeError):
         getattr(nlsq, name)
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        getattr(nlsq, name)  # warned normally once: now silent
+    assert name not in dir(nlsq)
+    with pytest.raises(ImportError):
+        exec(f"from nlsq import {name}")
+
+
+@pytest.mark.parametrize("name", REMOVED)
+def test_names_still_importable_from_defining_module(name):
+    assert hasattr(importlib.import_module(DEFINING_MODULE[name]), name)
 
 
 @pytest.mark.serial
-def test_import_nlsq_emits_no_deprecation_warning():
+def test_import_nlsq_emits_no_warning():
     r = subprocess.run(
-        [sys.executable, "-W", "error::DeprecationWarning", "-c", "import nlsq"],
+        [sys.executable, "-W", "error", "-c", "import nlsq"],
         capture_output=True,
         text=True,
         check=False,

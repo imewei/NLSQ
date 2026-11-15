@@ -1,6 +1,4 @@
-"""R8-3 / R8-5: nlsq.fit() legacy (workflow=None) goal and preset handling."""
-
-import warnings
+"""R8-3: nlsq.fit() (workflow=None) goal handling."""
 
 import jax.numpy as jnp
 import numpy as np
@@ -67,57 +65,48 @@ def test_explicit_tolerance_wins_over_goal(monkeypatch):
     assert seen["gtol"] == 1e-3
 
 
-def test_unknown_preset_raises():
-    x, y = _data()
-    with (
-        pytest.raises(ValueError, match="Unknown preset"),
-        warnings.catch_warnings(),
-    ):
-        warnings.simplefilter("ignore")
-        fit(_f, x, y, p0=[1, 1], preset="bogus")
+def test_large_dataset_branch_defaults(monkeypatch):
+    """At or above size_threshold: curve_fit_large, multistart off unless asked, 5 starts."""
+    import nlsq as pkg
+
+    seen = {}
+
+    def spy(*a, **k):
+        seen.update(k)
+        return "large"
+
+    monkeypatch.setattr(pkg, "curve_fit_large", spy)
+    x, y = _data(400)
+    assert fit(_f, x, y, p0=[1, 1], size_threshold=100) == "large"
+    assert seen["multistart"] is False and seen["n_starts"] == 5
+    seen.clear()
+    fit(_f, x, y, p0=[1, 1], size_threshold=100, multistart=True, n_starts=7)
+    assert seen["multistart"] is True and seen["n_starts"] == 7
 
 
-def test_preset_name_is_case_insensitive():
-    x, y = _data()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        r = fit(_f, x, y, p0=[1, 1], preset="FAST")
-    assert np.allclose(np.asarray(r[0]), [3.0, 0.7], rtol=0.1)
+@pytest.mark.parametrize(
+    ("n_points", "threshold", "backend"),
+    [
+        (99, 100, "curve_fit"),
+        (100, 100, "curve_fit_large"),
+        (101, 100, "curve_fit_large"),
+    ],
+)
+def test_size_threshold_boundary_is_inclusive(
+    monkeypatch, n_points, threshold, backend
+):
+    """n_points >= size_threshold goes to curve_fit_large; one below stays on curve_fit."""
+    import nlsq as pkg
+
+    monkeypatch.setattr(pkg, "curve_fit", lambda *a, **k: "curve_fit")
+    monkeypatch.setattr(pkg, "curve_fit_large", lambda *a, **k: "curve_fit_large")
+    x, y = _data(n_points)
+    assert fit(_f, x, y, p0=[1, 1], size_threshold=threshold) == backend
 
 
-@pytest.mark.filterwarnings("ignore:The .preset. parameter:FutureWarning")
-class TestStreamingPresetOptions:
-    def test_full_output_and_return_eval_rejected(self):
-        x, y = _data()
-        for kw in ({"full_output": True}, {"return_eval": True}):
-            with pytest.raises(ValueError, match="streaming"):
-                fit(_f, x, y, p0=[1, 1], preset="streaming", verbose=0, **kw)
-
-    def test_ftol_xtol_not_silently_dropped(self):
-        x, y = _data()
-        with pytest.warns(UserWarning, match="ftol"):
-            fit(_f, x, y, p0=[1, 1], preset="streaming", verbose=0, ftol=1e-3)
-
-    def test_max_nfev_and_gtol_reach_config(self, monkeypatch):
-        from nlsq.streaming import strategy
-
-        got = {}
-        real = strategy.build_large_strategy
-
-        def spy(kind, config, **kw):
-            got["config"] = config
-            return real(kind, config, **kw)
-
-        monkeypatch.setattr(strategy, "build_large_strategy", spy)
-        x, y = _data()
-        fit(_f, x, y, p0=[1, 1], preset="streaming", verbose=0, max_nfev=3, gtol=1e-5)
-        assert got["config"].gauss_newton_max_iterations == 3
-        assert got["config"].gauss_newton_tol == 1e-5
-
-
-@pytest.mark.filterwarnings("ignore:The .preset. parameter:FutureWarning")
-def test_goal_with_streaming_preset_does_not_warn_about_ftol_xtol():
-    x, y = _data()
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)
-        fit(_f, x, y, p0=[1, 1], preset="streaming", verbose=0, goal="fast")
+def test_options_after_workflow_are_keyword_only():
+    """Removing `preset` must not shift later positionals: an old positional
+    preset (11th argument) now fails loudly instead of landing in `multistart`."""
+    x, y = _data(50)
+    with pytest.raises(TypeError, match="positional"):
+        fit(_f, x, y, [1, 1], None, False, True, (-np.inf, np.inf), None, None, "fast")

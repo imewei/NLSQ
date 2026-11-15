@@ -8,8 +8,7 @@ These tests verify Task Group 5 of the multi-start optimization specification:
 - curve_fit(..., multistart=True) enables multi-start with default n_starts
 - curve_fit(..., multistart=True, n_starts=20) overrides default
 - curve_fit(..., global_search=True) is shorthand for multistart=True, n_starts=20
-- fit(preset='robust') applies correct multi-start configuration
-- fit(preset='streaming') uses AdaptiveHybridStreaming with tournament
+- fit(multistart=True, n_starts=5) applies correct multi-start configuration
 - fit() auto-detects dataset size and selects appropriate strategy
 """
 
@@ -182,25 +181,22 @@ class TestCurveFitMultistart:
 
 
 class TestFitFunction:
-    """Tests for the unified fit() function with presets."""
+    """Tests for the unified fit() function."""
 
-    @pytest.mark.filterwarnings(
-        "ignore:The 'preset' parameter is deprecated:FutureWarning"
-    )
-    def test_fit_robust_preset(self):
-        """Test that fit(preset='robust') applies correct multi-start configuration."""
+    def test_fit_multistart_5_starts(self):
+        """Test that fit(multistart=True, n_starts=5) applies multi-start."""
         from nlsq import fit
 
         xdata, ydata, _true_params = generate_test_data(n_points=500)
 
-        # Fit with 'robust' preset
         result = fit(
             exponential_model,
             xdata,
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset="robust",
+            multistart=True,
+            n_starts=5,
         )
 
         # Check multi-start diagnostics
@@ -211,51 +207,12 @@ class TestFitFunction:
             else {},
         )
 
-        # 'robust' preset should use n_starts=5
         assert diagnostics.get("n_starts_configured") == 5
 
         # Check that fit succeeded
         popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
-    @pytest.mark.filterwarnings(
-        "ignore:The 'preset' parameter is deprecated:FutureWarning"
-    )
-    def test_fit_streaming_preset(self):
-        """Test that fit(preset='streaming') uses AdaptiveHybridStreaming with tournament."""
-        from nlsq import fit
-
-        xdata, ydata, _true_params = generate_test_data(n_points=500)
-
-        # Fit with 'streaming' preset
-        result = fit(
-            exponential_model,
-            xdata,
-            ydata,
-            p0=[1.0, 0.1, 0.0],
-            bounds=([0, 0, -1], [10, 5, 5]),
-            preset="streaming",
-        )
-
-        # Check that fit succeeded
-        popt = result.popt if hasattr(result, "popt") else result[0]
-        assert len(popt) == 3
-
-        # 'streaming' preset should configure n_starts=10
-        diagnostics = result.get(
-            "multistart_diagnostics",
-            result.multistart_diagnostics
-            if hasattr(result, "multistart_diagnostics")
-            else {},
-        )
-        # Check n_starts is 10 for streaming preset (even if multi-start is bypassed for small datasets)
-        assert diagnostics.get("n_starts_configured", 0) == 10 or diagnostics.get(
-            "bypassed", False
-        )
-
-    @pytest.mark.filterwarnings(
-        "ignore:The 'preset' parameter is deprecated:FutureWarning"
-    )
     def test_fit_auto_detects_dataset_size(self):
         """Test that fit() auto-detects dataset size and selects appropriate strategy."""
         from nlsq import fit
@@ -269,22 +226,14 @@ class TestFitFunction:
             ydata_small,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset="large",  # 'large' preset should auto-detect
         )
 
         # Check that fit succeeded
         popt = result_small.popt if hasattr(result_small, "popt") else result_small[0]
         assert len(popt) == 3
 
-        # For small datasets with 'large' preset, it should still work but may not use
-        # chunking or streaming (depending on size threshold)
-        # The key test is that it doesn't fail and returns valid results
-
-    @pytest.mark.filterwarnings(
-        "ignore:The 'preset' parameter is deprecated:FutureWarning"
-    )
-    def test_fit_fast_preset_no_multistart(self):
-        """Test that fit(preset='fast') has n_starts=0 (no multi-start overhead)."""
+    def test_fit_default_no_multistart(self):
+        """Test that fit() defaults to n_starts=0 (no multi-start overhead)."""
         from nlsq import fit
 
         xdata, ydata, _ = generate_test_data(n_points=500)
@@ -295,7 +244,6 @@ class TestFitFunction:
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset="fast",
         )
 
         # Check multi-start diagnostics
@@ -306,7 +254,6 @@ class TestFitFunction:
             else {},
         )
 
-        # 'fast' preset should have n_starts=0
         assert diagnostics.get("n_starts_configured") == 0
         assert diagnostics.get("bypassed", True)  # Should be bypassed
 
@@ -314,11 +261,8 @@ class TestFitFunction:
         popt = result.popt if hasattr(result, "popt") else result[0]
         assert len(popt) == 3
 
-    @pytest.mark.filterwarnings(
-        "ignore:The 'preset' parameter is deprecated:FutureWarning"
-    )
-    def test_fit_global_preset(self):
-        """Test that fit(preset='global') uses n_starts=20."""
+    def test_fit_multistart_20_starts(self):
+        """Test that fit(multistart=True, n_starts=20) uses 20 starts."""
         from nlsq import fit
 
         xdata, ydata, _ = generate_test_data(n_points=500)
@@ -329,7 +273,8 @@ class TestFitFunction:
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset="global",
+            multistart=True,
+            n_starts=20,
         )
 
         # Check multi-start diagnostics
@@ -340,7 +285,6 @@ class TestFitFunction:
             else {},
         )
 
-        # 'global' preset should have n_starts=20
         assert diagnostics.get("n_starts_configured") == 20
 
         # Check that fit succeeded

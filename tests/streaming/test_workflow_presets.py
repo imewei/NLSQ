@@ -670,7 +670,7 @@ class TestWorkflowIntegration:
 
     def test_valid_workflows_are_recognized(self):
         """Test that only valid workflows are recognized."""
-        from nlsq.core.minpack import REMOVED_PRESETS, WORKFLOW_PRESETS
+        from nlsq.core.minpack import REMOVED_PRESETS
 
         # Valid workflows
         valid_workflows = ["auto", "auto_global", "hpc"]
@@ -679,6 +679,7 @@ class TestWorkflowIntegration:
         for preset in REMOVED_PRESETS:
             assert preset in REMOVED_PRESETS
 
-        # WORKFLOW_PRESETS should still exist for backwards compatibility
-        # during transition (will be removed in Phase 6)
-        assert "standard" in WORKFLOW_PRESETS
+        # The unreachable WORKFLOW_PRESETS table is gone; only the error map stays.
+        from nlsq.core import minpack
+
+        assert not hasattr(minpack, "WORKFLOW_PRESETS")

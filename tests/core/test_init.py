@@ -527,10 +527,9 @@ class TestScipyConvention2DXdata(unittest.TestCase):
         popt, _ = curve_fit_large(self._plane, xy, z, p0=[1, 1, 1], strategy=Chunked())
         np.testing.assert_allclose(popt, [1, 2, 3], atol=0.05)
 
-    def test_fit_preset_large_2d(self):
+    def test_fit_default_2d(self):
         xy, z = self._data(50_000)
-        with pytest.warns(FutureWarning):
-            popt, _ = nlsq.fit(self._plane, xy, z, p0=[1, 1, 1], preset="large")
+        popt, _ = nlsq.fit(self._plane, xy, z, p0=[1, 1, 1])
         np.testing.assert_allclose(popt, [1, 2, 3], atol=0.05)
 
     def test_mismatched_length_still_rejected(self):

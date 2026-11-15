@@ -12,7 +12,7 @@ result is a KKT point of the box-constrained problem to within the stopping tole
 reached by a different path than TRF.
 
 shortcut: covariance: TSQR when kappa > 1e3; step solve stays on normal equations
-(conditioning study, benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md).
+(conditioning study: benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md at git cd3f4f7c).
 """
 
 from __future__ import annotations

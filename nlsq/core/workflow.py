@@ -55,38 +55,29 @@ if TYPE_CHECKING:
 
 
 class OptimizationGoal(Enum):
-    """Optimization goals that influence workflow selection and tolerances.
+    """Optimization goals that set the default convergence tolerances.
 
-    Each goal represents a different optimization priority, affecting:
-    - Convergence tolerances (gtol, ftol, xtol)
-    - Multi-start enablement
-    - Memory/speed tradeoffs
+    A goal only shifts the size-based default ``gtol``/``ftol``/``xtol`` (see
+    ``calculate_adaptive_tolerances``). It does not enable multi-start, change the
+    memory strategy, or run extra validation passes; pass ``multistart=True`` or a
+    ``workflow`` for those. Tolerances passed explicitly always take precedence.
 
     Attributes
     ----------
     FAST : auto
-        Prioritize speed with local optimization only.
-        Uses one tier looser tolerances, skips multi-start.
-        Best for: quick exploration, well-conditioned problems.
+        One tier looser tolerances than the dataset-size default.
 
     ROBUST : auto
-        Standard tolerances with multi-start for better global optimum.
-        Uses dataset-appropriate tolerances, enables multi-start via `MultiStartOrchestrator`.
-        Best for: production use, unknown problem conditioning.
+        Dataset-size default tolerances (no shift).
 
     GLOBAL : auto
-        Synonym for ROBUST. Emphasizes global optimization.
-        Same behavior as ROBUST, provided for semantic clarity.
+        Normalized to ROBUST (``OptimizationGoal.normalize``).
 
     MEMORY_EFFICIENT : auto
-        Minimize memory usage with standard tolerances.
-        Prioritizes streaming/chunking with smaller chunk sizes.
-        Best for: memory-constrained environments, very large datasets.
+        Dataset-size default tolerances (no shift).
 
     QUALITY : auto
-        Highest precision/accuracy as TOP PRIORITY.
-        Uses one tier tighter tolerances, enables multi-start, runs validation passes.
-        Best for: publication-quality results, critical applications.
+        One tier tighter tolerances than the dataset-size default.
     """
 
     FAST = auto()
