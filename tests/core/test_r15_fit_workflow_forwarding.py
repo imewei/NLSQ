@@ -32,10 +32,15 @@ def test_fit_with_workflow_forwards_multistart():
     assert diag is not None and not diag.get("bypassed", True)
 
 
-def test_fit_with_workflow_warns_on_preset():
+def test_fit_rejects_removed_preset_kwarg():
     x, y = _data()
-    with pytest.warns(UserWarning, match="preset"):
+    with pytest.raises(TypeError, match="preset"):
         nlsq.fit(_model, x, y, p0=[1.0, 1.0], workflow="auto", preset="robust")
+    with pytest.raises(TypeError, match="preset"):
+        nlsq.fit(_model, x, y, p0=[1.0, 1.0], preset="fast")
+    # preset=None was the old default value: still accepted, with and without workflow
+    nlsq.fit(_model, x, y, p0=[1.0, 1.0], preset=None)
+    nlsq.fit(_model, x, y, p0=[1.0, 1.0], workflow="auto", preset=None)
 
 
 def test_telemetry_recent_events_nonpositive_n():

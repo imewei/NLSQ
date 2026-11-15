@@ -199,7 +199,7 @@ return OptimizeResult(
     cost=float(cost),  # Python scalar
     grad=np.array(g),  # NumPy array
     optimality=float(g_norm),  # Python scalar
-    ...,
+    # ... remaining fields ...
 )
 ```
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-14
+
 ### Added
 - GUI: an "Absolute sigma" checkbox in Advanced options (default off, unchanged behaviour) passes
   `absolute_sigma` to the fit, the exported script and YAML config, and autosave. The Results page
@@ -350,21 +352,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on GPU); results agree to rounding (about 1e-16 relative), and `exact_lm` keeps
   re-exporting the moved helpers.
 
-### Deprecated
-- `nlsq.PerformanceProfiler`, `nlsq.ProfileMetrics`, `nlsq.clear_profiling_data`,
-  `nlsq.get_global_profiler`, `nlsq.ProfilerVisualization` and
-  `nlsq.ProfilingDashboard`. Accessing them from the top-level package now
-  emits one `DeprecationWarning` per name and they will be removed from it in
-  the next minor release. Import them from `nlsq.utils.profiler` and
-  `nlsq.utils.profiler_visualization` instead.
-
 ### Removed
+- `nlsq.PerformanceProfiler`, `nlsq.ProfileMetrics`, `nlsq.clear_profiling_data`,
+  `nlsq.get_global_profiler`, `nlsq.ProfilerVisualization` and `nlsq.ProfilingDashboard` are no longer
+  importable from the top-level package (`from nlsq import ...` raises `ImportError`). Import them from
+  `nlsq.utils.profiler` and `nlsq.utils.profiler_visualization`. **Breaking:** the deprecation was only
+  on `main` after v0.7.6 (no tagged release emitted the warning), so this is a hard removal in 0.8.0.
+- **`fit(preset=...)`** (deprecated with a `FutureWarning` promising removal in
+  v0.8.0): the `preset` argument and its `fast`/`robust`/`global`/`streaming`/`large` table are gone.
+  **Breaking:** passing a non-`None` `preset` raises `TypeError` (`preset=None` is still accepted). The
+  parameters after `workflow` (`multistart`, `n_starts`, `sampler`, `center_on_p0`, `scale_factor`,
+  `memory_limit_gb`, `size_threshold`, `show_progress`, `chunk_size`) are now keyword-only, so a call that
+  passed `preset` positionally fails loudly instead of shifting every later argument. Migration:
+  - `fast` -> the default (no `preset`).
+  - `robust` -> `multistart=True, n_starts=5`; `global` -> `multistart=True, n_starts=20`.
+    **Pass `n_starts`:** `multistart=True` alone keeps `n_starts=0` below `size_threshold`, which bypasses
+    multi-start (unchanged behaviour, but the old presets always set the count).
+  - `streaming` -> `workflow=HybridStreamingConfig(...)`; its multi-start options live on that config.
+  - `large` -> the default routing by size (`curve_fit_large` at or above `size_threshold`, multi-start off
+    unless requested), or call `curve_fit_large(...)` directly. The old `large` preset forced
+    `curve_fit_large` with `multistart=True, n_starts=5` even for small data.
+  - For memory-aware or global selection use `workflow="auto"` / `"auto_global"` / `"hpc"`.
+  A call that never passed `preset` routes exactly as before (`curve_fit` below `size_threshold`,
+  `curve_fit_large` at or above it).
+- `nlsq.core.minpack.WORKFLOW_PRESETS` and `_fit_with_preset`: unreachable, because every
+  key is rejected by `REMOVED_PRESETS` first. The removed-preset `ValueError` with migration hints is kept.
 - `nlsq.facades` (`OptimizationFacade`, `StabilityFacade`, `DiagnosticsFacade`)
   and `nlsq.utils.async_logger`. Nothing in the package imported either; the
   tests that used them were removed with them (`async_logger` unit tests, and
   the `OptimizationFacade` use in `tests/benchmarks/test_decomposition_memory.py`).
 
 ### Fixed
+- **`OptimizationGoal` docstring** (`nlsq/core/workflow.py`) claimed goals enable multi-start, tune
+  chunking, or run validation passes. A goal only shifts the size-based default `gtol`/`ftol`/`xtol`
+  (`QUALITY` one tier tighter, `FAST` one tier looser; the rest unchanged). Code unchanged.
 - **GPU `curve_fit` slowdown**: since `1e5ed01c` (covariance column equilibration), `pcov_from_jacobian` reduced
   the Jacobian on the host, copying all of a GPU `J` (24 MB at 1M x 3): ~46 ms for the reduction, ~54 ms per fit at 1M points. Column norms
   now run on `J`'s device and only `p` scalars come back. Interleaved A/B on the RTX 4090 laptop GPU, warm

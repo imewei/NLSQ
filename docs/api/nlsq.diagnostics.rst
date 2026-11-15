@@ -300,7 +300,7 @@ Combine all analyses into a unified health report:
     health_report = create_health_report(
         identifiability=ident_report,
         gradient_health=grad_report,  # From GradientMonitor
-        sensitivity=sens_report,
+        sloppy_model=sens_report,
         config=config,
     )
 

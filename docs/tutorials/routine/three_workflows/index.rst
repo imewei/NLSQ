@@ -57,7 +57,7 @@ Choosing the Right Workflow
 
 **Use hpc when:**
 
-- Running on HPC clusters (PBS, SLURM)
+- Running batch jobs on HPC clusters (PBS or SLURM job scripts)
 - Jobs may take hours or days
 - You need crash recovery via checkpoints
 

@@ -228,13 +228,13 @@ For bounds-based normalization with bounds :math:`[l_i, u_i]`:
 
 .. math::
 
-    \\theta_{\\text{norm},i} = \\frac{\\theta_i - l_i}{u_i - l_i}
+    \theta_{\text{norm},i} = \frac{\theta_i - l_i}{u_i - l_i}
 
-For p0-based normalization with initial values :math:`\\theta_0`:
+For p0-based normalization with initial values :math:`\theta_0`:
 
 .. math::
 
-    \\theta_{\\text{norm},i} = \\frac{\\theta_i}{|\\theta_{0,i}|}
+    \theta_{\text{norm},i} = \frac{\theta_i}{|\theta_{0,i}|}
 
 Denormalization Jacobian
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -243,11 +243,11 @@ The denormalization Jacobian is diagonal:
 
 .. math::
 
-    J_{ii} = \\text{scale}_i
+    J_{ii} = \text{scale}_i
 
 For bounds-based: :math:`J_{ii} = u_i - l_i`
 
-For p0-based: :math:`J_{ii} = |\\theta_{0,i}|`
+For p0-based: :math:`J_{ii} = |\theta_{0,i}|`
 
 Covariance Transform
 ~~~~~~~~~~~~~~~~~~~~
@@ -256,13 +256,13 @@ To transform covariance from normalized to original space:
 
 .. math::
 
-    \\Sigma_{\\text{orig}} = J \\, \\Sigma_{\\text{norm}} \\, J^T
+    \Sigma_{\text{orig}} = J \, \Sigma_{\text{norm}} \, J^T
 
 Since :math:`J` is diagonal, this simplifies to:
 
 .. math::
 
-    \\Sigma_{\\text{orig},ij} = J_{ii} \\, \\Sigma_{\\text{norm},ij} \\, J_{jj}
+    \Sigma_{\text{orig},ij} = J_{ii} \, \Sigma_{\text{norm},ij} \, J_{jj}
 
 See Also
 --------

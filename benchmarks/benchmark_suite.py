@@ -27,12 +27,9 @@ from benchmarks.common.constants import (
     DEFAULT_WARMUP_RUNS,
     EXTENDED_DATA_SIZES,
 )
-from nlsq import (
-    PerformanceProfiler,
-    ProfilerVisualization,
-    ProfilingDashboard,
-    curve_fit,
-)
+from nlsq import curve_fit
+from nlsq.utils.profiler import PerformanceProfiler
+from nlsq.utils.profiler_visualization import ProfilerVisualization, ProfilingDashboard
 
 
 @dataclass

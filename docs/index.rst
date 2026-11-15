@@ -35,6 +35,7 @@ Choose your path:
    .. grid-item-card:: Routine Analysis
       :link: routine_guide
       :link-type: doc
+      :footer: :doc:`Routine User Guide → <routine_guide>`
 
       **Fast, Standardized Fitting**
 
@@ -44,12 +45,11 @@ Choose your path:
       - Pre-defined workflows
       - Quick results
 
-      +++
-      :doc:`Routine User Guide → <routine_guide>`
 
    .. grid-item-card:: Advanced Development
       :link: advanced_guide
       :link-type: doc
+      :footer: :doc:`Advanced User Guide → <advanced_guide>`
 
       **Custom Pipelines & Scale**
 
@@ -59,8 +59,6 @@ Choose your path:
       - HPC & Graphics Cards
       - Debugging & Diagnostics
 
-      +++
-      :doc:`Advanced User Guide → <advanced_guide>`
 
 ----
 

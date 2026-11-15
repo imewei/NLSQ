@@ -36,23 +36,18 @@ def test_inferred_p0_counts_only_positional_fit_parameters(model, route):
 
 
 @pytest.mark.parametrize("model", [_model_kwargs, _model_varargs, _model_keyword_only])
-def test_streaming_preset_infers_only_positional_fit_parameters(model, monkeypatch):
+def test_streaming_workflow_infers_only_positional_fit_parameters(model):
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
-    # Keep the real engine and use a small batch: the preset's default 10K-row
-    # warmup is unnecessary for a 12-point parameter-inference regression.
-    monkeypatch.setattr(
-        "nlsq.streaming.hybrid_config.HybridStreamingConfig",
-        partial(
-            HybridStreamingConfig,
-            chunk_size=16,
-            warmup_iterations=1,
-            max_warmup_iterations=2,
-            gauss_newton_max_iterations=2,
-        ),
+    # Small batch: the default 10K-row warmup is unnecessary for a 12-point
+    # parameter-inference regression.
+    config = HybridStreamingConfig(
+        chunk_size=16,
+        warmup_iterations=1,
+        max_warmup_iterations=2,
+        gauss_newton_max_iterations=2,
     )
     x = np.linspace(0.0, 1.0, 12)
-    with pytest.warns(FutureWarning, match="preset"):
-        result = fit(model, x, model(x, 1.0), preset="streaming", verbose=0)
+    result = fit(model, x, model(x, 1.0), workflow=config, verbose=0)
     np.testing.assert_allclose(result.popt, [1.0], rtol=1e-5)
     assert result.pcov.shape == (1, 1)

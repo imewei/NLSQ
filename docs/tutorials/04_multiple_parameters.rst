@@ -284,7 +284,7 @@ Tips for Multi-Parameter Fitting
 
       from nlsq import fit
 
-      popt, pcov = fit(model, x, y, preset="global")
+      popt, pcov = fit(model, x, y, multistart=True, n_starts=20)
 
 5. **Check the Fit Visually**
 
@@ -359,7 +359,7 @@ Key Takeaways
 1. Multi-parameter fits need **good initial guesses**
 2. Estimate guesses from **data characteristics**
 3. Use **bounds** to constrain the search space
-4. Use ``preset='global'`` for **robust optimization**
+4. Use ``multistart=True, n_starts=20`` for **robust optimization**
 5. Check for **parameter correlations** in the covariance matrix
 6. Always **visualize** your fit results
 

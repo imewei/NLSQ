@@ -280,7 +280,6 @@ nitpick_ignore += [
     ("py:obj", "PrecisionState"),
     ("py:obj", "OptimizationState"),
     ("py:obj", "ConvergenceMetrics"),
-    ("py:obj", "WORKFLOW_PRESETS"),
     ("py:obj", "format_error_message"),
     ("py:obj", "estimate_initial_parameters"),
     ("py:obj", "device_put"),

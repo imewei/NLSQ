@@ -3,12 +3,12 @@
 A GPU SVD of a tall-skinny Jacobian has ~1 ms of launch/solver overhead regardless
 of size; below ``HOST_SVD_MAX_ELEMENTS`` the same SVD on the CPU device, including
 the device-to-host copy of ``J`` and the copy of the results back, is faster
-(benchmarks/baselines/2026-11-06-perf-phase0.md item (c)). The host path costs one
+(benchmarks/baselines/2026-11-06-perf-phase0.md item (c), at git cd3f4f7c). The host path costs one
 temporary n x p host copy of the Jacobian.
 
 Two limits: ``HOST_SVD_MAX_ELEMENTS`` (30_000) for the per-iteration TRF full SVD, and
 ``HOST_COV_SVD_MAX_ELEMENTS`` (150_000) for the covariance SVD only
-(``minpack._covariance_svd``, benchmarks/baselines/2026-11-10-qr-covariance-ab.md).
+(``minpack._covariance_svd``, benchmarks/baselines/2026-11-10-qr-covariance-ab.md at git cd3f4f7c).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import jax
 HOST_SVD_MAX_ELEMENTS: int = 30_000
 
 # Covariance-only limit (the QR-then-SVD kernel in ``minpack._covariance_svd``): host won at every
-# size up to 150,000 elements (benchmarks/baselines/2026-11-10-qr-covariance-ab.md). Kept separate
+# size up to 150,000 elements (benchmarks/baselines/2026-11-10-qr-covariance-ab.md at git cd3f4f7c). Kept separate
 # because the TRF per-iteration SVD shares ``HOST_SVD_MAX_ELEMENTS`` and was not re-measured.
 HOST_COV_SVD_MAX_ELEMENTS: int = 150_000
 

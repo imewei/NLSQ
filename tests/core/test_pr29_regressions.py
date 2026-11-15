@@ -166,8 +166,7 @@ class TestAutoP0RemainingFitSites:
     """Round-2 finding: the p0="auto" guard was applied at 4-5 call sites in
     round 1 but missed 3 more identical-pattern sites in fit()'s
     workflow-config branches (_fit_with_config's HybridStreamingConfig
-    branch, _fit_with_preset's streaming-tier branch,
-    _fit_global_multistart's streaming-strategy branch), each of which
+    branch, _fit_global_multistart's streaming-strategy branch), each of which
     crashed the same way: `ValueError: could not convert string to float`
     from np.atleast_1d("auto") flowing into prepare_bounds()."""
 
@@ -177,32 +176,6 @@ class TestAutoP0RemainingFitSites:
 
         x, y = linear_data
         result = fit(_linear, x, y, p0="auto", workflow=HybridStreamingConfig())
-        assert result is not None
-
-    def test_streaming_preset_branch_does_not_crash_on_p0_auto(self, linear_data):
-        from nlsq.core.minpack import _fit_with_preset
-
-        x, y = linear_data
-        # The "streaming"/"hpc_distributed" WORKFLOW_PRESETS entries (tier
-        # STREAMING/STREAMING_CHECKPOINT) are unreachable from the public
-        # fit()/curve_fit() string-workflow API -- both are blocked by
-        # REMOVED_PRESETS before the preset lookup. This branch is
-        # unreachable-but-not-deleted dead code from the public surface, so
-        # it's called directly here to still cover the fix.
-        result = _fit_with_preset(
-            f=_linear,
-            xdata=x,
-            ydata=y,
-            p0="auto",
-            sigma=None,
-            absolute_sigma=False,
-            check_finite=True,
-            bounds=(-np.inf, np.inf),
-            method=None,
-            preset={"tier": "STREAMING", "description": "test"},
-            goal=None,
-            n_points=len(y),
-        )
         assert result is not None
 
     def test_global_multistart_streaming_strategy_does_not_crash_on_p0_auto(

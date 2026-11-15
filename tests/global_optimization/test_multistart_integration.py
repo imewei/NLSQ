@@ -77,20 +77,20 @@ class TestEndToEndWorkflows:
     def test_fit_global_preset_on_small_dataset(self):
         """End-to-end: fit() with 'global' preset on small dataset returns valid result.
 
-        This test verifies that the unified fit() function with 'global' preset
+        This test verifies that the unified fit() function with multistart=True, n_starts=20
         correctly configures and runs multi-start optimization, returning a valid
         result with proper diagnostics.
         """
         xdata, ydata, true_params = generate_test_data(n_points=500)
 
-        # Use 'global' preset which should configure n_starts=20
         result = fit(
             exponential_model,
             xdata,
             ydata,
             p0=[1.0, 0.1, 0.0],
             bounds=([0, 0, -1], [10, 5, 5]),
-            preset="global",
+            multistart=True,
+            n_starts=20,
         )
 
         # Verify result structure

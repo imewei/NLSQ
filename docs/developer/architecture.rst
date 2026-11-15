@@ -238,8 +238,8 @@ Entry Points
     multi-start; requires bounds).
   - ``hpc``: ``auto_global`` plus checkpointing and cluster detection.
   - ``fit()`` never selects the exact engine and rejects ``method="exact_streaming"``.
-  - The deprecated ``preset=`` argument (fast, robust, global, streaming, large) emits a
-    ``FutureWarning`` and is scheduled for removal in v0.8.0.
+  - The ``preset=`` argument was removed; passing it raises ``TypeError``. Without
+    ``workflow``, ``fit()`` picks ``curve_fit`` or ``curve_fit_large`` by point count.
 
 Strategy Specs and Builder
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

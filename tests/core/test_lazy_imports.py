@@ -29,7 +29,6 @@ class TestLazyImportMechanism:
             "AdaptiveHybridStreamingOptimizer",
             "HybridStreamingConfig",
             "LargeDatasetFitter",
-            "PerformanceProfiler",
             "MemoryManager",
         ]
 
@@ -104,13 +103,6 @@ class TestLazyImportCategories:
         assert hasattr(nlsq, "LargeDatasetFitter")
         assert hasattr(nlsq, "fit_large_dataset")
         assert hasattr(nlsq, "estimate_memory_requirements")
-
-    def test_profiler_imports(self) -> None:
-        """Test profiler module lazy imports."""
-        import nlsq
-
-        assert hasattr(nlsq, "PerformanceProfiler")
-        assert hasattr(nlsq, "ProfileMetrics")
 
     def test_memory_imports(self) -> None:
         """Test memory management lazy imports."""

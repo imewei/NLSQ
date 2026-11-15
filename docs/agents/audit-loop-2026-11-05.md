@@ -7,7 +7,6 @@ no findings remain. The review starts at `6a6488850d79106076594826bd5ddc7e7b9be3
 the changed-code base is `11b3259abc1c95b564625bf1b1f1fef9c71911cc` (three-dot diff).
 Review also covers the working tree and unchanged production modules.
 
-The executable workflow is [review-debug-until-clean](../../workflows/review-debug-until-clean.md).
 Completion requires two consecutive complete review passes with no new
 actionable findings, no unresolved confirmed bugs, and final verification.
 This is a bounded review result, not proof that no possible bug exists.

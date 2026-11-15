@@ -163,13 +163,7 @@ development laptop drift by up to about 50% between sessions.
 
 Baseline results are stored in `baselines/` as JSON files:
 
-- `cache_unification.json` - Cache performance baselines
-- `jacobian_autoswitch.json` - Jacobian mode baselines
-- `memory_reuse.json` - Memory optimization baselines
-- `sparse_activation.json` - Sparse solver baselines
-- `streaming_overhead.json`, `streaming_partial_batch_overhead.json` - Streaming overhead baselines
-- `import_baseline.txt` - Import-time baseline read by `microbench/test_import.py`
-- `v0.3.0-beta.3-linux.json`, `v0.3.0-beta.3-darwin.json` - Release cold-JIT / hot-path timings
+- `v0.3.0-beta.3-linux.json`, `v0.3.0-beta.3-darwin.json` - Release cold-JIT / hot-path timings, read by `tests/regression/test_performance_regression.py` (skipped when absent)
 - `create_baseline.py` - Script that writes a release baseline
 - `2026-11-13-library-comparison-1k-100M.md` - Newest library comparison report
 

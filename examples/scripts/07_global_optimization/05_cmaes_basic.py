@@ -158,7 +158,7 @@ def main():
         print("  Available presets when evosax is installed:")
         print("    - 'cmaes-fast':   Quick exploration (no restarts)")
         print("    - 'cmaes':        Default (BIPOP restarts)")
-        print("    - 'cmaes-global': Thorough search (more restarts)")
+        print("    - 'cmaes-global': Thorough search (more generations)")
 
     # =========================================================================
     # 4. Examining diagnostics (if evosax available)
@@ -246,7 +246,7 @@ def main():
     print("CMA-ES Presets:")
     print("  - 'cmaes-fast':   Quick exploration, no restarts")
     print("  - 'cmaes':        Default, BIPOP restarts")
-    print("  - 'cmaes-global': Thorough search, more restarts")
+    print("  - 'cmaes-global': Thorough search, more generations")
 
 
 if __name__ == "__main__":

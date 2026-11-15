@@ -394,7 +394,8 @@ result = fit(
     model, x, y, p0=[1, 1, 1], workflow="auto_global", bounds=([0, 0, 0], [10, 5, 10])
 )
 
-# workflow="hpc" - auto_global with HPC cluster detection (PBS/SLURM)
+# workflow="hpc" - auto_global plus cluster detection that is logged for diagnostics
+# (reads $PBS_NODEFILE, else counts local GPUs; it does not change the fit)
 result = fit(model, x, y, p0=[1, 1, 1], workflow="hpc", bounds=([0, 0, 0], [10, 5, 10]))
 
 # hpc + checkpoint/resume needs the CMA-ES route explicitly, plus run_id/model_id/seed

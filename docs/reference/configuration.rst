@@ -196,11 +196,10 @@ Jacobian AD mode
 ``set_jacobian_mode()`` only sets the environment variable for the current
 process; to persist the choice, write it to ``~/.nlsq/config.json`` yourself.
 
-Fit Presets and Workflows
+Fit Workflows
 ----------------------------
-
-The unified ``fit()`` entry point selects a strategy via ``workflow`` (new,
-v0.6.3+) or the deprecated ``preset`` argument:
+The unified ``fit()`` entry point selects a strategy via ``workflow``
+(``"auto"``, ``"auto_global"``, ``"hpc"``, or a config object):
 
 .. code-block:: python
 
@@ -209,28 +208,14 @@ v0.6.3+) or the deprecated ``preset`` argument:
    # workflow-based selection
    popt, pcov = fit(model, x, y, workflow="auto", goal="quality")
 
-   # legacy preset argument (deprecated but still supported)
-   popt, pcov = fit(model, x, y, preset="robust")
+   # without workflow: curve_fit below size_threshold points, curve_fit_large above;
+   # multi-start is opt-in
+   popt, pcov = fit(model, x, y, multistart=True, n_starts=5)
 
-.. list-table::
-   :header-rows: 1
-   :widths: 25 75
-
-   * - ``preset`` value
-     - Behavior
-   * - ``fast``
-     - Single-start optimization for maximum speed
-   * - ``robust``
-     - Multi-start with 5 starts
-   * - ``global``
-     - Thorough global search with 20 starts
-   * - ``streaming``
-     - Streaming optimization for large datasets with multi-start
-   * - ``large``
-     - Auto-detect dataset size and use the appropriate strategy
-
-See the ``fit()`` API reference for the current ``workflow``/``goal``
-argument set, which supersedes ``preset``.
+The ``preset`` argument was removed. Passing it raises ``TypeError``. Use
+``multistart=True`` with ``n_starts=5`` (formerly ``robust``) or ``n_starts=20``
+(formerly ``global``), or a ``workflow``. See the ``fit()`` API reference for the
+current ``workflow``/``goal`` argument set.
 
 See Also
 ----------

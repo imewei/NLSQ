@@ -230,7 +230,9 @@ C0_2nd_err, k_2nd_err = perr_2nd
 # Half-life for second-order (depends on initial concentration)
 t_half_2nd = 1 / (k_2nd_fit * C0_2nd_fit)
 t_half_2nd_err = t_half_2nd * np.sqrt(
-    (k_2nd_err / k_2nd_fit) ** 2 + (C0_2nd_err / C0_2nd_fit) ** 2
+    (k_2nd_err / k_2nd_fit) ** 2
+    + (C0_2nd_err / C0_2nd_fit) ** 2
+    + 2 * pcov_2nd[0, 1] / (C0_2nd_fit * k_2nd_fit)
 )
 
 print("Fitted Parameters (auto workflow):")

@@ -42,7 +42,9 @@ Example Usage
    from nlsq import curve_fit
 
    # Perform fit
-   popt, pcov = curve_fit(model, x, y, p0=[1.0, 0.1], full_output=True)
+   popt, pcov, infodict, mesg, ier = curve_fit(
+       model, x, y, p0=[1.0, 0.1], full_output=True
+   )
 
    # Access additional result information
    # (when using LeastSquares directly)

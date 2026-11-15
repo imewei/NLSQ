@@ -1,6 +1,32 @@
 # Documentation Changelog
 
 ## Unreleased
+- `workflow="hpc"` documentation corrected against `nlsq/core/workflow.py` and `nlsq/core/minpack.py`.
+  `ClusterDetector.detect()` recognises PBS (`$PBS_NODEFILE`) and local multi-GPU only; there is no SLURM
+  detection, and the result is logged for diagnostics without changing the fit. Fixed in `README.md`,
+  `tutorials/routine/three_workflows/hpc_workflow` and `.../index`, and `explanation/workflows`.
+  `hpc` is no longer described as adding automatic checkpointing: checkpoint/resume works on the CMA-ES route
+  only, so the `explanation/workflows` example now selects `method="cmaes"` explicitly.
+- `explanation/workflows`: the memory-budget diagram now matches `MemoryBudget` (data is
+  `n_points * (n_features + 1) * 8` bytes in GiB, peak adds a 0.1 GB solver overhead, and the chunked check uses a
+  0.9 safety margin). New section "How `fit`, `curve_fit` and `curve_fit_large` relate" explains that the entry points
+  choose engines by different rules (point count versus estimated memory), that `workflow="auto"` never selects exact
+  streaming, and which options the `workflow=` path ignores with a warning.
+- Multi-GPU claims corrected in `tutorials/routine/gpu_acceleration/multi_gpu`, `.../index` and
+  `tutorials/routine/three_workflows/hpc_workflow`. They said NLSQ "automatically distributes starting points
+  across GPUs" and "detects the cluster environment and uses available GPUs". In the source, multi-start runs its
+  starts in a `ThreadPoolExecutor` sized `min(n_starts, len(jax.devices()))` when more than one device is visible
+  (`_select_worker_count`, `global_optimization/multi_start.py`); nothing pins a start to a GPU or shards data, and
+  `MultiGPUConfig` / `get_multi_gpu_config` in `core/workflow.py` are not called by any fit path. Where each start
+  actually runs was not measured here.
+
+## v0.8.0 (2026-11-14)
+- Version-output examples bumped to match the 0.8.0 release; `fit(preset=)` examples
+  migrated to `multistart=True, n_starts=...` (the argument was removed; see the root `CHANGELOG.md`
+  for the full migration table, the `WORKFLOW_PRESETS` / `_fit_with_preset` removal and the six removed
+  top-level profiler exports).
+- `OptimizationGoal` docstring corrected: a goal only shifts default tolerances. The HPC example script and
+  notebook no longer import the removed `WORKFLOW_PRESETS` and show `workflow="hpc"` instead.
 - Obsolete, unused and duplicate documentation removed (`/dev-suite:docs ... --full`). Candidates were found from
   an unmuted Sphinx build (`-D suppress_warnings=`), the toctree and cross-reference graph, a shingle-overlap
   scan for duplicate prose, and a sweep of the repository outside `docs/` for references.

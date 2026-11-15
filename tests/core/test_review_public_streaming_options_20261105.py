@@ -1,4 +1,4 @@
-"""Public streaming selection must preserve explicit sampling options."""
+"""Public workflow=HybridStreamingConfig() streaming route: finite-check behaviour."""
 
 from unittest.mock import patch
 
@@ -6,30 +6,7 @@ import numpy as np
 import pytest
 
 import nlsq
-
-
-def test_public_streaming_forwards_explicit_sampling_window():
-    x = np.arange(4.0)
-    with patch("nlsq.streaming.strategy.build_large_strategy") as build:
-        build.return_value.fit.return_value = {
-            "x": np.array([2.0]),
-            "pcov": np.eye(1),
-            "success": True,
-            "message": "converged",
-        }
-        with pytest.warns(FutureWarning, match="preset"):
-            nlsq.fit(
-                lambda x, a: a * x,
-                x,
-                2 * x,
-                p0=[1.0],
-                preset="streaming",
-                center_on_p0=False,
-                scale_factor=0.125,
-            )
-    config = build.call_args.args[1]
-    assert config.center_on_p0 is False
-    assert config.scale_factor == 0.125
+from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 
 @pytest.mark.parametrize("invalid_data", ["x", "y"])
@@ -43,16 +20,13 @@ def test_public_streaming_checks_finite_before_engine(invalid_data):
             "pcov": np.eye(1),
             "success": True,
         }
-        with (
-            pytest.raises(ValueError, match=r"NaN|Inf|finite"),
-            pytest.warns(FutureWarning, match="preset"),
-        ):
+        with pytest.raises(ValueError, match=r"NaN|Inf|finite"):
             nlsq.fit(
                 lambda x, a: a * x,
                 x,
                 y,
                 p0=[1.0],
-                preset="streaming",
+                workflow=HybridStreamingConfig(),
                 check_finite=True,
             )
     build.assert_not_called()
@@ -68,13 +42,12 @@ def test_public_streaming_can_disable_finite_check():
             "pcov": np.eye(1),
             "success": True,
         }
-        with pytest.warns(FutureWarning, match="preset"):
-            nlsq.fit(
-                lambda x, a: a * x,
-                x,
-                y,
-                p0=[1.0],
-                preset="streaming",
-                check_finite=False,
-            )
+        nlsq.fit(
+            lambda x, a: a * x,
+            x,
+            y,
+            p0=[1.0],
+            workflow=HybridStreamingConfig(),
+            check_finite=False,
+        )
     build.return_value.fit.assert_called_once()

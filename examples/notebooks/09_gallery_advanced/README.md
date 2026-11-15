@@ -11,7 +11,7 @@ v0.3.x advanced features:
 
 | Original (04_gallery/)           | Advanced (09_gallery_advanced/)           |
 |----------------------------------|-------------------------------------------|
-| Uses `curve_fit()` directly      | Uses `fit()` with presets                 |
+| Uses `curve_fit()` directly      | Uses `fit()` with multi-start             |
 | Single local optimization        | Multi-start global optimization           |
 | Manual parameter tuning          | Automatic workflow selection              |
 | Works well with good guesses     | Robust even with poor initial guesses     |
@@ -63,11 +63,12 @@ popt, pcov = fit(
     ydata,
     p0=initial_guess,
     bounds=(lower, upper),
-    preset="robust",  # 'fast', 'robust', or 'global'
+    multistart=True,
+    n_starts=5,
 )
 ```
 
-### Global Optimization with Presets
+### Global Optimization
 
 ```python
 # Thorough global search with 20 multi-starts
@@ -77,7 +78,8 @@ popt, pcov = fit(
     ydata,
     p0=initial_guess,
     bounds=(lower, upper),
-    preset="global",  # Uses GlobalOptimizationConfig internally
+    multistart=True,
+    n_starts=20,
 )
 ```
 
@@ -135,7 +137,8 @@ popt, pcov = fit(
     ydata,
     p0=initial_guess,
     bounds=(lower, upper),
-    preset="robust",  # Automatic multi-start
+    multistart=True,
+    n_starts=5,
 )
 ```
 

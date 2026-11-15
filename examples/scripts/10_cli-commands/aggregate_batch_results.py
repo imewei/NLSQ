@@ -92,15 +92,17 @@ def load_results(output_dir: Path, pattern: str) -> list[dict[str, Any]]:
     for path in sorted(output_dir.glob(pattern)):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
+        uncertainties = data.get("uncertainties") or []
+        uncertainties = (uncertainties + [float("nan")] * len(data["popt"]))[
+            : len(data["popt"])
+        ]
         rows.append(
             {
                 "file": path.name,
                 "name": data.get("metadata", {}).get("workflow_name", path.stem),
                 "model": data.get("metadata", {}).get("model_id", "unknown"),
                 "popt": data["popt"],
-                "uncertainties": data.get(
-                    "uncertainties", [float("nan")] * len(data["popt"])
-                ),
+                "uncertainties": uncertainties,
                 "r_squared": data.get("statistics", {}).get("r_squared", float("nan")),
                 "status": data.get("convergence", {}).get("status", "unknown"),
             }
@@ -111,7 +113,11 @@ def load_results(output_dir: Path, pattern: str) -> list[dict[str, Any]]:
 def print_table(rows: list[dict[str, Any]]) -> list[str]:
     """Print one row per workflow; returns the parameter names used."""
     n_params = max(len(r["popt"]) for r in rows)
-    names = parameter_names(rows[0]["model"], n_params)
+    names = (
+        parameter_names(rows[0]["model"], n_params)
+        if len({row["model"] for row in rows}) == 1
+        else [f"p{i}" for i in range(n_params)]
+    )
 
     header = f"{'workflow':<22}{'status':<10}"
     header += "".join(f"{n:>18}" for n in names)

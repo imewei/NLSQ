@@ -77,7 +77,7 @@ Pass ``strategy=Chunked()`` (or ``Auto(exact=None)``) for the chunked fit. Data 
 exact solver cannot fit (2-D ``xdata``, a non-pointwise model) raises ``ValueError``.
 
 Parameters:
-    - ``func``: Model function f(x, \\*params) -> y
+    - ``func``: Model function f(x, \*params) -> y
     - ``xdata``: Independent variable data
     - ``ydata``: Dependent variable data
     - ``p0``: Initial parameter guess

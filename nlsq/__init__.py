@@ -30,7 +30,6 @@ import faulthandler
 import inspect
 import os
 import sys
-import threading
 
 # Enable faulthandler FIRST so any SIGBUS/SIGSEGV during import prints a
 # traceback to stderr instead of dying silently.  This is deliberately before
@@ -169,13 +168,6 @@ _LAZY_MODULES: dict[str, str] = {
     "GlobalOptimizationConfig": "nlsq.global_optimization",
     "MultiStartOrchestrator": "nlsq.global_optimization",
     "TournamentSelector": "nlsq.global_optimization",
-    # Profiling & Visualization
-    "PerformanceProfiler": "nlsq.utils.profiler",
-    "ProfileMetrics": "nlsq.utils.profiler",
-    "clear_profiling_data": "nlsq.utils.profiler",
-    "get_global_profiler": "nlsq.utils.profiler",
-    "ProfilerVisualization": "nlsq.utils.profiler_visualization",
-    "ProfilingDashboard": "nlsq.utils.profiler_visualization",
     # Diagnostics
     "ConvergenceMonitor": "nlsq.utils.diagnostics",
     "OptimizationDiagnostics": "nlsq.utils.diagnostics",
@@ -253,22 +245,6 @@ _LAZY_MODULES: dict[str, str] = {
 # Cache for lazily-loaded attributes
 _LAZY_CACHE: dict[str, Any] = {}
 
-# Top-level exports that still resolve but warn once per name. Import them from
-# their defining modules (nlsq.utils.profiler / nlsq.utils.profiler_visualization).
-_DEPRECATED_EXPORTS: dict[str, str] = {
-    name: f"nlsq.{name} is deprecated and will be removed in the next minor release"
-    for name in (
-        "PerformanceProfiler",
-        "ProfileMetrics",
-        "clear_profiling_data",
-        "get_global_profiler",
-        "ProfilerVisualization",
-        "ProfilingDashboard",
-    )
-}
-_deprecation_seen: set[str] = set()
-_deprecation_lock = threading.Lock()
-
 
 def __getattr__(name: str) -> Any:
     """Lazily load specialty modules on first access.
@@ -276,18 +252,6 @@ def __getattr__(name: str) -> Any:
     This enables faster import time by deferring loading of specialty
     modules until they are actually needed.
     """
-    if name in _DEPRECATED_EXPORTS and name not in _deprecation_seen:
-        import warnings
-
-        # The lock makes check-warn-add atomic so concurrent first accesses warn
-        # once. Mark seen only after warn: under -W error the raise must repeat.
-        with _deprecation_lock:
-            if name not in _deprecation_seen:
-                warnings.warn(
-                    _DEPRECATED_EXPORTS[name], DeprecationWarning, stacklevel=2
-                )
-                _deprecation_seen.add(name)
-
     # Check if it's a lazy module
     if name in _LAZY_MODULES:
         # Return cached value if already loaded
@@ -405,37 +369,6 @@ __all__ = [
     "set_memory_limits",
 ]
 
-# Preset configurations for the fit() function
-_FIT_PRESETS = {
-    "fast": {
-        "n_starts": 0,
-        "multistart": False,
-        "description": "Single-start optimization for maximum speed",
-    },
-    "robust": {
-        "n_starts": 5,
-        "multistart": True,
-        "description": "Multi-start with 5 starts for robustness",
-    },
-    "global": {
-        "n_starts": 20,
-        "multistart": True,
-        "description": "Thorough global search with 20 starts",
-    },
-    "streaming": {
-        "n_starts": 10,
-        "multistart": True,
-        "use_streaming": True,
-        "description": "Streaming optimization for large datasets with multi-start",
-    },
-    "large": {
-        "n_starts": 5,
-        "multistart": True,
-        "use_large_dataset": True,
-        "description": "Auto-detect dataset size and use appropriate strategy",
-    },
-}
-
 
 def fit(
     f: ModelFunction,
@@ -447,11 +380,9 @@ def fit(
     check_finite: bool = True,
     bounds: BoundsTuple | tuple[float, float] = (-float("inf"), float("inf")),
     method: MethodLiteral | None = None,
-    # NEW: Workflow parameter (v0.6.3)
     workflow: str | None = None,
-    # Legacy: preset parameter (deprecated)
-    preset: Literal["fast", "robust", "global", "streaming", "large"] | None = None,
-    # Multi-start parameters (can override preset)
+    *,
+    # Multi-start parameters
     multistart: bool | None = None,
     n_starts: int | None = None,
     sampler: Literal["lhs", "sobol", "halton"] = "lhs",
@@ -464,12 +395,12 @@ def fit(
     chunk_size: int | None = None,
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray] | OptimizeResult:
-    """Unified curve fitting function with preset-based configuration.
+    """Unified curve fitting function.
 
-    This function provides a simplified API for curve fitting with sensible
-    defaults based on preset configurations. It automatically selects the
-    appropriate backend (curve_fit, curve_fit_large, or streaming) based on
-    the preset and dataset characteristics.
+    Without ``workflow``, this selects ``curve_fit`` below ``size_threshold``
+    points and ``curve_fit_large`` at or above it. With ``workflow`` it delegates
+    to ``nlsq.core.minpack.fit`` (``"auto"``, ``"auto_global"``, ``"hpc"``, or a
+    config object).
 
     Parameters
     ----------
@@ -491,32 +422,25 @@ def fit(
         Parameter bounds as (lower, upper).
     method : str, optional
         Optimization algorithm ('trf', 'lm', or None for auto).
-    preset : {'fast', 'robust', 'global', 'streaming', 'large'}, optional
-        Preset configuration to use:
-
-        - 'fast': Single-start optimization for maximum speed (n_starts=0)
-        - 'robust': Multi-start with 5 starts for robustness
-        - 'global': Thorough global search with 20 starts
-        - 'streaming': Streaming optimization for large datasets with multi-start
-        - 'large': Auto-detect dataset size and use appropriate strategy
-
-        If None, defaults to 'fast' for small datasets or 'large' for datasets
-        exceeding size_threshold. Names are case-insensitive; an unknown name
-        raises ValueError. With 'streaming', only ``gtol`` and ``max_nfev`` are
-        mapped (to ``gauss_newton_tol`` / ``gauss_newton_max_iterations``),
-        any other solver option emits a UserWarning, and ``full_output=True`` /
-        ``return_eval=True`` raise ValueError.
+    workflow : str or config object, optional
+        ``"auto"`` (memory-aware), ``"auto_global"`` (multi-start / CMA-ES, needs
+        finite bounds), ``"hpc"``, or a ``HybridStreamingConfig`` /
+        ``LDMemoryConfig`` / ``GlobalOptimizationConfig``. If None, the engine is
+        chosen by point count as described above.
     goal : {'fast', 'robust', 'global', 'memory_efficient', 'quality'}, optional
         Optimization goal (case-insensitive, or an ``OptimizationGoal``). It sets
         the ``gtol``/``ftol``/``xtol`` defaults from the number of points;
         tolerances passed explicitly in ``**kwargs`` take precedence. Unknown
         names raise ValueError.
     multistart : bool, optional
-        Override preset's multi-start setting. Left unset at or above
-        ``size_threshold`` it is off (the exact streaming default does not support
-        multi-start); an explicit True warns and uses the chunked fit.
+        Enable multi-start. It only takes effect with ``n_starts > 0``; pass
+        ``n_starts`` explicitly (``multistart=True`` alone runs a single fit below
+        ``size_threshold``). Left unset at or above ``size_threshold`` it is off (the
+        exact streaming default does not support multi-start); an explicit True warns
+        and uses the chunked fit.
     n_starts : int, optional
-        Override preset's n_starts setting.
+        Number of starts used when ``multistart=True``. Default 0 (multi-start
+        bypassed), or 5 at or above ``size_threshold``.
     sampler : {'lhs', 'sobol', 'halton'}, optional
         Sampling strategy for multi-start. Default: 'lhs'.
     center_on_p0 : bool, optional
@@ -533,8 +457,7 @@ def fit(
         Override automatic chunk size calculation.
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
-        forwarded to the selected backend. With ``preset='streaming'`` only
-        ``gtol`` and ``max_nfev`` are used (see ``preset``).
+        forwarded to the selected backend.
 
     Returns
     -------
@@ -544,24 +467,18 @@ def fit(
 
     Examples
     --------
-    Basic usage with default preset:
+    Basic usage:
 
     >>> popt, pcov = fit(model_func, xdata, ydata, p0=[1, 2, 3])
 
-    Using 'robust' preset for multi-start:
+    Multi-start for robustness:
 
     >>> result = fit(model_func, xdata, ydata, p0=[1, 2, 3],
-    ...              bounds=([0, 0, 0], [10, 10, 10]), preset='robust')
+    ...              bounds=([0, 0, 0], [10, 10, 10]), multistart=True, n_starts=20)
 
-    Using 'global' preset for thorough search:
+    Memory-aware workflow on a large dataset:
 
-    >>> result = fit(model_func, xdata, ydata, p0=[1, 2, 3],
-    ...              bounds=([0, 0, 0], [10, 10, 10]), preset='global')
-
-    Large dataset with auto-detection:
-
-    >>> result = fit(model_func, big_xdata, big_ydata,
-    ...              preset='large', show_progress=True)
+    >>> result = fit(model_func, big_xdata, big_ydata, workflow='auto')
 
     See Also
     --------
@@ -575,7 +492,12 @@ def fit(
             "fit() does not dispatch to it at any dataset size"
         )
 
-    # NEW WORKFLOW SYSTEM (v0.6.3)
+    if kwargs.pop("preset", None) is not None:  # preset=None was the old default
+        raise TypeError(
+            "fit() no longer accepts 'preset'. Use workflow='auto' | 'auto_global' | "
+            "'hpc' (or a config object), or multistart=/n_starts= directly."
+        )
+
     # If workflow parameter is specified, delegate to minpack.fit()
     if workflow is not None:
         import warnings as _warnings
@@ -584,13 +506,6 @@ def fit(
 
         # Options that used to be dropped silently on this path: forward the ones
         # minpack.fit honours (through its **kwargs), warn about the one it can't.
-        if preset is not None:
-            _warnings.warn(
-                "`preset` is ignored when `workflow` is given; use `workflow=` "
-                "or `goal=` instead.",
-                UserWarning,
-                stacklevel=2,
-            )
         # Only the plain "auto" workflow feeds these into curve_fit (via
         # **kwargs); the other workflows pass multistart/show_progress/... to
         # their backends explicitly, so forwarding would raise a duplicate
@@ -648,20 +563,7 @@ def fit(
             **kwargs,
         )
 
-    # LEGACY PATH: preset-based configuration (for backwards compatibility)
-    # Emit deprecation warning if preset is explicitly provided
-    if preset is not None:
-        import warnings
-
-        warnings.warn(
-            "The 'preset' parameter is deprecated and will be removed in v0.8.0. "
-            "Use the 'workflow' parameter instead: "
-            "workflow='auto' (default), 'auto_global' (robust), or 'hpc' (streaming). "
-            "See migration guide: https://nlsq.readthedocs.io/en/latest/migration.html",
-            FutureWarning,
-            stacklevel=2,
-        )
-
+    # No workflow: pick curve_fit or curve_fit_large by point count.
     # Input validation
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
@@ -671,7 +573,6 @@ def fit(
     # goal: validated and applied here exactly as minpack.fit does for
     # workflow=..., instead of leaking into curve_fit's ignored **kwargs.
     goal = kwargs.pop("goal", None)
-    goal_derived: set[str] = set()
     if goal is not None:
         from nlsq.core.minpack import _parse_goal_parameter
         from nlsq.core.workflow import calculate_adaptive_tolerances
@@ -680,136 +581,14 @@ def fit(
         for tol_key in ("gtol", "ftol", "xtol"):
             if tol_key not in kwargs:
                 kwargs[tol_key] = goal_tols[tol_key]
-                goal_derived.add(tol_key)
 
-    # Auto-select preset if not provided
-    if preset is None:
-        if n_points >= size_threshold:
-            preset = "large"
-        else:
-            preset = "fast"
+    large = n_points >= size_threshold
+    effective_multistart = bool(multistart)
+    effective_n_starts: int = n_starts if n_starts is not None else (5 if large else 0)
 
-    # Get preset configuration (names are case-insensitive, like workflow names)
-    preset = preset.lower() if isinstance(preset, str) else preset  # type: ignore[assignment]
-    if preset not in _FIT_PRESETS:
-        raise ValueError(
-            f"Unknown preset {preset!r}. Must be one of: {sorted(_FIT_PRESETS)}"
-        )
-    preset_config = _FIT_PRESETS[preset]
-
-    # Apply preset defaults, allowing overrides
-    effective_multistart: bool = (
-        multistart
-        if multistart is not None
-        else bool(preset_config.get("multistart", False))
-    )
-    _n_starts_default: int = preset_config.get("n_starts", 0)  # type: ignore[assignment]
-    effective_n_starts: int = n_starts if n_starts is not None else _n_starts_default
-    use_streaming = preset_config.get("use_streaming", False)
-    use_large_dataset = preset_config.get("use_large_dataset", False)
-
-    # Determine which backend to use
-    if use_streaming or preset == "streaming":
-        # Use AdaptiveHybridStreaming for streaming preset
-        from nlsq.core.minpack import _check_finite_for_streaming
-        from nlsq.streaming.hybrid_config import HybridStreamingConfig
-        from nlsq.streaming.strategy import (
-            build_large_strategy,
-            default_p0,
-            scipy_layout_to_points_first,
-        )
-
-        _check_finite_for_streaming(xdata, ydata, check_finite)
-
-        # Prepare p0
-        if p0 is None:
-            p0 = default_p0(f)
-        p0 = np.atleast_1d(p0)
-
-        # Prepare bounds
-        from nlsq.core.least_squares import prepare_bounds
-
-        lb, ub = prepare_bounds(bounds, len(p0))
-        bounds_tuple = (
-            (lb, ub)
-            if not (np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
-            else None
-        )
-
-        # Create config with multi-start settings
-        # Use the correct parameter names from HybridStreamingConfig
-        # Map the solver options that have a hybrid equivalent; refuse or warn
-        # about the rest instead of dropping them silently.
-        stream_kwargs = dict(kwargs)
-        for tol_key in goal_derived & {"ftol", "xtol"}:
-            stream_kwargs.pop(tol_key)  # goal-derived, not user-specified
-        for unsupported in ("full_output", "return_eval"):
-            if stream_kwargs.pop(unsupported, False):
-                raise ValueError(
-                    f"{unsupported}=True is not supported by preset='streaming' "
-                    "(it returns a result object)"
-                )
-        config_overrides: dict[str, Any] = {}
-        if (gtol := stream_kwargs.pop("gtol", None)) is not None:
-            config_overrides["gauss_newton_tol"] = gtol
-        if (max_nfev := stream_kwargs.pop("max_nfev", None)) is not None:
-            config_overrides["gauss_newton_max_iterations"] = int(max_nfev)
-        stream_callback = stream_kwargs.pop("callback", None)
-        stream_verbose = stream_kwargs.pop("verbose", 0)
-        if stream_kwargs:
-            import warnings
-
-            warnings.warn(
-                f"preset='streaming' ignores {sorted(stream_kwargs)} (the hybrid "
-                "streaming optimizer has no equivalent; only gtol and max_nfev "
-                "are mapped, to gauss_newton_tol / gauss_newton_max_iterations)",
-                UserWarning,
-                stacklevel=2,
-            )
-
-        config = HybridStreamingConfig(
-            enable_multistart=effective_multistart and effective_n_starts > 0,
-            n_starts=effective_n_starts if effective_multistart else 10,
-            multistart_sampler=sampler,
-            center_on_p0=center_on_p0,
-            scale_factor=scale_factor,
-            **config_overrides,
-        )
-
-        large_strategy = build_large_strategy("hybrid", config)
-
-        # The hybrid engine chunks along axis 0; fit() takes scipy's (k, M) layout.
-        f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
-        result_dict = large_strategy.fit(
-            f_engine,
-            x_engine,
-            ydata,
-            p0,
-            bounds=bounds_tuple,
-            sigma=sigma,
-            absolute_sigma=absolute_sigma,
-            callback=stream_callback,
-            verbose=stream_verbose,
-        )
-
-        # Convert to standard result format
-        from nlsq.result import CurveFitResult
-
-        result = CurveFitResult(result_dict)
-        result["pcov"] = result_dict.get("pcov", np.full((len(p0), len(p0)), np.inf))
-        result["multistart_diagnostics"] = {
-            "n_starts_configured": effective_n_starts,
-            "bypassed": not effective_multistart or effective_n_starts == 0,
-            "preset": preset,
-        }
-        return result
-
-    if use_large_dataset or n_points >= size_threshold:
-        # Use curve_fit_large for large datasets. At or above size_threshold the default
-        # is exact streaming, which rejects multistart: the "large" preset's multistart
-        # must not trigger the chunked fallback unless the caller asked for it.
-        if multistart is None and n_points >= size_threshold:
-            effective_multistart = False
+    if large:
+        # At or above size_threshold curve_fit_large defaults to exact streaming,
+        # which rejects multistart; it is only on if the caller asked for it.
         return curve_fit_large(
             f,
             xdata,
