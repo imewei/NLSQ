@@ -24,7 +24,6 @@ from pathlib import Path
 import numpy as np
 
 from nlsq import HybridStreamingConfig, OptimizationGoal
-from nlsq.core.minpack import WORKFLOW_PRESETS
 from nlsq.core.workflow import ClusterDetector, ClusterInfo
 
 QUICK = os.environ.get("NLSQ_EXAMPLES_QUICK") == "1"
@@ -296,22 +295,14 @@ def main():
     print(f"  Final parameters: {final_params}")
 
     # =========================================================================
-    # 5. HPC Distributed Preset
+    # 5. HPC Workflow
     # =========================================================================
     print()
-    print("5. HPC Workflow Presets:")
+    print("5. HPC Workflow:")
     print("-" * 50)
-
-    if "hpc_distributed" in WORKFLOW_PRESETS:
-        hpc_preset = WORKFLOW_PRESETS["hpc_distributed"]
-        print("  hpc_distributed preset:")
-        for key, value in list(hpc_preset.items())[:8]:
-            print(f"    {key}: {value}")
-    else:
-        print("  Available presets for HPC:")
-        for name in WORKFLOW_PRESETS:
-            desc = WORKFLOW_PRESETS[name].get("description", "")
-            print(f"    - {name}: {desc}")
+    print("  fit(model, x, y, workflow='hpc', bounds=bounds,")
+    print("      checkpoint_dir='/path/to/checkpoints')")
+    print("  (The removed 'hpc_distributed' preset is replaced by workflow='hpc'.)")
 
     # =========================================================================
     # 6. PBS Pro Job Script

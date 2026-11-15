@@ -165,14 +165,14 @@ data:
 
 ```yaml
 data:
-  input_file: "data/damped_oscillation.txt"
+  input_file: "data/gaussian_peak.txt"
   format: "ascii"
   columns:
     x: 0
     y: 1
   ascii:
-    skip_rows: 1
-    delimiter: "whitespace"
+    skip_header: 3
+    delimiter: null
 ```
 
 ### NPZ (NumPy Archive)
@@ -199,18 +199,21 @@ data:
     sigma_path: "/data/sigma"  # Optional
 ```
 
-### 2D Surface Data (CSV)
+### 2D Surface Data (ASCII)
 
 For 2D fitting, provide x, y coordinates and z values:
 
 ```yaml
 data:
-  input_file: "data/beam_profile_2d.csv"
-  format: "csv"
+  input_file: "data/surface_2d.txt"
+  format: "ascii"
   columns:
     x: 0    # X coordinate
     y: 1    # Y coordinate (becomes second row of xdata)
     z: 2    # Z value (the dependent variable)
+  ascii:
+    skip_header: 3
+    delimiter: null
 ```
 
 ## Model Types
@@ -574,5 +577,5 @@ fitting:
 ## See Also
 
 - [NLSQ Documentation](https://nlsq.readthedocs.io/)
-- [CLI Reference](../../../docs/user_guide/cli_reference.md)
+- [CLI Reference](../../../docs/reference/cli.rst)
 - [Workflow Template](../../../nlsq/cli/templates/workflow_config_template.yaml)

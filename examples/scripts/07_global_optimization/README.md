@@ -114,6 +114,7 @@ from nlsq.global_optimization import (
     scale_samples_to_bounds,  # Scale [0,1] samples to bounds
 )
 import jax
+import jax.numpy as jnp
 
 # Generate samples in [0, 1]^d
 key = jax.random.PRNGKey(42)
@@ -171,8 +172,8 @@ if is_evosax_available():
 | Preset | max_generations | restarts | Use Case |
 |--------|-----------------|----------|----------|
 | `cmaes-fast` | 50 | 0 | Quick exploration |
-| `cmaes` | 100 | 5 (BIPOP) | Default |
-| `cmaes-global` | 200 | 10 (BIPOP) | Thorough search |
+| `cmaes` | 100 | 9 (BIPOP) | Default |
+| `cmaes-global` | 200 | 9 (BIPOP) | Thorough search |
 
 ---
 

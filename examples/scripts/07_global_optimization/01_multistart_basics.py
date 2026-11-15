@@ -361,8 +361,8 @@ def main():
             )
             plot_idx += 1
 
-    ax2.set_xlabel("Parameter value (normalized)")
-    ax2.set_ylabel("Parameter value (normalized)")
+    ax2.set_xlabel("Parameter value")
+    ax2.set_ylabel("Parameter value")
     ax2.set_title("LHS Coverage: All 2D Projections")
     ax2.legend(loc="upper right", fontsize=8)
 

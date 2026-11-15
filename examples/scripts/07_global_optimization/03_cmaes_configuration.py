@@ -149,7 +149,7 @@ def main():
         print("  Available CMA-ES presets when evosax is installed:")
         print("    - 'cmaes-fast':   Quick exploration (no restarts)")
         print("    - 'cmaes':        Default (BIPOP restarts)")
-        print("    - 'cmaes-global': Thorough search (more restarts)")
+        print("    - 'cmaes-global': Thorough search (more generations)")
 
     # =========================================================================
     # 5. Using fit() with auto_global workflow
@@ -334,7 +334,7 @@ def main():
     print("CMA-ES Configuration (when evosax is available):")
     print("  - 'cmaes-fast':   Quick exploration, no restarts")
     print("  - 'cmaes':        Default, BIPOP restarts")
-    print("  - 'cmaes-global': Thorough search, more restarts")
+    print("  - 'cmaes-global': Thorough search, more generations")
     print()
     print("Usage:")
     print("  # Auto method selection")

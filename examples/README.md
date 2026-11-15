@@ -369,8 +369,8 @@ from nlsq.streaming.hybrid_config import HybridStreamingConfig
 # Auto-select workflow
 popt, pcov = fit(model, x, y, p0=p0)
 
-# With preset
-popt, pcov = fit(model, x, y, p0=p0, preset="robust")
+# Multi-start
+popt, pcov = fit(model, x, y, p0=p0, multistart=True, n_starts=5)
 
 # With an explicit workflow configuration
 popt, pcov = fit(model, x, y, p0=p0, workflow=HybridStreamingConfig())
@@ -384,18 +384,18 @@ popt, pcov = fit(model, x, y, p0=p0, workflow=HybridStreamingConfig())
 **Domain examples using `fit()` API with global optimization:** ⭐ NEW
 
 Same 12 domain examples as Section 04, updated to demonstrate:
-- Unified `fit()` API with presets
+- Unified `fit()` API
 - `GlobalOptimizationConfig` for multi-start optimization
 - Best practices for production workflows
 
 #### 🧬 Biology (3 notebooks)
 - **Dose-Response** - Hill equation with global optimization
-- **Enzyme Kinetics** - Michaelis-Menten with `preset="robust"`
+- **Enzyme Kinetics** - Michaelis-Menten with `multistart=True, n_starts=5`
 - **Growth Curves** - Logistic models with multi-start
 
 #### ⚗️ Chemistry (2 notebooks)
 - **Reaction Kinetics** - Rate constants with global search
-- **Titration Curves** - pKa with `preset="global"`
+- **Titration Curves** - pKa with `multistart=True, n_starts=20`
 
 #### ⚛️ Physics (4 notebooks)
 - **Damped Oscillation** - Multi-start for oscillation parameters
@@ -412,11 +412,11 @@ Same 12 domain examples as Section 04, updated to demonstrate:
 ```python
 from nlsq import fit, GlobalOptimizationConfig
 
-# Method 1: Preset
-popt, pcov = fit(model, x, y, p0=p0, preset="robust")
+# Method 1: Multi-start (5 starts)
+popt, pcov = fit(model, x, y, p0=p0, multistart=True, n_starts=5)
 
-# Method 2: Global preset (20 multi-starts)
-popt, pcov = fit(model, x, y, p0=p0, preset="global")
+# Method 2: Thorough search (20 multi-starts)
+popt, pcov = fit(model, x, y, p0=p0, multistart=True, n_starts=20)
 
 # Method 3: Custom multi-start
 popt, pcov = fit(model, x, y, p0=p0, multistart=True, n_starts=15, sampler="lhs")
@@ -571,7 +571,7 @@ popt, pcov = fit(model, x, y, p0=p0, goal="memory_efficient")
 ### Stuck in local minimum
 **Solution**: Use global optimization
 ```python
-popt, pcov = fit(model, x, y, p0=p0, preset="global")
+popt, pcov = fit(model, x, y, p0=p0, multistart=True, n_starts=20)
 ```
 
 ---
