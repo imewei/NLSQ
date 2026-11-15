@@ -191,8 +191,9 @@ uses exact streaming when the call is eligible:
   because the LM step solve stays on the normal equations (poly12,
   ``cond(J) = 7.5e8``: parameter error O(1) with ``success=True``), so check
   such results. See
-  ``benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md`` for the
-  conditioning study behind keeping normal equations for the step.
+  ``benchmarks/baselines/2026-10-31-exact-streaming-conditioning.md`` (at git
+  ``cd3f4f7c``; since removed from the tree) for the conditioning study behind
+  keeping normal equations for the step.
 - **Scale:** the method has been run on one billion points (16 GB of ``x`` and
   ``y`` in an HDF5 file) with 1.8 GiB peak host memory; each pass reads the file once.
 

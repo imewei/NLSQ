@@ -169,15 +169,14 @@ See :doc:`../reference/configuration` for detailed configuration.
 Python Script Run
 -----------------
 
-Use this when you want to run a workflow from a Python script using built-in presets.
+Use this when you want to run a workflow from a Python script.
 
 .. code-block:: python
 
    from nlsq import fit
 
-   # Using built-in presets (no YAML needed): "fast", "robust", "global",
-   # "streaming", "large" -- no domain-specific presets exist yet.
-   popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], preset="robust")
+   # No YAML needed: enable multi-start directly, or pass workflow="auto".
+   popt, pcov = fit(model_func, xdata, ydata, p0=[2.0, 0.5], multistart=True, n_starts=5)
 
 Domain-Specific Examples
 ------------------------

@@ -21,7 +21,7 @@ Chapter Overview
    Automatic GPU detection and usage patterns.
 
 **Multi-GPU** (5 min)
-   Using multiple GPUs for parallel processing.
+   Selecting GPUs and how multi-start sizes its worker pool.
 
 Quick Start
 -----------

@@ -198,13 +198,11 @@ fit Return Format
    # Same as curve_fit
 
    # With full_output=True:
-   popt, pcov, info = fit(model, x, y, p0=p0, full_output=True)
+   popt, pcov, infodict, mesg, ier = fit(model, x, y, p0=p0, full_output=True)
 
-   # info contains:
-   # - residuals: Final residuals
-   # - jacobian: Final Jacobian
+   # infodict (dict) contains:
    # - nfev: Function evaluations
-   # - nit: Iterations
+   # - fvec: Final residuals
 
 Error Handling
 --------------

@@ -136,7 +136,7 @@ from nlsq.svd_fallback import randomized_svd
 U, s, V = randomized_svd(A, n_components=10)
 
 # New code (v0.3.5+)
-from nlsq.svd_fallback import compute_svd_with_fallback
+from nlsq.stability.svd_fallback import compute_svd_with_fallback
 
 U, s, V = compute_svd_with_fallback(A, full_matrices=False)
 # Truncate manually if needed:
@@ -152,7 +152,7 @@ from nlsq.svd_fallback import compute_svd_adaptive
 U, s, V = compute_svd_adaptive(A, use_randomized=True)
 
 # New code (v0.3.5+) - same behavior, full SVD used
-from nlsq.svd_fallback import compute_svd_with_fallback
+from nlsq.stability.svd_fallback import compute_svd_with_fallback
 
 U, s, V = compute_svd_with_fallback(A, full_matrices=False)
 ```

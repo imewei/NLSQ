@@ -355,7 +355,8 @@ from nlsq.streaming.large_dataset import LargeDatasetFitter
 
 fitter = LargeDatasetFitter(memory_limit_gb=8.0)  # Chunk size derived from memory limit
 
-popt, pcov = fitter.fit(model, x, y, p0=p0)
+result = fitter.fit(model, x, y, p0=p0)
+popt, pcov = result.popt, result.pcov
 ```
 
 ### Issue 4: Fitting Doesn't Converge
@@ -417,12 +418,10 @@ If you can provide analytical Jacobian:
 ```python
 def jac_analytical(x, a, b, c):
     """Analytical Jacobian for a*exp(-b*x) + c"""
-    J = np.zeros((len(x), 3))
-    exp_term = np.exp(-b * x)
-    J[:, 0] = exp_term  # d/da
-    J[:, 1] = -a * x * exp_term  # d/db
-    J[:, 2] = 1.0  # d/dc
-    return J
+    exp_term = jnp.exp(-b * x)  # jnp, not np: the jac must be JAX-traceable
+    return jnp.stack(
+        [exp_term, -a * x * exp_term, jnp.ones_like(x)], axis=1
+    )  # d/da, d/db, d/dc
 
 
 popt, pcov = curve_fit(model, x, y, p0=p0, jac=jac_analytical)

@@ -32,7 +32,7 @@ NLSQ v0.6.3 provides three workflows that cover all use cases:
      - Required
      - Multi-modal problems, unknown initial guess.
    * - ``hpc``
-     - ``auto_global`` + checkpointing
+     - ``auto_global`` + logged cluster detection (checkpointing on the CMA-ES route only)
      - Required
      - Long-running HPC jobs.
 
@@ -92,12 +92,18 @@ The system automatically selects between:
 workflow="hpc"
 ~~~~~~~~~~~~~~
 
-For long-running jobs on HPC clusters. Wraps ``auto_global`` with automatic
-checkpointing for crash recovery.
+For long-running jobs on HPC clusters. ``hpc`` runs ``auto_global`` after logging
+what ``ClusterDetector`` found (a PBS allocation read from ``$PBS_NODEFILE``, or the
+local GPUs; the result is informational and does not change the fit).
+
+Checkpoint and resume work on the CMA-ES route only. On the multi-start, chunked
+and streaming routes, passing ``checkpoint_dir`` emits a ``UserWarning`` and writes
+nothing. To checkpoint, select CMA-ES explicitly:
 
 .. code-block:: python
 
    from nlsq import fit
+   from nlsq.global_optimization import CMAESConfig
 
    result = fit(
        model,
@@ -106,9 +112,60 @@ checkpointing for crash recovery.
        p0=[1.0, 0.5, 0.1],
        workflow="hpc",
        bounds=([0, 0, 0], [10, 5, 1]),
+       method="cmaes",
+       cmaes_config=CMAESConfig(restart_strategy="none"),
        checkpoint_dir="/scratch/my_job/checkpoints",
-       checkpoint_interval=10,  # Save every 10 generations/starts
+       checkpoint_interval=10,  # Save every 10 generations
+       run_id="exp-42",
+       model_id="exp_decay_v1",
+       seed=42,
    )
+
+See :doc:`../tutorials/routine/three_workflows/hpc_workflow` for the full
+checkpointing walkthrough.
+
+How ``fit``, ``curve_fit`` and ``curve_fit_large`` relate
+----------------------------------------------------------
+
+``curve_fit`` is the in-memory base case. The other entry points either call it
+or replace it, and they pick their engine by **different rules**, so the same
+data can take different engines depending on which one you call:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 36 36
+
+   * - Call
+     - Decides by
+     - Engines it can pick
+   * - ``fit(...)`` (no ``workflow``)
+     - Point count against ``size_threshold`` (default 1,000,000)
+     - ``curve_fit`` below the threshold, ``curve_fit_large`` at or above it
+   * - ``curve_fit_large(...)``
+     - Point count against ``size_threshold``, via the ``Auto`` strategy
+     - ``curve_fit`` below the threshold; exact streaming LM at or above it
+       (opt out with ``strategy=Chunked()``); chunked or hybrid when you ask
+   * - ``fit(..., workflow=...)``
+     - Estimated memory (``MemoryBudgetSelector``, below), not point count
+     - ``curve_fit`` (standard), the chunked engine, or the hybrid streaming
+       optimizer; plus a global method for ``auto_global`` and ``hpc``
+
+Three consequences:
+
+- ``workflow="auto"`` never selects the exact streaming solver. Exact streaming is
+  reachable only through ``curve_fit_large`` (or ``fit`` without ``workflow`` on
+  data at or above ``size_threshold``).
+- On the ``workflow=`` path, ``size_threshold``, ``chunk_size`` and
+  ``show_progress`` are ignored with a warning. Use ``memory_limit_gb`` to steer
+  the memory strategy instead.
+- ``fit(..., method="exact_streaming")`` is rejected with an error that points to
+  ``curve_fit_large``.
+
+For example, 10 million points with 3 parameters estimate to roughly 0.54 GB
+peak (see the formulas below). On a machine with ample free RAM, ``workflow="auto"``
+therefore runs an in-memory ``curve_fit``, while ``curve_fit_large`` on the same
+data runs exact streaming. The estimate uses detected available memory (8 GB is
+the fallback when detection fails), so the outcome depends on the machine.
 
 Memory Strategy Selection
 -------------------------
@@ -126,9 +183,9 @@ RAM as the threshold.
    │ threshold_gb = available_gb × 0.75  (safety factor)             │
    │                                                                  │
    │ # Memory estimates (float64 = 8 bytes)                          │
-   │ data_gb     = n_points × 2 × 8 / 1e9  (x + y)                   │
-   │ jacobian_gb = n_points × n_params × 8 / 1e9                     │
-   │ peak_gb     = data_gb + 1.3 × jacobian_gb + solver_overhead     │
+   │ data_gb     = n_points × (n_features + 1) × 8 / 1024³           │
+   │ jacobian_gb = n_points × n_params × 8 / 1024³                   │
+   │ peak_gb     = data_gb + 1.3 × jacobian_gb + 0.1  (overhead, GB) │
    └─────────────────────────────────────────────────────────────────┘
                                │
                                ▼
@@ -138,7 +195,7 @@ RAM as the threshold.
                        │ YES              │ NO
                        ▼                  ▼
           ┌──────────────────┐    ┌───────────────────────────┐
-          │ STREAMING        │    │ peak_gb > threshold_gb?   │
+          │ STREAMING        │    │ peak > 0.9×threshold_gb?  │
           │ HybridStreaming  │    └───────────────────────────┘
           │ with adaptive    │          │ YES           │ NO
           │ batch_size       │          ▼               ▼

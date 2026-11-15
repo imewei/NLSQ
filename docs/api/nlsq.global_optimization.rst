@@ -17,7 +17,8 @@ Key Features
 - **Quasi-random sequences**: Sobol and Halton for deterministic, low-discrepancy sampling
 - **Multi-start orchestration**: Evaluate multiple starting points and select best
 - **Tournament selection**: Memory-efficient selection for streaming datasets
-- **Preset configurations**: 'fast', 'robust', 'global', 'thorough', 'streaming'
+- **Preset configurations**: 'fast', 'robust', 'global', 'thorough', 'streaming' (these are
+  ``GlobalOptimizationConfig`` presets, unrelated to the removed ``fit(preset=)`` argument)
 
 Quick Start
 -----------
@@ -39,8 +40,10 @@ Basic multi-start optimization:
    x = np.linspace(0, 5, 100)
    y = 3.0 * np.exp(-0.5 * x) + 1.0 + np.random.normal(0, 0.1, 100)
 
-   # Method 1: Use fit() with preset
-   popt, pcov = fit(model, x, y, preset="robust", bounds=([0, 0, 0], [10, 5, 10]))
+   # Method 1: Use fit() with multi-start
+   popt, pcov = fit(
+       model, x, y, multistart=True, n_starts=5, bounds=([0, 0, 0], [10, 5, 10])
+   )
 
    # Method 2: Use MultiStartOrchestrator directly
    orchestrator = MultiStartOrchestrator.from_preset("global")

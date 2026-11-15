@@ -2,8 +2,8 @@ workflow="hpc" - HPC Cluster Optimization
 =========================================
 
 The ``hpc`` workflow is designed for long-running optimization jobs on High
-Performance Computing (HPC) clusters. It wraps ``auto_global`` with automatic
-cluster detection (PBS/SLURM).
+Performance Computing (HPC) clusters. It wraps ``auto_global`` and adds cluster
+detection (PBS, or local multi-GPU) that is logged for diagnostics.
 
 .. note::
 
@@ -20,8 +20,9 @@ When to Use
 
 Use ``hpc`` workflow when:
 
-- Running on HPC clusters (PBS, SLURM, etc.) and want automatic cluster
-  detection logged for diagnostics
+- Running on HPC clusters (PBS job scripts or SLURM job scripts) and want the
+  cluster or local-GPU detection result logged for diagnostics (only PBS is
+  recognised by name; see "Cluster Detection" below)
 - Running memory-aware global optimization (same requirements as
   ``auto_global``)
 
@@ -132,29 +133,35 @@ code to distinguish a clean checkpointed stop from a crash and resubmit:
 Cluster Detection
 -----------------
 
-NLSQ automatically detects HPC environments:
+``workflow="hpc"`` runs ``ClusterDetector().detect()`` once at the start and
+writes the result to the log (scheduler, node count, GPU count, and the job id
+at debug level). The result is informational: it does not change the fit.
+``detect()`` tries two things, in this order
+(``nlsq/core/workflow.py``, ``ClusterDetector.detect``):
 
 **PBS/Torque:**
 
 .. code-block:: bash
 
-   # Detected via $PBS_NODEFILE
+   # Detected via $PBS_NODEFILE (node list, one line per allocated slot)
    export PBS_NODEFILE=/var/spool/pbs/aux/12345.node1
 
-**SLURM:**
-
-.. code-block:: bash
-
-   # Detected via SLURM environment variables
-   export SLURM_JOB_ID=12345
-   export SLURM_NNODES=4
-
-**Multi-GPU:**
+**Local multi-GPU:**
 
 .. code-block:: bash
 
    # Detected via JAX device count
    python -c "import jax; print(jax.device_count())"
+
+If neither applies, the log says the fit is running on the local machine.
+
+.. note::
+
+   There is no SLURM detection. Under SLURM, ``workflow="hpc"`` still runs and
+   still runs, but ``SLURM_JOB_ID`` and ``SLURM_NNODES`` are not read. The log
+   shows the local-GPU result when JAX sees GPUs on the node, and the
+   "local machine" line otherwise, never a SLURM scheduler entry. SLURM job scripts (see below) work as ordinary
+   batch scripts.
 
 HPC Job Script Example
 ----------------------
@@ -236,10 +243,12 @@ For jobs with multiple GPUs:
        p0=[...],
        workflow="hpc",
        bounds=bounds,
-       n_starts=100,  # More starts for multi-GPU
+       n_starts=100,  # More starts keep a multi-GPU worker pool busy
    )
 
-NLSQ automatically distributes starting points across available GPUs.
+On the multi-start route, starting points run in a thread pool sized by the
+number of visible JAX devices. NLSQ does not pin starts to specific GPUs; see
+:doc:`../gpu_acceleration/multi_gpu`.
 
 Best Practices for HPC
 ----------------------

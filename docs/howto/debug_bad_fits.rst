@@ -52,7 +52,7 @@ Error: "Optimal parameters not found"
 
       from nlsq import fit
 
-      popt, pcov = fit(model, x, y, preset="global")
+      popt, pcov = fit(model, x, y, multistart=True, n_starts=20)
 
 3. Check data quality:
 

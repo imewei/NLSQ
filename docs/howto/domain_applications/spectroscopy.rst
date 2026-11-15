@@ -71,7 +71,8 @@ Multi-Peak Fitting
        x,
        y,
        p0=initial_guesses,
-       preset="robust",
+       multistart=True,
+       n_starts=5,
    )
 
 Fluorescence Lifetime
@@ -136,7 +137,7 @@ Tips for Spectroscopy Fitting
 
    .. code-block:: python
 
-      popt, pcov = fit(model, x, y, p0=p0, preset="global")
+      popt, pcov = fit(model, x, y, p0=p0, multistart=True, n_starts=20)
 
 4. **Check residuals** for systematic patterns indicating missing peaks
 

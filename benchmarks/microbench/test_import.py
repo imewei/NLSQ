@@ -147,7 +147,7 @@ print(f'{(end - start) * 1000:.1f}')
 class TestImportTimeComparison:
     """Compare import times before and after optimization."""
 
-    BASELINE_MS = 1084.4  # From benchmarks/baselines/import_baseline.txt
+    BASELINE_MS = 1084.4  # Cold import measured 2025-12-26
     TARGET_MS = 400.0  # SC-001 target
 
     def test_import_time_vs_target(self) -> None:

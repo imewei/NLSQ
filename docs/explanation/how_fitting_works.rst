@@ -190,7 +190,7 @@ Common issues:
 1. **Local minimum**: Found a suboptimal solution
 
    - Use better initial guesses
-   - Try global optimization (preset='global')
+   - Try global optimization (multistart=True, n_starts=20)
 
 2. **Ill-conditioned Jacobian**: Parameters are poorly determined
 

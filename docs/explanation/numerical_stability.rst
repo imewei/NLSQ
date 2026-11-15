@@ -220,7 +220,7 @@ Optimization Diverges
 
       from nlsq.stability import check_problem_stability
 
-      report = check_problem_stability(model, x, y, p0=p0)
+      report = check_problem_stability(x, y, p0=p0, f=model)
       print(f"Condition number: {report['condition_number']:.2e}")
 
 3. Use bounds to constrain parameters:
