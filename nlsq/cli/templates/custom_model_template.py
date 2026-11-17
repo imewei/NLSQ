@@ -48,19 +48,18 @@ Usage
 
    model:
      type: custom
-     custom:
-       file: /path/to/your_model.py
-       function: your_model_name
+     path: /path/to/your_model.py
+     function: your_model_name
 
 Example YAML Configuration
 --------------------------
 model:
   type: custom
-  custom:
-    file: ./my_custom_model.py
-    function: damped_oscillator
-  auto_p0: true      # Uses estimate_p0() if defined
-  auto_bounds: true  # Uses bounds() if defined
+  path: ./my_custom_model.py
+  function: damped_oscillator
+# estimate_p0() and bounds() are picked up automatically when defined (see
+# above): the p0 default applies when `fitting.p0` is "auto" or omitted, the
+# bounds default when `fitting.bounds` is omitted.
 
 JIT Compilation Notes
 ---------------------

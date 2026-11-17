@@ -36,8 +36,10 @@ Example Usage
 """
 
 import csv
+import itertools
 import logging
 import math
+import numbers
 import os
 import zipfile
 from pathlib import Path
@@ -118,6 +120,25 @@ def _real_float(arr: np.ndarray, key: str, file_path: Path) -> np.ndarray:
             file_format="npz",
         )
     return np.real(arr).astype(np.float64)
+
+
+def _check_aligned(
+    shapes: dict[str, tuple[int, ...]], file_path: Path, fmt: str
+) -> None:
+    """Reject arrays whose stored shapes differ, before they are flattened.
+
+    Flattening erases a (2, 3) vs (3, 2) mismatch and would pair observations
+    wrongly. Singleton axes are ignored, so (n,) and (n, 1) still align.
+    """
+    squeezed = {k: tuple(d for d in v if d != 1) for k, v in shapes.items()}
+    if len(set(squeezed.values())) > 1:
+        raise DataLoadError(
+            "Arrays have incompatible shapes: "
+            + ", ".join(f"{k}={shapes[k]}" for k in shapes),
+            file_path=file_path,
+            file_format=fmt,
+            suggestion="x, y (and sigma) must be stored with the same shape.",
+        )
 
 
 def _is_number(text: str) -> bool:
@@ -283,7 +304,7 @@ class DataLoader:
                     suggestion="Quote YAML values such as yes/no/on/off, or use an integer index.",
                 )
             # A negative index would silently select a trailing column (e.g. sigma).
-            if isinstance(col, int) and col < 0:
+            if isinstance(col, numbers.Integral) and col < 0:
                 raise DataLoadError(
                     f"columns.{key} must be a non-negative column index, got {col}",
                     file_path=file_path,
@@ -401,6 +422,28 @@ class DataLoader:
         skip_header = cfg_get(ascii_config, "skip_header", 0)
         skip_footer = cfg_get(ascii_config, "skip_footer", 0)
         dtype = cfg_get(ascii_config, "dtype", "float64")
+
+        try:
+            narrow_float = np.dtype(dtype).kind == "f" and np.dtype(dtype).itemsize < 8
+        except TypeError:
+            narrow_float = False  # loadtxt reports the invalid dtype below
+        if narrow_float:
+            # float32/float16 would silently round the data before the float64 cast
+            raise DataLoadError(
+                f"ascii.dtype {dtype!r} would round the data to reduced precision",
+                file_path=file_path,
+                file_format="ascii",
+                suggestion="Use ascii.dtype: float64 (the default).",
+            )
+        for key, col in (config.get("columns") or {}).items():
+            if col is not None and not isinstance(col, numbers.Integral):
+                raise DataLoadError(
+                    f"columns.{key} must be a 0-based integer column index for "
+                    f"ASCII files, got {col!r}",
+                    file_path=file_path,
+                    file_format="ascii",
+                    suggestion="ASCII files have no header names; use e.g. `x: 0`.",
+                )
 
         try:
             if skip_footer > 0:
@@ -545,16 +588,45 @@ class DataLoader:
 
         # Read header names if present
         header_names: list[str] | None = None
+        n_preamble = 0  # blank / comment-only lines between skip_header and header
         if has_header:
-            with open(file_path, encoding=encoding) as f:
-                # Skip additional header lines if specified
-                for _ in range(skip_header):
-                    f.readline()
-                # csv.reader honours quoted fields containing the delimiter,
-                # matching how the data rows are split below
-                header_names = [
-                    col.strip() for col in next(csv.reader(f, delimiter=delimiter), [])
-                ]
+            try:
+                with open(file_path, encoding=encoding) as f:
+                    # Skip additional header lines if specified
+                    for _ in range(skip_header):
+                        f.readline()
+                    line = f.readline()
+                    while line and not _strip_unquoted_comment(line).strip():
+                        n_preamble += 1
+                        line = f.readline()
+                    if not line:
+                        raise DataLoadError(
+                            "CSV file contains no data rows (empty or only "
+                            "comment lines)",
+                            file_path=file_path,
+                            file_format="csv",
+                        )
+                    # csv.reader honours quoted fields containing the delimiter,
+                    # matching how the data rows are split below
+                    # same quote-aware "#" comment removal as the data rows
+                    line = _strip_unquoted_comment(line.rstrip("\r\n"))
+                    if len(delimiter) == 1:
+                        header_cells = next(
+                            csv.reader(itertools.chain([line], f), delimiter=delimiter),
+                            [],
+                        )
+                    else:  # csv.reader needs 1 char; split like the data rows
+                        header_cells = (
+                            line.rstrip("\r\n").replace('"', "").split(delimiter)
+                        )
+                    header_names = [col.strip() for col in header_cells]
+            except UnicodeDecodeError as e:
+                raise DataLoadError(
+                    f"Cannot decode CSV file with encoding {encoding!r}: {e}",
+                    file_path=file_path,
+                    file_format="csv",
+                    suggestion="Set csv.encoding (e.g. latin-1) to match the file.",
+                ) from e
             if header_names and all(_is_number(c) for c in header_names):
                 # A header-less file read with the default has_header=True would
                 # silently lose its first data row.
@@ -568,7 +640,7 @@ class DataLoader:
 
         try:
             # Calculate skip rows: additional skip_header + 1 for header row
-            total_skip = skip_header + (1 if has_header else 0)
+            total_skip = skip_header + n_preamble + (1 if has_header else 0)
 
             # genfromtxt does not understand quoting; numeric cells quoted by
             # Excel/pandas ("1.0","2.0") would otherwise all become NaN.
@@ -594,7 +666,7 @@ class DataLoader:
                     yield delimiter.join(c.replace(delimiter, " ") for c in row)
 
             with open(file_path, encoding=encoding, newline="") as fh:
-                data = np.genfromtxt(
+                data = np.genfromtxt(  # type: ignore[call-overload]  # numpy stubs lack the generator + encoding overload
                     _unquoted_rows(fh),
                     delimiter=delimiter,
                     skip_header=total_skip,
@@ -602,6 +674,7 @@ class DataLoader:
                     missing_values=missing_values,
                     filling_values=np.nan,
                     dtype=np.float64,
+                    ndmin=2,  # one data row stays a row, one column a column
                 )
 
             if (
@@ -710,7 +783,7 @@ class DataLoader:
         DataLoadError
             If column name not found.
         """
-        if isinstance(col, int) and not isinstance(col, bool):
+        if isinstance(col, numbers.Integral) and not isinstance(col, bool):
             return col
 
         if header_names is None:
@@ -718,7 +791,9 @@ class DataLoader:
                 f"Cannot use column name '{col}' without header row",
                 file_path=file_path,
                 file_format="csv",
-                suggestion="Set csv.header: true or use column indices instead.",
+                suggestion="Set csv.header: true or use column indices instead. "
+                "A header written as a '#' comment (np.savetxt default) is not a "
+                'header row: write it with comments="" or use column indices.',
             )
 
         try:
@@ -794,6 +869,12 @@ class DataLoader:
                         payload // max(dtype.itemsize, 1), key, file_path, "npz", limit
                     )
 
+                shapes: dict[str, tuple[int, ...]] = {}
+
+                def _flat(name: str, arr: np.ndarray) -> np.ndarray:
+                    shapes[name] = arr.shape
+                    return arr.flatten()
+
                 # Load x data
                 if x_key not in data:
                     raise DataLoadError(
@@ -804,7 +885,7 @@ class DataLoader:
                         suggestion=f"Available keys are: {', '.join(available_keys)}",
                     )
                 _check(x_key)
-                x_arr = _real_float(data[x_key], x_key, file_path).flatten()
+                x_arr = _flat("x", _real_float(data[x_key], x_key, file_path))
 
                 # Load y data
                 if y_key not in data:
@@ -816,7 +897,7 @@ class DataLoader:
                         suggestion=f"Available keys are: {', '.join(available_keys)}",
                     )
                 _check(y_key)
-                y_arr = _real_float(data[y_key], y_key, file_path).flatten()
+                y_arr = _flat("y", _real_float(data[y_key], y_key, file_path))
 
                 # Handle 2D vs 1D data
                 if is_2d and z_key is not None:
@@ -830,7 +911,7 @@ class DataLoader:
                             suggestion=f"Available keys are: {', '.join(available_keys)}",
                         )
                     _check(z_key)
-                    z_arr = _real_float(data[z_key], z_key, file_path).flatten()
+                    z_arr = _flat("z", _real_float(data[z_key], z_key, file_path))
 
                     # 2D surface data: x, y are coordinates, z is dependent variable
                     # Stack x, y into shape (2, n_points)
@@ -853,7 +934,11 @@ class DataLoader:
                             suggestion=f"Available keys are: {', '.join(available_keys)}",
                         )
                     _check(sigma_key)
-                    sigma = _real_float(data[sigma_key], sigma_key, file_path).flatten()
+                    sigma = _flat(
+                        "sigma", _real_float(data[sigma_key], sigma_key, file_path)
+                    )
+
+                _check_aligned(shapes, file_path, "npz")
 
         except DataLoadError:
             raise
@@ -951,6 +1036,15 @@ class DataLoader:
                         file_path=file_path,
                         file_format="hdf5",
                     )
+                if dset.dtype.kind not in "biuf":
+                    # h5py cannot convert complex/string/compound data to float64
+                    # and its OSError would read as a corrupt file.
+                    raise DataLoadError(
+                        f"Dataset '{path}' has unsupported dtype {dset.dtype}; "
+                        "only real numeric datasets can be fitted",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
                 _check_load_size(math.prod(dset.shape), path, file_path, "hdf5", limit)
                 if math.prod(dset.shape) > 0 and dset.id.get_storage_size() == 0:
                     # Declared but never written: reading would allocate the whole
@@ -979,7 +1073,13 @@ class DataLoader:
                             file_path=file_path,
                             file_format="hdf5",
                         )
-                return np.asarray(dset, dtype=np.float64).flatten()
+                return np.asarray(dset, dtype=np.float64)
+
+            shapes: dict[str, tuple[int, ...]] = {}
+
+            def _flat(name: str, arr: np.ndarray) -> np.ndarray:
+                shapes[name] = arr.shape
+                return arr.flatten()
 
             with h5py.File(file_path, "r") as f:
                 # Load x data
@@ -992,7 +1092,7 @@ class DataLoader:
                         context={"available_paths": available_paths},
                         suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                     )
-                x_arr = _read(f, x_path)
+                x_arr = _flat("x", _read(f, x_path))
 
                 # Load y data
                 if y_path not in f:
@@ -1004,7 +1104,7 @@ class DataLoader:
                         context={"available_paths": available_paths},
                         suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                     )
-                y_arr = _read(f, y_path)
+                y_arr = _flat("y", _read(f, y_path))
 
                 # Handle 2D vs 1D data
                 if is_2d and z_path is not None:
@@ -1018,7 +1118,7 @@ class DataLoader:
                             context={"available_paths": available_paths},
                             suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                         )
-                    z_arr = _read(f, z_path)
+                    z_arr = _flat("z", _read(f, z_path))
 
                     # 2D surface data: x, y are coordinates, z is dependent variable
                     # Stack x, y into shape (2, n_points)
@@ -1041,7 +1141,8 @@ class DataLoader:
                             context={"available_paths": available_paths},
                             suggestion=f"Available dataset paths are: {', '.join(available_paths)}",
                         )
-                    sigma = _read(f, sigma_path)
+                    sigma = _flat("sigma", _read(f, sigma_path))
+                _check_aligned(shapes, file_path, "hdf5")
 
         except DataLoadError:
             raise

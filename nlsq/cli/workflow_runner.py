@@ -152,6 +152,9 @@ class WorkflowRunner:
         # without a second file read. Semantics: reflects the most recent run()
         # call only — do not rely on this across multiple run() invocations.
         self.last_data: tuple[np.ndarray, np.ndarray, np.ndarray | None] | None = None
+        # Same contract for the model resolved by run(): visualization reuses it
+        # so a custom model file is not read, validated and executed twice.
+        self.last_model: Any = None
 
     def run(self, config: dict[str, Any]) -> dict[str, Any]:
         """Execute complete curve fitting workflow.
@@ -227,6 +230,7 @@ class WorkflowRunner:
 
         # Step 2: Resolve model
         model = self._resolve_model(config)
+        self.last_model = model
 
         # Step 3: Extract fitting parameters
         p0, bounds, fit_kwargs = self._extract_fit_params(config, xdata, ydata, model)
@@ -574,7 +578,38 @@ class WorkflowRunner:
             )
         fit_kwargs["check_finite"] = check_finite
 
+        if method == "hybrid_streaming":
+            self._drop_unsupported_hybrid_options(fit_kwargs)
+
         return p0, bounds, fit_kwargs
+
+    @staticmethod
+    def _drop_unsupported_hybrid_options(fit_kwargs: dict[str, Any]) -> None:
+        """Drop the options ``method: hybrid_streaming`` cannot honour.
+
+        The hybrid engine has no ``ftol``/``xtol``/``gtol``/``max_nfev`` (its
+        stopping rules are Gauss-Newton iteration/tolerance settings with
+        different semantics, so there is no exact mapping) and always minimises
+        the plain least-squares cost. The options are dropped with a warning;
+        a robust ``loss`` would change the objective, so it is rejected.
+        """
+        loss = fit_kwargs.get("loss", "linear")
+        if loss != "linear":
+            raise ConfigError(
+                f"fitting.loss={loss!r} is not supported by method "
+                "'hybrid_streaming' (it minimises the linear least-squares cost)",
+                suggestion="Use method: trf for a robust loss, or loss: linear.",
+            )
+        fit_kwargs.pop("loss", None)
+        dropped = [k for k in ("ftol", "xtol", "gtol", "max_nfev") if k in fit_kwargs]
+        for key in dropped:
+            del fit_kwargs[key]
+        if dropped:
+            logger.warning(
+                "method 'hybrid_streaming' has no equivalent of fitting.%s; "
+                "ignored. It stops on its own Gauss-Newton settings.",
+                ", fitting.".join(dropped),
+            )
 
     def _execute_fit(
         self,
@@ -643,6 +678,15 @@ class WorkflowRunner:
             # Add remaining kwargs
             fit_args.update(kwargs)
 
+            if kwargs.get("method") == "hybrid_streaming":
+                from nlsq.streaming.strategy import scipy_layout_to_points_first
+
+                # that engine takes multi-dimensional x points-first (n, k); the
+                # loader (like scipy) hands over (k, n). No-op for 1-D x.
+                fit_args["f"], fit_args["xdata"] = scipy_layout_to_points_first(
+                    model, xdata
+                )
+
             # Execute fit
             result = nlsq.curve_fit(**fit_args)
 
@@ -660,6 +704,7 @@ class WorkflowRunner:
                     # sets this, so omitting it here silently drops
                     # r_squared only for callers that get a plain tuple back.
                     "ydata": ydata.tolist(),
+                    "absolute_sigma": bool(kwargs.get("absolute_sigma", False)),
                 }
             else:
                 # CurveFitResult object
@@ -682,6 +727,10 @@ class WorkflowRunner:
 
                 # Store ydata for statistics calculation
                 result_dict["ydata"] = ydata.tolist()
+                # Noise-scale flag, needed to pick the confidence-band quantile
+                result_dict["absolute_sigma"] = bool(
+                    kwargs.get("absolute_sigma", False)
+                )
 
                 # `fun` above is sigma-weighted; the exporter needs sigma to
                 # recover data-scale residuals for rmse and r_squared.
@@ -720,7 +769,9 @@ class WorkflowRunner:
         except RuntimeError as e:
             error_msg = str(e)
 
-            if "maxfev" in error_msg.lower() or "max" in error_msg.lower():
+            # Only the explicit option names: a bare "max" also matches
+            # unrelated errors (e.g. "exceeds xmax of the lookup table").
+            if "maxfev" in error_msg.lower() or "max_nfev" in error_msg.lower():
                 raise FitError(
                     "Curve fitting failed: maximum function evaluations exceeded",
                     context={"error": error_msg},

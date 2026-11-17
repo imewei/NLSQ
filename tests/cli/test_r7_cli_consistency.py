@@ -29,7 +29,7 @@ def test_hdf5_boundary_uses_total_elements_of_2d_dataset(monkeypatch, tmp_path):
     p = tmp_path / "d.h5"
     with h5py.File(p, "w") as f:
         f.create_dataset("/data/x", data=np.ones((2, 50)))
-        f.create_dataset("/data/y", data=np.ones(100))
+        f.create_dataset("/data/y", data=np.ones((2, 50)))
     cfg = {"format": "hdf5", "hdf5": {"x_path": "/data/x", "y_path": "/data/y"}}
     monkeypatch.setenv("NLSQ_MAX_LOAD_ELEMENTS", "100")
     DataLoader().load(p, cfg)  # exactly at the limit: accepted

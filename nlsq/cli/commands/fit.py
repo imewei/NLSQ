@@ -341,9 +341,13 @@ def _generate_visualization(
         }
 
         # Resolve model for visualization
-        model_config = config.get("model") or {}
-        model_name = cfg_get(model_config, "name", cfg_get(model_config, "path", ""))
-        model = runner.model_registry.get_model(model_name, model_config)
+        model = runner.last_model
+        if model is None:
+            model_config = config.get("model") or {}
+            model_name = cfg_get(
+                model_config, "name", cfg_get(model_config, "path", "")
+            )
+            model = runner.model_registry.get_model(model_name, model_config)
 
         # Generate visualization
         visualizer = FitVisualizer()

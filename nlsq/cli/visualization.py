@@ -21,6 +21,7 @@ Example Usage
 >>> output_paths = visualizer.generate(result, data, model, config)
 """
 
+import logging
 import threading
 import warnings
 from collections.abc import Callable
@@ -124,6 +125,8 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
 # FitVisualizer Class
 # =============================================================================
 
+
+logger = logging.getLogger("nlsq.cli.visualization")
 
 _DRAW_LOCK = threading.RLock()
 
@@ -530,15 +533,24 @@ class FitVisualizer:
                     pcov,
                     confidence_level,
                     ndata=len(xdata),
+                    sigma=sigma,
+                    absolute_sigma=bool(_field(result, "absolute_sigma") or False),
                 )
-                ax.fill_between(
-                    x_fit,
-                    lower,
-                    upper,
-                    color=confidence_color,
-                    alpha=confidence_alpha,
-                    label=f"{confidence_level * 100:.0f}% CI",
-                )
+                if np.isfinite(lower).all() and np.isfinite(upper).all():
+                    ax.fill_between(
+                        x_fit,
+                        lower,
+                        upper,
+                        color=confidence_color,
+                        alpha=confidence_alpha,
+                        label=f"{confidence_level * 100:.0f}% CI",
+                    )
+                else:
+                    logger.warning(
+                        "Confidence band is undefined for this fit (no residual "
+                        "degrees of freedom, a non-finite covariance or a "
+                        "non-differentiable model); it is omitted from the plot."
+                    )
 
             # Plot fit curve
             ax.plot(
@@ -760,11 +772,16 @@ class FitVisualizer:
         pcov: np.ndarray,
         confidence_level: float = 0.95,
         ndata: int | None = None,
+        sigma: np.ndarray | None = None,
+        absolute_sigma: bool = False,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Calculate confidence bands using error propagation.
+        """Calculate the confidence band of the mean response.
 
-        Uses the Jacobian of the model with respect to parameters and
-        the covariance matrix to compute prediction uncertainties.
+        Delegates to ``CurveFitResult.confidence_band`` so the CLI plot uses the
+        library's quantile rule (normal for ``absolute_sigma=True``,
+        Student-t with ``ndata - n_params`` degrees of freedom
+        otherwise, NaN with a ``RuntimeWarning`` when there are none) and its
+        domain-robust Jacobian (autodiff, adaptive finite-difference fallback).
 
         Parameters
         ----------
@@ -779,55 +796,42 @@ class FitVisualizer:
         confidence_level : float
             Confidence level (default 0.95 for 95% CI).
         ndata : int, optional
-            Number of fitted data points; sets Student-t dof = ndata - n_params.
-            Falls back to the normal quantile when omitted or dof <= 0.
+            Number of fitted data points. When omitted the noise is treated as
+            estimated from a very large sample (quantile ~ normal); the plot
+            code always passes it.
+        sigma, absolute_sigma : optional
+            The fit's weighting; ``absolute_sigma=True`` (with or without
+            ``sigma``, which then defaults to 1) means the noise scale is known
+            and selects the normal quantile.
 
         Returns
         -------
         tuple[ndarray, ndarray]
-            Lower and upper bounds of the confidence band.
+            Lower and upper bounds of the band; all NaN when it is undefined.
         """
-        n_points = len(x)
-        n_params = len(popt)
+        from nlsq.result import CurveFitResult
 
-        # Compute Jacobian numerically using finite differences
         popt = np.asarray(popt, dtype=float)
-        jacobian = np.zeros((n_points, n_params))
-
-        y0 = np.asarray(model(x, *popt))
-
-        for i in range(n_params):
-            # Central difference with a relative cbrt(eps) step: a fixed 1e-8
-            # forward step vanishes below float resolution when |y| is large.
-            h = np.cbrt(np.finfo(float).eps) * max(1.0, abs(popt[i]))
-            p_plus, p_minus = popt.copy(), popt.copy()
-            p_plus[i] += h
-            p_minus[i] -= h
-            jacobian[:, i] = (
-                np.asarray(model(x, *p_plus)) - np.asarray(model(x, *p_minus))
-            ) / (2 * h)
-
-        # Compute variance of predictions: var(y) = J @ pcov @ J.T (diagonal elements)
-        # For efficiency, compute element-wise
-        variance = np.zeros(n_points)
-        for i in range(n_points):
-            j_i = jacobian[i, :]
-            variance[i] = j_i @ pcov @ j_i
-
-        std_prediction = np.sqrt(np.maximum(variance, 0))
-
-        # Student-t quantile (normal fallback when dof is unknown/non-positive)
-        alpha = 1 - confidence_level
-        dof = None if ndata is None else ndata - n_params
-        if dof is not None and dof > 0:
-            z = stats.t.ppf(1 - alpha / 2, dof)
-        else:
-            z = stats.norm.ppf(1 - alpha / 2)
-
-        lower = y0 - z * std_prediction
-        upper = y0 + z * std_prediction
-
-        return lower, upper
+        n = 10**9 if ndata is None else int(ndata)
+        result = CurveFitResult(
+            {
+                "popt": popt,
+                "pcov": np.asarray(pcov, dtype=float),
+                "model": model,
+                "xdata": np.asarray(x),
+                # only the length is used (degrees of freedom)
+                "ydata": np.broadcast_to(0.0, (n,)),
+                "sigma": sigma,
+                "absolute_sigma": bool(absolute_sigma),
+            }
+        )
+        try:
+            lower, upper = result.confidence_band(np.asarray(x), confidence_level)
+        except (FloatingPointError, ArithmeticError, ValueError, TypeError) as e:
+            logger.warning("Confidence band is undefined: %s", e)
+            nan = np.full(np.shape(x), np.nan)
+            return nan, nan.copy()
+        return np.asarray(lower), np.asarray(upper)
 
     def _get_residuals(
         self,

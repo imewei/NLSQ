@@ -303,6 +303,14 @@ class ResultExporter:
                     f"invalid variance (negative or NaN) for parameter {i}"
                     for i in np.flatnonzero(~valid)
                 ]
+                # An all-inf covariance is how the library marks one it could not
+                # estimate (n < p, singular Jacobian); it is exported as null. A
+                # single inf entry (one unidentifiable parameter) is left as is.
+                if np.isposinf(diag).all():
+                    uncertainty_warnings.append(
+                        "covariance could not be estimated (underdetermined fit "
+                        "or singular Jacobian); parameter uncertainties are null"
+                    )
 
         # Calculate statistics
         statistics = self._calculate_statistics(result)
