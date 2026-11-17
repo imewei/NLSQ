@@ -6,7 +6,8 @@ This module provides automatic fallback mechanisms that attempt to recover
 from optimization failures by trying alternative approaches.
 
 Key Features:
-- Automatic method selection (trf → alternative approaches)
+- Alternative method selection (currently only "trf"; a no-op when TRF is
+  already the method, so it never repeats the original fit)
 - Initial guess perturbation for escaping local minima
 - Tolerance adjustment for difficult problems
 - Parameter bound inference when needed
@@ -24,12 +25,15 @@ Example:
     >>> print(f"Success with strategy: {result.fallback_strategy_used}")
 """
 
+import warnings
 from collections.abc import Callable
+from functools import lru_cache
 from typing import Any, ClassVar, Protocol
 
 import numpy as np
 
 from nlsq.precision.bound_inference import infer_bounds
+from nlsq.result import OptimizeWarning
 from nlsq.utils.logging import get_logger
 
 __all__ = [
@@ -111,7 +115,12 @@ class FallbackStrategy:
 
 
 class AlternativeMethodStrategy(FallbackStrategy):
-    """Try alternative optimization methods."""
+    """Try alternative optimization methods.
+
+    Only ``"trf"`` is in the sequence, so this is a no-op (the kwargs come back
+    unchanged and the orchestrator skips the attempt) whenever the fit already
+    uses TRF -- the default when ``method`` is unset.
+    """
 
     def __init__(self):
         super().__init__(
@@ -128,8 +137,11 @@ class AlternativeMethodStrategy(FallbackStrategy):
         """Try next method in sequence."""
         modified = kwargs.copy()
         if self.current_index < len(self.method_sequence):
-            modified["method"] = self.method_sequence[self.current_index]
+            method = self.method_sequence[self.current_index]
             self.current_index += 1
+            # Re-running the method the fit already used repeats the original solve.
+            if method != (kwargs.get("method") or "trf"):
+                modified["method"] = method
         return modified
 
     def has_more(self) -> bool:
@@ -234,7 +246,15 @@ class AdjustTolerancesStrategy(FallbackStrategy):
 
 
 class AddParameterBoundsStrategy(FallbackStrategy):
-    """Infer and add parameter bounds if not provided."""
+    """Infer and add parameter bounds if not provided.
+
+    The inferred box is a heuristic (it assumes e.g. a positive rate in the
+    second parameter, and ``p0``-centred windows), so it can exclude the
+    unconstrained solution. ``enforce_positivity`` is off, but the box is still
+    not guaranteed sign-neutral; the safeguard is that the orchestrator reports
+    the attempt as unsuccessful when the fitted parameters sit on an inferred
+    bound.
+    """
 
     def __init__(self):
         super().__init__(
@@ -268,9 +288,12 @@ class AddParameterBoundsStrategy(FallbackStrategy):
         if xdata is None or ydata is None:
             return modified  # Can't infer without data
 
-        lower, upper = infer_bounds(xdata, ydata, p0)
+        # enforce_positivity=False: p0 may be the auto-filled ones(n), which says
+        # nothing about the sign of the true parameters.
+        lower, upper = infer_bounds(xdata, ydata, p0, enforce_positivity=False)
 
         modified["bounds"] = (lower, upper)
+        modified["_invented_bounds"] = True  # popped by _run_strategy
 
         return modified
 
@@ -314,32 +337,63 @@ def _rescale_sigma(sigma: Any, y_scale: float) -> np.ndarray:
     """
     sigma_arr = np.asarray(sigma)
     if sigma_arr.ndim == 2:
-        return sigma_arr / (y_scale**2)
+        return sigma_arr / y_scale / y_scale  # not y_scale**2: that can overflow
     return sigma_arr / y_scale
 
 
 def _fit_rescaled(curve_fit, f, xdata, ydata, kwargs, scale_info):
-    """Fit the rescaled problem, then refit the original from its solution.
+    """Rescale attempt: callback-free pre-solve, then one flagged solve.
 
-    Only popt is unit-invariant: every other field of the scaled fit (pcov,
-    residuals, xdata, ydata, model) is in scaled units. The refit starts at the
-    scaled solution, so it converges immediately and returns a result entirely
-    in the user's units. If the refit fails the exception propagates and the
-    caller moves on to the next strategy instead of returning scaled fields.
+    Contract: each attempt runs one caller-visible, flagged solve; the rescale
+    attempt additionally runs a callback-free pre-solve on the scaled problem to
+    find a starting point, so a callback runs only in the solve whose result can
+    be returned. The pre-solve uses the caller's bounds, loss, etc. but drops
+    callbacks, output flags and side effects; only its ``popt`` (unit-invariant)
+    is used, and only if the pre-solve succeeded. The final solve is on the original problem from that start, with the
+    caller's kwargs, and its result is returned verbatim (original units by
+    construction). A failed, unsuccessful or non-finite pre-solve (and any error or
+    warning inside it) falls back to the caller's ``p0``. The pre-solve's warnings
+    are silenced with ``warnings.catch_warnings``, which is process-global (not
+    thread-safe): warnings emitted by other threads during the pre-solve window
+    are suppressed too.
     """
+    start = {}
+    # Everything the pre-solve needs (scaling, sigma, jac, f_scale, the call) is
+    # inside the guard: any failure means "no better start". Its warnings are
+    # silenced (and cannot be promoted to errors) so only the final solve speaks.
+    try:
+        args, scaled_kwargs = _presolve_args(f, xdata, ydata, kwargs, scale_info)
+        # warnings.catch_warnings is process-global (not thread-safe): warnings
+        # emitted by other threads during the pre-solve window are suppressed
+        # too. curve_fit has no per-call switch for them. Same trade-off as
+        # multi_start._suppress_optimize_warning; only the call is inside.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            scaled = curve_fit(*args, **scaled_kwargs)
+        popt = np.asarray(scaled.x, dtype=float)
+        if _fit_succeeded(scaled) and np.all(np.isfinite(popt)):
+            start = {"p0": popt}
+        else:
+            get_logger(__name__).debug("Rescale pre-solve unsuccessful; using p0")
+    except Exception as exc:  # the pre-solve only improves the start
+        get_logger(__name__).debug(f"Rescale pre-solve failed ({exc}); using p0")
+    return curve_fit(f, xdata, ydata, **{**kwargs, **start})
+
+
+def _presolve_args(f, xdata, ydata, kwargs, scale_info):
+    """Positional args and kwargs of the scaled pre-solve (see ``_fit_rescaled``)."""
     xs, ys = scale_info["_x_scale"], scale_info["_y_scale"]
     xo, yo = scale_info["_x_offset"], scale_info["_y_offset"]
 
     def scaled_f(x_scaled, *params):
         return (f(x_scaled * xs + xo, *params) - yo) / ys
 
-    # The scaled stage needs a CurveFitResult (.x), so drop tuple-return modes;
-    # the final refit keeps the user's kwargs and so the user's return type.
     scaled_kwargs = {
         k: v
         for k, v in kwargs.items()
-        if k not in ("full_output", "return_eval", "timeit")
+        if k not in ("full_output", "return_eval", "timeit", "callback")
     }
+    scaled_kwargs.update(compute_diagnostics=False, compute_covariance=False, verbose=0)
     jac = kwargs.get("jac")
     if callable(jac):
         # d/dp of (f(x_s*xs + xo, p) - yo) / ys
@@ -347,12 +401,13 @@ def _fit_rescaled(curve_fit, f, xdata, ydata, kwargs, scale_info):
     sigma = kwargs.get("sigma")
     if sigma is not None:
         scaled_kwargs["sigma"] = _rescale_sigma(sigma, ys)
-    elif kwargs.get("f_scale") is not None:
+    elif kwargs.get("f_scale") is not None or kwargs.get("loss", "linear") != "linear":
         # Without sigma, residuals have y units. With sigma, scaling both
         # data and weights leaves whitened residuals (and f_scale) unchanged.
-        scaled_kwargs["f_scale"] = kwargs["f_scale"] / ys
-    scaled = curve_fit(scaled_f, (xdata - xo) / xs, (ydata - yo) / ys, **scaled_kwargs)
-    return curve_fit(f, xdata, ydata, **{**kwargs, "p0": np.asarray(scaled.x)})
+        # An omitted f_scale is the solver default 1.0 and must scale too.
+        f_scale = kwargs.get("f_scale")
+        scaled_kwargs["f_scale"] = (1.0 if f_scale is None else f_scale) / ys
+    return (scaled_f, (xdata - xo) / xs, (ydata - yo) / ys), scaled_kwargs
 
 
 class RescaleProblemStrategy(FallbackStrategy):
@@ -392,32 +447,252 @@ class RescaleProblemStrategy(FallbackStrategy):
         return modified
 
 
-def _fit_succeeded(result) -> bool:
-    """Tuple-style returns (no ``success`` attribute) count as success."""
-    return bool(getattr(result, "success", True))
+_OUTPUT_FLAGS = ("full_output", "return_eval", "timeit")
 
 
-def _keep_best(best, result, attempt_loss, caller_loss, strategy_name=None):
+def _flags(kwargs: dict[str, Any]) -> dict[str, bool]:
+    return {k: bool(kwargs.get(k)) for k in _OUTPUT_FLAGS}
+
+
+def _tuple_kind(result, flags) -> str | None:
+    """Layout of a flagged ``curve_fit`` return (same precedence as curve_fit).
+
+    ``"eval"``: ``(popt, pcov, f(x))``; ``"full"``: ``(popt, pcov, infodict,
+    mesg, ier)``; ``"timeit"``: ``(popt, pcov, res, post_time, ctime)``.
+    ``None`` for a result object.
+    """
+    if not isinstance(result, tuple) or not flags:
+        return None
+    if flags.get("return_eval"):
+        return "eval"
+    if flags.get("full_output"):
+        return "full"
+    return "timeit" if flags.get("timeit") else None
+
+
+def _fit_succeeded(result, flags=None) -> bool:
+    """Whether a ``curve_fit`` return value reports convergence.
+
+    Result objects use ``.success``. For flagged tuples: ``full_output`` carries
+    ``ier`` (1-4 converged); ``timeit`` carries the raw result at index 2 and
+    uses its ``success``. ``return_eval`` takes precedence over the other flags
+    and returns ``(popt, pcov, f(x))`` with no status (also when combined with
+    ``full_output``/``timeit``), so a finite ``popt`` counts as success (HEAD
+    behaviour for that mode).
+    """
+    kind = _tuple_kind(result, flags)
+    if kind is None:
+        return bool(getattr(result, "success", True))
+    if kind == "full":
+        return result[4] in (1, 2, 3, 4)
+    finite = bool(np.all(np.isfinite(np.asarray(result[0], dtype=float))))
+    if kind == "timeit":
+        return finite and bool(result[2].get("success", True))
+    return finite
+
+
+def _fitted_params(result, flags=None) -> np.ndarray | None:
+    """popt of a curve_fit return value (object or flagged tuple), or None."""
+    if _tuple_kind(result, flags) is not None:
+        return np.asarray(result[0], dtype=float)
+    popt = getattr(result, "popt", None)
+    if popt is None:
+        popt = getattr(result, "x", None)
+    return None if popt is None else np.asarray(popt, dtype=float)
+
+
+def _ulp(v, toward):
+    """Spacing from ``|v|`` one step toward ``toward`` (+inf/-inf).
+
+    Unlike ``np.spacing`` it is finite at finfo.max (falls back to the opposite
+    direction when the step leaves the float range), and it is direction-aware:
+    the step above an exact power of two is twice the step below. Callers hold
+    ``np.errstate(under/over/invalid="ignore")`` (subnormal steps underflow).
+    """
+    step = np.abs(np.nextafter(v, toward) - v)
+    return np.where(np.isfinite(step), step, np.abs(v - np.nextafter(v, -toward)))
+
+
+def _hits_bound(result, bounds, flags=None, p0=None) -> bool:
+    """Whether any fitted parameter sits on a finite bound.
+
+    Allowance per parameter and bound ``b``: ``1e-6 * scale + 64 ulps``.
+    ``scale`` is the interval width when finite; otherwise the parameter's own
+    natural scale ``max(|b|, |p0_i|)`` (never another parameter's), or 1.0 when
+    that is zero (an uninformative zero start at a zero bound). A finite
+    interval caps the allowance at 1% of its width, but a distance of up to 2
+    spacings of ``b`` always counts as a hit (a strictly feasible solver cannot
+    land closer). The solver stays ~1e-14 of the scale from a bound, inside it.
+    """
+    popt = _fitted_params(result, flags)
+    if popt is None:
+        return False
+    lower, upper = (
+        np.broadcast_to(np.asarray(b, dtype=float), popt.shape) for b in bounds
+    )
+    p0_abs = (
+        np.zeros(popt.shape)
+        if p0 is None
+        else np.broadcast_to(np.abs(np.asarray(p0, dtype=float)), popt.shape)
+    )
+    # Overflow is expected at the edge of the float range (|b| ~ finfo.max):
+    # a width that overflows is simply "not a finite interval".
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        width = upper - lower  # inf when either side is unbounded
+        finite_width = np.isfinite(width)
+        for b, toward in ((lower, np.inf), (upper, -np.inf)):
+            own = np.maximum(np.abs(b), p0_abs)
+            scale = np.where(finite_width, width, np.where(own > 0, own, 1.0))
+            tol = 1e-6 * scale + 64 * _ulp(np.maximum(np.abs(b), np.abs(popt)), np.inf)
+            tol = np.where(finite_width, np.minimum(tol, 0.01 * width), tol)
+            # Two representable steps into the interval always count (a strictly
+            # feasible solver cannot land closer); stepping the bound itself,
+            # not scaling one spacing, stays correct across a power of two.
+            b2 = np.nextafter(np.nextafter(b, toward), toward)
+            b2 = np.where(np.isfinite(b2), b2, b)
+            on_edge = (popt >= np.minimum(b, b2)) & (popt <= np.maximum(b, b2))
+            near = (np.abs(popt - b) <= tol) | on_edge
+            if np.any(np.isfinite(b) & near):
+                return True
+    return False
+
+
+def _mark_unsuccessful(
+    result, flags=None, reason: str = "Fit pinned to an inferred bound"
+):
+    """Flag ``result`` as not converged where its format has a status field.
+
+    A ``return_eval``-only tuple has none and is returned unchanged; the
+    orchestrator then relies on the ``pinned`` verdict from ``_run_strategy``.
+    """
+    kind = _tuple_kind(result, flags)
+    if kind == "full":
+        return (*result[:3], reason, 5)
+    if kind == "timeit":
+        result[2]["success"] = False
+        result[2]["message"] = reason
+        return result
+    if kind == "eval":
+        return result
+    result["success"] = False
+    result["message"] = reason
+    return result
+
+
+def _same_kwargs(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Whether a strategy left the fit kwargs unchanged (a no-op attempt)."""
+    if a.keys() != b.keys():
+        return False
+    for k, v in a.items():
+        w = b[k]
+        if v is w:
+            continue
+        try:
+            if np.array_equal(np.asarray(v), np.asarray(w)):
+                continue
+        except Exception:
+            pass
+        return False
+    return True
+
+
+@lru_cache(maxsize=1)
+def _loss_funcs():
+    from nlsq.core.loss_functions import LossFunctionsJIT
+
+    return LossFunctionsJIT()
+
+
+def _robust_cost(fvec, loss, f_scale) -> float:
+    """Cost of residuals ``fvec`` under a built-in or callable loss.
+
+    Same formula as curve_fit: ``0.5 * f_scale**2 * sum(rho(z))``,
+    ``z = (f / f_scale)**2``. A callable that raises or returns non-finite
+    values ranks ``inf``.
+    """
+    f = np.asarray(fvec, dtype=float)
+    if isinstance(loss, str) and loss == "linear":
+        return 0.5 * float(np.sum(np.square(f)))
+    import jax.numpy as jnp
+
+    try:
+        loss_function = _loss_funcs().get_loss_function(loss)
+        cost = float(
+            loss_function(
+                jnp.asarray(f),
+                f_scale,
+                data_mask=jnp.ones(f.shape, bool),
+                cost_only=True,
+            )
+        )
+    except Exception:
+        return np.inf
+    return cost if np.isfinite(cost) else np.inf
+
+
+def _attempt_cost(result, attempt_loss, caller_loss, flags, f_scale) -> float:
+    """Comparable cost of a failed attempt, ``inf`` when it cannot be derived."""
+    same = attempt_loss == caller_loss
+    kind = _tuple_kind(result, flags)
+    if kind is None:
+        if same:
+            return float(getattr(result, "cost", np.inf))
+        return 0.5 * float(np.sum(np.square(np.asarray(result.fun))))
+    if kind == "full":
+        fvec = result[2].get("fvec")
+        if fvec is None:
+            return np.inf
+        # the attempt's own loss when it is the caller's, else linear SSR
+        return _robust_cost(fvec, attempt_loss if same else "linear", f_scale)
+    if kind == "timeit" and same:  # raw result has cost but no fun
+        return float(result[2].get("cost", np.inf))
+    return np.inf
+
+
+def _keep_best(
+    best,
+    result,
+    attempt_loss,
+    caller_loss,
+    strategy_name=None,
+    flags=None,
+    f_scale=1.0,
+):
     """Keep the best unsuccessful ``(key, result, strategy_name)`` triple.
 
     Robust-loss costs (sum of rho) are always <= 0.5*SSR and not comparable with
     linear ones, so an attempt run under a different loss than the caller's is
     ranked by its linear ``0.5*sum(fun**2)``; for a non-linear caller loss only
-    same-loss attempts compete first. Non-finite or missing cost ranks last.
+    same-loss attempts compete first. Attempts with non-finite parameters rank
+    last; an attempt whose cost cannot be derived (status-less tuples, callable
+    losses) ranks ``inf`` and so the first such finite attempt is kept.
     """
     try:
-        if attempt_loss == caller_loss:
-            cost = float(getattr(result, "cost", np.inf))
-        else:
-            cost = 0.5 * float(np.sum(np.square(np.asarray(result.fun))))
-    except (AttributeError, TypeError, ValueError):
+        cost = _attempt_cost(result, attempt_loss, caller_loss, flags, f_scale)
+    except (AttributeError, TypeError, ValueError, KeyError):
         cost = np.inf
     if not np.isfinite(cost):
         cost = np.inf
-    key = (caller_loss not in (attempt_loss, "linear"), cost)
+    popt = _fitted_params(result, flags)
+    nonfinite = popt is not None and not bool(np.all(np.isfinite(popt)))
+    key = (nonfinite, caller_loss not in (attempt_loss, "linear"), cost)
     if best is None or key < best[0]:
         return (key, result, strategy_name)
     return best
+
+
+def _is_noop(modified, kwargs) -> bool:
+    """A proposal equal to the current kwargs (an in-place mutation, returning
+    the very same object, cannot be told apart and counts as a real attempt)."""
+    return modified is not kwargs and _same_kwargs(modified, kwargs)
+
+
+def _propose(strategy, kwargs):
+    """``(strategy.apply(kwargs), None)``, or ``(None, error)`` if apply() raised."""
+    try:
+        return strategy.apply(kwargs), None
+    except Exception as e:
+        return None, e
 
 
 class FallbackResult:
@@ -538,8 +813,10 @@ class FallbackOrchestrator:
         else:
             self.strategies = strategies
 
-        # Sort by priority (highest first)
-        self.strategies.sort(key=lambda s: s.priority, reverse=True)
+        # Sort by priority (highest first); a copy, so the caller's list is untouched
+        self.strategies = sorted(
+            self.strategies, key=lambda s: s.priority, reverse=True
+        )
 
         self.max_attempts = max_attempts
         # Per-fit attempt counter used for the max_attempts cutoff and for
@@ -571,6 +848,19 @@ class FallbackOrchestrator:
         -------
         result : FallbackResult
             Optimization result with fallback metadata
+
+        Notes
+        -----
+        ``full_output`` / ``return_eval`` / ``timeit`` are passed to every
+        attempt and the winning ``curve_fit`` return is handed back verbatim
+        (no re-run, no re-formatting), so stateful callbacks run once per
+        attempt exactly as in an ordinary fit. Success detection depends on
+        what the flagged return carries: ``full_output`` has ``ier`` and
+        ``timeit`` the raw result's ``success``, but ``return_eval`` (alone or
+        combined with the other flags, which it overrides) has no status, so
+        there a finite fit counts as converged and fallback only triggers on
+        exceptions or non-finite parameters. Use ``full_output=True`` or
+        ``timeit=True`` without ``return_eval`` for status-aware fallback.
 
         Raises
         ------
@@ -605,6 +895,7 @@ class FallbackOrchestrator:
 
         best: tuple[Any, Any, str | None] | None = None  # best unsuccessful attempt
         caller_loss = kwargs.get("loss", "linear")
+        flags = _flags(kwargs)
         last_exception: Exception | None = None
         try:
             # _xdata/_ydata are for strategies only; curve_fit would warn on them.
@@ -614,13 +905,20 @@ class FallbackOrchestrator:
                 ydata,
                 **{k: v for k, v in kwargs.items() if k not in ("_xdata", "_ydata")},
             )
-            if _fit_succeeded(result):
+            if _fit_succeeded(result, flags):
                 if self.verbose:
                     print("Success with original parameters!")
                 return FallbackResult(result, strategy_used=None, attempts=1)
             if self.verbose:
                 print("[FAIL] Fit returned success=False")
-            best = _keep_best(best, result, caller_loss, caller_loss)
+            best = _keep_best(
+                best,
+                result,
+                caller_loss,
+                caller_loss,
+                flags=flags,
+                f_scale=kwargs.get("f_scale") or 1.0,
+            )
         except Exception as e:
             if self.verbose:
                 print(f"[FAIL] Failed: {type(e).__name__}: {e}")
@@ -646,51 +944,67 @@ class FallbackOrchestrator:
         # Try fallback strategies: round-robin passes, so progressive strategies
         # (perturbations, loss sequence, ...) get re-queried until exhausted.
         pending = list(self.strategies)
+        flags = _flags(kwargs)
         while pending and self.total_attempts < self.max_attempts:
+            spent = self.total_attempts
             for strategy in list(pending):
                 if self.total_attempts >= self.max_attempts:
                     break
+
+                # A strategy with nothing new to propose would just repeat the
+                # previous solve: skip it without spending an attempt.
+                modified, apply_error = _propose(strategy, kwargs)
+                if apply_error is None and _is_noop(modified, kwargs):
+                    if not strategy.has_more():
+                        pending.remove(strategy)
+                    continue
 
                 self.total_attempts += 1
                 self._lifetime_attempts += 1
                 strategy.attempts += 1
 
-                if self.verbose:
-                    print(
-                        f"\nAttempt {self.total_attempts}/{self.max_attempts}: "
-                        f"{strategy.description}",
-                    )
+                self._say(
+                    f"\nAttempt {self.total_attempts}/{self.max_attempts}: "
+                    f"{strategy.description}"
+                )
 
                 try:
-                    result, attempt_loss = self._run_strategy(
-                        strategy, curve_fit, f, xdata, ydata, kwargs
+                    if apply_error is not None:
+                        raise apply_error
+                    result, attempt_loss, pinned = self._run_strategy(
+                        strategy, curve_fit, f, xdata, ydata, kwargs, modified
                     )
 
-                    if _fit_succeeded(result):
-                        strategy.successes += 1
-                        self.successful_strategies[strategy.name] = (
-                            self.successful_strategies.get(strategy.name, 0) + 1
-                        )
-                        if self.verbose:
-                            print(f"[OK] Success with {strategy.name}!")
+                    if _fit_succeeded(result, flags) and not pinned:
+                        self._record_success(strategy)
+                        self._say(f"[OK] Success with {strategy.name}!")
                         return FallbackResult(
                             result,
                             strategy_used=strategy.name,
                             attempts=self.total_attempts,
                         )
-                    if self.verbose:
-                        print(f"[FAIL] {strategy.name} returned success=False")
+                    self._say(f"[FAIL] {strategy.name} returned success=False")
                     best = _keep_best(
-                        best, result, attempt_loss, caller_loss, strategy.name
+                        best,
+                        result,
+                        attempt_loss,
+                        caller_loss,
+                        strategy.name,
+                        flags=flags,
+                        f_scale=modified.get("f_scale") or 1.0,
                     )
 
                 except Exception as e:
-                    if self.verbose:
-                        print(f"[FAIL] Failed: {type(e).__name__}")
+                    self._say(f"[FAIL] Failed: {type(e).__name__}")
                     last_exception = e
 
                 if not strategy.has_more():
                     pending.remove(strategy)
+
+            if self.total_attempts == spent:
+                # A whole pass proposed only no-ops (skips spend no attempt):
+                # nothing new is left to try, so the loop must end here.
+                break
 
         if best is not None:
             # No attempt converged: hand back the lowest-cost result, still
@@ -700,6 +1014,16 @@ class FallbackOrchestrator:
                 f"All {self.total_attempts} fallback attempts failed to converge; "
                 "returning best result"
             )
+            if _tuple_kind(best[1], flags) == "eval":
+                # (popt, pcov, f(x)) has no status field, so the caller cannot
+                # tell this best-effort return from a converged fit.
+                warnings.warn(
+                    "No fallback attempt converged; returning the best "
+                    "return_eval result, which carries no status (popt may be "
+                    "unconverged or non-finite). Check the fit before using it.",
+                    OptimizeWarning,
+                    stacklevel=3,
+                )
             return FallbackResult(
                 best[1], strategy_used=best[2], attempts=self.total_attempts
             )
@@ -712,10 +1036,26 @@ class FallbackOrchestrator:
         self.logger.error(error_msg)
         raise RuntimeError(error_msg) from last_exception
 
+    def _say(self, message: str) -> None:
+        if self.verbose:
+            print(message)
+
+    def _record_success(self, strategy) -> None:
+        strategy.successes += 1
+        self.successful_strategies[strategy.name] = (
+            self.successful_strategies.get(strategy.name, 0) + 1
+        )
+
     @staticmethod
-    def _run_strategy(strategy, curve_fit, f, xdata, ydata, kwargs):
-        """Apply one strategy's kwargs modifications and run the fit."""
-        modified_kwargs = strategy.apply(kwargs)
+    def _run_strategy(strategy, curve_fit, f, xdata, ydata, kwargs, modified=None):
+        """Apply one strategy's kwargs modifications and run the fit.
+
+        ``modified`` is the strategy's already-computed ``apply(kwargs)`` output
+        (``apply`` is stateful for progressive strategies, so it is not re-run).
+        Returns ``(result, attempt_loss, pinned)``; ``pinned`` is True when the
+        fit ended on a bound this orchestrator invented (it is never a success).
+        """
+        modified_kwargs = strategy.apply(kwargs) if modified is None else modified
 
         # Remove internal markers
         modified_kwargs.pop("_xdata", None)
@@ -734,8 +1074,19 @@ class FallbackOrchestrator:
             return (
                 _fit_rescaled(curve_fit, f, xdata, ydata, modified_kwargs, scale_info),
                 attempt_loss,
+                False,
             )
-        return curve_fit(f, xdata, ydata, **modified_kwargs), attempt_loss
+        invented_bounds = modified_kwargs.pop("_invented_bounds", False)
+        result = curve_fit(f, xdata, ydata, **modified_kwargs)
+        flags = _flags(modified_kwargs)
+        pinned = invented_bounds and _hits_bound(
+            result, modified_kwargs["bounds"], flags, modified_kwargs.get("p0")
+        )
+        if pinned:
+            # The box was our guess, not the user's: a solution pinned to it
+            # is an artefact of the guess, never a converged fit.
+            result = _mark_unsuccessful(result, flags)
+        return result, attempt_loss, pinned
 
     def get_statistics(self) -> dict[str, Any]:
         """

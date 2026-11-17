@@ -27,6 +27,8 @@ class AlgorithmSelector:
     def __init__(self):
         """Initialize algorithm selector."""
         # Algorithm characteristics
+        # Reference metadata only: 'dogbox' is listed but not a supported curve_fit
+        # method (rejected in core.problem), and select_algorithm never picks it.
         self.algorithm_properties = {
             "trf": {
                 "memory_factor": 2.5,  # Relative memory usage
@@ -95,8 +97,9 @@ class AlgorithmSelector:
             Problem characteristics and statistics
         """
         # Convert to numpy for analysis
-        xdata = np.asarray(xdata)
-        ydata = np.asarray(ydata)
+        # float64 so integer / float16 data cannot wrap or overflow in ranges
+        xdata = np.asarray(xdata, dtype=np.float64)
+        ydata = np.asarray(ydata, dtype=np.float64)
 
         n_points = len(ydata)  # xdata may be (k, N), so count observations via y
 
@@ -147,7 +150,11 @@ class AlgorithmSelector:
 
         # Parameter scale analysis
         if p0 is not None:
-            analysis["param_scale_range"] = np.ptp(np.log10(np.abs(p0) + 1e-10))
+            # Exact zeros (e.g. an offset guess) carry no magnitude information
+            # and would otherwise read as a 10-decade spread.
+            nz = np.abs(np.asarray(p0, dtype=np.float64).ravel())
+            nz = nz[np.isfinite(nz) & (nz > 0)]
+            analysis["param_scale_range"] = np.ptp(np.log10(nz)) if nz.size > 1 else 0
         else:
             analysis["param_scale_range"] = 0
 
@@ -233,7 +240,12 @@ class AlgorithmSelector:
             # Check for uniform spacing
             if len(xdata) > 2:
                 spacing = np.diff(xdata)
-                results["x_uniform"] = np.std(spacing) / np.mean(spacing) < 0.01
+                mean_spacing = abs(np.mean(spacing))
+                # |mean| keeps descending x from always passing; a zero mean
+                # (x not monotone on net) is never uniform.
+                results["x_uniform"] = bool(
+                    mean_spacing > 0 and np.std(spacing) / mean_spacing < 0.01
+                )
             else:
                 results["x_uniform"] = True
         else:
@@ -386,12 +398,8 @@ class AlgorithmSelector:
         n_params : int
             Number of parameters
         """
-        if n_points > 100000:
-            # Large problem: use iterative solver
-            if n_points > 1000000:
-                recommendations["tr_solver"] = "lsmr"  # Iterative solver
-        elif n_params > 100:
-            # Many parameters: use iterative solver
+        if n_points > 1000000 or n_params > 100:
+            # Very large or many-parameter problem: use iterative solver
             recommendations["tr_solver"] = "lsmr"
 
     def _select_loss_function(
@@ -515,7 +523,7 @@ class AlgorithmSelector:
         """
         # Initialize default recommendations
         recommendations = {
-            "algorithm": "trf",  # Default (only algorithm currently implemented)
+            "algorithm": "trf",  # Always recommended; 'lm' is only a user-chosen curve_fit method
             "loss": "linear",
             "use_bounds": problem_analysis.get("has_bounds", False),
             "max_nfev": None,
@@ -583,7 +591,7 @@ class AlgorithmSelector:
         alg = recommendations["algorithm"]
         if alg == "trf":
             explanation.append(
-                "Trust Region Reflective (TRF) algorithm selected (currently the only supported algorithm in NLSQ)",
+                "Trust Region Reflective (TRF) algorithm recommended (the only algorithm this selector recommends)",
             )
 
         # Loss function

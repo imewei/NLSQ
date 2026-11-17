@@ -63,7 +63,8 @@ class TestFallbackProgressiveStrategies:
         }
         assert by_name["perturb_p0"] == 3
         assert by_name["robust_loss"] == 3
-        assert by_name["alternative_method"] == 1
+        # TRF is already the default method: the strategy has nothing new to try
+        assert by_name["alternative_method"] == 0
         assert by_name["add_bounds"] == 1
 
 

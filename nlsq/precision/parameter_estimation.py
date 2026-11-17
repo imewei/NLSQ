@@ -63,8 +63,8 @@ parameter-order assumption each pattern makes.
 
 See Also
 --------
-nlsq.minpack.curve_fit : Main curve fitting function
-nlsq.error_messages : Enhanced error messages
+nlsq.core.minpack.curve_fit : Main curve fitting function
+nlsq.utils.error_messages : Enhanced error messages
 """
 
 import inspect
@@ -72,11 +72,31 @@ from collections.abc import Callable
 
 import numpy as np
 
+from nlsq.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _as_float64(a):
+    """Widen integer / low-precision floats so ranges cannot wrap or overflow."""
+    a = np.asarray(a)
+    return a.astype(np.float64) if a.dtype.kind in "iubf" else a
+
+
+def _sorted_by_x(xdata, ydata):
+    """Order 1-D points by ascending x (pattern heuristics assume it)."""
+    xdata = _as_float64(xdata)
+    ydata = _as_float64(ydata)
+    if xdata.ndim == 1 and xdata.shape == ydata.shape:
+        order = np.argsort(xdata, kind="stable")
+        return xdata[order], ydata[order]
+    return xdata, ydata
+
 
 def _finite_points(xdata, ydata):
     """Drop points with a non-finite x or y so NaN cannot leak into p0."""
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    xdata = _as_float64(xdata)
+    ydata = _as_float64(ydata)
     if xdata.shape[-1:] != ydata.shape[-1:]:
         return xdata, ydata
     try:
@@ -180,9 +200,15 @@ def estimate_initial_parameters(
     # Check if function has custom estimation method (for library functions)
     if hasattr(f, "estimate_p0"):
         try:
-            return np.asarray(f.estimate_p0(xdata, ydata))
-        except Exception:
-            pass  # Fall back to generic estimation
+            est = np.asarray(f.estimate_p0(xdata, ydata), dtype=np.float64)
+            if not np.isfinite(est).all():
+                raise ValueError("estimate_p0 returned non-finite values")
+            return est
+        except Exception as exc:
+            logger.warning(
+                f"estimate_p0 of {f!r} failed ({type(exc).__name__}: {exc}); "
+                "using generic heuristics"
+            )
 
     # Convert to numpy arrays
     xdata, ydata = _finite_points(xdata, ydata)
@@ -291,7 +317,8 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
         - 'exponential_decay': Monotonically decreasing
         - 'exponential_growth': Monotonically increasing
         - 'gaussian': Bell-shaped curve with peak in middle
-        - 'sigmoid': S-shaped curve going from low to high (or vice versa)
+        - 'sigmoid': S-shaped curve going from low to high
+        - 'sigmoid_inv': S-shaped curve going from high to low
         - 'unknown': No clear pattern detected
 
     Notes
@@ -325,6 +352,9 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
     """
     if len(ydata) < 3:
         return "unknown"
+
+    # Heuristics below read array order as x order
+    xdata, ydata = _sorted_by_x(xdata, ydata)
 
     # Calculate linear correlation first
     try:
@@ -427,6 +457,7 @@ def estimate_p0_for_pattern(
     - **exponential_decay**: Estimates amplitude from range, rate from half-life
     - **gaussian**: Estimates amplitude, mean from peak, sigma from FWHM
     - **sigmoid**: Estimates L, x0, k from data range and midpoint
+    - **sigmoid_inv**: Same as sigmoid with a negative steepness k
     - **unknown**: Falls back to generic heuristics
 
     Examples
@@ -438,7 +469,7 @@ def estimate_p0_for_pattern(
     >>> ydata = 3 * np.exp(-0.5 * xdata) + 1
     >>> p0 = estimate_p0_for_pattern('exponential_decay', xdata, ydata, 3)
     >>> print(p0)
-    [2.0, 0.277..., 1.0]  # [amplitude, rate, offset]
+    [2.7537, 0.5225, 1.2463]  # [amplitude, rate, offset]
 
     Estimate parameters for Gaussian:
 
@@ -453,7 +484,7 @@ def estimate_p0_for_pattern(
     detect_function_pattern : Detect pattern from data
     estimate_initial_parameters : Main parameter estimation function
     """
-    xdata, ydata = _finite_points(xdata, ydata)
+    xdata, ydata = _sorted_by_x(*_finite_points(xdata, ydata))
     if pattern == "linear":
         # Linear: y = a*x + b
         if n_params >= 2:
@@ -508,8 +539,8 @@ def estimate_p0_for_pattern(
         p0.extend([1.0] * (n_params - len(p0)))
         return np.array(p0)
 
-    elif pattern == "sigmoid":
-        # y = L / (1 + exp(-k*(x-x0))) + b
+    elif pattern in ("sigmoid", "sigmoid_inv"):
+        # y = L / (1 + exp(-k*(x-x0))) + b  (k < 0 for the high-to-low case)
         y_min, y_max = np.min(ydata), np.max(ydata)
         L = y_max - y_min
         b = y_min
@@ -527,6 +558,8 @@ def estimate_p0_for_pattern(
             if np.max(xdata) != np.min(xdata)
             else 1.0
         )
+        if pattern == "sigmoid_inv":
+            k = -k
 
         p0 = [L, x0, k, b][:n_params]
         p0.extend([1.0] * (n_params - len(p0)))

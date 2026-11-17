@@ -9,14 +9,26 @@ This subpackage contains numerical precision utilities:
 """
 
 from nlsq.precision.algorithm_selector import AlgorithmSelector, auto_select_algorithm
-from nlsq.precision.bound_inference import BoundsInference, infer_bounds, merge_bounds
-from nlsq.precision.parameter_normalizer import ParameterNormalizer
+from nlsq.precision.bound_inference import (
+    BoundsInference,
+    infer_bounds,
+    infer_bounds_for_multistart,
+    merge_bounds,
+)
+from nlsq.precision.parameter_estimation import estimate_initial_parameters
+from nlsq.precision.parameter_normalizer import (
+    NormalizedModelWrapper,
+    ParameterNormalizer,
+)
 
 __all__ = [
     "AlgorithmSelector",
     "BoundsInference",
+    "NormalizedModelWrapper",
     "ParameterNormalizer",
     "auto_select_algorithm",
+    "estimate_initial_parameters",
     "infer_bounds",
+    "infer_bounds_for_multistart",
     "merge_bounds",
 ]
