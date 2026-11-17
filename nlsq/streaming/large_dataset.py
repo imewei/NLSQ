@@ -888,7 +888,7 @@ class ProgressReporter:
         """
         self.total_chunks = total_chunks
         self.logger = logger or get_logger(__name__)
-        self.start_time = time.time()
+        self.start_time = time.perf_counter()
         self.completed_chunks = 0
 
     def update(self, chunk_idx: int, chunk_result: dict | None = None):
@@ -902,7 +902,7 @@ class ProgressReporter:
             Results from chunk processing
         """
         self.completed_chunks = chunk_idx + 1
-        elapsed = time.time() - self.start_time
+        elapsed = time.perf_counter() - self.start_time
 
         if self.completed_chunks > 0:
             avg_time_per_chunk = elapsed / self.completed_chunks
@@ -1670,7 +1670,7 @@ class LargeDatasetFitter:
         """
         from nlsq.global_optimization import MultiStartOrchestrator
 
-        exploration_start_time = time.time()
+        exploration_start_time = time.perf_counter()
 
         # Create orchestrator with our config
         orchestrator = MultiStartOrchestrator(
@@ -1693,7 +1693,7 @@ class LargeDatasetFitter:
             **kwargs,
         )
 
-        exploration_time = time.time() - exploration_start_time
+        exploration_time = time.perf_counter() - exploration_start_time
 
         # Extract diagnostics from result
         diagnostics = result.get("multistart_diagnostics", {})
@@ -1868,7 +1868,7 @@ class LargeDatasetFitter:
     ) -> OptimizeResult:
         """Internal implementation of fitting algorithm."""
 
-        fit_start_time = time.time()
+        fit_start_time = time.perf_counter()
         if getattr(xdata, "ndim", 1) > 1:
             # scipy layout (k, M) -> points-first (M, k); see _scipy_x.
             xdata = np.asarray(xdata).T
@@ -1970,7 +1970,9 @@ class LargeDatasetFitter:
         )
 
         # Add multi-start diagnostics and timing to result
-        multistart_diagnostics["total_fit_time_seconds"] = time.time() - fit_start_time
+        multistart_diagnostics["total_fit_time_seconds"] = (
+            time.perf_counter() - fit_start_time
+        )
         result["multistart_diagnostics"] = multistart_diagnostics
 
         return self._annotate_equivalence(result, stats.n_chunks)
@@ -2459,7 +2461,7 @@ class LargeDatasetFitter:
         y_valid = y_chunk[:valid_length]
         # Only retry if we have current parameter estimates
         if current_params is None:
-            chunk_duration = time.time() - chunk_start_time
+            chunk_duration = time.perf_counter() - chunk_start_time
             chunk_times.append(chunk_duration)
             chunk_result = self._create_chunk_result(
                 chunk_idx=chunk_idx,
@@ -2499,7 +2501,7 @@ class LargeDatasetFitter:
                 )
             popt_chunk, pcov_chunk = retry_res
 
-            chunk_duration = time.time() - chunk_start_time
+            chunk_duration = time.perf_counter() - chunk_start_time
             chunk_times.append(chunk_duration)
 
             chunk_result = self._create_chunk_result(
@@ -2527,7 +2529,7 @@ class LargeDatasetFitter:
         except Exception as retry_e:
             # Retry also failed
             self.logger.warning(f"Retry for chunk {chunk_idx} also failed: {retry_e}")
-            chunk_duration = time.time() - chunk_start_time
+            chunk_duration = time.perf_counter() - chunk_start_time
             chunk_times.append(chunk_duration)
 
             chunk_result = self._create_chunk_result(
@@ -3075,7 +3077,7 @@ class LargeDatasetFitter:
                 buffer_pool=buffer_pool,
                 indices=shuffle_idx,
             ):
-                chunk_start_time = time.time()
+                chunk_start_time = time.perf_counter()
                 chunk_kwargs = kwargs
                 sigma_valid = None
                 # Tripwire: sigma below is gathered by chunk_bounds, so the
@@ -3162,7 +3164,7 @@ class LargeDatasetFitter:
                     # Build the chunk result BEFORE accumulating: anything raising
                     # after the accumulator update would send the chunk to the
                     # retry path and fold it in a second time.
-                    chunk_duration = time.time() - chunk_start_time
+                    chunk_duration = time.perf_counter() - chunk_start_time
                     chunk_times.append(chunk_duration)
 
                     # Create successful chunk result. n_points/data_stats
@@ -3205,7 +3207,7 @@ class LargeDatasetFitter:
                     if isinstance(e, _ChunkNotConverged):
                         # The inner fit ran to its own stop; a retry from a
                         # perturbed start would just double the cost.
-                        chunk_duration = time.time() - chunk_start_time
+                        chunk_duration = time.perf_counter() - chunk_start_time
                         chunk_times.append(chunk_duration)
                         chunk_result = self._create_chunk_result(
                             chunk_idx=chunk_idx,

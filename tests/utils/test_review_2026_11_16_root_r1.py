@@ -417,6 +417,7 @@ def test_stale_constants_removed_or_corrected():
     assert set(constants.__all__) <= set(dir(constants))
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="GPU check is Linux-only")
 def test_check_gpu_availability_warns_when_backend_fails(monkeypatch):
     import jax
 

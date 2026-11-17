@@ -42,6 +42,7 @@ import math
 import numbers
 import os
 import zipfile
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +121,14 @@ def _real_float(arr: np.ndarray, key: str, file_path: Path) -> np.ndarray:
             file_format="npz",
         )
     return np.real(arr).astype(np.float64)
+
+
+def _flatten_recording(
+    shapes: dict[str, tuple[int, ...]], name: str, arr: np.ndarray
+) -> np.ndarray:
+    """Flatten ``arr``, recording its stored shape under ``name`` for _check_aligned."""
+    shapes[name] = arr.shape
+    return arr.flatten()
 
 
 def _check_aligned(
@@ -871,9 +880,7 @@ class DataLoader:
 
                 shapes: dict[str, tuple[int, ...]] = {}
 
-                def _flat(name: str, arr: np.ndarray) -> np.ndarray:
-                    shapes[name] = arr.shape
-                    return arr.flatten()
+                _flat = partial(_flatten_recording, shapes)
 
                 # Load x data
                 if x_key not in data:
@@ -1077,9 +1084,7 @@ class DataLoader:
 
             shapes: dict[str, tuple[int, ...]] = {}
 
-            def _flat(name: str, arr: np.ndarray) -> np.ndarray:
-                shapes[name] = arr.shape
-                return arr.flatten()
+            _flat = partial(_flatten_recording, shapes)
 
             with h5py.File(file_path, "r") as f:
                 # Load x data

@@ -1402,8 +1402,8 @@ def test_skip_never_calls_tsqr(spy_tsqr):
 
 
 def test_flag_off_emits_no_conditioning_warnings(spy_tsqr):
-    y_ill = np.asarray(two_exp(x, 2.0, 1.0, 1.5, 1.00001)) + noise  # scaled kappa > 1e4
     """Ill-conditioned problem, compute_covariance=False: no COND_WARN / TSQR-route warning."""
+    y_ill = np.asarray(two_exp(x, 2.0, 1.0, 1.5, 1.00001)) + noise  # scaled kappa > 1e4
     with warnings.catch_warnings(record=True) as off:
         warnings.simplefilter("always")
         lm.exact_lm_fit(

@@ -699,10 +699,16 @@ def test_return_eval_with_omit_and_data_mask_matches_plain(route):
     np.testing.assert_allclose(out[2], ref[2])
 
 
-def test_auto_route_converged_fit_emits_no_budget_warning():
+def test_auto_route_converged_fit_emits_no_budget_warning(monkeypatch):
     pytest.importorskip("evosax")
     from nlsq import curve_fit
     from nlsq.result import OptimizeWarning
+
+    # This problem needs ~9000 evaluations (the default n=2 budget) on Linux, and
+    # a few restarts more on Windows; give it headroom so the test checks "a fit
+    # that converges inside the budget does not warn", not the platform's restart
+    # count. Budget exhaustion is covered by its own tests.
+    monkeypatch.setattr("nlsq.core.minpack._auto_bipop_budget", lambda *_a: 10**6)
 
     x = np.linspace(0, 5, 200)
     y = 3.0 * np.exp(-0.7 * x) + np.random.default_rng(0).normal(0, 0.01, 200)

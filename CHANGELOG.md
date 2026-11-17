@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (it is unused).
 
 ### Fixed
+- **Timings on Windows.** `curve_fit` `timeit` (`ctime`, `post_time`) and the chunk durations of `LargeDatasetFitter` use `time.perf_counter()`; with `time.time()` the ~15 ms Windows clock reported `0.0` for fast fits.
 - **Qt GUI, review round 1 (2026-11-16).** Library `RuntimeWarning`/`UserWarning`s and `nlsq.*` WARNING log records
   raised during a fit (covariance not estimable, rank-deficient Jacobian, chunked route "not equivalent to
   full-batch" and "ignores bounds") are now collected from the worker thread (per-thread `showwarning` and log
@@ -90,8 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Review round 3: `return_eval` with a user `data_mask` returns `f` over all rows again on the multistart and
   CMA-ES routes (as plain `curve_fit`); the implicit `method='auto'` CMA-ES route caps BIPOP with a finite
   `max_total_evaluations` (the worst case of the former fixed-2x schedule), explicit `method='cmaes'` stays
-  unlimited; `max_total_evaluations` is also honoured with `restart_strategy='none'`; the budget warning says
-  "cut short" when the best run had converged; the tournament skips zero-observation batches and rejects
+  unlimited; `max_total_evaluations` is also honoured with `restart_strategy='none'`; the tournament skips zero-observation batches and rejects
   misshaped batch sigma.
   Review round 4: a tournament round that saw no observations neither eliminates nor is consumed (empty batches
   do not count toward `batches_per_round`); a resumed single-run CMA-ES counts the checkpointed generations
@@ -139,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[x0 + 0.1, 1]`); full-rank results still match SciPy. (b) `compute_jac_scale` (`x_scale="jac"`) uses
   max-scaled column norms, so Jacobians near 1e+/-200 no longer give scale 0/inf or 1. (c)
   `CommonJIT.build_quadratic_1d` uses `jnp` throughout (it raised `TracerArrayConversionError` under
-  `jit` and copied to the host) and now returns JAX scalars. (d) see Configuration above. (e) `get_device_info()` and `check_gpu_availability()` no longer count
+  `jit` and copied to the host) and now returns JAX scalars. (d) see the Configuration bullet below. (e) `get_device_info()` and `check_gpu_availability()` no longer count
   TPUs as GPUs; `get_device_info()` has a new `tpu_count` key.
 - **Root modules, review round 2 (2026-11-16).** `CallbackChain` now returns `True` when any chained
   callback returns `True`, so the scipy stop protocol works through a chain (it was swallowed and the fit

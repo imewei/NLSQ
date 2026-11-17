@@ -36,7 +36,7 @@ def _strict_json(path: Path) -> dict:
 
 
 def _doc_model_blocks() -> list[dict]:
-    doc = (TEMPLATES / "custom_model_template.py").read_text()
+    doc = (TEMPLATES / "custom_model_template.py").read_text(encoding="utf-8")
     doc = doc.split('"""')[1]
     blocks = re.findall(r"^( *)model:\n((?:\1 .*\n)+)", doc, re.MULTILINE)
     out = []
@@ -250,10 +250,10 @@ def test_well_determined_fit_has_no_uncertainty_warning(tmp_path, monkeypatch):
 
 def _template_run(tmp_path, monkeypatch, method: str | None):
     monkeypatch.chdir(tmp_path)
-    text = (TEMPLATES / "workflow_config_template.yaml").read_text()
+    text = (TEMPLATES / "workflow_config_template.yaml").read_text(encoding="utf-8")
     if method is not None:
         text = text.replace('# method: "trf"', f'method: "{method}"')
-    Path("workflow.yaml").write_text(text)
+    Path("workflow.yaml").write_text(text, encoding="utf-8")
     Path("data").mkdir()
     x = np.linspace(0, 5, 40)
     np.savetxt(

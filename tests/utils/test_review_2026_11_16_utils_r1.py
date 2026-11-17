@@ -280,6 +280,7 @@ def test_html_report_escapes_profile_names():
     assert "<script>alert(1)</script>" not in html
 
 
+@pytest.mark.serial
 def test_import_does_not_switch_matplotlib_backend():
     import subprocess
     import sys

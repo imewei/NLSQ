@@ -87,7 +87,7 @@ def _is_transient_gn_error(exc: BaseException) -> bool:
 # A cost-change/step stop only counts as convergence when the relative gradient
 # (see _relative_gradient) is below this: ~1e-9 at an optimum, ~1e-5 in a flat valley.
 _GN_RELGRAD_SUCCESS = 1e-6
-CALLBACK_STOP_MESSAGE = "Stopped because `callback` function raised `StopOptimization`."
+CALLBACK_STOP_MESSAGE = "Stopped by `callback` (raised `StopOptimization`/`StopIteration` or returned True)."
 # convergence_reason -> scipy-style status (1 gtol, 2 ftol, 0 max iterations,
 # -2 callback stop); success is status != 0 with no phase failure.
 _REASON_STATUS = {

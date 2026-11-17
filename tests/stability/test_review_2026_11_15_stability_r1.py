@@ -379,6 +379,9 @@ class TestReturnEvalAndXOnlyRecovery:
 
 
 class TestRound2:
+    @pytest.mark.skipif(
+        not hasattr(__import__("signal"), "SIGALRM"), reason="needs SIGALRM (POSIX)"
+    )
     def test_noop_strategy_with_always_true_has_more_terminates(self):
         import signal
 

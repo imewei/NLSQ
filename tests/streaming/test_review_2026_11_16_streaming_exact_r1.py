@@ -27,6 +27,7 @@ def _exp(x, a, k):
 # --- A-W1: the TSQR gate uses the Jacobi-scaled condition number ----------------------
 
 
+@pytest.mark.serial
 def test_scaled_condition_gate_keeps_normal_route_and_pcov():
     x, y = _exp_data(1e6, noise=1.0)
     with warnings.catch_warnings():

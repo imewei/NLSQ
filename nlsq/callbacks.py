@@ -475,8 +475,10 @@ class EarlyStopping(CallbackBase):
 class CallbackChain(CallbackBase):
     """Chain multiple callbacks together.
 
-    Calls each callback in sequence. If any callback raises StopOptimization,
-    propagates it to stop the optimization.
+    Calls each callback in sequence. The optimization stops when any callback
+    raises ``StopOptimization`` or ``StopIteration`` (propagated at once) or returns
+    ``True`` (the remaining callbacks still run). Any other exception is deferred:
+    the remaining callbacks run, then it is re-raised or warned about.
 
     Parameters
     ----------

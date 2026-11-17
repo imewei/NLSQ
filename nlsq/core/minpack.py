@@ -4699,10 +4699,10 @@ class CurveFit:
             )
 
         # Convert to JAX arrays (no .block_until_ready() - one-time setup)
-        st = time.time()
+        st = time.perf_counter()
         jnp_xdata = jnp.asarray(xdata)
         jnp_ydata = jnp.asarray(ydata)
-        ctime = time.time() - st
+        ctime = time.perf_counter() - st
 
         jnp_data_mask = jnp.array(data_mask, dtype=bool)
 
@@ -5239,7 +5239,7 @@ class CurveFit:
             optimality=getattr(res, "optimality", None),
         )
 
-        st = time.time()
+        st = time.perf_counter()
         # Degrees-of-freedom/SVD-threshold must reflect the EFFECTIVE point
         # count, prepared.n_effective (unmasked rows), not the raw m.
         ysize = prepared.n_effective
@@ -5253,7 +5253,7 @@ class CurveFit:
 
         return_full = full_output
 
-        post_time = time.time() - st
+        post_time = time.perf_counter() - st
 
         # Log curve fit completion
         total_time = self.logger.timers.get("curve_fit", 0)

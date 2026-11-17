@@ -153,7 +153,7 @@ def jacobian_mode_selector(
 TERMINATION_MESSAGES = {
     -4: "The gradient (Jacobian or residuals) contains non-finite values.",
     -3: "Inner optimization loop exceeded maximum iterations.",
-    -2: "Stopped because `callback` function raised `StopOptimization`.",
+    -2: "Stopped by `callback` (raised `StopOptimization`/`StopIteration` or returned True).",
     -1: "Improper input parameters status returned from `leastsq`",
     0: "The maximum number of function evaluations is exceeded.",
     1: "`gtol` termination condition is satisfied.",
