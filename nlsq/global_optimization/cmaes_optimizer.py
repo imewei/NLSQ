@@ -11,6 +11,7 @@ import contextlib
 import logging
 import signal
 import threading
+import warnings
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,6 +31,7 @@ from nlsq.global_optimization.cmaes_config import (
     is_evosax_available,
 )
 from nlsq.global_optimization.cmaes_diagnostics import CMAESDiagnostics
+from nlsq.result import OptimizeWarning
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
@@ -341,6 +343,53 @@ def _create_fitness_function(
     return fitness_population_batched
 
 
+def _progress_milestones(max_generations: int) -> dict[int, str]:
+    """Generation index -> label for the 25/50/75% progress log lines.
+
+    Built from a list so later entries don't silently overwrite earlier ones when
+    max_generations is small (<= 3 makes the indices collide: first label wins).
+    """
+    milestones: dict[int, str] = {}
+    for pct, label in ((0.25, "25%"), (0.50, "50%"), (0.75, "75%")):
+        milestones.setdefault(int(max_generations * pct), label)
+    return milestones
+
+
+def _run_end_reason(std: float, tol_x: float, stagnation_counter: int) -> str | None:
+    """'xtol'/'ftol' if a BIPOP run converged (std below tol_x / 5-generation
+    stagnation), else None (it ended on max_generations)."""
+    if std < tol_x and stagnation_counter < 5:
+        return "xtol"
+    return "ftol" if stagnation_counter >= 5 else None
+
+
+def _bipop_final_reason(
+    best_run_reason: str | None,
+    budget_hit: bool,
+    total_evaluations: int,
+    budget: int | None,
+    restarts_unused: int,
+    budget_label: str | None = None,
+) -> str:
+    """Reason for a CMA-ES search; warns when the evaluation budget cut it short."""
+    if budget_hit and best_run_reason is None:
+        warnings.warn(
+            f"CMA-ES stopped after {total_evaluations} fitness evaluations "
+            f"({budget_label or f'max_total_evaluations={budget}'}) before converging "
+            f"({restarts_unused} restart(s) unused).",
+            OptimizeWarning,
+            stacklevel=4,
+        )
+    elif budget_hit:  # converged best run: the cap is how the schedule normally ends
+        logger.info(
+            f"CMA-ES evaluation budget ({budget}) ended the restart schedule after "
+            f"{total_evaluations} evaluations; the best run had converged"
+        )
+    if best_run_reason is not None:
+        return best_run_reason
+    return "max_evaluations" if budget_hit else "max_restarts"
+
+
 def _require_finite_bounds(lower_bounds: jax.Array, upper_bounds: jax.Array) -> None:
     """Raise ``ValueError`` unless every bound is finite with ``lower < upper``.
 
@@ -439,7 +488,9 @@ class CMAESOptimizer:
     >>> print(f"Optimal params: {result['popt']}")
     """
 
-    def __init__(self, config: CMAESConfig | None = None) -> None:
+    def __init__(
+        self, config: CMAESConfig | None = None, budget_label: str | None = None
+    ) -> None:
         """Initialize CMAESOptimizer.
 
         Parameters
@@ -447,8 +498,13 @@ class CMAESOptimizer:
         config : CMAESConfig | None, optional
             Configuration for CMA-ES optimization. If None, uses default config
             (BIPOP enabled, 100 generations, 9 max restarts).
+        budget_label : str | None, optional
+            Wording for the evaluation budget in the budget-exhausted warning
+            (default ``max_total_evaluations=<budget>``); set by the implicit
+            ``method='auto'`` route to say the budget is automatic.
         """
         self.config = config if config is not None else CMAESConfig()
+        self._budget_label = budget_label
 
         # Verify evosax is available
         if not is_evosax_available():
@@ -578,6 +634,9 @@ class CMAESOptimizer:
         # bounds may be SciPy-style scalars (e.g. (0, 10)) meant to broadcast
         # to every parameter. Resize using p0's length when available -- same
         # convention prepare_bounds() uses elsewhere in this codebase.
+        from nlsq.core.minpack import _bounds_as_tuple
+
+        bounds = _bounds_as_tuple(bounds)  # scipy.optimize.Bounds -> (lb, ub)
         lower_bounds = jnp.asarray(bounds[0], dtype=float)
         upper_bounds = jnp.asarray(bounds[1], dtype=float)
         n_params_hint = None
@@ -742,25 +801,51 @@ class CMAESOptimizer:
                 result.get("success", getattr(refined, "success", True))
             )
         else:
-            # Return CMA-ES result without refinement
-            finite = bool(np.isfinite(best_fitness))
-            result = {
-                "popt": np.asarray(best_params),
-                "pcov": self._estimate_pcov_from_cmaes(n_params),
-                "success": finite,
-                "status": 1 if finite else 0,
-                "message": (
-                    "CMA-ES optimization completed"
-                    if finite
-                    else "CMA-ES never found a finite fitness value"
-                ),
-            }
-            diagnostics.nlsq_refinement = False
+            result = self._unrefined_result(
+                best_params, best_fitness, n_params, diagnostics
+            )
 
         # Add diagnostics to result
         result["cmaes_diagnostics"] = diagnostics.to_dict()
 
         return result
+
+    def _unrefined_result(
+        self,
+        best_params: jax.Array,
+        best_fitness: jax.Array,
+        n_params: int,
+        diagnostics: CMAESDiagnostics,
+    ) -> dict[str, Any]:
+        """Result dict for ``refine_with_nlsq=False``.
+
+        Exhausting ``max_generations`` (or a BIPOP schedule whose best run did not
+        converge) is a budget stop, not convergence: ``success=False`` and a warning.
+        """
+        finite = bool(np.isfinite(best_fitness))
+        reason = diagnostics.convergence_reason
+        converged = finite and reason in ("xtol", "ftol")
+        diagnostics.nlsq_refinement = False
+        if finite and not converged:
+            warnings.warn(
+                f"CMA-ES stopped without converging ({reason}); the result is "
+                "unrefined.",
+                OptimizeWarning,
+                stacklevel=4,
+            )
+        if converged:
+            message = "CMA-ES optimization completed"
+        elif finite:
+            message = f"CMA-ES stopped without converging ({reason})"
+        else:
+            message = "CMA-ES never found a finite fitness value"
+        return {
+            "popt": np.asarray(best_params),
+            "pcov": self._estimate_pcov_from_cmaes(n_params),
+            "success": converged,
+            "status": 1 if converged else 0,
+            "message": message,
+        }
 
     def _setup_checkpointing(
         self,
@@ -1003,6 +1088,9 @@ class CMAESOptimizer:
         best_solution = initial_solution
         best_fitness = jnp.array(jnp.inf)
         convergence_reason = "max_generations"
+        evaluations = 0
+        budget = self.config.max_total_evaluations
+        budget_hit = False
         start_gen = 0
         loop_stop = self.config.max_generations  # = start_gen if resumed run is done
 
@@ -1048,15 +1136,16 @@ class CMAESOptimizer:
                 if float(state.std) < self.config.tol_x:
                     convergence_reason = "xtol"
                     loop_stop = start_gen
+                # Evaluations already spent by the checkpointed generations count
+                # toward the budget: each resume must not get a fresh one.
+                evaluations = start_gen * popsize
+                budget_hit = budget is not None and evaluations >= budget
+                loop_stop = start_gen if budget_hit else loop_stop
 
         # Progress milestones for logging (25%, 50%, 75%)
         # Build the dict from a list so later entries don't silently overwrite
         # earlier ones when max_generations is small (e.g. <=3 causes collisions).
-        milestones: dict[int, str] = {}
-        for pct, label in ((0.25, "25%"), (0.50, "50%"), (0.75, "75%")):
-            gen_idx = int(self.config.max_generations * pct)
-            if gen_idx not in milestones:
-                milestones[gen_idx] = label
+        milestones = _progress_milestones(self.config.max_generations)
 
         def _save_checkpoint(gen_idx: int, current_key: jax.Array) -> None:
             assert checkpoint_manager is not None
@@ -1103,6 +1192,11 @@ class CMAESOptimizer:
             # Record fitness history
             diagnostics.fitness_history.append(float(best_fitness))
 
+            evaluations += popsize
+            if budget is not None and evaluations >= budget:
+                budget_hit = True
+                break
+
             if preemption_event is not None and preemption_event.is_set():
                 jax.block_until_ready((state.mean, state.C, state.best_solution))
                 _save_checkpoint(gen, key)
@@ -1142,9 +1236,20 @@ class CMAESOptimizer:
         if checkpointing and gen >= start_gen:
             _save_checkpoint(gen, key)
 
+        if budget_hit:
+            convergence_reason = _bipop_final_reason(
+                "xtol" if float(state.std) < self.config.tol_x else None,
+                True,
+                evaluations,
+                budget,
+                0,
+                self._budget_label,
+            )
+
         # Update diagnostics
         diagnostics.final_sigma = float(state.std)
         diagnostics.convergence_reason = convergence_reason
+        diagnostics.budget_exhausted = budget_hit
         diagnostics.total_restarts = 0
 
         return best_solution, best_fitness, gen + 1
@@ -1208,7 +1313,10 @@ class CMAESOptimizer:
         key = jax.random.key(seed)
 
         total_generations = 0
-        convergence_reason = "max_restarts"
+        total_evaluations = 0
+        budget = self.config.max_total_evaluations
+        budget_hit = False
+        best_run_reason: str | None = None  # how the run holding the best point ended
         final_sigma = self.config.sigma
         original_solution = initial_solution
 
@@ -1244,6 +1352,7 @@ class CMAESOptimizer:
                 population, state = es.ask(key_ask, state, params)
                 fitness = fitness_fn(population)
                 state, _metrics = es.tell(key_tell, population, fitness, state, params)
+                total_evaluations += popsize
 
                 # Track best for this run (fitness is raw SSR: lower is better)
                 if state.best_fitness < run_best_fitness:
@@ -1252,6 +1361,12 @@ class CMAESOptimizer:
 
                 # Record fitness history
                 diagnostics.fitness_history.append(float(run_best_fitness))
+
+                # Budget first: a convergence/stagnation break below must not
+                # skip it, or a restart schedule would silently overrun.
+                budget_hit = budget is not None and total_evaluations >= budget
+                if budget_hit:
+                    break
 
                 # Check for stagnation.
                 fitness_spread = _finite_fitness_spread(fitness)
@@ -1316,13 +1431,18 @@ class CMAESOptimizer:
                 },
             )
 
+            # How this run ended (std/stagnation = converged), kept for the run that
+            # holds the best point so `success` describes the returned solution.
             # Update global best
+            if float(run_best_fitness) < restarter.best_fitness:
+                best_run_reason = _run_end_reason(
+                    float(state.std), self.config.tol_x, stagnation_counter
+                )
             restarter.update_best(run_best_solution, float(run_best_fitness))
 
-            # Check if this run converged well (no need for more restarts)
-            if float(state.std) < self.config.tol_x and stagnation_counter < 5:
-                logger.info("BIPOP: Good convergence achieved, stopping restarts early")
-                convergence_reason = "xtol"
+            # A cleanly converged run ends that run only: stopping the whole schedule
+            # here would keep BIPOP from ever exploring another basin.
+            if budget_hit:
                 break
 
             if restarter.exhausted:
@@ -1375,10 +1495,20 @@ class CMAESOptimizer:
             f"{total_generations} total generations",
         )
 
+        convergence_reason = _bipop_final_reason(
+            best_run_reason,
+            budget_hit,
+            total_evaluations,
+            budget,
+            self.config.max_restarts - restarter.restart_count,
+            self._budget_label,
+        )
+
         # Update diagnostics
         diagnostics.total_restarts = restarter.restart_count
         diagnostics.final_sigma = final_sigma
         diagnostics.convergence_reason = convergence_reason
+        diagnostics.budget_exhausted = budget_hit
 
         return best_solution, jnp.array(best_fitness), total_generations
 

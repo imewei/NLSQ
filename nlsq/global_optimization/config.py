@@ -176,6 +176,12 @@ class GlobalOptimizationConfig:
         Number of data batches to use for evaluation in each tournament round.
         More batches = more reliable selection but slower.
 
+    seed : int or None, default=None
+        Base seed of the Latin hypercube sampler. ``None`` keeps the fixed
+        default base key (``PRNGKey(0)``); successive ``fit()`` calls of one
+        orchestrator still draw different points. Sobol and Halton are
+        deterministic sequences and ignore it.
+
     Examples
     --------
     >>> config = GlobalOptimizationConfig(n_starts=20, sampler='sobol')
@@ -213,6 +219,8 @@ class GlobalOptimizationConfig:
     elimination_rounds: int = 3
     elimination_fraction: float = 0.5
     batches_per_round: int = 50
+
+    seed: int | None = None
 
     # Private field for tracking preset origin (not user-configurable)
     _preset: str | None = field(default=None, repr=False)
@@ -269,6 +277,11 @@ class GlobalOptimizationConfig:
             "batches_per_round",
             _require_int("batches_per_round", self.batches_per_round, 1),
         )
+
+        if self.seed is not None:
+            object.__setattr__(self, "seed", _require_int("seed", self.seed, 0))
+            if self.seed >= 2**63:  # jax.random.PRNGKey takes a C long
+                raise ValueError(f"seed must be < 2**63, got {self.seed}")
 
         # Validate parameter combinations
         if self.n_starts == 0 and self.elimination_rounds > 0:

@@ -393,6 +393,18 @@ def scale_samples_to_bounds(
     jax.Array
         Scaled samples with values in [lb, ub].
 
+    Raises
+    ------
+    ValueError
+        If any bound is non-finite.
+
+    Notes
+    -----
+    Finite bounds are required, but only checked for concrete (non-traced)
+    inputs so the function stays usable under ``jax.jit``/``vmap``. Traced
+    callers must validate beforehand: a traced non-finite bound yields
+    ``nan``/``inf`` samples.
+
     Examples
     --------
     >>> import jax.numpy as jnp
@@ -405,7 +417,23 @@ def scale_samples_to_bounds(
     """
     lb = jnp.asarray(lb)
     ub = jnp.asarray(ub)
+    # Only concrete inputs can be checked; under jit/vmap the core stays pure jnp.
+    concrete = not isinstance(lb, jax.core.Tracer) and not isinstance(
+        ub, jax.core.Tracer
+    )
+    if concrete and not (
+        bool(jnp.all(jnp.isfinite(lb))) and bool(jnp.all(jnp.isfinite(ub)))
+    ):
+        raise ValueError(
+            "scale_samples_to_bounds needs finite bounds (an infinite bound gives "
+            "NaN/inf samples); pass an explicit finite sampling box"
+        )
 
+    return _scale_unit_samples(samples, lb, ub)
+
+
+def _scale_unit_samples(samples: jax.Array, lb: jax.Array, ub: jax.Array) -> jax.Array:
+    # Trace-safe (no finiteness check): center_samples_around_p0 runs under vmap.
     return (1 - samples) * lb + samples * ub
 
 
@@ -488,7 +516,7 @@ def center_samples_around_p0(
 
     # Transform samples to centered bounds
     # The half-width form can land 1 ulp outside [lb, ub]; clip (inf-safe).
-    return jnp.clip(scale_samples_to_bounds(samples, centered_lb, centered_ub), lb, ub)
+    return jnp.clip(_scale_unit_samples(samples, centered_lb, centered_ub), lb, ub)
 
 
 def get_sampler(sampler_type: str) -> Callable[..., jax.Array]:

@@ -152,7 +152,9 @@ def compute_fingerprint(
     """Compute the identity fingerprint stored with a checkpoint and
     checked on resume (spec section 6). Never includes checkpoint_dir/
     checkpoint_interval/run_id/model_id-as-a-config-field -- those are
-    orchestration knobs, not identity of the optimization problem.
+    orchestration knobs, not identity of the optimization problem. ``p0`` is
+    not part of the identity either: a resumed run continues from the stored
+    state, which supersedes any new ``p0``.
 
     Returns a mix of string/int fields (compared by equality on load) and
     the raw bounds_lower/bounds_upper arrays (stored for human
