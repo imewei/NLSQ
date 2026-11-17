@@ -28,6 +28,10 @@ create_fit_config_from_state
 
 import contextlib
 import logging
+import re
+import threading
+import warnings
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -36,7 +40,7 @@ import numpy as np
 from nlsq.callbacks import StopOptimization
 from nlsq.core.minpack import fit
 from nlsq.gui_qt.session_state import VALID_WORKFLOWS, n_points
-from nlsq.result import CurveFitResult
+from nlsq.result import CurveFitResult, OptimizeWarning
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +103,7 @@ class FitConfig:
     chunk_size: int = 10000
     absolute_sigma: bool = False
     check_finite: bool = True
+    auto_bounds: bool = False
     # Hybrid-streaming-only controls: carried for reporting, not used by fit().
     normalize: bool = True
     warmup_iterations: int = 200
@@ -290,6 +295,128 @@ class _CallbackWrapper:
         return self._aborted
 
 
+class _ThreadLogCollector(logging.Handler):
+    """Collect WARNING+ records the given thread emits on the ``nlsq`` loggers."""
+
+    def __init__(self, thread_id: int, messages: list[str]) -> None:
+        super().__init__(level=logging.WARNING)
+        self._thread_id = thread_id
+        self._messages = messages
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # the adapter's own "setting not honoured" log lines are already notes
+        if record.thread == self._thread_id and not record.name.startswith(
+            "nlsq.gui_qt"
+        ):
+            self._messages.append(record.getMessage())
+
+
+# thread id -> message sink of the fit currently collecting on that thread
+_collectors: dict[int, list[str]] = {}
+_hook_lock = threading.Lock()
+_hook_filters: list[tuple] = []
+
+
+def _warning_hook(message, category, filename, lineno, file=None, line=None):
+    sink = _collectors.get(threading.get_ident())
+    if sink is not None and issubclass(category, (RuntimeWarning, UserWarning)):
+        # DeprecationWarning etc. concern the developer, not the fit
+        sink.append(str(message))
+    else:
+        _hook_state["previous"](message, category, filename, lineno, file, line)
+
+
+_hook_state = {"previous": warnings.showwarning}
+
+
+def install_warning_hook() -> None:
+    """Route a collecting thread's warnings to its fit; idempotent, never undone.
+
+    One process-wide ``showwarning`` hook plus two permanent "always" filters
+    (``OptimizeWarning`` and anything attributed to ``nlsq.*``, so a repeated
+    fit warns again). Nothing here is restored later, so it cannot interleave
+    badly with the ``catch_warnings`` blocks other threads (pyqtgraph, the
+    results page) enter and leave while a fit runs. If something else swapped
+    the hook out (a ``catch_warnings`` block that was entered before this ran),
+    the next call reinstalls it.
+    """
+    with _hook_lock:
+        if warnings.showwarning is not _warning_hook:
+            _hook_state["previous"] = warnings.showwarning
+            warnings.showwarning = _warning_hook
+        # they must sit in front: a later ignore filter would shadow them
+        if warnings.filters[: len(_hook_filters)] != _hook_filters or not _hook_filters:
+            warnings.filterwarnings("always", category=OptimizeWarning)
+            warnings.filterwarnings("always", module=r"nlsq\.")
+            _hook_filters[:] = warnings.filters[:2]  # in list order, for the guard
+
+
+@contextlib.contextmanager
+def capture_fit_diagnostics() -> Iterator[list[str]]:
+    """Collect the library warnings and log records the calling thread raises.
+
+    The library reports degenerate fits (covariance not estimable, rank-deficient
+    Jacobian, ignored settings, non-full-batch routes) only through
+    ``warnings.warn`` and ``nlsq.*`` WARNING log records, which a GUI never
+    sees. Output is collected per thread (see ``install_warning_hook``); other
+    threads' warnings go to the previous ``showwarning`` untouched.
+
+    Limits: only the thread that runs the fit is collected, so warnings and log
+    records raised on library-owned pool threads (multi-start runs its starts in
+    a ``ThreadPoolExecutor``) are not; and a warning raised outside ``nlsq.*``
+    (e.g. a numpy RuntimeWarning from a user model) follows Python's default
+    once-per-location rule, so a repeated fit may not report it again.
+    A fit-thread warning raised while the GUI thread sits inside a bare
+    ``catch_warnings()``/``simplefilter("ignore")`` block (pyqtgraph's
+    ``dataBounds``) can still be dropped; diagnostics that are also logged
+    survive via the log handler. ``catch_warnings`` blocks inside the library
+    on the fit thread (``streaming/specs.py``, ``stability/fallback.py``) can
+    leave a stale ignore filter; that is outside ``gui_qt`` and not fixed here.
+    """
+    install_warning_hook()
+    messages: list[str] = []
+    thread_id = threading.get_ident()
+    nlsq_logger = logging.getLogger("nlsq")
+    handler = _ThreadLogCollector(thread_id, messages)
+    _collectors[thread_id] = messages
+    nlsq_logger.addHandler(handler)
+    try:
+        yield messages
+    finally:
+        nlsq_logger.removeHandler(handler)
+        _collectors.pop(thread_id, None)
+
+
+_MAX_FIT_NOTES = 5
+_NOTE_SUFFIX = re.compile(r"\s+reason=\S+\s*$")
+
+
+_FILLER = frozenset({"the", "of", "a", "parameters"})
+
+
+def _dedupe_notes(messages: list[str]) -> list[str]:
+    """Unique messages in order, capped so the status line stays readable.
+
+    A diagnostic often arrives twice, as a log record and as a warning with
+    slightly different wording. Texts that differ only by a ``reason=...``
+    suffix, a ``Category:`` prefix or filler words, or whose words are all in
+    another note, count as one (the more detailed text is kept).
+    """
+    kept: list[tuple[frozenset[str], str]] = []
+    for m in messages:
+        text = _NOTE_SUFFIX.sub("", re.sub(r"^\w*Warning:\s*", "", m.strip())).strip()
+        words = frozenset(re.findall(r"\w+", text.lower())) - _FILLER
+        if not text or any(words <= w for w, _ in kept):
+            continue
+        kept = [(w, t) for w, t in kept if not w <= words]
+        kept.append((words, text))
+    notes = [t for _, t in kept]
+    if len(notes) > _MAX_FIT_NOTES:
+        extra = len(notes) - _MAX_FIT_NOTES
+        notes = [*notes[:_MAX_FIT_NOTES], f"(+{extra} more library warnings)"]
+    return notes
+
+
 def _resolve_workflow(
     workflow: str | None,
     bounds: tuple[np.ndarray, np.ndarray] | None,
@@ -470,29 +597,35 @@ def execute_fit(
     if config.method and config.method != "auto":
         fit_kwargs["method"] = config.method
 
+    if config.auto_bounds:
+        fit_kwargs["auto_bounds"] = True
+
     # Execute fit
     try:
-        result = fit(
-            f=model,
-            xdata=xdata,
-            ydata=ydata,
-            p0=p0,
-            sigma=sigma,
-            bounds=bounds or (-float("inf"), float("inf")),
-            workflow=workflow,
-            goal=goal,
-            **fit_kwargs,
-        )
+        with capture_fit_diagnostics() as diagnostics:
+            result = fit(
+                f=model,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                bounds=bounds or (-float("inf"), float("inf")),
+                workflow=workflow,
+                goal=goal,
+                **fit_kwargs,
+            )
     except Exception as e:
         # Wrap exception with more context
         raise RuntimeError(f"Fitting failed: {e}") from e
 
-    if notes:
-        for note in notes:
-            logger.warning("GUI fit setting not honoured: %s", note)
-        if hasattr(result, "__setitem__"):
-            # Shown on the Results page status line
-            result["gui_notes"] = notes
+    for note in notes:
+        logger.warning("GUI fit setting not honoured: %s", note)
+    # Library warnings (degenerate fit, ignored settings, non-full-batch route)
+    # would otherwise never leave stderr/the log: show them with the result.
+    notes = _dedupe_notes([*notes, *diagnostics])
+    if notes and hasattr(result, "__setitem__"):
+        # Shown on the Results page status line
+        result["gui_notes"] = notes
 
     # Check for abort
     if callback_wrapper is not None and callback_wrapper.aborted:
@@ -628,6 +761,60 @@ def extract_confidence_intervals(
         return [(-float("inf"), float("inf"))] * n_params
 
 
+def parameter_confidence_intervals(result: Any, n_data: int) -> np.ndarray | None:
+    """95% parameter intervals as an ``(n_params, 2)`` array, or None without pcov.
+
+    The result owns the statistics (known absolute sigma gives a normal
+    quantile, otherwise Student-t with ``n - p`` degrees of freedom) so the
+    table, the CSV/JSON exports and the library never disagree. NaN means
+    undefined (``n <= p`` with an estimated noise scale), never a made-up
+    interval. Results that cannot compute their own (plain objects, or a
+    result with no data attached) fall back to the t interval with ``n_data``.
+    """
+    pcov = getattr(result, "pcov", None)
+    if pcov is None:
+        return None
+    method = getattr(result, "confidence_intervals", None)
+    if callable(method):
+        with contextlib.suppress(Exception), warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # n <= p is flagged by the caller
+            return np.asarray(method(alpha=0.95), dtype=float)
+    from scipy import stats
+
+    popt = getattr(result, "x", None)
+    if popt is None:
+        popt = getattr(result, "popt", None)
+    if popt is None:
+        return None
+    popt = np.asarray(popt, dtype=float)
+    dof = n_data - len(popt)
+    half = (
+        stats.t.ppf(0.975, dof) * np.sqrt(np.diag(np.asarray(pcov, dtype=float)))
+        if dof > 0
+        else np.full(len(popt), np.nan)
+    )
+    return np.column_stack([popt - half, popt + half])
+
+
+def confidence_band(result: Any, x: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+    """95% confidence band of the fitted curve at ``x`` from the result.
+
+    Delegates to ``CurveFitResult.confidence_band`` (domain-aware derivative,
+    non-finite covariance handled). None when the result cannot provide one.
+    """
+    method = getattr(result, "confidence_band", None)
+    if not callable(method) or getattr(result, "pcov", None) is None:
+        return None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # n <= p is flagged by the caller
+            lower, upper = method(x)
+    except Exception:
+        logger.warning("Confidence band unavailable", exc_info=True)
+        return None
+    return np.asarray(lower, dtype=float), np.asarray(upper, dtype=float)
+
+
 def extract_parameter_uncertainties(result: CurveFitResult) -> list[float]:
     """Extract parameter uncertainties from covariance matrix.
 
@@ -694,6 +881,7 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
         chunk_size=state.chunk_size,
         absolute_sigma=bool(getattr(state, "absolute_sigma", False)),
         check_finite=bool(getattr(state, "check_finite", True)),
+        auto_bounds=bool(getattr(state, "auto_bounds", False)),
         normalize=getattr(state, "normalize", True),
         warmup_iterations=getattr(state, "warmup_iterations", 200),
         defense_preset=getattr(state, "defense_preset", None),

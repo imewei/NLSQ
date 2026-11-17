@@ -104,15 +104,18 @@ def test_ctrl_t_syncs_checkbox_and_state(qapp, app_state, main_window):
     assert app_state.theme == after
 
 
-def test_confidence_band_large_parameters(qapp, app_state):
+def test_confidence_band_large_parameters():
     from nlsq.core.functions import exponential_decay as m
-    from nlsq.gui_qt.pages.results import ResultsPage
+    from nlsq.gui_qt.adapters.fit_adapter import confidence_band
+    from nlsq.result import CurveFitResult
 
-    rp = ResultsPage(app_state)
     x = np.linspace(0, 5, 50)
     popt = np.array([1e9, 0.7, 0.0])
     pcov = np.diag([1e14, 1e-4, 1.0])  # sd(a) = 1e7
-    lo, hi = rp._compute_confidence_bands(x, popt, pcov, m, n_data=50)
+    result = CurveFitResult(
+        popt=popt, pcov=pcov, success=True, model=m, xdata=x, ydata=np.zeros(50)
+    )
+    lo, hi = confidence_band(result, x)
     half = (hi[0] - lo[0]) / 2
     expected = 2.0106 * np.sqrt(1e14 + 1.0)
     assert half == pytest.approx(expected, rel=1e-2)
