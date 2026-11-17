@@ -69,6 +69,11 @@ jobs:
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
+    # macOS arm64 runners are capacity-limited: a job that waits too long is cancelled
+    # with "not acquired by Runner" before any step runs, which fails the whole run
+    # and skips the Build job. On pull requests run macOS only on Python 3.13; main
+    # and manual runs keep the full matrix.
+    if: ${{ !(github.event_name == 'pull_request' && matrix.os == 'macos-latest' && matrix.python-version != '3.13') }}
     timeout-minutes: 180
     defaults:
       run:
