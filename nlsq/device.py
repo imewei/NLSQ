@@ -11,10 +11,34 @@ import logging
 import os
 import subprocess
 import sys
+import warnings
 
 from nlsq.config import _env_flag
 
 _logger = logging.getLogger(__name__)
+
+
+def _device_platform(d: object) -> str:
+    """Lower-case platform of a JAX device ("gpu", "tpu", "cpu", ...).
+
+    Uses ``.platform`` when present, else falls back to substring matching on
+    ``str(d)`` for mocks/older JAX ("cuda"/"rocm"/"gpu" -> "gpu", "tpu" -> "tpu").
+    """
+    platform = getattr(d, "platform", None)
+    if isinstance(platform, str) and platform:
+        platform = platform.lower()
+        return "gpu" if platform in ("cuda", "rocm") else platform
+    s = str(d).lower()
+    if "tpu" in s:
+        return "tpu"
+    if "cuda" in s or "gpu" in s or "rocm" in s:
+        return "gpu"
+    return "cpu"
+
+
+def _is_gpu_device(d: object) -> bool:
+    """True if a JAX device is a GPU (TPUs are not GPUs)."""
+    return _device_platform(d) == "gpu"
 
 
 def _is_accelerator_device(d: object) -> bool:
@@ -190,7 +214,7 @@ def get_recommended_package() -> str | None:
     return None
 
 
-def check_gpu_availability(warn: bool = True) -> bool:
+def check_gpu_availability(warn: bool = True, *, warn_on_error: bool = True) -> bool:
     """Check if GPU is available but not being used by JAX.
 
     Prints a helpful warning if GPU hardware and system CUDA are detected
@@ -200,6 +224,10 @@ def check_gpu_availability(warn: bool = True) -> bool:
     ----------
     warn : bool, default=True
         If True, print warning when GPU available but not used.
+    warn_on_error : bool, default=True
+        If True (and ``warn`` is True), emit a ``UserWarning`` when the check itself
+        fails (e.g. the JAX backend cannot initialise). ``import nlsq`` passes False
+        so that importing never warns about a broken backend.
 
     Returns
     -------
@@ -241,7 +269,7 @@ def check_gpu_availability(warn: bool = True) -> bool:
         import jax
 
         devices = jax.devices()
-        using_gpu = any(_is_accelerator_device(d) for d in devices)
+        using_gpu = any(_is_gpu_device(d) for d in devices)
 
         if using_gpu:
             _logger.debug(f"JAX is using GPU: {devices}")
@@ -268,6 +296,8 @@ def check_gpu_availability(warn: bool = True) -> bool:
         return False
     except Exception as e:
         _logger.debug(f"GPU check failed: {e}")
+        if warn and warn_on_error:  # a GPU is present (or JAX is broken)
+            warnings.warn(f"GPU check failed: {e}", UserWarning, stacklevel=2)
         return False
 
 
@@ -324,7 +354,8 @@ def get_device_info() -> dict:
         - jax_version: JAX version string
         - jax_backend: Current backend (cpu, gpu)
         - devices: List of device strings
-        - gpu_count: Number of GPU devices
+        - gpu_count: Number of GPU devices (TPUs are not counted)
+        - tpu_count: Number of TPU devices
         - using_gpu: Boolean
         - gpu_hardware: GPU name
         - gpu_sm_version: SM version (float)
@@ -332,12 +363,15 @@ def get_device_info() -> dict:
         - system_cuda_major: System CUDA major version (int)
         - recommended_package: Recommended JAX package
         - plugin_issues: List of detected plugin conflict descriptions
+        - jax_error: Error text when JAX is importable but its backend cannot
+          initialise (e.g. ``JAX_PLATFORMS=bogus``), else None
     """
     info: dict = {
         "jax_version": None,
         "jax_backend": None,
         "devices": [],
         "gpu_count": 0,
+        "tpu_count": 0,
         "using_gpu": False,
         "gpu_hardware": None,
         "gpu_sm_version": None,
@@ -345,6 +379,7 @@ def get_device_info() -> dict:
         "system_cuda_major": None,
         "recommended_package": None,
         "plugin_issues": [],
+        "jax_error": None,
     }
 
     # JAX info
@@ -355,10 +390,15 @@ def get_device_info() -> dict:
         info["jax_backend"] = jax.default_backend()
         devices = jax.devices()
         info["devices"] = [str(d) for d in devices]
-        info["gpu_count"] = sum(1 for d in devices if _is_accelerator_device(d))
+        info["gpu_count"] = sum(1 for d in devices if _is_gpu_device(d))
+        info["tpu_count"] = sum(1 for d in devices if _device_platform(d) == "tpu")
         info["using_gpu"] = info["gpu_count"] > 0
     except ImportError:
         pass
+    except (
+        Exception
+    ) as exc:  # backend init failure: report it, don't crash a diagnostic
+        info["jax_error"] = f"{type(exc).__name__}: {exc}"
 
     # GPU hardware info
     gpu_name, sm_version = get_gpu_info()

@@ -276,7 +276,7 @@ class TestClusterDetectorEdgeCases:
             MagicMock(platform="gpu"),
         ]
 
-        with patch("jax.devices", return_value=mock_devices):
+        with patch("jax.local_devices", return_value=mock_devices):
             gpu_count = detector._detect_gpus_per_node()
             assert gpu_count == 4
 

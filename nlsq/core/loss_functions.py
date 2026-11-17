@@ -106,7 +106,8 @@ def _zscale(f, f_scale):
 
 @jit
 def _calculate_cost(f_scale, rho, data_mask):
-    cost_array = jnp.where(data_mask, rho[0], 0)
+    # data_mask=None (the public default) means every point counts
+    cost_array = rho[0] if data_mask is None else jnp.where(data_mask, rho[0], 0)
     return 0.5 * f_scale**2 * jnp.sum(cost_array)
 
 
@@ -265,15 +266,18 @@ class LossFunctionsJIT:
         """
         return _stack_rhos
 
-    def get_empty_rhos(self, z):
-        """Return zero arrays for rho1 and rho2 when only cost is needed.
+    def _rhos(self, rho0, cost_only, derivs):
+        """Stack rho0 with its derivatives into the pinned ``(3, ...)`` layout.
 
-        Used when cost_only=True to avoid computing unnecessary derivatives.
+        With ``cost_only`` the derivative callable is skipped and zeros stand in
+        (``_calculate_cost`` reads only ``rho[0]``). ``zeros_like(rho0)`` also covers
+        0-D ``z``, which ``len(z)`` did not.
         """
-        dlength = len(z)
-        rho1 = jnp.zeros([dlength])
-        rho2 = jnp.zeros([dlength])
-        return rho1, rho2
+        if cost_only:
+            rho1 = rho2 = jnp.zeros_like(rho0)
+        else:
+            rho1, rho2 = derivs()
+        return self.stack_rhos(rho0, rho1, rho2)
 
     def create_huber_funcs(self):
         """Bind JIT-compiled Huber loss functions.
@@ -287,11 +291,7 @@ class LossFunctionsJIT:
     def huber(self, z, cost_only):
         """Compute Huber loss rho values."""
         rho0, mask = self.huber1(z)
-        if cost_only:
-            rho1, rho2 = self.get_empty_rhos(z)
-        else:
-            rho1, rho2 = self.huber2(z, mask)
-        return self.stack_rhos(rho0, rho1, rho2)
+        return self._rhos(rho0, cost_only, lambda: self.huber2(z, mask))
 
     def create_soft_l1_funcs(self):
         """Bind JIT-compiled soft L1 loss functions.
@@ -305,11 +305,7 @@ class LossFunctionsJIT:
     def soft_l1(self, z, cost_only):
         """Compute soft L1 loss rho values."""
         rho0, t = self.soft_l1_1(z)
-        if cost_only:
-            rho1, rho2 = self.get_empty_rhos(z)
-        else:
-            rho1, rho2 = self.soft_l1_2(t)
-        return self.stack_rhos(rho0, rho1, rho2)
+        return self._rhos(rho0, cost_only, lambda: self.soft_l1_2(t))
 
     def create_cauchy_funcs(self):
         """Bind JIT-compiled Cauchy (Lorentzian) loss functions.
@@ -323,11 +319,7 @@ class LossFunctionsJIT:
     def cauchy(self, z, cost_only):
         """Compute Cauchy loss rho values."""
         rho0 = self.cauchy1(z)
-        if cost_only:
-            rho1, rho2 = self.get_empty_rhos(z)
-        else:
-            rho1, rho2 = self.cauchy2(z)
-        return self.stack_rhos(rho0, rho1, rho2)
+        return self._rhos(rho0, cost_only, lambda: self.cauchy2(z))
 
     def create_arctan_funcs(self):
         """Bind JIT-compiled arctan loss functions.
@@ -341,11 +333,7 @@ class LossFunctionsJIT:
     def arctan(self, z, cost_only):
         """Compute arctan loss rho values."""
         rho0 = self.arctan1(z)
-        if cost_only:
-            rho1, rho2 = self.get_empty_rhos(z)
-        else:
-            rho1, rho2 = self.arctan2(z)
-        return self.stack_rhos(rho0, rho1, rho2)
+        return self._rhos(rho0, cost_only, lambda: self.arctan2(z))
 
     def create_zscale(self):
         """Bind JIT-compiled function to compute scaled squared residuals.

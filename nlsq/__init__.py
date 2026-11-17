@@ -86,7 +86,14 @@ if sys.platform == "darwin":
     os.environ.setdefault("QT_OPENGL", "software")
     os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
 
-if sys.platform == "linux" and not os.environ.get("NLSQ_FORCE_CPU"):
+if sys.platform == "linux" and os.environ.get(
+    "NLSQ_FORCE_CPU", ""
+).strip().lower() not in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}:  # same truthiness as config._env_flag
     # Configure XLA GPU memory behaviour BEFORE JAX initializes its backend.
     # The PJRT GPU client reads these at backend-init (first device use), so
     # they only take effect if set before any `import jax` triggers init — which
@@ -260,9 +267,9 @@ def __getattr__(name: str) -> Any:
 
         # Import the module and get the attribute
         module_path = _LAZY_MODULES[name]
-        try:
-            import importlib
+        import importlib
 
+        try:
             module = importlib.import_module(module_path)
             attr = getattr(module, name)
             # Cache for future access (setdefault is atomic under GIL)
@@ -274,8 +281,9 @@ def __getattr__(name: str) -> Any:
                 f"This may require an optional dependency. Error: {e}",
             ) from e
         except AttributeError as e:
+            # Keep the original text: it may come from inside the submodule's import
             raise AttributeError(
-                f"Module '{module_path}' does not have attribute '{name}'",
+                f"Module '{module_path}' does not have attribute '{name}' ({e})",
             ) from e
 
     # Not found - raise standard AttributeError
@@ -306,13 +314,23 @@ __all__ = [
     "ConvergenceMonitor",
     "CurveFit",
     "DefenseLayerTelemetry",
+    "DiagnosticLevel",
+    "DiagnosticPlugin",
+    "DiagnosticsConfig",
     "EarlyStopping",
     "FallbackOrchestrator",
     "FallbackResult",
     "FallbackStrategy",
     "GlobalOptimizationConfig",
+    "GradientHealthReport",
+    "GradientMonitor",
+    "HealthStatus",
     "HybridStreamingConfig",
+    "IdentifiabilityAnalyzer",
+    "IdentifiabilityReport",
     "InputValidator",
+    "IssueCategory",
+    "IssueSeverity",
     "IterationLogger",
     "LDMemoryConfig",
     "LargeDatasetConfig",
@@ -322,6 +340,8 @@ __all__ = [
     "MemoryBudgetSelector",
     "MemoryConfig",
     "MemoryManager",
+    "ModelHealthIssue",
+    "ModelHealthReport",
     "MultiStartOrchestrator",
     "NumericalStabilityGuard",
     "OptimizationDiagnostics",
@@ -330,6 +350,9 @@ __all__ = [
     "OptimizeResult",
     "OptimizeWarning",
     "ParameterNormalizer",
+    "ParameterSensitivityAnalyzer",
+    "ParameterSensitivityReport",
+    "PluginRegistry",
     "ProgressBar",
     "SparseJacobianComputer",
     "SparseOptimizer",
@@ -344,6 +367,7 @@ __all__ = [
     "clear_cache",
     "clear_memory_pool",
     "configure_for_large_datasets",
+    "create_health_report",
     "curve_fit",
     "curve_fit_large",
     "detect_collinearity",
@@ -366,6 +390,7 @@ __all__ = [
     "memory_context",
     "merge_bounds",
     "reset_defense_telemetry",
+    "run_plugins",
     "set_memory_limits",
 ]
 
@@ -457,13 +482,19 @@ def fit(
         Override automatic chunk size calculation.
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss)
-        forwarded to the selected backend.
+        forwarded to the selected backend. ``strategy`` (a ``Chunked``, ``Exact``,
+        ``Hybrid``, ... spec from ``nlsq.streaming``) routes the call to
+        ``curve_fit_large`` at every size; it cannot be combined with the other
+        engine options (``method``, ``multistart``, ``chunk_size``, ...), and the
+        ``goal`` tolerances do not apply to it (set them on the strategy).
 
     Returns
     -------
     result : CurveFitResult or tuple
-        Optimization result. Contains popt, pcov, and multistart_diagnostics.
-        Supports tuple unpacking: popt, pcov = fit(...)
+        Below ``size_threshold`` a ``CurveFitResult`` (popt, pcov,
+        multistart_diagnostics, ...). At or above it, whatever ``curve_fit_large``
+        returns (a plain ``(popt, pcov)`` tuple for the exact default).
+        Both support tuple unpacking: popt, pcov = fit(...)
 
     Examples
     --------
@@ -573,14 +604,62 @@ def fit(
     # goal: validated and applied here exactly as minpack.fit does for
     # workflow=..., instead of leaking into curve_fit's ignored **kwargs.
     goal = kwargs.pop("goal", None)
+    strategy = kwargs.pop("strategy", None)
     if goal is not None:
         from nlsq.core.minpack import _parse_goal_parameter
         from nlsq.core.workflow import calculate_adaptive_tolerances
 
         goal_tols = calculate_adaptive_tolerances(n_points, _parse_goal_parameter(goal))
-        for tol_key in ("gtol", "ftol", "xtol"):
-            if tol_key not in kwargs:
-                kwargs[tol_key] = goal_tols[tol_key]
+        # The hybrid engine has no ftol/xtol/gtol (curve_fit and curve_fit_large
+        # reject them) and an explicit strategy owns its tolerances.
+        if method != "hybrid_streaming" and strategy is None:
+            for tol_key in ("gtol", "ftol", "xtol"):
+                if tol_key not in kwargs:
+                    kwargs[tol_key] = goal_tols[tol_key]
+        else:
+            import warnings as _warnings
+
+            _warnings.warn(
+                "goal tolerances are not applied with "
+                + ("strategy=" if strategy is not None else "method='hybrid_streaming'")
+                + "; set them on the strategy / HybridStreamingConfig instead.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    if strategy is not None:
+        # An explicit strategy owns the engine at every size; curve_fit_large
+        # rejects any legacy option set alongside it, so forward only those the
+        # caller changed (not fit()'s own n_starts/sampler defaults).
+        changed: dict[str, Any] = {
+            "method": method,
+            "multistart": multistart,
+            "n_starts": n_starts,
+            "chunk_size": chunk_size,
+        }
+        changed = {k: v for k, v in changed.items() if v is not None}
+        if sampler != "lhs":
+            changed["sampler"] = sampler
+        if not center_on_p0:
+            changed["center_on_p0"] = center_on_p0
+        if scale_factor != 1.0:
+            changed["scale_factor"] = scale_factor
+        # size_threshold only picks the engine in fit(); the strategy replaces that
+        return curve_fit_large(
+            f,
+            xdata,
+            ydata,
+            p0=p0,
+            sigma=sigma,
+            absolute_sigma=absolute_sigma,
+            check_finite=check_finite,
+            bounds=bounds,
+            memory_limit_gb=memory_limit_gb,
+            show_progress=show_progress,
+            strategy=strategy,
+            **changed,
+            **kwargs,
+        )
 
     large = n_points >= size_threshold
     effective_multistart = bool(multistart)
@@ -741,6 +820,37 @@ def _legacy_to_strategy(**legacy: Any) -> "LargeStrategy":
                 "Unrecognized keyword argument(s) for method="
                 f"'hybrid_streaming': {sorted(kwargs)}. These are not "
                 "HybridStreamingConfig fields.",
+            )
+        # Legacy options that have a HybridStreamingConfig field are mapped;
+        # an explicit override of the config field itself wins.
+        if opts["chunk_size"] is not None:
+            overrides.setdefault("chunk_size", opts["chunk_size"])
+        if multistart:
+            overrides.setdefault("enable_multistart", True)
+            overrides.setdefault("n_starts", n_starts)
+            overrides.setdefault("multistart_sampler", opts["sampler"])
+            overrides.setdefault("center_on_p0", opts["center_on_p0"])
+            overrides.setdefault("scale_factor", opts["scale_factor"])
+        # size_threshold is irrelevant with an explicit method; the rest have no
+        # hybrid counterpart, so say so instead of dropping them silently.
+        unused = sorted(
+            name
+            for name in (
+                "stability",
+                "rescale_data",
+                "max_jacobian_elements_for_svd",
+                "auto_size_detection",
+            )
+            if not _same_value(opts[name], _LEGACY_DEFAULTS[name])
+        )
+        if unused:
+            import warnings
+
+            warnings.warn(
+                f"{unused} have no effect with method='hybrid_streaming' and are "
+                "ignored.",
+                UserWarning,
+                stacklevel=4,
             )
         return Hybrid(config=HybridStreamingConfig(**overrides), verbose=verbose)
 
@@ -935,7 +1045,11 @@ def curve_fit_large(
     **kwargs
         Additional optimization parameters (ftol, xtol, gtol, max_nfev, loss). With
         ``method="exact_streaming"`` only ftol, xtol, gtol, max_nfev and n_points are
-        accepted (``loss`` raises ``TypeError``).
+        accepted (``loss`` raises ``TypeError``). With ``method="hybrid_streaming"``
+        only ``HybridStreamingConfig`` fields and ``verbose`` are accepted (ftol,
+        xtol, gtol and max_nfev raise ``TypeError``); ``chunk_size`` and
+        ``multistart``/``n_starts`` map to the config's ``chunk_size`` and
+        ``enable_multistart``/``n_starts``.
 
     Returns
     -------
@@ -1132,6 +1246,6 @@ _LEGACY_DEFAULTS: dict[str, Any] = {
 # This helps users realize when GPU acceleration is available but not being used
 from nlsq.device import check_gpu_availability
 
-check_gpu_availability()
+check_gpu_availability(warn_on_error=False)
 
 _dbg("nlsq import complete")

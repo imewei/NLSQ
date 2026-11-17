@@ -44,10 +44,13 @@ class OptimizeResult(dict):
         - 4: Both ftol and xtol satisfied
         - 0: Maximum function evaluations reached
         - -1: Legacy improper-input status
-        - -2: Stopped by a callback raising ``StopOptimization`` (matches
-          SciPy's status; ``success`` stays True so the best-so-far
-          parameters are returned rather than raising)
+        - -2: Stopped by a callback raising ``StopOptimization`` or
+          ``StopIteration``, or returning ``True`` (matches SciPy's status;
+          ``success`` stays True so the best-so-far parameters are returned
+          rather than raising)
         - -3: Inner loop iteration limit (algorithm-specific)
+        - -4: Non-finite gradient (Jacobian or residuals); ``x`` is the last
+          finite iterate
 
     message : str
         Human-readable description of termination cause. Provides detailed
@@ -172,6 +175,13 @@ class OptimizeResult(dict):
     """
 
     def __getattr__(self, name):
+        # Python lands here when a class property itself raised AttributeError
+        # (e.g. "ydata not available", or a user-model typo) and clears that
+        # error. Re-run the property so its own message propagates instead of a
+        # bare AttributeError(name); an explicitly stored dict key still wins.
+        prop = getattr(type(self), name, None)
+        if isinstance(prop, property) and prop.fget is not None and name not in self:
+            return prop.fget(self)
         try:
             return self[name]
         except KeyError as e:

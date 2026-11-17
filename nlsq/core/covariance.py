@@ -40,9 +40,149 @@ def _column_norms(J: Any) -> Any:
     return col_max * jnp.linalg.norm(J / jnp.where(col_max > 0, col_max, 1.0), axis=0)
 
 
+def _column_norms_host(J: np.ndarray) -> np.ndarray:
+    """``_column_norms`` in NumPy float64 (a jitted call would narrow to float32)."""
+    with np.errstate(invalid="ignore"):
+        col_max = np.max(np.abs(J), axis=0, initial=0.0)
+        return col_max * np.linalg.norm(J / np.where(col_max > 0, col_max, 1.0), axis=0)
+
+
 COND_WARN = 1e4  # warn when sqrt(cond(H)), the cond(J) estimate, exceeds this
 # warnings point at the user's call site, whether exact_lm_fit or curve_fit_large was called
 _NLSQ_DIR = (os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep,)
+
+
+# The rank-deficient pcov is returned only if all three checks pass (otherwise all-inf
+# plus an OptimizeWarning). kappa = max D / min D over the nonzero columns; the equilibrated
+# V_r carries ~eps errors that the column norms D rescale, so the original-coordinate
+# pseudo-inverse is off by ~eps * kappa in its dependent block and by ~eps * kappa^2 in
+# structurally zero entries and in X @ n (measured against an mpmath reference).
+# (0) eps * kappa and eps * s_1 / s_r (the retained equilibrated spectrum) must be
+#     <= _KAPPA_TOL.
+# (1) Probe: a rounding-level perturbation of V_r may move an entry by at most
+#     _UNRESOLVED_TOL * |X_ij| + floor * sqrt(X_ii X_jj), floor = min(_UNRESOLVED_TOL,
+#     max(_CROSS_FLOOR * _UNRESOLVED_TOL, 10 * eps * kappa^2)). The per-entry term polices
+#     small cross-covariances (a plain sqrt(X_ii X_jj) scale hid them); the floor keeps
+#     structurally zero cross terms from being judged against D's roundoff.
+# (2) Null space: X @ n must vanish for every null vector n of J (original coordinates,
+#     D^-1 v) to min(_NULL_CAP, max(_NULL_TOL, 10 * eps * kappa^2)) of the magnitude
+#     sum_j |X_ij||n_j|, so cancellation of large terms is detected.
+_UNRESOLVED_TOL = 1e-3
+_CROSS_FLOOR = 1e-8  # relative correlation floor before the kappa^2 noise term
+_NULL_TOL = 1e-6
+_PROBE_ULPS = 4.0
+_PROBE_DRAWS = 4
+_KAPPA_TOL = 1e-5
+_NULL_CAP = 1e-4
+
+
+def _reduced_inverse(s: np.ndarray, V: np.ndarray, D: np.ndarray):
+    """``(s_M, VT_M)`` of ``M = diag(s) V D`` (so ``pinv(J^T J) = VT_M^T diag(1/s_M^2) VT_M``)."""
+    _, sm, VTm = np.linalg.svd((s[:, None] * V) * D, full_matrices=False)
+    return sm, VTm
+
+
+def _rank_deficient_factors(
+    s: np.ndarray,
+    VT: np.ndarray,
+    VT_null: np.ndarray,
+    col_norm: np.ndarray,
+    zero_cols: np.ndarray,
+    n_eff: int,
+    eps: float,
+) -> tuple[np.ndarray, np.ndarray, bool]:
+    """Factors of the original-coordinate pseudo-inverse, and whether it is unresolvable.
+
+    Penrose conditions in equilibrated coordinates do not catch the failure (they hold
+    to ~1e-14 for a wrong matrix), because ``D A_s D`` amplifies the rounding in ``A_s``.
+    Two checks replace them (see ``_UNRESOLVED_TOL``): a backward-stability probe, which
+    perturbs ``V_r`` by ``max(n_eff, p) * eps`` (the scale of the rank cutoff, four
+    deterministic sign patterns), and the original-coordinate null-space test. Exactly
+    zero Jacobian columns are structural: their row and column of ``pcov`` are exactly 0,
+    so they are zeroed in ``V_r`` and never perturbed (the probe is then unit-free, as the
+    perturbation is scaled by the true column norms ``D``).
+    """
+    VT = np.where(zero_cols, 0.0, VT)
+    sm, VTm = _reduced_inverse(s, VT, col_norm)
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        sc = VTm / sm[:, None]
+        X0 = sc.T @ sc
+        d = np.sqrt(np.abs(np.diag(X0)))
+        # Parameters with exactly zero variance are exactly unidentifiable: no scale to
+        # compare against, so leave them out.
+        used = d > 0
+        ok = bool(np.isfinite(X0).all() and used.any())
+        if ok:
+            absX = np.abs(X0)
+            nz = col_norm[~zero_cols]
+            kappa = (
+                nz.max() / nz.min() if nz.size else np.float64(1.0)
+            )  # numpy: may overflow to inf
+            # The equilibrated V_r carries ~eps errors that D rescales: the dependent
+            # block of X is off by ~eps * kappa (measured, 5e-3 at kappa = 3e13), and
+            # structurally zero entries / X @ n carry ~eps * kappa^2 noise.
+            noise = eps * kappa**2
+            null_tol = min(_NULL_CAP, max(_NULL_TOL, 10.0 * noise))
+            cross_floor = min(
+                _UNRESOLVED_TOL, max(_CROSS_FLOOR * _UNRESOLVED_TOL, 10.0 * noise)
+            )
+            # the retained equilibrated spectrum: the smallest retained value s_r of
+            # ~eps * s_1 absolute error leaves the pseudo-inverse good to ~eps * s_1 / s_r
+            if eps * kappa > _KAPPA_TOL or eps * s[0] / s[-1] > _KAPPA_TOL:
+                ok = False
+        if ok:
+            for v_null in VT_null:
+                v = np.where(zero_cols, 0.0, v_null)
+                if np.linalg.norm(v) < np.sqrt(eps):  # a pure zero-column direction
+                    continue
+                n = v / col_norm
+                n = n / np.max(np.abs(n))
+                resid = np.abs(X0 @ n)
+                weight = absX @ np.abs(n)
+                if not np.all(resid <= null_tol * weight):  # also catches NaN
+                    ok = False
+                    break
+        if ok:
+            rng = np.random.default_rng(0)
+            amp = _PROBE_ULPS * eps
+            allowed = _UNRESOLVED_TOL * absX[np.ix_(used, used)]
+            allowed = allowed + cross_floor * np.outer(d[used], d[used])
+            for _ in range(_PROBE_DRAWS):
+                signs = np.where(zero_cols, 0.0, rng.choice([-1.0, 1.0], size=VT.shape))
+                s1, V1 = _reduced_inverse(s, VT + amp * signs, col_norm)
+                sc1 = V1 / s1[:, None]
+                dev = np.abs(X0 - sc1.T @ sc1)[np.ix_(used, used)]
+                if not np.all(dev <= allowed):  # also catches NaN
+                    ok = False
+                    break
+    return sm, VTm, not ok
+
+
+def _numpy_svd(J: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Host float64 ``(s, VT)`` of ``J``, via QR as in ``CurveFit.covariance_svd``."""
+    if not np.all(np.isfinite(J)):  # LAPACK raises; the JAX path yields NaN s
+        k = min(J.shape)
+        return np.full(k, np.nan), np.full((k, J.shape[1]), np.nan)
+    _, s, VT = np.linalg.svd(np.linalg.qr(J, mode="r"), full_matrices=False)
+    return s, VT
+
+
+def _working_precision(J: Any, svd: Callable) -> tuple[Any, Callable, float]:
+    """``(J, svd, eps)`` at float64 precision, or the widest JAX allows.
+
+    A narrower J (float32) is upcast, its entries taken as exact: a float32 SVD has
+    ~1e-7 roundoff that the float64 rank cutoff and acceptance checks would read as
+    identifiable directions. With JAX x64 off a float64 J would be narrowed by the
+    injected (JAX) SVD, so it is decomposed on the host in NumPy float64 instead.
+    float64 inputs with x64 on pass through untouched.
+    """
+    wide = np.promote_types(J.dtype, np.float64)
+    work = jax.dtypes.canonicalize_dtype(wide)
+    if work != wide:
+        return np.asarray(J, dtype=wide), _numpy_svd, float(np.finfo(wide).eps)
+    if J.dtype != work:
+        J = np.asarray(J, dtype=work)  # host widening: a device cast flushes subnormals
+    return J, svd, float(np.finfo(work).eps)
 
 
 def pcov_from_jacobian(
@@ -61,7 +201,12 @@ def pcov_from_jacobian(
     ``pcov`` is scaled back afterwards. ``n_eff`` is the true data count (``J`` may carry
     padded rows); it sets the singular-value cutoff
     ``eps * max(n_eff, J.shape[1]) * s[0]`` on the equilibrated ``s`` and the degrees of
-    freedom ``n_eff - p``. Fallback messages go to ``logger`` (default: the
+    freedom ``n_eff - p``. When that cutoff finds ``J`` rank-deficient, ``pcov`` is the
+    Moore-Penrose inverse in the original coordinates (``pinv(J.T @ J)``), taken from
+    the SVD of ``M = S_r V_r^T D`` (the equilibrated factors cut to the detected rank,
+    rescaled by the column norms ``D``). If that matrix fails the probe or null-space
+    checks of ``_rank_deficient_factors`` it is not trusted: all-``inf`` with an
+    ``OptimizeWarning`` instead. Fallback messages go to ``logger`` (default: the
     ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is
     attributed to the first frame outside ``nlsq/``.
     """
@@ -70,10 +215,14 @@ def pcov_from_jacobian(
     # "dropped" and its variance collapse); pcov is scaled back below. Departs from
     # SciPy's unscaled cutoff on purpose. Zero columns are left unscaled; if any
     # column norm is non-finite, no column is scaled.
-    col_norm = np.asarray(_column_norms(J))
+    J, svd, eps = _working_precision(J, svd)
+    col_norm = np.asarray(
+        _column_norms_host(J) if svd is _numpy_svd else _column_norms(J)
+    )
     if not np.all(np.isfinite(col_norm)):
         col_norm = np.ones_like(col_norm)
-    col_norm = np.where(col_norm > 0, col_norm, 1.0)
+    zero_cols = col_norm == 0
+    col_norm = np.where(zero_cols, 1.0, col_norm)
     # Do Moore-Penrose inverse discarding zero singular values
     outputs = svd(J / col_norm)
     # Convert JAX arrays to NumPy more efficiently using np.asarray
@@ -90,18 +239,31 @@ def pcov_from_jacobian(
     if not singular:
         # Use n_eff (true data count) not J.shape[0] (may be padded) for
         # the threshold, so padding doesn't cause over-aggressive SV truncation.
-        threshold = np.finfo(float).eps * max(n_eff, J.shape[1]) * s[0]
+        threshold = eps * max(n_eff, J.shape[1]) * s[0]
         valid_mask = s > threshold
         s = s[valid_mask]
+        VT_null = VT[~valid_mask]
         VT = VT[valid_mask]
         singular = len(s) == 0
 
     rank_deficient = not singular and len(s) < n_params
+    unresolved = False
+    if rank_deficient:
+        # A pseudo-inverse is not invariant under the column equilibration, so the
+        # equilibrated SVD (J = J_s D, J_s = U S V^T) only DETECTED the rank. J^T J =
+        # M^T M for the small r x p matrix M = S_r V_r^T D, so pinv(J^T J) comes from
+        # the SVD of M, built from the well-resolved equilibrated factors (an SVD of the
+        # raw J loses a small identifiable column to roundoff in large ones).
+        s, VT, unresolved = _rank_deficient_factors(
+            s, VT, VT_null, col_norm, zero_cols, n_eff, eps
+        )
+        col_norm = np.ones_like(col_norm)
+        singular = unresolved
     warn_cov = False
     if singular:
         pcov = np.full((n_params, n_params), np.inf)
         warn_cov = True
-        reason = "singular_jacobian"
+        reason = "unresolved_rank_deficiency" if unresolved else "singular_jacobian"
     else:
         scaled_cost = (
             not absolute_sigma and n_eff > p and np.isfinite(cost) and cost >= 0
@@ -117,7 +279,11 @@ def pcov_from_jacobian(
         reason = None
         if not absolute_sigma:
             if n_eff > p:
-                if not scaled_cost:
+                if cost < 0:  # negative variances are meaningless
+                    pcov.fill(np.inf)
+                    warn_cov = True
+                    reason = "negative_cost"
+                elif not scaled_cost:
                     with np.errstate(over="ignore", invalid="ignore"):
                         pcov = pcov * (2 * cost / (n_eff - p))
             else:
@@ -138,15 +304,24 @@ def pcov_from_jacobian(
     if rank_deficient:
         # Pseudo-inverse (SciPy-trf compatible) gives zero variance along the
         # null space, so unidentifiable parameters would read as known exactly.
-        rank_msg = (
-            f"Jacobian is rank-deficient (rank {len(s)} < {n_params} parameters); "
-            "some parameters are not identifiable and their reported "
-            "uncertainty is not meaningful"
-        )
+        rank_msg = _rank_deficient_message(len(s), n_params)
         (_logger if logger is None else logger).warning(
             rank_msg, reason="rank_deficient"
         )
         warnings.warn(rank_msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
+
+    if unresolved:
+        unresolved_msg = (
+            "The rank-deficient covariance cannot be resolved in the original parameter "
+            "coordinates at this column scaling (rounding-level changes to J move it "
+            "by more than "
+            f"{_UNRESOLVED_TOL:.0e}); rescale the parameters (or fit an equilibrated "
+            "parameterization) so the columns of J have comparable norms"
+        )
+        (_logger if logger is None else logger).warning(
+            unresolved_msg, reason="unresolved_rank_deficiency"
+        )
+        warnings.warn(unresolved_msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
 
     if warn_cov:
         (_logger if logger is None else logger).warning(
@@ -159,6 +334,14 @@ def pcov_from_jacobian(
         )
 
     return pcov, warn_cov
+
+
+def _rank_deficient_message(rank: int, n_params: int) -> str:
+    return (
+        f"Jacobian is rank-deficient (rank {rank} < {n_params} parameters); "
+        "some parameters are not identifiable and their reported "
+        "uncertainty is not meaningful"
+    )
 
 
 def warn_not_estimated() -> None:
@@ -241,6 +424,14 @@ def pcov_from_normal(
             d = np.ones_like(d)
             w, V, keep = _eig(d)
         if keep.any():
+            if not keep.all():
+                # same warning as pcov_from_jacobian: the pseudo-inverse gives zero
+                # variance along dropped directions, which would read as "known exactly"
+                warnings.warn(
+                    _rank_deficient_message(int(keep.sum()), p),
+                    OptimizeWarning,
+                    skip_file_prefixes=_NLSQ_DIR,
+                )
             if cond_warn and normal_condition(H) > COND_WARN:
                 warnings.warn(
                     f"normal-equation Hessian is ill-conditioned (sqrt(cond(H)) > "
@@ -260,9 +451,7 @@ def pcov_from_normal(
                         scaled = Vk * (np.sqrt(cost) * np.sqrt(2.0 / (n - p)))
                         scaled = scaled / np.sqrt(w[keep]) / np.sqrt(s)
                         pcov = scaled @ scaled.T
-                    else:
-                        cov = ((Vk / w[keep]) @ Vk.T) / s
-                        pcov = cov * (2.0 * cost / (n - p))
+                    # else: a negative or non-finite cost stays all-inf (fired below)
     if not np.isfinite(pcov).all():
         pcov = np.full((p, p), np.inf)
     fired = bool(np.isinf(pcov).any())

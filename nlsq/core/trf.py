@@ -105,6 +105,7 @@ from __future__ import annotations
 
 import functools
 import math
+import time
 import warnings
 from collections.abc import Callable
 
@@ -391,6 +392,62 @@ def _read_attempt_scalars(vec: jnp.ndarray) -> np.ndarray:
     return np.asarray(jax.device_get(vec))
 
 
+# Upper bound for the relative tolerance of the inner CG solve. The inner tolerance
+# follows ``gtol`` (unchanged for every ordinary gtol) but a loose outer gtol must
+# not make CG return a zero step, which would then be read as convergence.
+CG_INNER_RTOL_MAX = 1e-2
+# Used when gtol is disabled (0/None), negative or NaN: CG squares its tolerance, so
+# a negative value would read as "converged" before the first iteration. SciPy's lsmr
+# has its own atol/btol, independent of gtol.
+CG_INNER_RTOL_DEFAULT = 1e-8
+
+
+def _cg_inner_tol(gtol: float) -> float:
+    if not gtol > 0:  # also NaN
+        return CG_INNER_RTOL_DEFAULT
+    return min(gtol, CG_INNER_RTOL_MAX)
+
+
+def _timed_call(
+    call: Callable[..., Any], *args: Any, **kwargs: Any
+) -> tuple[Any, float]:
+    """Run ``call`` and return ``(result, seconds)`` including its execution.
+
+    The clock starts before the call and stops after the result is ready
+    (``block_until_ready``), unlike ``TRFProfiler.time_operation`` which times
+    only a synchronisation of an already-dispatched result.
+    """
+    start = time.perf_counter()
+    out = call(*args, **kwargs)
+    if hasattr(out, "block_until_ready"):
+        out.block_until_ready()
+    return out, time.perf_counter() - start
+
+
+def _gradient_status(
+    g_norm: jnp.ndarray, gtol: float, g_raw: jnp.ndarray | None = None
+) -> int | None:
+    """Classify a gradient max-norm: 1 (gtol met), -4 (non-finite) or None.
+
+    One device read serves both tests, so detecting a non-finite gradient adds
+    no host sync over the plain ``g_norm < gtol``. A max-norm propagates NaN, so
+    NaN/Inf in any gradient entry shows up. ``g_raw`` is the unscaled gradient's
+    max-norm for the bounded path, where ``g_norm`` is Coleman-Li scaled and may
+    overflow for huge (finite) bounds without the gradient being non-finite.
+    """
+    if g_raw is None:
+        g_norm_host = float(g_norm)
+        finite = math.isfinite(g_norm_host)
+    else:
+        g_norm_host, g_raw_host = np.asarray(jnp.stack([g_norm, g_raw]))
+        finite = math.isfinite(float(g_raw_host))
+    if g_norm_host < gtol:
+        return 1
+    if not finite:
+        return -4
+    return None
+
+
 def _saves_iteration_history(method: Callable[..., Any]) -> Callable[..., Any]:
     """Write this fit's iteration history when NLSQ_SAVE_ITERATIONS is set.
 
@@ -409,7 +466,7 @@ def _saves_iteration_history(method: Callable[..., Any]) -> Callable[..., Any]:
             if enabled:
                 try:
                     self.logger.save_iteration_data()
-                except OSError as e:
+                except Exception as e:  # never replace the fit's own outcome
                     self.logger.warning(
                         "Could not save iteration history", error=str(e)
                     )
@@ -530,6 +587,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         diagnostics: OptimizationDiagnostics | None = None,
         callback: Callable[..., Any] | None = None,
         fuse_scalars: bool = False,
+        initial_times: tuple[float, float] | None = None,
         **kwargs: Any,
     ) -> OptimizeResult:
         """Minimize a scalar function of one or more variables using the
@@ -592,7 +650,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Loss function. If None, the standard least-squares problem is
             solved.
         tr_options : dict
-            Options for the trust-region algorithm.
+            Accepted for scipy compatibility; not read by either solver.
         verbose : int
             Level of algorithm's verbosity:
 
@@ -600,8 +658,12 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 * 1 : display a termination report.
 
         timeit : bool, optional
-            If True, the time for each step is measured if the unbounded
-            version is being ran. Default is False.
+            If True, the execution time of every residual (``"fun"``)
+            and Jacobian (``"jac"``) evaluation is recorded in
+            ``result.all_times`` (``ftimes``/``jtimes`` lists of the
+            ``TRFProfiler``; ``nfev``/``njev`` entries, the x0 evaluations
+            included when ``initial_times`` is given). Only the unbounded version is timed; the bounded
+            version returns ``all_times == {}``. Default is False.
         """
         # bounded or unbounded version
         if np.all(lb == -np.inf) and np.all(ub == np.inf):
@@ -634,6 +696,25 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     fuse_scalars=fuse_scalars,
                     **kwargs,
                 )
+            # Timed run: each residual / Jacobian evaluation is executed to
+            # completion and timed (a sync per call, so only when timeit=True).
+            # initial_times are the x0 evaluations done before this call.
+            profiler = TRFProfiler()
+            if initial_times is not None:
+                profiler.ftimes.append(initial_times[0])
+                profiler.jtimes.append(initial_times[1])
+            timed_fun, timed_jac = fun, jac
+
+            def fun(*a: Any, **k: Any) -> Any:
+                out, elapsed = _timed_call(timed_fun, *a, **k)
+                profiler.ftimes.append(elapsed)
+                return out
+
+            def jac(*a: Any, **k: Any) -> Any:
+                out, elapsed = _timed_call(timed_jac, *a, **k)
+                profiler.jtimes.append(elapsed)
+                return out
+
             return self.trf_no_bounds(
                 fun,
                 xdata,
@@ -657,7 +738,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 verbose,
                 solver,
                 callback,
-                profiler=TRFProfiler(),
+                profiler=profiler,
                 diagnostics=diagnostics,
                 fuse_scalars=fuse_scalars,
             )
@@ -796,22 +877,21 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         -------
         tuple[int | None, float]
             Tuple of (termination_status, g_norm):
-            - termination_status: 1 if gradient tolerance satisfied, None otherwise
+            - termination_status: 1 if gradient tolerance satisfied, -4 if the
+              gradient is non-finite, None otherwise
             - g_norm: Computed gradient norm (OPT-8: returned to avoid redundant computation)
         """
         # OPT-8: Compute g_norm once and return it to avoid redundant computation
         # Keep as JAX scalar to defer GPU→CPU sync until actually needed
         g_norm = jnorm(g, ord=jnp.inf)
-
-        if g_norm < gtol:
+        status = _gradient_status(g_norm, gtol)
+        if status == 1:
             self.logger.debug(
                 "Convergence: gradient tolerance satisfied",
                 g_norm=float(g_norm),
                 gtol=gtol,
             )
-            return 1, g_norm
-
-        return None, g_norm
+        return status, g_norm
 
     def _solve_trust_region_subproblem(
         self,
@@ -872,7 +952,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         if solver in ("cg", "lsmr"):
             # Conjugate gradient solver
             J_h = J * d
-            step_h = self.solve_tr_subproblem_cg(J, f, d, Delta, alpha, gtol)
+            step_h = self.solve_tr_subproblem_cg(
+                J, f, d, Delta, alpha, _cg_inner_tol(gtol)
+            )
             result.update(
                 {
                     "J_h": J_h,
@@ -1103,7 +1185,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                         d_jnp,
                         Delta,
                         alpha,
-                        gtol,
+                        _cg_inner_tol(gtol),
                     )
                 _n_iter = 1  # Dummy value for compatibility
             else:
@@ -1205,8 +1287,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 xtol,
             )
 
-            # Single GPU→CPU sync per inner iteration: materialize term_code
-            # This sync also implicitly materializes actual_reduction and Delta_new
+            # Sequential path: several GPU→CPU syncs per attempt (term_code,
+            # actual_reduction, check_isfinite, Delta_new); the fused path
+            # (fuse_scalars) reads one vector instead.
             term_code_int = int(term_code)
             # Materialize actual_reduction as Python float to avoid repeated JAX syncs
             # in the while-loop condition and the acceptance check below
@@ -1328,7 +1411,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Termination status if callback requested stop, None otherwise.
         """
         try:
-            call_user_callback(
+            stop = call_user_callback(
                 callback,
                 iteration,
                 float(cost),  # JAX scalar -> Python float
@@ -1343,14 +1426,21 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     else None,
                 },
             )
-        except StopOptimization:
+        except (StopOptimization, StopIteration):
+            # StopIteration is scipy's stop convention
             self.logger.info("Optimization stopped by callback (StopOptimization)")
             return -2  # User-requested stop (scipy: callback stop)
         except Exception as e:
+            # Deliberate (tested): a faulty callback must not abort the fit.
             warnings.warn(
                 f"Callback raised exception: {e}. Continuing optimization.",
                 RuntimeWarning,
             )
+            return None
+        if isinstance(stop, (bool, np.bool_)) and stop:
+            # scipy convention: a callback returning True requests a stop
+            self.logger.info("Optimization stopped by callback (returned True)")
+            return -2
         return None
 
     def _initialize_bounds_state(
@@ -1488,7 +1578,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 f_zeros,
                 Delta,
                 alpha,
-                gtol,
+                _cg_inner_tol(gtol),
             )
             s, V, uf = None, None, None
         elif solver == "sparse":
@@ -1640,7 +1730,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                         f_zeros,
                         Delta,
                         alpha,
-                        gtol,
+                        _cg_inner_tol(gtol),
                     )
                 _n_iter = 1
             else:
@@ -1705,7 +1795,8 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 ftol,
                 xtol,
             )
-            # Single GPU→CPU sync per inner iteration: materialize term_code
+            # GPU→CPU syncs per attempt: term_code, actual_reduction, and the
+            # finiteness / Delta checks (see the unbounded loop's note)
             term_code_int = int(term_code)
             # Piggyback float materialization to avoid JAX sync in while/if checks
             actual_reduction = float(actual_reduction)
@@ -1793,6 +1884,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         njev: int,
         iteration: int,
         termination_status: int,
+        all_times: dict[str, list[float]] | None = None,
     ) -> OptimizeResult:
         """Build OptimizeResult from optimization state.
 
@@ -1821,16 +1913,18 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Total iterations performed
         termination_status : int
             Termination status code
+        all_times : dict, optional
+            Profiler timing data (``timeit=True``); ``{}`` when not timed.
 
         Returns
         -------
         OptimizeResult
             The optimization result object.
         """
-        active_mask = jnp.zeros_like(x)  # JAX zeros instead of NumPy
+        active_mask = np.zeros(x.shape, dtype=int)  # as scipy / the bounded path
 
         return OptimizeResult(
-            x=x,
+            x=np.asarray(x),
             cost=float(cost),  # Convert JAX scalar to Python float
             fun=f_true,
             jac=J,
@@ -1842,7 +1936,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             nit=iteration,  # Number of iterations performed
             status=termination_status,
             success=termination_status > 0 or termination_status == -2,
-            all_times={},
+            all_times={} if all_times is None else all_times,
         )
 
     def trf_no_bounds(
@@ -1924,7 +2018,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Loss function. If None, the standard least-squares problem is
             solved.
         tr_options : dict
-            Options for the trust-region algorithm.
+            Accepted for scipy compatibility; not read by either solver.
         verbose : int
             Level of algorithm's verbosity:
 
@@ -2008,15 +2102,13 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         # Trust region optimization loop
         with self.logger.timer("optimization", log_result=False):
             while True:
-                # Check gradient convergence using helper (only if not already terminated)
                 # OPT-8: Get g_norm from convergence check to avoid redundant computation
-                if termination_status is None:
-                    termination_status, g_norm = self._check_convergence_criteria(
-                        g,
-                        gtol,
-                    )
-                else:
-                    g_norm = jnorm(g, ord=jnp.inf)  # Only compute if already terminated
+                grad_status, g_norm = self._check_convergence_criteria(g, gtol)
+                # gtol (1) overwrites an ftol/xtol status from the step just
+                # taken, as scipy's trf does; a non-finite gradient (-4) takes
+                # precedence over it too (gtol and -4 cannot both hold).
+                if grad_status is not None:
+                    termination_status = grad_status
 
                 if verbose == 2:
                     # Use jax.debug.callback to avoid blocking host-device transfers
@@ -2144,6 +2236,14 @@ class TrustRegionReflective(TrustRegionJITFunctions):
 
                 # Invoke user callback if provided using helper
                 if callback is not None:
+                    if acceptance_result["accepted"]:
+                        # g was replaced by the step: report its norm, not the
+                        # pre-step one computed at the top of the iteration
+                        g_norm = jnorm(g, ord=jnp.inf)
+                        if _gradient_status(g_norm, gtol) == -4:
+                            # must not reach a callback that could stop with success
+                            termination_status = -4
+                            break
                     callback_status = self._invoke_callback(
                         callback=callback,
                         iteration=iteration,
@@ -2174,6 +2274,11 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             njev=njev,
             iteration=iteration,
             termination_status=termination_status,
+            all_times=(
+                profiler.get_timing_data()
+                if isinstance(profiler, TRFProfiler)
+                else None
+            ),
         )
 
     def trf_bounds(
@@ -2253,7 +2358,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Loss function. If None, the standard least-squares problem is
             solved.
         tr_options : dict
-            Options for the trust-region algorithm.
+            Accepted for scipy compatibility; not read by either solver.
         verbose : int
             Level of algorithm's verbosity:
 
@@ -2339,8 +2444,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             v, dv = CL_scaling_vector_jax(x, g, lb_jnp, ub_jnp)
 
             g_norm = jnorm(g * v, ord=jnp.inf)
-            if termination_status is None and g_norm < gtol:
-                termination_status = 1
+            grad_status = _gradient_status(g_norm, gtol, jnorm(g, ord=jnp.inf))
+            if grad_status is not None:  # gtol or non-finite: overrides ftol/xtol
+                termination_status = grad_status
 
             if verbose == 2:
                 debug.callback(
@@ -2476,6 +2582,13 @@ class TrustRegionReflective(TrustRegionJITFunctions):
 
             # Invoke user callback using helper
             if callback is not None:
+                if inner_result["accepted"]:
+                    # g (and the CL scaling) changed with the step: refresh the norm
+                    v_cb, _ = CL_scaling_vector_jax(x, g, lb_jnp, ub_jnp)
+                    g_norm = jnorm(g * v_cb, ord=jnp.inf)
+                    if _gradient_status(g_norm, gtol, jnorm(g, ord=jnp.inf)) == -4:
+                        termination_status = -4  # before a callback can stop
+                        break
                 callback_status = self._invoke_callback(
                     callback=callback,
                     iteration=iteration,
@@ -2509,6 +2622,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             nit=iteration,
             status=termination_status,
             success=termination_status > 0 or termination_status == -2,
+            all_times={},  # the bounded path is not timed
         )
 
     def select_step(

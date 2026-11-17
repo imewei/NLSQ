@@ -182,9 +182,10 @@ def test_chunked_route_sees_the_users_global_limit_and_restores_it(monkeypatch):
 
 
 # --- safety_factor -----------------------------------------------------------
-# At N, P the data is ~0.015 GB and the peak ~0.144 GB. A 0.19 GB limit lands on
-# "chunked" at the default 0.75 and on "standard" at 0.95, each by >10%.
-LIMIT_GB = 0.19
+# At N, P the data is ~0.015 GB and the peak ~0.204 GB (data, J, scaled J, SVD U,
+# workspace and the fixed 0.1 GB overhead). A 0.27 GB limit lands on "chunked" at
+# the default 0.75 and on "standard" at 0.95, each by >10%.
+LIMIT_GB = 0.27
 
 
 def _threshold(**kwargs) -> float:

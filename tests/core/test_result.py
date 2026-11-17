@@ -647,39 +647,42 @@ def test_workflow_model_comparison(simple_data):
 # ============================================================================
 
 
+def _counting(simple_result):
+    calls = {"n": 0}
+    inner = simple_result.model
+
+    def model(x, *p):
+        calls["n"] += 1
+        return inner(x, *p)
+
+    simple_result["model"] = model
+    return calls
+
+
 def test_predictions_computed_once(simple_result):
-    """Test that predictions are cached and only computed once."""
-    # Access predictions
+    """Predictions are cached until the inputs they depend on are replaced."""
+    calls = _counting(simple_result)
     pred1 = simple_result.predictions
-
-    # Clear the model to ensure it's not recomputed
-    original_model = simple_result.model
-    simple_result["model"] = None
-
-    # Access again - should still work (cached)
     pred2 = simple_result.predictions
-
-    # Should be the same object
     assert pred1 is pred2
+    assert calls["n"] == 1
 
-    # Restore model
-    simple_result["model"] = original_model
+    # replacing popt invalidates the cache
+    simple_result["x"] = np.asarray(simple_result.x) * 1.5
+    _ = simple_result.predictions
+    assert calls["n"] == 2
 
 
 def test_residuals_computed_once(simple_result):
-    """Test that residuals are cached and only computed once."""
-    # Access residuals
+    """Residuals are cached until the inputs they depend on are replaced."""
+    calls = _counting(simple_result)
     res1 = simple_result.residuals
-
-    # Clear ydata to ensure it's not recomputed
-    original_ydata = simple_result.ydata
-    simple_result["ydata"] = None
-
-    # Access again - should still work (cached)
     res2 = simple_result.residuals
-
-    # Should be the same object
     assert res1 is res2
+    assert calls["n"] == 1
 
-    # Restore ydata
-    simple_result["ydata"] = original_ydata
+    # replacing ydata invalidates the cache
+    simple_result["ydata"] = np.asarray(simple_result.ydata) + 1.0
+    res3 = simple_result.residuals
+    assert calls["n"] == 2
+    np.testing.assert_allclose(res3, res1 + 1.0)

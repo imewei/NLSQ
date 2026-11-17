@@ -14,8 +14,6 @@ These values are derived from:
 DEFAULT_MAX_NFEV_MULTIPLIER = 100  # Max function evaluations per parameter
 
 # Trust Region Step Quality
-STEP_ACCEPTANCE_THRESHOLD = 0.5  # Trust region step acceptance ratio (rho > 0.5)
-
 STEP_QUALITY_EXCELLENT = 0.75  # Excellent step quality threshold (rho > 0.75)
 
 STEP_QUALITY_GOOD = 0.25  # Good step quality threshold (0.25 < rho < 0.75)
@@ -66,7 +64,7 @@ JACOBIAN_SPARSITY_THRESHOLD = 0.1  # Threshold for sparse Jacobian (10% non-zero
 
 DEFAULT_MEMORY_LIMIT_GB = 4.0  # Default memory limit in gigabytes
 
-MEMORY_SAFETY_FACTOR = 0.9  # Use 90% of available memory
+MEMORY_SAFETY_FACTOR = 0.75  # Fraction of the memory limit strategy selection may use
 
 # =============================================================================
 # Chunk and Batch Sizes
@@ -83,8 +81,6 @@ MEDIUM_DATASET_THRESHOLD = 10_000  # Threshold for medium-sized datasets
 # =============================================================================
 
 TRUST_RADIUS_INCREASE_FACTOR = 2.0  # Factor to increase trust radius on success
-
-TRUST_RADIUS_DECREASE_FACTOR = 0.5  # Factor to decrease trust radius on failure
 
 # =============================================================================
 # Termination Status Codes
@@ -156,14 +152,12 @@ __all__ = [
     "MIN_POSITIVE_VALUE",
     "MIN_TRUST_RADIUS",
     "SMALL_DATASET_THRESHOLD",
-    "STEP_ACCEPTANCE_THRESHOLD",
     "STEP_QUALITY_EXCELLENT",
     "STEP_QUALITY_GOOD",
     "TERMINATION_FTOL",
     "TERMINATION_GTOL",
     "TERMINATION_MAX_NFEV",
     "TERMINATION_XTOL",
-    "TRUST_RADIUS_DECREASE_FACTOR",
     "TRUST_RADIUS_INCREASE_FACTOR",
     "XLARGE_DATASET_THRESHOLD",
 ]

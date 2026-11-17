@@ -617,7 +617,7 @@ class TestAcceleratorDeviceDetection:
         assert nlsq.device._is_accelerator_device(_StrOnlyDevice("cpu:0")) is False
 
     def test_get_device_info_counts_tpu_devices(self):
-        """get_device_info() must count TPU devices as accelerators."""
+        """get_device_info() counts TPUs separately: they are not GPUs."""
         mock_tpu = MagicMock()
         mock_tpu.platform = "tpu"
         mock_jax = MagicMock()
@@ -628,8 +628,9 @@ class TestAcceleratorDeviceDetection:
         with patch.dict("sys.modules", {"jax": mock_jax}):
             info = nlsq.device.get_device_info()
 
-        assert info["gpu_count"] == 2
-        assert info["using_gpu"] is True
+        assert info["gpu_count"] == 0
+        assert info["tpu_count"] == 2
+        assert info["using_gpu"] is False
 
 
 class TestPlatformGuard:

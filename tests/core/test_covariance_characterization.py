@@ -68,15 +68,18 @@ STD_E2E_PCOV_ABS = [
     [0.7616734798361435, 0.47978160000165926],
     [0.4797816000016593, 0.9115989532288085],
 ]
-EX_E2E_X = [2.005921963939399, 1.3042967370729526]
-EX_E2E_COST = 0.00026551317440889183
+# Re-captured 2026-11-16: exact_lm_fit now takes the undamped step after its ftol
+# certificate (as MINPACK does), so these are the iterate after it. Against the tight
+# (ftol=xtol=gtol=1e-15) optimum: x 8.3e-7 -> 3e-9, cost 2.4e-9 -> 2.6e-14, pcov 1.65e-6 -> 6e-9.
+EX_E2E_X = [2.005922516264126, 1.3042978116704866]
+EX_E2E_COST = 0.00026551317377305643
 EX_E2E_PCOV = [
-    [4.044685444582692e-05, 2.547764706101839e-05],
-    [2.5477647061018383e-05, 4.840822653662568e-05],
+    [4.044686860374794e-05, 2.5477667069294036e-05],
+    [2.5477667069294036e-05, 4.8408306265638496e-05],
 ]
 EX_E2E_PCOV_ABS = [
-    [0.7616732114305282, 0.4797812221133454],
-    [0.4797812221133453, 0.9115974498138598],
+    [0.7616734798688243, 0.4797816000472862],
+    [0.4797816000472863, 0.9115989534104025],
 ]
 # Fixed J / H at P_WC (direct helper calls)
 STD_WC = [
@@ -454,14 +457,19 @@ def test_standard_and_exact_agree_when_well_conditioned(j_wc):
 def test_exact_partial_rank_deficient_contract(j_dup):
     """Duplicate column: finite pseudo-inverse, dropped direction zeroed.
 
-    Unlike standard it also emits exactly one UserWarning (ill-conditioned H), and
-    that warning is not an OptimizeWarning.
+    Like standard it emits the rank-deficient OptimizeWarning (2026-11-15 review: the
+    pseudo-inverse otherwise reads as "known exactly"), then, unlike standard, one
+    UserWarning (ill-conditioned H) that is not an OptimizeWarning.
     """
     H = j_dup.T @ j_dup
     for absolute_sigma, golden in ((False, EX_DUP), (True, EX_DUP_ABS)):
         pcov, caught = _record(compute_covariance, H, COST_DUP, N, 3, absolute_sigma)
-        _assert_single(caught, UserWarning)
-        assert "ill-conditioned" in str(caught[0].message)
+        assert [w.category for w in caught] == [OptimizeWarning, UserWarning]
+        assert "rank-deficient" in str(caught[0].message)
+        assert "ill-conditioned" in str(caught[1].message)
+        assert all(
+            Path(w.filename).resolve() == Path(__file__).resolve() for w in caught
+        )
         _assert_rank_deficient_pinv(pcov)
         _assert_golden(pcov, golden)
 
@@ -496,14 +504,17 @@ def _exact_pcov00(k, p=2, n=N):
     ``c = 1 - 2**-k`` makes the small eigenvalue exactly ``2**-k`` and the largest ~2, so
     the equilibrated cutoff is ``p*eps*2``. Unit diagonal: Jacobi equilibration is the
     identity, so this pins the cutoff in the equilibrated space. Kept: pcov[0, 0] =
-    1/(1-c^2) ~ 2**(k-1); dropped: ~0.25. sqrt(cond) > 1e4 either way, so exactly one
-    UserWarning is expected.
+    1/(1-c^2) ~ 2**(k-1); dropped: ~0.25. sqrt(cond) > 1e4 either way, so one
+    UserWarning is expected, preceded by a rank-deficient OptimizeWarning when dropped.
     """
     c = 1.0 - 2.0**-k
     H = np.eye(p)
     H[0, 1] = H[1, 0] = c
     pcov, caught = _record(compute_covariance, H, 1.0, n, p, True)
-    _assert_single(caught, UserWarning)
+    dropped = pcov[0, 0] < 1.0
+    assert [w.category for w in caught] == (
+        [OptimizeWarning, UserWarning] if dropped else [UserWarning]
+    )
     return pcov[0, 0]
 
 
@@ -582,8 +593,8 @@ def test_hybrid_golden(hybrid_wc, j_wc):
 
 
 def test_hybrid_partial_rank_deficient_contract(hybrid_dup, j_dup):
-    """Finite, dropped direction zeroed, no warning (the ill-conditioning UserWarning
-    of the exact site is not emitted for hybrid)."""
+    """Finite, dropped direction zeroed, one rank-deficient OptimizeWarning (the
+    ill-conditioning UserWarning of the exact site is not emitted for hybrid)."""
     opt, p_norm = hybrid_dup
     r3, caught = _record(
         opt._run_phase3_finalize,
@@ -592,7 +603,7 @@ def test_hybrid_partial_rank_deficient_contract(hybrid_dup, j_dup):
         2 * COST_DUP,
         N,
     )
-    _assert_no_warnings(caught)
+    _assert_rank_warning(caught)
     pcov = np.asarray(r3["pcov"])
     _assert_rank_deficient_pinv(pcov)
     _assert_golden(pcov, HYB_DUP)
@@ -672,7 +683,7 @@ def test_gls_golden():
 
 
 def test_gls_degenerate_contract():
-    """n <= p -> all-inf via logger only (no warning); bad information -> history proxy."""
+    """n <= p -> all-inf via logger only (no warning); bad/no information -> all-inf + OptimizeWarning."""
     fit = _gls_fitter(absolute_sigma=False)
     fit._accum_n = 2
     pcov, caught = _record(
@@ -681,8 +692,8 @@ def test_gls_degenerate_contract():
     _assert_no_warnings(caught)
     _assert_all_inf(pcov, 2)
 
-    # Ill-conditioned information (cond 1e13 > 1e12) falls back to the covariance of
-    # the last parameter estimates, not an inverse.
+    # Ill-conditioned information (cond 1e13 > 1e12): neither an inverse nor a proxy
+    # from the parameter history -- not estimated (all-inf) with one OptimizeWarning.
     ill = LargeDatasetFitter(memory_limit_gb=1.0)
     # Unit diagonal: the gate judges the Jacobi-scaled matrix, so the ill-conditioning
     # must be correlation-like, not a mere parameter-unit disparity.
@@ -692,19 +703,21 @@ def test_gls_degenerate_contract():
     ill._absolute_sigma = True
     history = [np.array([1.0, 2.0]), np.array([1.1, 2.2]), np.array([0.9, 1.8])]
     pcov, caught = _record(ill._compute_covariance_from_history, history, history[-1])
-    _assert_no_warnings(caught)
-    _assert_golden(pcov, np.cov(np.asarray(history).T))
-    _assert_golden(pcov, [[0.01, 0.02], [0.02, 0.04]])
+    _assert_single(caught, OptimizeWarning)
+    assert "not estimated" in str(caught[0].message)
+    assert "scaled condition number" in str(caught[0].message)
+    _assert_all_inf(pcov, 2)
 
-    # No usable information and history of length <= 1 (empty or one estimate): the
-    # diagonal proxy |theta|*0.01 + 0.001 of the current parameters.
+    # No usable information: all-inf with one OptimizeWarning, whatever the history
+    # (no |theta|*0.01 + 0.001 diagonal, no np.cov proxy).
     none = LargeDatasetFitter(memory_limit_gb=1.0)
     for hist in ([], [np.array([9.0, 9.0])]):
         pcov, caught = _record(
             none._compute_covariance_from_history, hist, np.array([2.0, 1.3])
         )
-        _assert_no_warnings(caught)
-        _assert_golden(pcov, [[0.021, 0.0], [0.0, 0.014]])
+        _assert_single(caught, OptimizeWarning)
+        assert "no chunk contributed" in str(caught[0].message)
+        _assert_all_inf(pcov, 2)
 
 
 class _RecordingLogger:
@@ -721,11 +734,13 @@ class _RecordingLogger:
 
 
 _HISTORY = [np.array([1.0, 2.0]), np.array([1.1, 2.2]), np.array([0.9, 1.8])]
-_HISTORY_PROXY = [[0.01, 0.02], [0.02, 0.04]]  # np.cov of the last estimates
 
 
 def _gls_from_info(info):
-    """Run the GLS covariance on a hand-set information matrix (absolute_sigma)."""
+    """Run the GLS covariance on a hand-set information matrix (absolute_sigma).
+
+    Returns ``(pcov, logged, caught)``; callers assert on the recorded warnings.
+    """
     logger = _RecordingLogger()
     fit = LargeDatasetFitter(memory_limit_gb=1.0, logger=logger)
     fit._accum_information = np.asarray(info)
@@ -733,8 +748,7 @@ def _gls_from_info(info):
     fit._accum_n = 10
     fit._absolute_sigma = True
     pcov, caught = _record(fit._compute_covariance_from_history, _HISTORY, _HISTORY[-1])
-    _assert_no_warnings(caught)
-    return pcov, logger.warnings
+    return pcov, logger.warnings, caught
 
 
 def _unit_diag_info(cond):
@@ -744,39 +758,41 @@ def _unit_diag_info(cond):
 
 
 def test_gls_condition_number_gate_is_1e12_from_both_sides():
-    """Scaled cond <= 1e12 inverts the information matrix; above it falls back to history."""
+    """Scaled cond <= 1e12 inverts the information matrix; above it pcov is all-inf + warning."""
     for cond in (5e11, 9e11):
         info = _unit_diag_info(cond)
-        pcov, logged = _gls_from_info(info)
+        pcov, logged, caught = _gls_from_info(info)
+        _assert_no_warnings(caught)
         np.testing.assert_allclose(pcov, np.linalg.inv(info), rtol=RTOL)
         assert logged == []
 
     for cond in (1.1e12, 2e12):
-        pcov, logged = _gls_from_info(_unit_diag_info(cond))
-        _assert_golden(pcov, _HISTORY_PROXY)
-        assert len(logged) == 1
-        assert f"condition number: {cond:.2e}" in logged[0]
+        pcov, _logged, caught = _gls_from_info(_unit_diag_info(cond))
+        _assert_single(caught, OptimizeWarning)
+        assert f"scaled condition number {cond:.2e}" in str(caught[0].message)
+        _assert_all_inf(pcov, 2)
 
 
 def test_gls_gate_ignores_parameter_units():
-    """diag(1, 1e-13) is well posed after scaling: inverted, not replaced by the proxy."""
-    pcov, logged = _gls_from_info(np.diag([1.0, 1e-13]))
+    """diag(1, 1e-13) is well posed after scaling: inverted, not reported as not estimated."""
+    pcov, logged, caught = _gls_from_info(np.diag([1.0, 1e-13]))
+    _assert_no_warnings(caught)
     np.testing.assert_allclose(pcov, np.diag([1.0, 1e13]), rtol=RTOL)
     assert logged == []
 
 
-def test_gls_nonfinite_inverse_falls_back_to_history():
-    """cond = 1 passes the gate but inv() overflows to inf -> history proxy, not inf.
+def test_gls_nonfinite_inverse_is_not_estimated():
+    """cond = 1 passes the gate but inv() overflows to inf -> all-inf + OptimizeWarning.
 
     Denormal information (1e-320) inverts to 1e320 = inf; the finite check, not
     the condition-number gate, is what rejects it. (The LinAlgError branch of
     ``np.linalg.inv`` is unreachable without mocking: a singular matrix has
     cond = inf and is rejected by the gate first.)
     """
-    pcov, logged = _gls_from_info(np.diag([1e-320, 1e-320]))
-    _assert_golden(pcov, _HISTORY_PROXY)
-    assert len(logged) == 1
-    assert "condition number: 1.00e+00" in logged[0]
+    pcov, _logged, caught = _gls_from_info(np.diag([1e-320, 1e-320]))
+    _assert_single(caught, OptimizeWarning)
+    assert "scaled condition number 1.00e+00" in str(caught[0].message)
+    _assert_all_inf(pcov, 2)
 
 
 def test_package_import_enables_float64():
