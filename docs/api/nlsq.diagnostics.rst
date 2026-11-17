@@ -374,12 +374,16 @@ Create domain-specific diagnostics that integrate with the health report:
     # Register the plugin
     PluginRegistry.register(OpticalScatteringPlugin())
 
-    # Plugins are automatically included in health reports
+    # Registered plugins run automatically inside curve_fit(...,
+    # compute_diagnostics=True) and appear in the health report
+    result = curve_fit(model, x, y, p0=p0, compute_diagnostics=True)
+    for name, plugin_result in result.diagnostics.plugin_results.items():
+        print(f"{name}: {len(plugin_result.issues)} issues")
+
+    # They can also be run by hand
     from nlsq.diagnostics import run_plugins
 
     plugin_results = run_plugins(jacobian, parameters, residuals)
-    for name, result in plugin_results.items():
-        print(f"{name}: {len(result.issues)} issues")
 
 Configuration Reference
 -----------------------
