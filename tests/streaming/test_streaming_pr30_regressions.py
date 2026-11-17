@@ -16,6 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from nlsq.result import OptimizeWarning
 from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.streaming.large_dataset import (
@@ -286,14 +287,16 @@ class TestChunkedFitCovarianceUsesAccumulatedInformation:
         isn't enough to catch it."""
         fitter = LargeDatasetFitter()
         fitter._accum_information = np.array([[1.0, 1.0], [1.0, 1.0 + 1e-14]])
-        pcov = fitter._compute_covariance_from_history(
-            param_history=[np.array([1.0, 1.0]), np.array([1.0, 1.0])],
-            current_params=np.array([1.0, 1.0]),
-        )
-        # Should NOT equal the naive (numerically meaningless) inverse.
+        with pytest.warns(OptimizeWarning, match="not estimated"):
+            pcov = fitter._compute_covariance_from_history(
+                param_history=[np.array([1.0, 1.0]), np.array([1.0, 1.0])],
+                current_params=np.array([1.0, 1.0]),
+            )
+        # Should NOT equal the naive (numerically meaningless) inverse, and is
+        # reported as not-estimated (all-inf) with a warning, never a proxy.
         naive_inverse = np.linalg.inv(fitter._accum_information)
         assert not np.allclose(pcov, naive_inverse)
-        assert np.all(np.isfinite(pcov))
+        assert np.all(np.isinf(pcov))
 
     def test_badly_scaled_but_well_posed_information_is_inverted(self):
         """Condition is judged after diagonal scaling: parameters of very
@@ -307,15 +310,16 @@ class TestChunkedFitCovarianceUsesAccumulatedInformation:
         )
         np.testing.assert_allclose(pcov, np.diag([1.0, 1e-14]), rtol=1e-12)
 
-    def test_falls_back_to_proxy_when_no_accumulated_information(self):
+    def test_not_estimated_when_no_accumulated_information(self):
         fitter = LargeDatasetFitter()
         fitter._accum_information = None
-        pcov = fitter._compute_covariance_from_history(
-            param_history=[np.array([1.0, 1.0])],
-            current_params=np.array([1.0, 1.0]),
-        )
+        with pytest.warns(OptimizeWarning, match="not estimated"):
+            pcov = fitter._compute_covariance_from_history(
+                param_history=[np.array([1.0, 1.0])],
+                current_params=np.array([1.0, 1.0]),
+            )
         assert pcov.shape == (2, 2)
-        assert np.all(np.isfinite(pcov))
+        assert np.all(np.isinf(pcov))
 
 
 class TestChunkBufferPoolMultiFeatureXdata:

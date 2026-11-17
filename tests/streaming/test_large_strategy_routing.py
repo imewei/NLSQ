@@ -1068,7 +1068,7 @@ def _drive_global_chunked(ctx: SimpleNamespace) -> Any:
 
 def _check_global_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
     _, expected = MemoryBudgetSelector().select(
-        n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB
+        n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB, bounded=True
     )
     # multistart/n_starts go to fit(), not to the constructor.
     expect_fitter_ctor(rec, memory_limit_gb=expected.memory_limit_gb, config=expected)
@@ -1398,7 +1398,7 @@ def _drive_cf_auto_chunked_full(ctx: SimpleNamespace) -> Any:
 
 def _check_cf_auto_chunked(rec: Recorder, result: Any, ctx: Any) -> None:
     _, expected = MemoryBudgetSelector().select(
-        n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB
+        n_points=N, n_params=2, memory_limit_gb=CHUNKED_LIMIT_GB, bounded=True
     )
     # The raw memory_limit_gb kwarg (not the config's) is the constructor limit.
     assert expected.memory_limit_gb != CHUNKED_LIMIT_GB
@@ -1447,8 +1447,10 @@ def _check_cf_auto_chunked_timeit(rec: Recorder, result: Any, ctx: Any) -> None:
     assert result[0] is rec.last_result.x
     assert result[1] is rec.last_result.pcov
     assert result[2] is rec.last_result  # the engine's result object
-    assert result[3] == 0
-    assert result[4] == 0.123  # engine's execution_time
+    # Measured here (the engine reports no timings): post_time = result formatting,
+    # ctime = the chunked fit.
+    assert result[3] > 0 and result[4] > 0
+    assert "fun" not in result[2] and "jac" not in result[2]
 
 
 def _check_cf_auto_chunked_real(rec: Recorder, result: Any, ctx: Any) -> None:

@@ -255,7 +255,7 @@ class TestMaxIterationsWarning:
 
         with pytest.warns(OptimizeWarning, match="max iterations") as rec:
             r = self._fit(gauss_newton_max_iterations=1)
-        assert r["message"] == "Maximum iterations reached"
+        assert r["message"].startswith("Maximum iterations reached")
         assert (
             sum(
                 "hybrid streaming stopped at max iterations" in str(w.message)

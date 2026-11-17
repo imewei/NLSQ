@@ -154,8 +154,10 @@ class TestCGSolverCorrectness:
         )
 
         # Solve using direct SVD method (baseline)
-        direct_step, _direct_pred = optimizer._solve_gauss_newton_step(
-            JTJ, JTr, trust_radius=1.0
+        direct_step, _direct_pred = (
+            optimizer._solve_gauss_newton_step(  # radius not binding: compare the solves, not the TR clipping
+                JTJ, JTr, trust_radius=1e6
+            )
         )
 
         # Solve using CG with implicit matvec
@@ -174,7 +176,7 @@ class TestCGSolverCorrectness:
 
         # Solve using CG
         cg_step, _cg_pred = optimizer_cg._solve_gauss_newton_step_cg(
-            JTJ, JTr, trust_radius=1.0, params=p0, x_data=x, y_data=y
+            JTJ, JTr, trust_radius=1e6, params=p0, x_data=x, y_data=y
         )
 
         # Steps should match closely

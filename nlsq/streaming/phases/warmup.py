@@ -87,6 +87,159 @@ def _chunked_loss(
     return num / den + float(loss_fn.penalty(params))
 
 
+def _full_batch_fits(n_points: int, n_params: int) -> bool:
+    """True when a whole-batch loss/gradient comfortably fits the memory budget.
+
+    Same per-point estimate and budget as chunk sizing in ``large_dataset``
+    (``MemoryEstimator``; ``get_memory_config().memory_limit_gb``, default 8 GB,
+    capped by the available RAM, times the safety factor), but requires the batch
+    to use at most half of it: autodiff keeps model intermediates for every row.
+    """
+    from nlsq.config import get_memory_config
+    from nlsq.streaming.large_dataset import LDMemoryConfig, MemoryEstimator
+
+    cfg, default = get_memory_config(), LDMemoryConfig()
+    limit = (
+        cfg.memory_limit_gb
+        if cfg.memory_limit_gb is not None
+        else default.memory_limit_gb
+    )
+    safety = (
+        cfg.safety_factor if cfg.safety_factor is not None else default.safety_factor
+    )
+    budget = min(limit, MemoryEstimator.get_available_memory_gb()) * safety * 1024**3
+    return (
+        n_points * MemoryEstimator.estimate_memory_per_point(n_params) <= 0.5 * budget
+    )
+
+
+def _scan_loss(loss_fn: Callable, chunk_size: int) -> Callable:
+    """``loss_fn`` evaluated in ``chunk_size``-row pieces (``lax.scan`` + checkpoint)."""
+    base_sums, penalty = loss_fn.base_sums, loss_fn.penalty
+
+    @jax.jit
+    def loss(params, x, y):
+        n = x.shape[0]
+        n_full = n // chunk_size
+        m = n_full * chunk_size
+        xs = x[:m].reshape((n_full, chunk_size, *x.shape[1:]))
+        ys = y[:m].reshape((n_full, chunk_size, *y.shape[1:]))
+        shape = jax.eval_shape(base_sums, params, xs[0], ys[0])
+        init = tuple(jnp.zeros(t.shape, t.dtype) for t in shape)
+
+        @jax.checkpoint
+        def body(carry, xy):
+            a, b = base_sums(params, *xy)
+            return (carry[0] + a, carry[1] + b), None
+
+        (num, den), _ = jax.lax.scan(body, init, (xs, ys))
+        if m < n:
+            a, b = base_sums(params, x[m:], y[m:])
+            num, den = num + a, den + b
+        return num / den + penalty(params)
+
+    return loss
+
+
+def _use_full_batch(
+    loss_fn: Callable,
+    chunk_size: int,
+    n: int,
+    n_params: int,
+    fits: Callable[[int, int], bool] | None,
+) -> bool:
+    """Whole-batch evaluation for this call? Looked up per call, never cached."""
+    if not hasattr(loss_fn, "base_sums") or n <= chunk_size:
+        return True
+    return (_full_batch_fits if fits is None else fits)(n, n_params)
+
+
+def chunked_loss_fn(
+    loss_fn: Callable,
+    chunk_size: int,
+    full_batch_fits: Callable[[int, int], bool] | None = None,
+) -> Callable:
+    """Differentiable ``loss_fn`` that never evaluates the model on > ``chunk_size`` rows.
+
+    Same value as ``loss_fn(params, x, y)`` (chunk numerator/denominator sums are
+    added, the parameter-only penalty once). Full chunks run under ``lax.scan``
+    with ``jax.checkpoint``, so value AND gradient hold one chunk of model
+    intermediates at a time, not the whole dataset's. Inputs with at most
+    ``chunk_size`` rows and loss functions without the ``base_sums``/``penalty``
+    parts go straight to ``loss_fn``. So does a batch that comfortably fits the
+    memory budget (``_full_batch_fits``): the scan + checkpoint recomputation costs
+    ~1.6x at 1e6 points and only pays off when the batch would not fit.
+
+    The full/chunked choice is made in Python on EVERY call from the current memory
+    context (each variant is compiled once and cached), so a tighter
+    ``memory_context`` enforces chunking even for shapes already compiled whole.
+    Inside an outer ``jit`` the choice is fixed when that outer function traces.
+    """
+    if not hasattr(loss_fn, "base_sums"):
+        return loss_fn
+    whole = jax.jit(loss_fn)
+    chunked = _scan_loss(loss_fn, chunk_size)
+
+    def loss(params, x, y):
+        full = _use_full_batch(
+            loss_fn, chunk_size, x.shape[0], params.shape[0], full_batch_fits
+        )
+        return (whole if full else chunked)(params, x, y)
+
+    return loss
+
+
+def lbfgs_step_fns(
+    loss_fn: Callable, optimizer: Any, chunk_size: int
+) -> tuple[Callable, Callable]:
+    """Jitted ``(value_and_grad, update)`` for one L-BFGS step, shared by every warmup.
+
+    Both ``WarmupPhase`` and ``AdaptiveHybridStreamingOptimizer`` build their step
+    from this, so the value, gradient and line-search evaluations use the same
+    memory-aware loss (no model call sees more than ``chunk_size`` rows unless the
+    whole batch comfortably fits the memory budget). As in ``chunked_loss_fn`` the
+    choice is re-made on every call (``value_and_grad.decide``; a step decides once and
+    passes ``full=`` to both functions); one compiled pair is cached per choice.
+    """
+    pairs: dict[bool, tuple[Callable, Callable]] = {}
+
+    def pair(full: bool) -> tuple[Callable, Callable]:
+        if full not in pairs:
+            eval_loss = loss_fn if full else _scan_loss(loss_fn, chunk_size)
+
+            @jax.jit
+            def value_and_grad(p, x, y):
+                return jax.value_and_grad(eval_loss)(p, x, y)
+
+            @jax.jit
+            def update(grads, state, p, value, x, y):
+                return optimizer.update(
+                    grads,
+                    state,
+                    p,
+                    value=value,
+                    grad=grads,
+                    value_fn=lambda q: eval_loss(q, x, y),
+                )
+
+            pairs[full] = (value_and_grad, update)
+        return pairs[full]
+
+    def decide(p, x) -> bool:
+        """The memory decision for one step: call once, pass as ``full=`` to both."""
+        return _use_full_batch(loss_fn, chunk_size, x.shape[0], p.shape[0], None)
+
+    def value_and_grad(p, x, y, full: bool | None = None):
+        return pair(decide(p, x) if full is None else full)[0](p, x, y)
+
+    def update(grads, state, p, value, x, y, full: bool | None = None):
+        fns = pair(decide(p, x) if full is None else full)
+        return fns[1](grads, state, p, value, x, y)
+
+    value_and_grad.decide = decide  # type: ignore[attr-defined]
+    return value_and_grad, update
+
+
 def _create_lbfgs_optimizer(
     config: HybridStreamingConfig,
     params: jnp.ndarray,
@@ -109,7 +262,9 @@ def _create_lbfgs_optimizer(
         )
 
     optimizer = optax.lbfgs(
-        learning_rate=initial_step_size,
+        # The backtracking search is already capped at max_learning_rate=
+        # initial_step_size; a learning_rate on top applied s**2 to the direction.
+        learning_rate=None if line_search_type == "backtracking" else initial_step_size,
         memory_size=config.lbfgs_history_size,
         scale_init_precond=True,
         linesearch=linesearch,
@@ -125,9 +280,25 @@ def _create_lbfgs_optimizer(
     return optimizer, opt_state
 
 
+@jax.jit
+def _safe_norm(v: jnp.ndarray) -> jnp.ndarray:
+    """L2 norm that survives finite entries above ~1e154 (JIT-safe, no host sync).
+
+    ``jnp.linalg.norm`` squares first and returns ``inf`` there. The plain norm is
+    kept whenever it is finite (bit-identical results); otherwise the vector is
+    scaled by its largest component. Non-finite input still gives inf/nan.
+    """
+    plain = jnp.linalg.norm(v)
+    m = jnp.max(jnp.abs(v), initial=0.0)
+    ok = jnp.isfinite(m) & (m > 0)
+    m1 = jnp.where(ok, m, 1.0)
+    scaled = m1 * jnp.sqrt(jnp.sum((v / m1) ** 2))
+    return jnp.where(jnp.isfinite(plain), plain, jnp.where(ok, scaled, m))
+
+
 def _clip_update_norm(updates: jnp.ndarray, max_norm: float) -> jnp.ndarray:
     """Limit warmup updates with the shared JIT-compatible L2 constraint."""
-    update_norm = jnp.linalg.norm(updates)
+    update_norm = _safe_norm(updates)
     scale = jnp.minimum(1.0, max_norm / (update_norm + 1e-10))
     return updates * scale
 
@@ -360,6 +531,20 @@ class WarmupPhase:
         phase_history: list[dict[str, Any]],
         best_tracker: dict[str, Any],
     ) -> dict[str, Any]:
+        """Run Phase 1 L-BFGS warmup (see :meth:`_run`); always ends its telemetry token."""
+        self._warmup_token = None
+        try:
+            return self._run(data_source, initial_params, phase_history, best_tracker)
+        finally:
+            get_defense_telemetry().record_warmup_end(self._warmup_token)
+
+    def _run(
+        self,
+        data_source: tuple[jnp.ndarray, jnp.ndarray],
+        initial_params: jnp.ndarray,
+        phase_history: list[dict[str, Any]],
+        best_tracker: dict[str, Any],
+    ) -> dict[str, Any]:
         """Run Phase 1 L-BFGS warmup.
 
         Parameters
@@ -402,7 +587,7 @@ class WarmupPhase:
 
         # Record telemetry for warmup start
         telemetry = get_defense_telemetry()
-        telemetry.record_warmup_start()
+        self._warmup_token = telemetry.record_warmup_start()
 
         # =====================================================
         # LAYER 1: Warm Start Detection
@@ -767,8 +952,20 @@ class WarmupPhase:
                 return params, float("inf"), float("inf"), opt_state, True
             raise ValueError("Numerical issues detected in L-BFGS step input")
 
+        # One jitted value/grad and update per (loss_fn, optimizer), as in the
+        # adaptive optimizer (shared helper, memory-aware chunking).
+        cached = getattr(self, "_lbfgs_jit", None)
+        if cached is None or cached[0] is not loss_fn or cached[1] is not optimizer:
+            cached = self._lbfgs_jit = (
+                loss_fn,
+                optimizer,
+                *lbfgs_step_fns(loss_fn, optimizer, self.config.chunk_size),
+            )
+        _value_and_grad, _update = cached[2], cached[3]
+
         # Compute loss and gradient
-        loss_value, grads = jax.value_and_grad(loss_fn)(params, x_batch, y_batch)
+        full = _value_and_grad.decide(params, x_batch)  # once per step
+        loss_value, grads = _value_and_grad(params, x_batch, y_batch, full=full)
 
         # Validate loss and gradients
         if not self._validate_numerics(
@@ -781,19 +978,11 @@ class WarmupPhase:
                 return params, float("inf"), float("inf"), opt_state, True
             raise ValueError("Numerical issues detected in L-BFGS step")
 
-        grad_norm = jnp.linalg.norm(grads)
-
-        def value_fn(p):
-            return loss_fn(p, x_batch, y_batch)
+        grad_norm = _safe_norm(grads)
 
         try:
-            updates, new_opt_state = optimizer.update(
-                grads,
-                opt_state,
-                params,
-                value=loss_value,
-                grad=grads,
-                value_fn=value_fn,
+            updates, new_opt_state = _update(
+                grads, opt_state, params, loss_value, x_batch, y_batch, full=full
             )
             line_search_failed = False
         except Exception as e:
@@ -804,11 +993,13 @@ class WarmupPhase:
             line_search_failed = True
 
             telemetry = get_defense_telemetry()
-            telemetry.record_lbfgs_line_search_failure(iteration, str(e))
+            telemetry.record_lbfgs_line_search_failure(
+                iteration, str(e), warmup=getattr(self, "_warmup_token", None)
+            )
 
         # Layer 4: Trust Region Constraint
         if self.config.enable_step_clipping:
-            original_update_norm = float(jnp.linalg.norm(updates))
+            original_update_norm = float(_safe_norm(updates))
             max_norm = self.config.max_warmup_step_size
             updates = self._clip_update_norm(updates, max_norm)
 

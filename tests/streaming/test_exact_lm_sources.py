@@ -896,7 +896,8 @@ def _lin(x, a, b):
 
 
 def _ill_fit(entry):
-    x = np.linspace(1000.0, 1001.0, 3000)
+    # [1, x] nearly collinear after column scaling: scaled sqrt(cond(H)) ~ 4e5 > COND_WARN
+    x = np.linspace(1e5, 1e5 + 1.0, 3000)
     y = 1 + x + 1e-3 * np.sin(7 * x)
     if entry == "direct":
         lm.exact_lm_fit(_lin, x, y, [1.0, 1.0])

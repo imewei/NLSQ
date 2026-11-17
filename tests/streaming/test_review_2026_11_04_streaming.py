@@ -68,7 +68,8 @@ def test_chunked_does_not_touch_global_numpy_rng():
     state = np.random.get_state()[1].copy()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        _fitter().fit(_model, x, y, p0=np.array([1.0, 1.0]))
+        # explicit opt-out: the NaN is what forces the retry path
+        _fitter().fit(_model, x, y, p0=np.array([1.0, 1.0]), check_finite=False)
     assert np.array_equal(np.random.get_state()[1], state)
 
 

@@ -49,12 +49,15 @@ from nlsq.precision.parameter_normalizer import (
 from nlsq.stability.guard import NumericalStabilityGuard
 from nlsq.streaming.hybrid_config import HybridStreamingConfig
 from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
+from nlsq.streaming.phases.gauss_newton import clip_to_radius, scaled_norm
 from nlsq.streaming.phases.warmup import (
     _chunked_loss,
     _clip_update_norm,
     _create_lbfgs_optimizer,
+    _safe_norm,
     _validate_group_labels,
     build_warmup_loss,
+    lbfgs_step_fns,
 )
 from nlsq.streaming.telemetry import (
     DefenseLayerTelemetry,
@@ -72,7 +75,18 @@ _lazy_imports: dict = {}
 # Module-level logger for warmup defense diagnostics
 _logger = get_logger("adaptive_hybrid_streaming")
 
+
+def _is_transient_gn_error(exc: BaseException) -> bool:
+    """True for numerical failures a smaller trust radius can plausibly cure."""
+    return isinstance(exc, ArithmeticError | np.linalg.LinAlgError) or (
+        type(exc).__name__ in ("XlaRuntimeError", "JaxRuntimeError")
+    )
+
+
 # Same text as least_squares.TERMINATION_MESSAGES[-2] (TRF's callback stop).
+# A cost-change/step stop only counts as convergence when the relative gradient
+# (see _relative_gradient) is below this: ~1e-9 at an optimum, ~1e-5 in a flat valley.
+_GN_RELGRAD_SUCCESS = 1e-6
 CALLBACK_STOP_MESSAGE = "Stopped because `callback` function raised `StopOptimization`."
 # convergence_reason -> scipy-style status (1 gtol, 2 ftol, 0 max iterations,
 # -2 callback stop); success is status != 0 with no phase failure.
@@ -306,6 +320,9 @@ class AdaptiveHybridStreamingOptimizer:
         # Used for efficient chunk-based cost evaluation with JAX lax.scan
         self._cost_scan_body_compiled: bool = False
 
+        # Telemetry token of the current warmup (None: most recent warmup)
+        self._warmup_token: int | None = None
+
     def _invoke_fit_callback(
         self,
         params: jnp.ndarray,
@@ -321,8 +338,8 @@ class AdaptiveHybridStreamingOptimizer:
         1-based and monotonic across Phase 1 and Phase 2, ``cost`` = 0.5 * sum
         of squared residuals, ``params`` physical (denormalized) NumPy values,
         and ``info`` = ``{"phase", "gradient_norm"}`` (gradient in normalized
-        coordinates). ``StopOptimization`` ends the fit at the current best
-        point (status -2); any other callback exception is logged, not fatal.
+        coordinates). ``StopOptimization``/``StopIteration`` ends the fit at the
+        current best point (status -2); any other callback exception is logged, not fatal.
         """
         if self._fit_callback is None:
             return
@@ -332,14 +349,18 @@ class AdaptiveHybridStreamingOptimizer:
             # Callers see physical parameters, not the optimizer's normalized ones.
             if self.normalizer is not None:
                 params = self.normalizer.denormalize(params)
-            call_user_callback(
+            stop = call_user_callback(
                 self._fit_callback,
                 iteration,
                 float(cost),
                 np.asarray(params),
                 {"phase": phase, "gradient_norm": float(gradient_norm)},
             )
-        except StopOptimization:
+            if isinstance(stop, bool | np.bool_) and stop:
+                # scipy convention (as TRF): a callback returning True stops
+                self._stop_requested = True
+        except (StopOptimization, StopIteration):
+            # StopIteration parity with TRF/least_squares (status -2)
             _logger.info("Optimization stopped by callback (StopOptimization)")
             self._stop_requested = True
         except Exception as exc:
@@ -481,12 +502,19 @@ class AdaptiveHybridStreamingOptimizer:
             # Use configured strategy
             strategy = self.config.normalization_strategy
 
+        # A hint (even all-ones) makes the normalizer treat |p0| < 10 eps as zero,
+        # matching _zero_p0_scales; with no hint those entries would get a ~1e-16
+        # scale and freeze. None from the probe means "no reference": unit scale.
+        zero_hint = self._zero_p0_scales(model, x_sample)
+        if zero_hint is None:
+            zero_hint = jnp.ones_like(self.original_p0)
+
         # Create ParameterNormalizer
         self.normalizer = ParameterNormalizer(
             p0=self.original_p0,
             bounds=bounds,
             strategy=strategy,
-            zero_p0_scales=self._zero_p0_scales(model, x_sample),
+            zero_p0_scales=zero_hint,
         )
 
         # Create NormalizedModelWrapper
@@ -1089,19 +1117,29 @@ class AdaptiveHybridStreamingOptimizer:
             if self.config.center_on_p0:
                 # Same window as sampling.center_samples_around_p0: clamp p0 into
                 # the box, keep the window width and shift it inward (clipping
-                # each end would shrink it at a bound). Infinite spans fall back
-                # to clipping p0 +/- halfwidth.
-                with np.errstate(invalid="ignore"):
-                    span = ub - lb
-                    finite = np.isfinite(span)
+                # each end would shrink it at a bound). A dimension is boxed when
+                # both endpoints are finite (``ub - lb`` can overflow for a wide
+                # finite box), and its arithmetic runs at half scale (an exact
+                # power-of-two) so nothing overflows. Open dimensions fall back to
+                # clipping p0 +/- halfwidth.
+                with np.errstate(invalid="ignore", over="ignore"):
+                    finite = np.isfinite(lb) & np.isfinite(ub)
                     pc = np.clip(p0, lb, ub)
-                    width = np.minimum(scale_factor * span, span)
-                    shifted = np.clip(pc - width / 2, lb, ub - width)
-                    range_half = np.where(finite, span * scale_factor / 2, halfwidth)
+                    lbh, ubh = 0.5 * lb, 0.5 * ub
+                    span_h = np.where(finite, ubh - lbh, 0.0)
+                    width_h = np.minimum(scale_factor * span_h, span_h)
+                    shifted_h = np.clip(0.5 * pc - width_h / 2, lbh, ubh - width_h)
+                    range_half = np.where(finite, span_h * scale_factor, halfwidth)
                     lb, ub = (
-                        np.where(finite, shifted, np.maximum(lb, pc - range_half)),
                         np.where(
-                            finite, shifted + width, np.minimum(ub, pc + range_half)
+                            finite,
+                            2.0 * shifted_h,
+                            np.maximum(lb, pc - range_half),
+                        ),
+                        np.where(
+                            finite,
+                            2.0 * (shifted_h + width_h),
+                            np.minimum(ub, pc + range_half),
                         ),
                     )
                 halfwidth = range_half
@@ -1122,9 +1160,18 @@ class AdaptiveHybridStreamingOptimizer:
         Parameters
         ----------
         data_source : tuple
-            Data as (x_data, y_data).
+            Data as (x_data, y_data); multi-dimensional ``x_data`` is points-first
+            ``(M, k)`` and is batched along axis 0, as everywhere in this engine.
         model : Callable
             Model function.
+
+        Notes
+        -----
+        Batches are ``(x, y)`` and candidates are ranked on the unweighted loss:
+        ``fit()`` rejects ``sigma`` (and ``data_mask``) with ``NotImplementedError``
+        before this runs, so there is no weighting to pass. If sigma support is added
+        to the engine, yield ``(x, y, sigma)`` batches here (1-D sigma only; a
+        covariance-matrix sigma would need whitening first).
 
         Returns
         -------
@@ -1345,22 +1392,12 @@ class AdaptiveHybridStreamingOptimizer:
         # eager optax L-BFGS update retraces its line search on every call.
         cached = self._lbfgs_jit
         if cached is None or cached[0] is not loss_fn or cached[1] is not optimizer:
-
-            @jax.jit
-            def _value_and_grad(p, x, y):
-                return jax.value_and_grad(loss_fn)(p, x, y)
-
-            @jax.jit
-            def _update(grads, state, p, value, x, y):
-                return optimizer.update(
-                    grads,
-                    state,
-                    p,
-                    value=value,
-                    grad=grads,
-                    value_fn=lambda q: loss_fn(q, x, y),
-                )
-
+            # The model never sees more than config.chunk_size rows at once
+            # (value, gradient and line-search evaluations alike); shared with
+            # WarmupPhase.
+            _value_and_grad, _update = lbfgs_step_fns(
+                loss_fn, optimizer, self.config.chunk_size
+            )
             cached = self._lbfgs_jit = (
                 loss_fn,
                 optimizer,
@@ -1370,7 +1407,8 @@ class AdaptiveHybridStreamingOptimizer:
         _value_and_grad, _update = cached[2], cached[3]
 
         # Compute loss and gradient
-        loss_value, grads = _value_and_grad(params, x_batch, y_batch)
+        full = _value_and_grad.decide(params, x_batch)  # once per step
+        loss_value, grads = _value_and_grad(params, x_batch, y_batch, full=full)
 
         # Validate loss and gradients
         if not self._validate_numerics(
@@ -1389,12 +1427,12 @@ class AdaptiveHybridStreamingOptimizer:
             raise ValueError("Numerical issues detected in L-BFGS step")
 
         # Compute gradient norm
-        grad_norm = jnp.linalg.norm(grads)
+        grad_norm = _safe_norm(grads)
 
         # Apply optimizer updates (L-BFGS with line search)
         try:
             updates, new_opt_state = _update(
-                grads, opt_state, params, loss_value, x_batch, y_batch
+                grads, opt_state, params, loss_value, x_batch, y_batch, full=full
             )
             line_search_failed = False
         except Exception as e:
@@ -1408,12 +1446,14 @@ class AdaptiveHybridStreamingOptimizer:
 
             # Record line search failure in telemetry
             telemetry = get_defense_telemetry()
-            telemetry.record_lbfgs_line_search_failure(iteration, str(e))
+            telemetry.record_lbfgs_line_search_failure(
+                iteration, str(e), warmup=self._warmup_token
+            )
 
         # Layer 4: Trust Region Constraint - clip update magnitude (JIT-compatible)
         if self.config.enable_step_clipping:
             # Track original norm for telemetry before clipping
-            original_update_norm = float(jnp.linalg.norm(updates))
+            original_update_norm = float(_safe_norm(updates))
             max_norm = self.config.max_warmup_step_size
 
             updates = self._clip_update_norm(updates, max_norm)
@@ -2003,7 +2043,7 @@ class AdaptiveHybridStreamingOptimizer:
 
         # Record telemetry for warmup start
         telemetry = get_defense_telemetry()
-        telemetry.record_warmup_start()
+        self._warmup_token = telemetry.record_warmup_start()
 
         # LAYER 1: Warm Start Detection
         should_exit, result, initial_loss, relative_loss = (
@@ -2078,6 +2118,7 @@ class AdaptiveHybridStreamingOptimizer:
                 telemetry.record_lbfgs_line_search_failure(
                     iteration - 1,
                     f"step did not decrease loss: {prev_loss:.6e} -> {loss_value:.6e}",
+                    warmup=self._warmup_token,
                 )
 
             # Track best parameters. fit() seeds Phase 2 from this best_params
@@ -2121,7 +2162,7 @@ class AdaptiveHybridStreamingOptimizer:
                     self._save_checkpoint(checkpoint_path)
 
             # Check switch criteria after minimum warmup iterations
-            if iteration >= self.config.warmup_iterations:
+            if iteration + 1 >= self.config.warmup_iterations:
                 should_switch, reason = self._check_phase1_switch_criteria(
                     iteration=iteration,
                     current_loss=loss_value,
@@ -2466,20 +2507,140 @@ class AdaptiveHybridStreamingOptimizer:
         step = d * (Vt.T @ step_hat)
         JTr = JTr_orig
 
-        # Apply trust region constraint
-        step_norm = jnp.linalg.norm(step)
-        step = step * jnp.where(step_norm > trust_radius, trust_radius / step_norm, 1.0)
+        # Trust-region constraint: when the Gauss-Newton step is too long, the
+        # TR step is the DAMPED solve (H + lam I)^-1 g with ||step|| = radius,
+        # not the Newton step shrunk along its own direction. On a flat valley
+        # the Newton direction is dominated by the near-null curvature
+        # directions, so shrinking it makes tiny, nearly useless steps (the fit
+        # then "converges" on the cost-change test far from the optimum).
+        step = AdaptiveHybridStreamingOptimizer._damped_step_to_radius(
+            step, JTJ, JTr, keep, trust_radius
+        )
+        step = clip_to_radius(step, trust_radius)
 
         # Compute predicted reduction: -g^T δ - 0.5 δ^T H δ
         # where g = -J^T r (gradient) and H = J^T J (Hessian approx)
         # Since g = -JTr, we have: -g^T δ = JTr^T δ
         # predicted_reduction = JTr^T δ - 0.5 δ^T (J^T J) δ
-        predicted_reduction = jnp.maximum(
-            jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step),
-            0.0,
+        # Evaluated on a power-of-two scaled copy (exact) so the intermediate
+        # products cannot overflow for a huge finite J^T J. Host numpy: XLA CPU
+        # flushes the reciprocal of a huge scale to zero.
+        H = np.asarray(JTJ, dtype=float)
+        g_np = np.asarray(JTr, dtype=float)
+        step_np = np.asarray(step, dtype=float)
+        gain_scale = float(
+            np.ldexp(1.0, np.frexp(np.max(np.abs(H), initial=0.0))[1] - 1)
+        )
+        gain_scale = gain_scale if gain_scale > 0 else 1.0
+        predicted_reduction = jnp.asarray(
+            gain_scale
+            * max(
+                float(
+                    np.dot(g_np / gain_scale, step_np)
+                    - 0.5 * np.dot(step_np, (H / gain_scale) @ step_np)
+                ),
+                0.0,
+            )
         )
 
         return step, predicted_reduction
+
+    def _relative_gradient(
+        self,
+        params: jnp.ndarray,
+        JTJ: jnp.ndarray,
+        JTr: jnp.ndarray,
+        residual_sum_sq: float,
+        n_points: int,
+    ) -> float:
+        """Scale-free first-order optimality: ``max_j |J_j.r| / (||J_j|| ||r||)``.
+
+        The cosine between the residual and each Jacobian column (MINPACK/SciPy
+        ``gtol`` convention), so it is independent of parameter and data units:
+        ~1e-9 at a least-squares optimum, ~1e-4 on a flat valley that only a
+        cost-change test mistakes for convergence. Components held at an active
+        bound by an outward descent direction are excluded.
+        """
+        # Same objective as the step: data term plus the group-variance penalty.
+        JTJ, JTr, residual_sum_sq = self._add_group_variance_terms(
+            params, JTJ, JTr, residual_sum_sq, n_points
+        )
+        g = np.asarray(JTr, dtype=float)
+        if self.normalized_bounds is not None:
+            lb, ub = (np.asarray(b, dtype=float) for b in self.normalized_bounds)
+            q = np.asarray(params, dtype=float)
+            g = np.where(((q <= lb) & (g <= 0)) | ((q >= ub) & (g >= 0)), 0.0, g)
+        denom = np.sqrt(np.maximum(np.diag(np.asarray(JTJ, dtype=float)), 0.0)) * (
+            np.sqrt(max(float(residual_sum_sq), 0.0))
+        )
+        cos = np.where(denom > 0, np.abs(g) / np.where(denom > 0, denom, 1.0), 0.0)
+        return float(np.max(cos)) if cos.size else 0.0
+
+    @staticmethod
+    def _damped_step_to_radius(step, JTJ, JTr, keep, radius):
+        """Euclidean trust-region step of norm ``radius`` when ``step`` is longer.
+
+        Solves ``(H + lam I) p = g`` with ``||p||_2 = radius`` (Moré-Sorensen) on
+        the identifiable parameters ``keep``, from the eigendecomposition of
+        ``H = JTJ``; the damping is in the same (Euclidean) norm the radius is
+        measured in. Returns ``step`` unchanged when it already fits or the
+        inputs are not finite.
+        """
+        step_norm = scaled_norm(step)
+        if not np.isfinite(step_norm) or step_norm <= radius or radius <= 0:
+            return step
+        keep_np = np.asarray(keep, dtype=bool)
+        h = np.asarray(JTJ, dtype=float)[np.ix_(keep_np, keep_np)]
+        g = np.asarray(JTr, dtype=float)[keep_np]
+        if not (np.all(np.isfinite(h)) and np.all(np.isfinite(g))):
+            return step
+        # Scale by an exact power of two so symmetrising / eigh cannot overflow on
+        # a huge finite Hessian. (H/s + lam' I) p = g/s has the same p as the
+        # unscaled system, with lam' = lam/s, so the step needs no rescaling.
+        scale = float(np.max(np.abs(h), initial=0.0))
+        if scale > 0:
+            scale = float(np.ldexp(1.0, np.frexp(scale)[1] - 1))
+            h = h / scale
+            g = g / scale
+        lam_eig, q = np.linalg.eigh(0.5 * h + 0.5 * h.T)
+        lam_eig = np.maximum(lam_eig, 0.0)
+        c = q.T @ g
+        if not (np.all(np.isfinite(lam_eig)) and np.all(np.isfinite(c))):
+            import warnings
+
+            from nlsq.result import OptimizeWarning
+
+            warnings.warn(
+                "Gauss-Newton trust-region solve could not form a finite "
+                "eigensystem; using the shrunk Newton step (not the "
+                "trust-region optimum).",
+                OptimizeWarning,
+                stacklevel=2,
+            )
+            return step
+
+        def norm(lam):
+            return scaled_norm(c / (lam_eig + lam))
+
+        hi = max(float(lam_eig.max(initial=0.0)), 1e-300)
+        for _ in range(2000):  # grow until the damped step fits
+            if norm(hi) <= radius:
+                break
+            hi *= 2.0
+        else:
+            return step
+        lo = 0.0
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            if mid in (lo, hi):
+                break
+            if norm(mid) > radius:
+                lo = mid
+            else:
+                hi = mid
+        full = np.zeros(len(keep_np))
+        full[keep_np] = q @ (c / (lam_eig + hi))
+        return jnp.asarray(full)
 
     # =========================================================================
     # CG-based Gauss-Newton Solver Methods (Task Group 3)
@@ -2761,9 +2922,7 @@ class AdaptiveHybridStreamingOptimizer:
         step_final, _r_final, _, _, iterations, converged = final_state
 
         # Apply trust region constraint
-        step_norm = jnp.linalg.norm(step_final)
-        if step_norm > trust_radius:
-            step_final = step_final * (trust_radius / step_norm)
+        step_final = clip_to_radius(step_final, trust_radius)
 
         return step_final, int(iterations), bool(converged)
 
@@ -2870,65 +3029,21 @@ class AdaptiveHybridStreamingOptimizer:
         approaches (e.g., dogleg, 2D subspace) are used in trf.py but
         require the full Jacobian.
         """
-        step_norm = jnp.linalg.norm(step)
+        return clip_to_radius(step, trust_radius)
 
-        if step_norm <= trust_radius:
-            # Step is within trust region
-            return step
-        # Scale step to trust region boundary
-        return step * (trust_radius / step_norm)
-
-    def _gauss_newton_iteration(
+    def _add_group_variance_terms(
         self,
-        data_source: tuple[jnp.ndarray, jnp.ndarray],
         current_params: jnp.ndarray,
-        trust_radius: float,
-    ) -> dict[str, Any]:
-        """Perform one complete Gauss-Newton iteration with J^T J accumulation.
+        JTJ: jnp.ndarray,
+        JTr: jnp.ndarray,
+        total_cost: float,
+        n_points: int,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
+        """Add the group-variance penalty to (J^T J, J^T r, cost) at ``current_params``.
 
-        This method:
-        1. Accumulates J^T J and J^T r across all data chunks
-        2. Solves the trust region subproblem for the step
-        3. Evaluates the new parameters and cost
-        4. Updates trust region based on actual vs predicted reduction
-
-        Parameters
-        ----------
-        data_source : tuple of array_like
-            Full dataset as (x_data, y_data)
-        current_params : array_like
-            Current parameters in normalized space of shape (n_params,)
-        trust_radius : float
-            Current trust region radius
-
-        Returns
-        -------
-        result : dict
-            Iteration result with keys:
-            - 'new_params': Updated parameters
-            - 'new_cost': New cost value
-            - 'step': Parameter step taken
-            - 'actual_reduction': Actual cost reduction
-            - 'predicted_reduction': Predicted cost reduction
-            - 'trust_radius': Updated trust region radius
-            - 'gradient_norm': Gradient norm ||J^T r||
-
-        Notes
-        -----
-        Uses chunk-based accumulation (``_accumulate_pass``) for memory efficiency.
-        Cost evaluation of the trial step dispatches between JAX scan (GPU/TPU)
-        and Python loops (CPU) based on config.loop_strategy.
+        Returns the inputs unchanged when the regularization is disabled. Shared by
+        the Gauss-Newton step and the stationarity check so both see the same objective.
         """
-        x_data, y_data = data_source
-        n_points = len(x_data)
-
-        # Reuse the pass at these exact parameters when Phase 2 already computed it.
-        cache = self._pass_cache
-        if cache is not None and np.array_equal(cache[0], np.asarray(current_params)):
-            _, JTJ, JTr, total_cost = cache
-        else:
-            JTJ, JTr, total_cost = self._accumulate_pass(current_params, x_data, y_data)
-
         # Add group variance regularization if enabled
         # This prevents per-angle parameters from absorbing angle-dependent signals
         if (
@@ -2983,6 +3098,62 @@ class AdaptiveHybridStreamingOptimizer:
                     * float(jnp.where(jnp.isfinite(group_var), group_var, 0.0))
                     * n_points
                 )
+        return JTJ, JTr, total_cost
+
+    def _gauss_newton_iteration(
+        self,
+        data_source: tuple[jnp.ndarray, jnp.ndarray],
+        current_params: jnp.ndarray,
+        trust_radius: float,
+    ) -> dict[str, Any]:
+        """Perform one complete Gauss-Newton iteration with J^T J accumulation.
+
+        This method:
+        1. Accumulates J^T J and J^T r across all data chunks
+        2. Solves the trust region subproblem for the step
+        3. Evaluates the new parameters and cost
+        4. Updates trust region based on actual vs predicted reduction
+
+        Parameters
+        ----------
+        data_source : tuple of array_like
+            Full dataset as (x_data, y_data)
+        current_params : array_like
+            Current parameters in normalized space of shape (n_params,)
+        trust_radius : float
+            Current trust region radius
+
+        Returns
+        -------
+        result : dict
+            Iteration result with keys:
+            - 'new_params': Updated parameters
+            - 'new_cost': New cost value
+            - 'step': Parameter step taken
+            - 'actual_reduction': Actual cost reduction
+            - 'predicted_reduction': Predicted cost reduction
+            - 'trust_radius': Updated trust region radius
+            - 'gradient_norm': Gradient norm ||J^T r||
+
+        Notes
+        -----
+        Uses chunk-based accumulation (``_accumulate_pass``) for memory efficiency.
+        Cost evaluation of the trial step dispatches between JAX scan (GPU/TPU)
+        and Python loops (CPU) based on config.loop_strategy.
+        """
+        x_data, y_data = data_source
+        n_points = len(x_data)
+
+        # Reuse the pass at these exact parameters when Phase 2 already computed it.
+        cache = self._pass_cache
+        if cache is not None and np.array_equal(cache[0], np.asarray(current_params)):
+            _, JTJ, JTr, total_cost = cache
+        else:
+            JTJ, JTr, total_cost = self._accumulate_pass(current_params, x_data, y_data)
+
+        JTJ, JTr, total_cost = self._add_group_variance_terms(
+            current_params, JTJ, JTr, total_cost, n_points
+        )
 
         # Active set: a variable on a bound whose descent direction (JTr) points out
         # of the box is held fixed, as in exact_lm.free_set.
@@ -3160,6 +3331,12 @@ class AdaptiveHybridStreamingOptimizer:
                 return iter_result, trust_radius
 
             except Exception as exc:
+                # Only numerical failures are worth retrying with a smaller
+                # radius. A TypeError / shape ValueError is deterministic: retrying
+                # it (and then "falling back") only hides the bug, so let it reach
+                # fit()'s Phase 2 failure handler, which surfaces it in the result.
+                if not _is_transient_gn_error(exc):
+                    raise
                 if retry_attempt < max_retries:
                     trust_radius *= 0.5
                     continue
@@ -3190,6 +3367,7 @@ class AdaptiveHybridStreamingOptimizer:
                     "actual_reduction": 0.0,
                     "trust_radius": trust_radius,
                     "retry_exhausted": True,
+                    "error": f"{type(exc).__name__}: {exc}",
                 }
                 return iter_result, trust_radius
 
@@ -3341,6 +3519,7 @@ class AdaptiveHybridStreamingOptimizer:
             init_JTr,
             final_residual_sum_sq,
         )
+        final_JTr = init_JTr
 
         if verbose >= 1:
             init_elapsed = time.time() - init_start_time
@@ -3406,6 +3585,7 @@ class AdaptiveHybridStreamingOptimizer:
         if self._stop_requested:  # stopped during Phase 1
             return _stopped_by_callback(0, float(jnp.linalg.norm(init_JTr)))
 
+        last_gn_error: str | None = None
         for iteration in range(self.config.gauss_newton_max_iterations):
             iter_start_time = time.time()
 
@@ -3427,6 +3607,8 @@ class AdaptiveHybridStreamingOptimizer:
             # and actual_reduction are sentinel 0.0 values, not real measurements,
             # so they must not be read as "converged" below.
             retry_exhausted = iter_result.get("retry_exhausted", False)
+            if iter_result.get("error"):
+                last_gn_error = iter_result["error"]
             # On retry exhaustion, iter_result["trust_radius"] is whatever the
             # LAST FAILED _gauss_newton_iteration call computed internally
             # (its recovery-reset logic can bump the radius back up in
@@ -3466,16 +3648,6 @@ class AdaptiveHybridStreamingOptimizer:
                 phase=2,
                 gradient_norm=gradient_norm,
             )
-
-            # Save checkpoint periodically if enabled
-            if self._should_save_checkpoint(iteration):
-                checkpoint_path = (
-                    Path(self.config.checkpoint_dir)
-                    / f"checkpoint_phase2_iter{iteration + 1}.h5"
-                )
-                self.current_phase = 2
-                self.normalized_params = current_params
-                self._save_checkpoint(checkpoint_path)
 
             # Accept step if cost decreased
             # Save cost before step for convergence check. actual_reduction is
@@ -3526,13 +3698,27 @@ class AdaptiveHybridStreamingOptimizer:
                     retry_exhausted or gradient_norm > 1e-4
                 )
                 if should_reset_for_stall:
-                    trust_radius = self.config.trust_region_initial
+                    # Not after non-finite trials: trust_region_initial is the
+                    # radius that produced them, so keep the shrunk radius.
+                    if not retry_exhausted:
+                        trust_radius = self.config.trust_region_initial
                     self._consecutive_rejections = 0
                     if verbose >= 1:
                         print(
                             f"  Stall detected: resetting trust radius to "
                             f"{trust_radius:.4f}",
                         )
+
+            # Save checkpoint periodically if enabled (after the accept/reject
+            # update, so it holds the point this iteration ended at)
+            if self._should_save_checkpoint(iteration):
+                checkpoint_path = (
+                    Path(self.config.checkpoint_dir)
+                    / f"checkpoint_phase2_iter{iteration + 1}.h5"
+                )
+                self.current_phase = 2
+                self.normalized_params = current_params
+                self._save_checkpoint(checkpoint_path)
 
             # After the accept/reject update, so final_JTJ matches best_params.
             if self._stop_requested:
@@ -3588,6 +3774,15 @@ class AdaptiveHybridStreamingOptimizer:
                 not retry_exhausted
                 and not iter_result.get("step_at_boundary", False)
                 and relative_change < self.config.gauss_newton_tol
+                # Keep iterating while still far from first-order stationary
+                and self._relative_gradient(
+                    current_params,
+                    final_JTJ,
+                    final_JTr,
+                    final_residual_sum_sq,
+                    len(data_source[0]),
+                )
+                <= _GN_RELGRAD_SUCCESS
             ):
                 phase_record = {
                     "phase": 2,
@@ -3623,6 +3818,13 @@ class AdaptiveHybridStreamingOptimizer:
         reported_final_cost = (
             best_cost if jnp.isfinite(best_cost) else final_residual_sum_sq
         )
+        relative_gradient = self._relative_gradient(
+            current_params,
+            final_JTJ,
+            final_JTr,
+            final_residual_sum_sq,
+            len(data_source[0]),
+        )
         phase_record = {
             "phase": 2,
             "name": "gauss_newton",
@@ -3632,10 +3834,14 @@ class AdaptiveHybridStreamingOptimizer:
             "convergence_reason": "Maximum iterations reached",
             "gradient_norm": gradient_norm,
             "timestamp": time.time(),
+            "last_error": last_gn_error,
+            "relative_gradient": relative_gradient,
         }
         self.phase_history.append(phase_record)
 
         return {
+            "last_error": last_gn_error,
+            "relative_gradient": relative_gradient,
             "final_params": best_params,  # Use best, not current
             "best_params": best_params,
             "best_cost": best_cost,
@@ -4222,7 +4428,7 @@ class AdaptiveHybridStreamingOptimizer:
         callback : Callable, optional
             ``callback(iteration, cost, params, info)`` as for ``curve_fit``,
             called every config.callback_frequency iterations (see
-            :meth:`_invoke_fit_callback`); raise ``StopOptimization`` to stop.
+            :meth:`_invoke_fit_callback`); raise ``StopOptimization`` (or ``StopIteration``) to stop.
             The legacy ``callback(params, loss, iteration)`` form is not
             supported and raises ``TypeError`` before any work is done.
         verbose : int, default=1
@@ -4392,12 +4598,15 @@ class AdaptiveHybridStreamingOptimizer:
         phase1_failure: str | None = None
         phase1_start = time.time()
         try:
-            phase1_result = self._run_phase1_warmup(
-                data_source=(x_data, y_data),
-                model=func,
-                p0=p0_array,
-                bounds=bounds,
-            )
+            try:
+                phase1_result = self._run_phase1_warmup(
+                    data_source=(x_data, y_data),
+                    model=func,
+                    p0=p0_array,
+                    bounds=bounds,
+                )
+            finally:
+                get_defense_telemetry().record_warmup_end(self._warmup_token)
         except Exception as exc:
             phase1_failure = f"{type(exc).__name__}: {exc}"
             # Log unconditionally -- see the matching comment on the Phase 2
@@ -4561,8 +4770,24 @@ class AdaptiveHybridStreamingOptimizer:
         # ============================================================
         total_duration = time.time() - total_start_time
 
-        # Compute final residuals for 'fun' field
-        final_predictions = func(x_data, *phase3_result["popt"])
+        # Compute final residuals for 'fun' field,
+        # in chunk_size pieces: the model was chosen to fit per chunk, not whole.
+        chunk = self.config.chunk_size
+        if len(x_data) <= chunk:
+            final_predictions = func(x_data, *phase3_result["popt"])
+        else:
+            final_predictions = jnp.concatenate(
+                [
+                    # broadcast: a model may return a scalar for a chunk
+                    jnp.broadcast_to(
+                        jnp.asarray(
+                            func(x_data[s : s + chunk], *phase3_result["popt"])
+                        ),
+                        np.shape(y_data[s : s + chunk]),
+                    )
+                    for s in range(0, len(x_data), chunk)
+                ]
+            )
         final_residuals = y_data - final_predictions
 
         # Build streaming diagnostics
@@ -4593,6 +4818,19 @@ class AdaptiveHybridStreamingOptimizer:
             if pipeline_failure
             else phase2_result["convergence_reason"]
         )
+        if (
+            phase2_result["convergence_reason"] == "Maximum iterations reached"
+            and phase2_result.get("relative_gradient", 0.0) > _GN_RELGRAD_SUCCESS
+        ):
+            result_message += (
+                f" (not first-order stationary: relative gradient "
+                f"{phase2_result['relative_gradient']:.1e} > {_GN_RELGRAD_SUCCESS:.0e}; "
+                "if more iterations do not help, the fit may be stuck in a flat "
+                "valley: try a different p0 or warmup settings)"
+            )
+        if phase2_result.get("last_error"):
+            # Fault tolerance substituted best-known params for a failed step.
+            result_message += f" (a Gauss-Newton iteration fell back after: {phase2_result['last_error']})"
         # A phase failure or max-iterations stop is status 0 / success=False
         # (curve_fit full_output then reports ier=5, as for TRF).
         status = (
@@ -4608,6 +4846,12 @@ class AdaptiveHybridStreamingOptimizer:
             "success": status != 0,
             "status": status,
             "message": result_message,
+            # Structured stop reason for consumers (the message text is free-form).
+            "convergence_reason": (
+                "Phase failed"
+                if pipeline_failure
+                else phase2_result["convergence_reason"]
+            ),
             "nit": nit,
             # Approximate full-data model evaluations: one per L-BFGS iteration
             # (line-search re-evaluations not counted), two per Gauss-Newton
