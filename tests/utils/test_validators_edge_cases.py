@@ -205,8 +205,14 @@ class TestValidateDataShapes:
     def test_points_less_than_params(self):
         """Test with fewer points than parameters."""
         ydata = np.array([1.0, 2.0])
-        errors, _warnings = self.validator._validate_data_shapes(2, ydata, 5)
+        errors, _warnings = self.validator._validate_data_shapes(
+            2, ydata, 5, method="lm"
+        )
         assert any("as many data points" in e for e in errors)
+        # trf (default) accepts underdetermined fits and only warns
+        errors, warns = self.validator._validate_data_shapes(2, ydata, 5)
+        assert not any("as many data points" in e for e in errors)
+        assert any("fewer data points" in w for w in warns)
 
     def test_boundary_case_equal_points_params(self):
         """Test boundary case: points == params is accepted (matches default path)."""

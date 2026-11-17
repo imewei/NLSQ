@@ -4,7 +4,10 @@ This module provides informative error messages that help users debug
 optimization failures by providing diagnostics and actionable recommendations.
 
 The main component is the :class:`OptimizationError` exception, which is raised
-when curve fitting fails to converge. Unlike generic errors, it provides:
+when curve fitting fails with a non-convergence status. Exhausting ``max_nfev``
+is *not* such a failure: ``curve_fit`` emits an ``OptimizeWarning`` and returns
+the best parameters found (check ``result.success`` / catch the warning).
+Unlike generic errors, the exception provides:
 
 - **Diagnostics**: Final cost, gradient norm, iterations, function evaluations
 - **Reasons**: Why the optimization failed (e.g., max iterations, gradient too large)
@@ -12,8 +15,10 @@ when curve fitting fails to converge. Unlike generic errors, it provides:
 
 Examples
 --------
-The enhanced error messages are raised automatically when optimization fails:
+The enhanced error messages are raised automatically when optimization fails
+with a non-convergence status. Hitting ``max_nfev`` only warns:
 
+>>> import warnings
 >>> from nlsq import curve_fit
 >>> import jax.numpy as jnp
 >>> import numpy as np
@@ -24,13 +29,10 @@ The enhanced error messages are raised automatically when optimization fails:
 >>> xdata = np.linspace(0, 1, 10)
 >>> ydata = difficult_func(xdata, 1, -5)
 >>>
->>> try:
+>>> with warnings.catch_warnings(record=True) as caught:
+...     warnings.simplefilter("always")
 ...     popt, pcov = curve_fit(difficult_func, xdata, ydata, p0=[0.1, 0.1], max_nfev=5)
-... except OptimizationError as e:
-...     print(e)
-...     # Prints detailed diagnostics and recommendations
-...     print(f"Reasons: {e.reasons}")
-...     print(f"Recommendations: {e.recommendations}")
+>>> # caught contains an OptimizeWarning when max_nfev was exhausted
 
 See Also
 --------
@@ -79,7 +81,7 @@ def analyze_failure(
     if hasattr(result, "grad") and result.grad is not None:
         grad = np.asarray(result.grad)
         grad_norm = np.linalg.norm(grad, ord=np.inf)
-        if grad_norm > gtol:
+        if gtol is not None and grad_norm > gtol:
             reasons.append(
                 f"Gradient norm {grad_norm:.2e} exceeds tolerance {gtol:.2e}",
             )
@@ -94,7 +96,7 @@ def analyze_failure(
         reasons.append(f"Reached maximum function evaluations ({max_nfev})")
         recommendations.append(f"✓ Increase iteration limit: max_nfev={max_nfev * 2}")
         recommendations.append("✓ Provide better initial guess p0")
-        recommendations.append("✓ Try different optimization method (trf/dogbox/lm)")
+        recommendations.append("✓ Try different optimization method (trf/lm)")
 
     # Check for numerical issues
     if hasattr(result, "x") and result.x is not None:
@@ -219,14 +221,16 @@ class OptimizationError(RuntimeError):
     >>> y = 3 * np.exp(-0.5 * x) + 1
     >>>
     >>> try:
-    ...     # Force failure with very low max_nfev
-    ...     popt, pcov = curve_fit(exponential, x, y, p0=[1, 1, 1], max_nfev=3)
+    ...     popt, pcov = curve_fit(exponential, x, y, p0=[1, 1, 1])
     ... except OptimizationError as e:
     ...     # Access error attributes programmatically
-    ...     if any("maximum" in r.lower() for r in e.reasons):
-    ...         # Auto-retry with higher max_nfev
-    ...         popt, pcov = curve_fit(exponential, x, y, p0=[1, 1, 1], max_nfev=200)
-    ...         print("Auto-retry succeeded!")
+    ...     print(e.reasons)
+    ...     print(e.recommendations)
+
+    Exhausting ``max_nfev`` does not raise: ``curve_fit`` emits an
+    ``OptimizeWarning`` and returns the best parameters found, so catch the
+    warning (``warnings.catch_warnings``) to detect it and retry with a larger
+    ``max_nfev``.
 
     See Also
     --------
@@ -249,7 +253,8 @@ class OptimizationError(RuntimeError):
             grad = np.asarray(result.grad)
             grad_norm = np.linalg.norm(grad, ord=np.inf)
             diagnostics["Gradient norm"] = f"{grad_norm:.6e}"
-            diagnostics["Gradient tolerance"] = f"{gtol:.6e}"
+            if gtol is not None:
+                diagnostics["Gradient tolerance"] = f"{gtol:.6e}"
 
         if hasattr(result, "nfev"):
             diagnostics["Function evaluations"] = f"{result.nfev} / {max_nfev}"

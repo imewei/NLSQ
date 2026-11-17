@@ -141,7 +141,9 @@ class TestValidateCurveFitBasic(unittest.TestCase):
         ydata = np.array([2.0])
 
         errors, _warnings_list, _x_clean, _y_clean = (
-            self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
+            self.validator.validate_curve_fit_inputs(
+                self.linear_func, xdata, ydata, method="lm"
+            )
         )
 
         self.assertTrue(
@@ -161,16 +163,17 @@ class TestValidateCurveFitEdgeCases(unittest.TestCase):
 
         self.linear_func = linear
 
-    def test_identical_x_values_error(self):
-        """Test error when all x values are identical."""
+    def test_identical_x_values_warning(self):
+        """All-identical x is a warning (SciPy parity: constant-x fits are valid)."""
         xdata = np.array([2.0, 2.0, 2.0, 2.0, 2.0])
         ydata = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 
-        errors, _warnings_list, _x_clean, _y_clean = (
+        errors, warnings_list, _x_clean, _y_clean = (
             self.validator.validate_curve_fit_inputs(self.linear_func, xdata, ydata)
         )
 
-        self.assertTrue(any("x values are identical" in e for e in errors))
+        self.assertFalse(any("x values are identical" in e for e in errors))
+        self.assertTrue(any("x values are identical" in w for w in warnings_list))
 
     def test_identical_y_values_warning(self):
         """Test warning when all y values are identical."""
@@ -539,7 +542,7 @@ class TestValidateLeastSquaresInputs(unittest.TestCase):
         """Test all valid methods."""
         x0 = np.array([1.0, 2.0, 3.0])
 
-        for method in ["trf", "dogbox", "lm"]:
+        for method in ["trf", "lm"]:
             errors, _warnings_list, _x0_clean = (
                 self.validator.validate_least_squares_inputs(
                     self.residuals_func, x0, method=method

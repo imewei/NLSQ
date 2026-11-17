@@ -128,6 +128,11 @@ def _convert_dict_to_serializable(obj: dict) -> dict:
             "Cannot serialize dict containing reserved key '__nlsq_type__'; "
             "this key is reserved for internal type markers.",
         )
+    if _is_legacy_type_payload(result):
+        raise SafeSerializationError(
+            "Cannot serialize a dict that looks like the legacy '__type__' marker "
+            "format; it would be rejected on load. Rename the '__type__' key.",
+        )
     return result
 
 
@@ -154,17 +159,43 @@ def _sanitize_array_data(data: Any) -> Any:
     return data
 
 
+def _marker_part(part: Any) -> float:
+    """Real or imaginary part of a complex marker: a plain number or float marker.
+
+    Validated without recursion, so a marker cannot make the loader walk an
+    arbitrarily large nested payload before being rejected.
+    """
+    if isinstance(part, (int, float)):
+        return part
+    if (
+        isinstance(part, dict)
+        and part.keys() == {"__nlsq_type__", "value"}
+        and part["__nlsq_type__"] == "float"
+    ):
+        value = (
+            _FLOAT_MARKERS.get(part["value"])
+            if isinstance(part["value"], str)
+            else None
+        )
+        if value is not None:
+            return value
+    raise SafeSerializationError(
+        "Complex marker parts must be real numbers or float markers"
+    )
+
+
+_FLOAT_MARKERS = {"nan": float("nan"), "inf": float("inf"), "-inf": float("-inf")}
+
+
 def _unsanitize_array_data(data: Any) -> Any:
     """Reverse ``_sanitize_array_data``, restoring NaN/Inf floats in array data."""
     if isinstance(data, list):
         return [_unsanitize_array_data(item) for item in data]
     if isinstance(data, dict):
         if data.get("__nlsq_type__") == "complex":
-            real = _unsanitize_array_data(data["real"])
-            imag = _unsanitize_array_data(data["imag"])
-            if not isinstance(real, (int, float)) or not isinstance(imag, (int, float)):
-                raise SafeSerializationError("Complex array parts must be real numbers")
-            return complex(real, imag)
+            return complex(
+                _marker_part(data.get("real")), _marker_part(data.get("imag"))
+            )
         if data.get("__nlsq_type__") == "float":
             value = data.get("value")
             if value == "nan":
@@ -203,6 +234,15 @@ def _float_to_serializable(obj: Any) -> Any:
     return value
 
 
+def _complex_to_serializable(obj: Any) -> Any:
+    """Complex scalar -> the marker used for complex array elements."""
+    if isinstance(obj, np.complexfloating) and obj.itemsize > 16:
+        raise SafeSerializationError(
+            f"Cannot serialize {type(obj).__name__} without losing precision"
+        )
+    return _sanitize_array_data(complex(obj))
+
+
 def _convert_to_serializable(obj: Any) -> Any:
     """Convert object to JSON-serializable form.
 
@@ -238,6 +278,9 @@ def _convert_to_serializable(obj: Any) -> Any:
 
     if isinstance(obj, (float, np.floating)):
         return _float_to_serializable(obj)
+
+    if isinstance(obj, (complex, np.complexfloating)):
+        return _complex_to_serializable(obj)
 
     # Handle tuples (convert to list with marker)
     if isinstance(obj, tuple):
@@ -291,6 +334,39 @@ def _convert_to_serializable(obj: Any) -> Any:
     )
 
 
+_MAX_NDIM = 64
+
+
+def _check_nested_structure(data: Any, shape: tuple, limit: int) -> None:
+    """Require ``data`` to be nested lists exactly matching ``shape``.
+
+    Walks level by level and stops at the first mismatch, so no container or
+    leaf beyond what the declared shape (and ``limit`` nodes per level) allows
+    is traversed or copied; empty-shape arrays cannot smuggle uncounted
+    containers.
+    """
+    if len(shape) > _MAX_NDIM:
+        raise SafeSerializationError(f"Array has too many dimensions ({len(shape)})")
+    level = [data]
+    for dim in shape:
+        if len(level) * dim > limit:
+            raise SafeSerializationError(
+                f"Array data is larger than the limit ({limit:,} nodes per level)"
+            )
+        nxt: list = []
+        for node in level:
+            if not isinstance(node, list) or len(node) != dim:
+                raise SafeSerializationError(
+                    f"Malformed ndarray: data does not match shape {shape}"
+                )
+            nxt.extend(node)
+        level = nxt
+    if any(isinstance(node, list) for node in level):
+        raise SafeSerializationError(
+            f"Malformed ndarray: data is nested deeper than shape {shape}"
+        )
+
+
 def _deserialize_ndarray(obj: dict) -> np.ndarray:
     """Reconstruct a numpy array from its serialized dict representation."""
     try:
@@ -312,12 +388,6 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
             f"Refusing to deserialize array with non-numeric dtype "
             f"{dtype!r}. Only numeric dtypes are allowed.",
         )
-    data = _unsanitize_array_data(raw_data)
-    # np.array(["False"], dtype=bool) is True: only accept real JSON booleans.
-    if dtype.kind == "b" and not all(
-        isinstance(v, bool) for v in np.asarray(data, dtype=object).ravel()
-    ):
-        raise SafeSerializationError("Boolean array data must contain only booleans")
     # Validate each dimension is a non-negative integer. A zero dimension
     # makes n_elements=0 which bypasses the limit check while allowing
     # an arbitrarily large logical shape through reshape.
@@ -335,12 +405,46 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
             f"(limit: {_MAX_DESERIALIZE_ELEMENTS:,}). "
             "Possible DoS via attacker-controlled shape.",
         )
+    # Bound the ACTUAL payload before allocating anything from it: the declared
+    # shape alone says nothing about what "data" really holds.
+    _check_nested_structure(raw_data, shape, _MAX_DESERIALIZE_ELEMENTS)
+    data = _unsanitize_array_data(raw_data)
+    # np.array(["False"], dtype=bool) is True: only accept real JSON booleans.
+    if dtype.kind == "b" and not all(
+        isinstance(v, bool) for v in np.asarray(data, dtype=object).ravel()
+    ):
+        raise SafeSerializationError("Boolean array data must contain only booleans")
     try:
         return np.array(data, dtype=dtype).reshape(shape)
     except (ValueError, TypeError, OverflowError) as e:
         raise SafeSerializationError(
             f"Malformed ndarray in serialized data: {e}",
         ) from e
+
+
+def _is_legacy_type_payload(obj: dict) -> bool:
+    return obj.get("__type__") in ("ndarray", "tuple", "float") and (
+        "data" in obj or "value" in obj
+    )
+
+
+def _reject_legacy_type_payload(obj: dict) -> None:
+    """Fail loudly on the removed legacy ``__type__`` format.
+
+    Such a payload would otherwise restore as a plain dict where an
+    array/tuple/float was written.
+    """
+    if _is_legacy_type_payload(obj):
+        raise SafeSerializationError(
+            "Legacy '__type__' payload is no longer supported; re-create the "
+            "checkpoint with this version of NLSQ"
+        )
+
+
+def _tuple_from_marker(obj: dict) -> tuple:
+    if not isinstance(obj.get("value"), list):
+        raise SafeSerializationError("Malformed tuple marker: 'value' must be a list")
+    return tuple(_convert_from_serializable(item) for item in obj["value"])
 
 
 def _convert_from_serializable(obj: Any) -> Any:
@@ -377,11 +481,10 @@ def _convert_from_serializable(obj: Any) -> Any:
             type_name = obj["__nlsq_type__"]
 
             if type_name == "tuple":
-                if not isinstance(obj.get("value"), list):
-                    raise SafeSerializationError(
-                        "Malformed tuple marker: 'value' must be a list"
-                    )
-                return tuple(_convert_from_serializable(item) for item in obj["value"])
+                return _tuple_from_marker(obj)
+
+            if type_name == "complex":
+                return _unsanitize_array_data(obj)
 
             if type_name == "float":
                 value = obj["value"]
@@ -401,6 +504,8 @@ def _convert_from_serializable(obj: Any) -> Any:
             raise SafeSerializationError(
                 f"Unrecognized __nlsq_type__ tag in serialized data: {type_name!r}",
             )
+
+        _reject_legacy_type_payload(obj)
 
         # Regular dict — restore non-string keys from prefixed encoding
         result: dict = {}

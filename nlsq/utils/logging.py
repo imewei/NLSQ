@@ -98,6 +98,21 @@ def _save_iterations_setting() -> str | None:
     return val
 
 
+class _History(deque):
+    """Bounded iteration history that counts the entries it had to drop."""
+
+    dropped = 0
+
+    def append(self, item):
+        if self.maxlen is not None and len(self) == self.maxlen:
+            self.dropped += 1
+        super().append(item)
+
+    def clear(self):
+        super().clear()
+        self.dropped = 0
+
+
 class _StderrUnlessRootConfigured(logging.StreamHandler):
     """Console handler that stands down once the application configures logging.
 
@@ -159,8 +174,10 @@ class NLSQLogger:
         # Performance tracking
         self.timers: dict[str, float] = {}
 
-        # Optimization tracking
-        self.optimization_history: deque[dict[str, Any]] = deque(maxlen=10000)
+        # Optimization tracking: one history per thread (a fit runs in one
+        # thread), so concurrent fits sharing this logger do not clear or save
+        # each other's iterations.
+        self._history_tls = threading.local()
 
         # Register custom log level
         if not hasattr(logging, "PERFORMANCE"):
@@ -169,12 +186,35 @@ class NLSQLogger:
         # Shared handlers on the root 'nlsq' logger
         self._setup_global_handlers()
 
-    def _setup_global_handlers(self):
-        """Setup shared handlers on the root 'nlsq' logger."""
+    @property
+    def optimization_history(self) -> deque[dict[str, Any]]:
+        """Iteration history of the calling thread.
+
+        The history is per thread (a fit runs in one thread): read or save it
+        from the thread that ran the fit.
+        """
+        hist = getattr(self._history_tls, "history", None)
+        if hist is None:
+            hist = self._history_tls.history = _History(maxlen=10000)
+        return hist
+
+    @optimization_history.setter
+    def optimization_history(self, value) -> None:
+        self._history_tls.history = value
+
+    def _setup_global_handlers(self, force: bool = False):
+        """Setup shared handlers on the root 'nlsq' logger.
+
+        First initialisation stands down if the application already attached
+        handlers to 'nlsq'. ``force`` (used by ``enable_debug_mode``) re-creates
+        NLSQ's own handlers regardless, leaving the application's in place.
+        """
         root_nlsq = logging.getLogger("nlsq")
 
-        # Skip if already initialized or has handlers
-        if getattr(root_nlsq, "_nlsq_initialized", False) or root_nlsq.handlers:
+        if force:
+            if any(getattr(h, "_nlsq_owned", False) for h in root_nlsq.handlers):
+                return  # already has NLSQ's handlers: never duplicate them
+        elif getattr(root_nlsq, "_nlsq_initialized", False) or root_nlsq.handlers:
             return
 
         # Console handler on stderr: stdout is reserved for program output
@@ -206,6 +246,7 @@ class NLSQLogger:
             formatter = logging.Formatter("[%(levelname)s] %(message)s")
 
         console_handler.setFormatter(formatter)
+        console_handler._nlsq_owned = True  # type: ignore[attr-defined]
         if not logging.getLogger().handlers:
             root_nlsq.addHandler(console_handler)
 
@@ -228,6 +269,7 @@ class NLSQLogger:
                     datefmt="%Y-%m-%d %H:%M:%S",
                 )
                 file_handler.setFormatter(file_formatter)
+                file_handler._nlsq_owned = True  # type: ignore[attr-defined]
                 root_nlsq.addHandler(file_handler)
 
                 # Log this only once
@@ -282,6 +324,8 @@ class NLSQLogger:
 
     def performance(self, message: str, **kwargs):
         """Log performance-related message."""
+        if not self.logger.isEnabledFor(LogLevel.PERFORMANCE):
+            return
         self.logger.log(LogLevel.PERFORMANCE, self._format_message(message, **kwargs))
 
     @contextmanager
@@ -699,7 +743,10 @@ class NLSQLogger:
             self.debug("Parameters", values=params.tolist())
 
     def save_iteration_data(self, output_dir: str | None = None):
-        """Save optimization history to file.
+        """Save the calling thread's optimization history to file.
+
+        The history is per thread: call this from the thread that ran the fit
+        (a different thread sees an empty history and writes nothing).
 
         Parameters
         ----------
@@ -725,7 +772,10 @@ class NLSQLogger:
 
         # Convert history to arrays
         data: dict[str, np.ndarray] = {}
-        for key in self.optimization_history[0]:
+        # Union of keys (insertion order): iteration 0 has no step size, so the
+        # first entry alone would drop that column for the whole fit.
+        columns = dict.fromkeys(k for entry in self.optimization_history for k in entry)
+        for key in columns:
             values: list[float] = []
             for entry in self.optimization_history:
                 val = entry.get(key, np.nan)
@@ -740,6 +790,12 @@ class NLSQLogger:
 
         np.savez(str(filename), **data)  # type: ignore[arg-type]
         self.info(f"Saved optimization history to {filename}")
+        dropped = getattr(self.optimization_history, "dropped", 0)
+        if dropped:
+            self.warning(
+                f"Optimization history was truncated: the {dropped} earliest "
+                "iterations were dropped (only the most recent are saved)",
+            )
 
 
 # Module-level convenience functions
@@ -805,7 +861,8 @@ def set_global_level(level: int | LogLevel):
     # The console handler has its own threshold fixed at creation; keep it in
     # step or enable_verbose_mode() would still print nothing below WARNING.
     for handler in root_logger.handlers:
-        if isinstance(handler, logging.StreamHandler) and not isinstance(
+        # Only NLSQ's own console handler: leave application handlers alone.
+        if getattr(handler, "_nlsq_owned", False) and not isinstance(
             handler, logging.FileHandler
         ):
             handler.setLevel(level)
@@ -822,13 +879,15 @@ def enable_debug_mode():
     # Recreate global handlers
     root_nlsq = logging.getLogger("nlsq")
     for handler in list(root_nlsq.handlers):
+        if not getattr(handler, "_nlsq_owned", False):
+            continue  # an application's own handler
         root_nlsq.removeHandler(handler)
         handler.close()  # releases the debug log file
     root_nlsq._nlsq_initialized = False  # type: ignore[attr-defined]
 
     # Force setup on next logger access
     if _loggers:
-        next(iter(_loggers.values()))._setup_global_handlers()
+        next(iter(_loggers.values()))._setup_global_handlers(force=True)
 
 
 def enable_verbose_mode():

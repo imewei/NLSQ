@@ -191,6 +191,7 @@ class InputValidator:
         n_points: int,
         ydata: np.ndarray,
         n_params: int,
+        method: str | None = None,
     ) -> tuple[list[str], list[str]]:
         """Validate data shapes and minimum requirements.
 
@@ -202,6 +203,9 @@ class InputValidator:
             Dependent variable data
         n_params : int
             Number of parameters
+        method : str, optional
+            Solver. ``"lm"`` needs at least as many points as parameters; other
+            methods (trf, the default) only warn about underdetermined fits.
 
         Returns
         -------
@@ -226,9 +230,17 @@ class InputValidator:
             errors.append("Need at least 2 data points for fitting")
 
         if n_points < n_params:
-            errors.append(
-                f"Need at least as many data points ({n_points}) as parameters ({n_params}) for fitting",
-            )
+            if method == "lm":
+                errors.append(
+                    f"Need at least as many data points ({n_points}) as parameters ({n_params}) for fitting",
+                )
+            else:
+                # trf accepts underdetermined fits (as SciPy does); the covariance
+                # cannot be estimated, which the fit itself reports.
+                warnings_list.append(
+                    f"fewer data points ({n_points}) than parameters ({n_params}): "
+                    "the fit is underdetermined and the covariance cannot be estimated",
+                )
 
         return errors, warnings_list
 
@@ -303,7 +315,9 @@ class InputValidator:
 
         try:
             p0 = np.atleast_1d(np.asarray(p0))
-            if len(p0) != n_params:
+            if p0.ndim > 1:
+                errors.append("p0 must have at most 1 dimension")
+            elif len(p0) != n_params:
                 errors.append(
                     f"Initial guess p0 has {len(p0)} parameters, "
                     f"but function expects {n_params}",
@@ -435,6 +449,15 @@ class InputValidator:
 
             if check_finite and not np.all(np.isfinite(sigma)):
                 errors.append("sigma contains NaN or Inf values")
+            elif strict and is_cov and np.all(np.isfinite(sigma)):
+                # The fit whitens with a Cholesky factor (lower triangle, as SciPy).
+                # Only in the strict (enable_stability) path: the always-on path
+                # would duplicate the fit's own O(n^3) factorization, and the fit
+                # reports a non-PD matrix itself.
+                try:
+                    np.linalg.cholesky(sigma.astype(float))
+                except np.linalg.LinAlgError:
+                    errors.append("sigma covariance matrix must be positive definite")
 
         except Exception as e:
             errors.append(f"Invalid sigma: {e}")
@@ -472,13 +495,22 @@ class InputValidator:
                 xdata.flatten()[0] if hasattr(xdata, "flatten") else xdata.flat[0]
             )
             if np.all(xdata == xdata_first):
-                errors.append("All x values are identical - cannot fit")
+                # Warning, not error: SciPy accepts constant-x fits (e.g. a
+                # constant model); whether it is identifiable depends on the model.
+                warnings.append(
+                    "All x values are identical - parameters that depend on x "
+                    "will not be identifiable"
+                )
         except (AttributeError, NotImplementedError):
             # Skip if array type doesn't support .flat or .flatten()
             pass
 
+        # Range checks need an ordering: skip complex data
+        if not np.isrealobj(xdata):
+            return errors, warnings
+
         # Check for very small range
-        x_range = np.ptp(xdata)
+        x_range = np.ptp(xdata.astype(float)) if xdata.dtype == bool else np.ptp(xdata)
         if x_range < 1e-10 and x_range > 0:
             warnings.append(
                 f"x data range is very small ({x_range:.2e}) - consider rescaling",
@@ -517,6 +549,10 @@ class InputValidator:
         except Exception as e:
             # Skip this check if it fails - log for debugging
             logger.debug(f"Y-value uniformity check failed (non-critical): {e}")
+
+        # Range checks need an ordering: skip complex data
+        if not np.isrealobj(ydata):
+            return warnings
 
         # Check for very small range
         y_range = np.ptp(ydata.astype(float)) if ydata.dtype == bool else np.ptp(ydata)
@@ -650,6 +686,7 @@ class InputValidator:
         sigma: Any | None = None,
         absolute_sigma: bool = True,
         check_finite: bool = True,
+        method: str | None = None,
     ) -> tuple[list[str], list[str], np.ndarray, np.ndarray]:
         """Validate inputs for curve_fit function.
 
@@ -674,6 +711,9 @@ class InputValidator:
             Whether sigma is absolute or relative
         check_finite : bool
             Whether to check for finite values
+        method : str, optional
+            Solver the fit will use; only ``"lm"`` requires at least as many
+            points as parameters.
 
         Returns
         -------
@@ -719,6 +759,7 @@ class InputValidator:
             n_points,
             ydata,
             n_params,
+            method,
         )
         errors.extend(shape_errors)
         warnings_list.extend(shape_warnings)
@@ -833,7 +874,7 @@ class InputValidator:
             List of error messages
         """
         errors: list[str] = []
-        valid_methods = ["trf", "dogbox", "lm"]
+        valid_methods = ["trf", "lm"]
         if method not in valid_methods:
             errors.append(f"method must be one of {valid_methods}, got {method}")
         return errors
@@ -1373,6 +1414,7 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                 sigma = kwargs.get("sigma")
                 absolute_sigma = kwargs.get("absolute_sigma", True)
                 check_finite = kwargs.get("check_finite", True)
+                method = kwargs.get("method")
 
                 # Validate
                 errors, warnings_list, xdata_clean, ydata_clean = (
@@ -1385,6 +1427,7 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                         sigma,
                         absolute_sigma,
                         check_finite,
+                        method,
                     )
                 )
 
