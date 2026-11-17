@@ -42,11 +42,25 @@ def _validate_fim(fim: np.ndarray) -> str | None:
     if fim.ndim != 2 or fim.shape[0] != fim.shape[1]:
         return "FIM must be a square matrix"
 
+    if fim.size == 0:
+        return "Empty FIM matrix"
+
+    if np.iscomplexobj(fim):
+        return "Complex FIM is not supported (real input required)"
+
     if not np.all(np.isfinite(fim)):
         return "FIM contains non-finite (NaN/Inf) values"
 
-    if np.issubdtype(fim.dtype, np.integer):
-        fim = fim.astype(float)
+    # Round-off is the larger of the matrix's storage precision (float16/float32
+    # keep their own eps) and float64's, because the eigenvalues are computed in
+    # float64 (so float64, longdouble and integer FIMs all use float64 eps).
+    eps = max(
+        float(np.finfo(fim.dtype).eps)
+        if np.issubdtype(fim.dtype, np.floating)
+        else 0.0,
+        float(np.finfo(np.float64).eps),
+    )
+    fim = np.asarray(fim, dtype=np.float64)
     scale = float(np.max(np.abs(fim))) if fim.size else 0.0
     normalized = fim / scale if scale else fim
     if not np.allclose(normalized, normalized.T, rtol=1e-8, atol=1e-10):
@@ -54,7 +68,7 @@ def _validate_fim(fim: np.ndarray) -> str | None:
 
     eigvals = np.linalg.eigvalsh(normalized)
     max_abs_eig = float(np.max(np.abs(eigvals))) if eigvals.size else 0.0
-    tol = fim.shape[0] * np.finfo(np.float64).eps * max_abs_eig
+    tol = fim.shape[0] * eps * max_abs_eig
     if eigvals.size and float(np.min(eigvals)) < -tol:
         return "FIM must be positive semi-definite"
 
@@ -146,6 +160,9 @@ class ModelHealthIssue:
     This dataclass represents an actionable issue detected during
     diagnostic analysis, including its category, severity, and
     a recommendation for addressing it.
+
+    Instances are immutable but intentionally unhashable (``details`` is a
+    dict); compare them with ``==`` or key by ``code``.
 
     Attributes
     ----------
@@ -244,8 +261,10 @@ class IdentifiabilityReport(AnalysisResult):
     Attributes
     ----------
     condition_number : float
-        Condition number of the FIM. High values (> 1e8) indicate
-        practical unidentifiability.
+        Condition number of the column-equilibrated FIM (each parameter
+        scaled by the norm of its Jacobian column, so it does not depend on
+        parameter or data units; it can differ from ``cond(J.T @ J)`` of the
+        raw matrix). High values (> 1e8) indicate practical unidentifiability.
     numerical_rank : int
         Numerical rank of the FIM. If less than n_params, indicates
         structural unidentifiability.
@@ -391,7 +410,7 @@ class GradientHealthReport(AnalysisResult):
     stagnation_detected : bool
         Whether gradient stagnation was detected.
     issues : list[ModelHealthIssue]
-        List of detected gradient issues (GRAD-001, GRAD-002, GRAD-003).
+        List of detected gradient issues (GRAD-001 to GRAD-005).
     health_status : HealthStatus
         Overall health status based on detected issues.
 
@@ -486,9 +505,12 @@ class ParameterSensitivityReport(AnalysisResult):
     is_sloppy : bool
         Whether the model exhibits wide eigenvalue spread (sensitivity spectrum).
     eigenvalues : np.ndarray
-        Eigenvalue spectrum of the Fisher Information Matrix.
+        Eigenvalue spectrum of the column-equilibrated Fisher Information
+        Matrix (unit-free; not the eigenvalues of the raw ``J.T @ J``).
     eigenvectors : np.ndarray | None
-        Eigenvectors of the FIM (columns are eigenvectors).
+        Unit-norm parameter directions (columns) belonging to ``eigenvalues``,
+        expressed in the original parameter space (the equilibrated
+        eigenvectors mapped back through the column scaling).
     eigenvalue_range : float
         Log10 range of eigenvalues (orders of magnitude).
     effective_dimensionality : float
@@ -604,21 +626,21 @@ class DiagnosticsReport:
 
     def _compute_overall_status(self) -> None:
         """Compute overall health status from individual analyses."""
-        # Check identifiability
-        if self.identifiability is not None:
-            if self.identifiability.health_status == HealthStatus.CRITICAL:
+        # A failed analysis (available=False) is at least a WARNING, matching
+        # create_health_report (Contract B1); never reported as healthy.
+        for part in (self.identifiability, self.gradient_health):
+            if part is None:
+                continue
+            status = part.health_status
+            if not part.available and status == HealthStatus.HEALTHY:
+                status = HealthStatus.WARNING
+            if status == HealthStatus.CRITICAL:
                 self.overall_status = HealthStatus.CRITICAL
-            elif self.identifiability.health_status == HealthStatus.WARNING:
-                if self.overall_status != HealthStatus.CRITICAL:
-                    self.overall_status = HealthStatus.WARNING
-
-        # Check gradient health
-        if self.gradient_health is not None:
-            if self.gradient_health.health_status == HealthStatus.CRITICAL:
-                self.overall_status = HealthStatus.CRITICAL
-            elif self.gradient_health.health_status == HealthStatus.WARNING:
-                if self.overall_status != HealthStatus.CRITICAL:
-                    self.overall_status = HealthStatus.WARNING
+            elif (
+                status == HealthStatus.WARNING
+                and self.overall_status != HealthStatus.CRITICAL
+            ):
+                self.overall_status = HealthStatus.WARNING
 
     def __str__(self) -> str:
         """Return a human-readable summary of all diagnostics."""
@@ -675,8 +697,8 @@ class DiagnosticsConfig:
         Relative gradient magnitude threshold for vanishing detection.
         Default: 1e-6.
     exploding_threshold : float
-        Absolute gradient magnitude threshold for exploding-gradient
-        detection.
+        Growth factor over the first recorded gradient norm above which
+        exploding gradients are flagged (relative, so unit-independent).
         Default: 1e8.
     sloppy_threshold : float
         Eigenvalue ratio threshold for sensitivity classification.
@@ -960,9 +982,9 @@ def _format_model_health_summary(
             lines.append(f"UNAVAILABLE: {report.gradient_health.error_message}")
         lines.append("")
 
-    # Sloppy Model section (only for FULL level)
-    config = report.config or DiagnosticsConfig()
-    if config.level == DiagnosticLevel.FULL and report.sloppy_model is not None:
+    # Sloppy Model section (whenever a sloppy-model report is attached: its
+    # issues are already part of the status and the issue list)
+    if report.sloppy_model is not None:
         lines.append("--- Sloppy Model ---")
         if report.sloppy_model.available:
             lines.append(
@@ -1008,6 +1030,21 @@ def _format_model_health_summary(
     lines.append(separator)
 
     return "\n".join(lines)
+
+
+def _json_safe(obj: Any) -> Any:
+    """Make ``obj`` strict-JSON serializable: non-finite floats become None,
+    numpy/JAX arrays and scalars become lists/Python numbers."""
+    if hasattr(obj, "tolist") and not isinstance(obj, (str, bytes)):
+        # numpy / JAX arrays and scalars
+        return _json_safe(obj.tolist())
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {str(k): _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return [_json_safe(v) for v in obj]
+    return obj
 
 
 def _model_health_to_dict(report: ModelHealthReport) -> dict[str, Any]:
@@ -1125,4 +1162,4 @@ def _model_health_to_dict(report: ModelHealthReport) -> dict[str, Any]:
             "emit_warnings": report.config.emit_warnings,
         }
 
-    return result
+    return _json_safe(result)

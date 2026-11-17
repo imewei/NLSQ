@@ -12,9 +12,12 @@ Categories:
 - IDENT: Identifiability issues
 - CORR: Correlation issues
 - GRAD: Gradient issues
-- COND: Conditioning issues
+- COND: Conditioning issues (reserved: not emitted by the built-in analyzers)
 - SENS: Parameter sensitivity issues
-- CONV: Convergence issues
+- CONV: Convergence issues (reserved: not emitted by the built-in analyzers)
+
+COND/CONV entries stay in the catalog for plugins and callers that raise those
+codes themselves; the built-in analyzers emit IDENT, CORR, GRAD and SENS only.
 
 Usage
 -----

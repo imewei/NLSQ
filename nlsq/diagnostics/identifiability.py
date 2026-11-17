@@ -35,17 +35,165 @@ _logger = logging.getLogger(__name__)
 
 def _equilibrate_columns(jacobian: np.ndarray) -> np.ndarray:
     """Scale each Jacobian column to unit 2-norm (zero columns stay zero)."""
-    jacobian = np.asarray(jacobian, dtype=np.result_type(jacobian, np.float32))
+    jacobian = _as_float64(jacobian)
     cmax = np.max(np.abs(jacobian), axis=0)
     jn = jacobian / np.where(cmax > 0, cmax, 1.0)  # pre-scale: avoids norm underflow
     norms = np.linalg.norm(jn, axis=0)
     return jn / np.where(norms > 0, norms, 1.0)
 
 
+def _column_log_scale(jacobian: np.ndarray) -> np.ndarray:
+    """log of the per-column scale applied by :func:`_equilibrate_columns`.
+
+    Kept in log space so columns near the float limits neither over- nor
+    underflow (zero columns get scale 1, i.e. log 0).
+    """
+    jacobian = _as_float64(jacobian)
+    cmax = np.max(np.abs(jacobian), axis=0)
+    cmax = np.where(cmax > 0, cmax, 1.0)
+    norms = np.linalg.norm(jacobian / cmax, axis=0)
+    return np.log(cmax) + np.log(np.where(norms > 0, norms, 1.0))
+
+
+def _directions_to_original(vectors: np.ndarray, log_scale: np.ndarray) -> np.ndarray:
+    """Map unit directions from equilibrated coordinates (q = scale * p) back to p.
+
+    ``p_i = v_i / scale_i`` is formed in log space and max-normalized per column
+    before the L2 normalization, so extreme scales cannot overflow to inf/NaN or
+    underflow to a zero vector; components far below the largest one in the unit
+    result simply round to zero (correct for a unit vector).
+    """
+    with np.errstate(divide="ignore"):
+        t = np.log(np.abs(vectors)) - log_scale[:, None]
+    m = np.max(t, axis=0)
+    ok = np.isfinite(m)
+    out = np.sign(vectors) * np.exp(t - np.where(ok, m, 0.0))
+    out[:, ~ok] = 0.0
+    norms = np.linalg.norm(out, axis=0)
+    return out / np.where(norms > 0, norms, 1.0)
+
+
+def _as_float64(a: np.ndarray) -> np.ndarray:
+    """At least float64: float32/float16/integer inputs are upcast.
+
+    The rank tolerances scale with ``max(m, n) * eps``: with float32's eps that
+    is ~0.1 * s_max for a million-row Jacobian, which reports false rank
+    deficiency. A diagnostic should not be limited by the storage precision of
+    the Jacobian. Jacobians are analyzed as stored: entries are treated as exact,
+    so rounding noise already present in a float32-computed Jacobian is not
+    modeled; a FIM instead gets the storage-precision cutoff
+    (:func:`_storage_eps`), since forming/storing the normal matrix rounds it.
+    Limits: complex Jacobians/FIMs are rejected by the validators
+    (unavailable analysis) because the SVD/eigen code assumes real input; a
+    longdouble (float128) input is not converted and ``np.linalg`` raises
+    ``TypeError``, which the analyzers report as an unavailable analysis.
+    """
+    a = np.asarray(a)
+    return np.asarray(a, dtype=np.result_type(a.dtype, np.float64))
+
+
+def _storage_eps(a: np.ndarray) -> float:
+    """Round-off level of the *supplied* matrix: its own dtype's eps, never below float64's.
+
+    The decompositions run in float64 (see :func:`_as_float64`), but a float32
+    Jacobian/FIM already carries eps32-level noise from its storage, so rank and
+    null-space tolerances must be taken from the storage dtype before the upcast.
+    """
+    eps64 = float(np.finfo(np.float64).eps)
+    dt = np.asarray(a).dtype
+    return max(
+        float(np.finfo(dt).eps) if np.issubdtype(dt, np.floating) else 0.0, eps64
+    )
+
+
+def _host_svd(
+    matrix: np.ndarray, full_matrices: bool = False
+) -> tuple[np.ndarray, np.ndarray]:
+    """Singular values and V (not transposed) computed on the host in float64.
+
+    JAX would silently run a float64 input in float32 when ``jax_enable_x64`` is
+    off while the tolerances here assume float64; NumPy keeps them consistent
+    (as ``core/covariance.py`` does). A tall matrix is reduced to its R factor
+    first (same ``s`` and ``V``, no m x n ``U``). Only if LAPACK fails to
+    converge does it use the robust fallback.
+    """
+    matrix = _as_float64(matrix)
+    m, n = matrix.shape
+    try:
+        if not full_matrices and m > 2 * n:
+            matrix = np.linalg.qr(matrix, mode="r")
+        _, s, vh = np.linalg.svd(matrix, full_matrices=full_matrices)
+        return s, vh.T
+    except np.linalg.LinAlgError:
+        from nlsq.stability.svd_fallback import compute_svd_with_fallback
+
+        _, s, v = compute_svd_with_fallback(matrix, full_matrices=full_matrices)
+        return np.asarray(s), np.asarray(v)
+
+
+def _host_eigh(fim: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Eigenvalues (descending, negative round-off clamped to 0) and eigenvectors.
+
+    A FIM is symmetric positive semi-definite, but validation accepts slightly
+    negative eigenvalues from rounding; singular values would turn those into
+    positive ones, so symmetric matrices use a symmetric eigensolve instead.
+    """
+    fim = _as_float64(fim)
+    w, v = np.linalg.eigh((fim + fim.T) / 2)
+    order = np.argsort(w)[::-1]
+    return np.maximum(w[order], 0.0), v[:, order]
+
+
 def _fim_scale(fim: np.ndarray) -> np.ndarray:
     """Per-parameter scale sqrt(|diag(F)|); 1 where diag is zero/non-finite."""
     d = np.sqrt(np.abs(np.diag(fim)))
     return np.where((d > 0) & np.isfinite(d), d, 1.0)
+
+
+def _correlation_with_null_limit(
+    covariance: np.ndarray, null_basis: np.ndarray, bound: float
+) -> np.ndarray | None:
+    """Correlation of a pseudo-inverse covariance, with null directions restored.
+
+    The pseudo-inverse drops the null directions that drive the strongest
+    correlations (and flips the sign of a trade-off pair).  Taking the limit
+    ``cov = pinv + P / lam`` as ``lam -> 0`` (``P`` = projector onto the null
+    space): two parameters that both load on the null space get
+    ``P_ij / sqrt(P_ii P_jj)``, a parameter pair with exactly one such member
+    is uncorrelated in the limit, and the rest use the pseudo-inverse.
+
+    ``bound`` is the error bound on a null-vector component for the precision
+    of the decomposition actually used (``~ n*eps*sigma_max/sigma_gap``, from
+    the caller's rank tolerance): a component above it is a resolved loading,
+    one at or below it cannot be told apart from an exact zero and is treated
+    as structurally zero. That limit is inherent: a real loading smaller than
+    the decomposition's resolution is reported as uncorrelated.
+    """
+    n = covariance.shape[0]
+    if null_basis.shape[1] >= n:
+        return None  # nothing is determined (e.g. all-zero Jacobian)
+    if null_basis.shape[1]:
+        proj = null_basis @ null_basis.T
+        pd = np.diag(proj)
+        involved = np.max(np.abs(null_basis), axis=1) > bound
+    else:
+        proj, pd = np.zeros((n, n)), np.zeros(n)
+        involved = np.zeros(n, dtype=bool)
+    free = ~involved
+    diag = np.diag(covariance)
+    if np.any(diag[free] <= 0):
+        return None
+    corr = np.zeros((n, n))
+    if free.any():
+        sd = np.sqrt(diag[free])
+        corr[np.ix_(free, free)] = covariance[np.ix_(free, free)] / np.outer(sd, sd)
+    if involved.any():
+        sp = np.sqrt(pd[involved])
+        corr[np.ix_(involved, involved)] = proj[np.ix_(involved, involved)] / np.outer(
+            sp, sp
+        )
+    np.fill_diagonal(corr, 1.0)
+    return np.clip(corr, -1.0, 1.0)
 
 
 class IdentifiabilityAnalyzer:
@@ -194,6 +342,15 @@ class IdentifiabilityAnalyzer:
                 health_status=HealthStatus.CRITICAL,
             )
 
+        # Complex input would need Hermitian (conjugate) handling: not supported
+        if np.iscomplexobj(jacobian):
+            return IdentifiabilityReport(
+                available=False,
+                error_message="Complex Jacobians are not supported (real input required)",
+                n_params=jacobian.shape[1],
+                health_status=HealthStatus.CRITICAL,
+            )
+
         # Check for NaN
         if np.any(np.isnan(jacobian)):
             return IdentifiabilityReport(
@@ -264,29 +421,19 @@ class IdentifiabilityAnalyzer:
         # Column-equilibrate so cond/rank/correlation do not depend on the units
         # of x, y or the parameters (correlation is invariant to this scaling).
         jacobian = _equilibrate_columns(jacobian)
-        try:
-            from nlsq.stability.svd_fallback import compute_svd_with_fallback
-
-            # compute_svd_with_fallback returns V already (not transposed)
-            # With fewer observations than parameters the thin SVD drops the
-            # right nullspace; request full V and pad s with the n - m zeros.
-            wide = jacobian.shape[0] < jacobian.shape[1]
-            _, s, v = compute_svd_with_fallback(jacobian, full_matrices=wide)
-            s = np.asarray(s)
-            v = np.asarray(v)
-        except ImportError:
-            wide = jacobian.shape[0] < jacobian.shape[1]
-            _, s, vh = np.linalg.svd(jacobian, full_matrices=wide)
-            v = vh.T
+        # With fewer observations than parameters the thin SVD drops the right
+        # nullspace; request full V and pad s with the n - m zeros.
+        wide = jacobian.shape[0] < jacobian.shape[1]
+        s, v = _host_svd(jacobian, full_matrices=wide)
         if wide:
             s = np.concatenate([s, np.zeros(jacobian.shape[1] - s.size, s.dtype)])
 
         max_s = float(np.max(s)) if s.size else 0.0
         nonzero_s = s[s > 0]
-        float_dtype = (
-            jacobian.dtype if np.issubdtype(jacobian.dtype, np.floating) else np.float64
-        )
-        tol = max_s * max(jacobian.shape) * np.finfo(float_dtype).eps
+        # Precision of the decomposition actually used.
+        # The Jacobian is analyzed as stored (entries treated as exact, solved in
+        # float64): rounding already present in a float32 Jacobian is not modeled.
+        tol = max_s * max(jacobian.shape) * np.finfo(s.dtype).eps
 
         if max_s == 0 or len(nonzero_s) == 0:
             condition_number = float("inf")
@@ -341,16 +488,9 @@ class IdentifiabilityAnalyzer:
             safe_s = np.where(s_n > 0, s_n, 1.0)
             inv_s2 = np.where(s > tol, 1.0 / safe_s**2, 0.0)
             covariance = (v * inv_s2) @ v.T
-            diag = np.diag(covariance)
-
-            if np.any(diag <= 0):
-                return None
-
-            sqrt_diag = np.sqrt(diag)
-            correlation = covariance / np.outer(sqrt_diag, sqrt_diag)
-            correlation = np.clip(correlation, -1.0, 1.0)
-
-            return correlation
+            kept = s[s > tol]
+            s_gap = float(np.min(kept)) if kept.size else s_max
+            return _correlation_with_null_limit(covariance, v[:, s <= tol], tol / s_gap)
 
         except Exception:
             _logger.warning("Correlation matrix computation failed", exc_info=True)
@@ -550,18 +690,11 @@ class IdentifiabilityAnalyzer:
             Numerical rank based on singular value tolerance.
         """
         # Unit-invariant: analyze D^-1/2 F D^-1/2 with D = diag(F).
+        storage_eps = _storage_eps(fim)
+        fim = _as_float64(fim)
         d = _fim_scale(fim)
         fim = fim / np.outer(d, d)
-        try:
-            # Try to use NLSQ's SVD fallback for robustness
-            from nlsq.stability.svd_fallback import compute_svd_with_fallback
-
-            # compute_svd_with_fallback returns (U, s, V)
-            _, singular_values, _ = compute_svd_with_fallback(fim)
-            singular_values = np.asarray(singular_values)
-        except ImportError:
-            # Fallback to numpy SVD if module not available
-            singular_values = np.linalg.svd(fim, compute_uv=False)
+        singular_values, _ = _host_eigh(fim)
 
         # Handle edge case of all-zero FIM
         max_sv = np.max(singular_values)
@@ -576,11 +709,7 @@ class IdentifiabilityAnalyzer:
             condition_number = float(max_sv / min_sv) if min_sv > 0 else float("inf")
 
             # Compute numerical rank with relative tolerance
-            # Use float64 eps if FIM has an integer dtype to avoid ValueError
-            float_dtype = (
-                fim.dtype if np.issubdtype(fim.dtype, np.floating) else np.float64
-            )
-            tol = max_sv * max(fim.shape) * np.finfo(float_dtype).eps
+            tol = max_sv * max(fim.shape) * storage_eps
             numerical_rank = int(np.sum(singular_values > tol))
 
         return singular_values, condition_number, numerical_rank
@@ -611,26 +740,21 @@ class IdentifiabilityAnalyzer:
             # models, where a plain inverse would raise/blow up.
             # Equilibrate by diag(FIM) first: corr(inv(F)) == corr(inv(D^-1 F D^-1)),
             # but pinv's rank cutoff no longer depends on the columns' units.
+            storage_eps = _storage_eps(fim)
+            fim = _as_float64(fim)
             d = np.sqrt(np.abs(np.diag(fim)))
-            if np.all(d > 0) and np.all(np.isfinite(d)):
-                covariance = np.linalg.pinv(fim / np.outer(d, d))
-            else:
-                covariance = np.linalg.pinv(fim)
-            diag = np.diag(covariance)
-
-            # Handle zero or near-zero diagonal elements
-            if np.any(diag <= 0):
-                # Covariance should be positive semi-definite, but handle edge cases
+            if not np.all(np.isfinite(d)):
                 return None
-
-            # correlation[i,j] = Cov[i,j] / sqrt(Cov[i,i] * Cov[j,j])
-            sqrt_diag = np.sqrt(diag)
-            correlation = covariance / np.outer(sqrt_diag, sqrt_diag)
-
-            # Clip to [-1, 1] to handle numerical precision issues
-            correlation = np.clip(correlation, -1.0, 1.0)
-
-            return correlation
+            d = np.where(d > 0, d, 1.0)  # zero column: leave it unscaled
+            scaled = fim / np.outer(d, d)
+            w, u = np.linalg.eigh((scaled + scaled.T) / 2)
+            keep = w > max(float(np.max(w)), 0.0) * len(w) * storage_eps
+            covariance = (u[:, keep] / w[keep]) @ u[:, keep].T
+            tol = max(float(np.max(w)), 0.0) * len(w) * storage_eps
+            w_gap = float(np.min(w[keep])) if keep.any() else float(np.max(w))
+            return _correlation_with_null_limit(
+                covariance, u[:, ~keep], tol / w_gap if w_gap > 0 else np.inf
+            )
 
         except Exception:
             _logger.warning("Correlation matrix computation failed", exc_info=True)
