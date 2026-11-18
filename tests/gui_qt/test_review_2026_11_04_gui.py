@@ -69,7 +69,7 @@ def test_fit_adapter_forwards_global_settings(monkeypatch):
     assert captured["sampler"] == "sobol"
     assert captured["scale_factor"] == 2.0
     assert captured["center_on_p0"] is False
-    assert captured["max_nfev"] == 50
+    assert captured["max_nfev"] == 51  # iterations + the initial evaluation
 
 
 def test_auto_global_without_bounds_is_reported_not_silent(monkeypatch):
@@ -112,7 +112,8 @@ def test_results_page_handles_2d_surface_data(qapp):
     page.update_results(run_fit(st))
     assert page.has_results()
     assert "Fit completed" in page._status_label.text()
-    assert page._export_btn.isEnabled()
+    # the figure exporter only supports a 1-D independent variable
+    assert not page._export_btn.isEnabled()
 
 
 @pytest.mark.serial

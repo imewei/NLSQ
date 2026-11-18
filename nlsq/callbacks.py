@@ -379,11 +379,16 @@ class IterationLogger(CallbackBase):
     def close(self):
         """Close log file."""
         if self._file is not None:
-            elapsed = time.time() - self._start_time if self._start_time else 0
-            footer = "=" * 80 + "\n"
-            footer += f"Optimization completed in {elapsed:.2f}s\n"
-            footer += "=" * 80 + "\n"
-            self._write(footer)
+            # A caller-provided file stays open across close() calls: write the footer
+            # once per run (_start_time is reset below) and never to a closed file.
+            if not getattr(self._file, "closed", False) and (
+                not self._file_provided or self._start_time is not None
+            ):
+                elapsed = time.time() - self._start_time if self._start_time else 0
+                footer = "=" * 80 + "\n"
+                footer += f"Optimization completed in {elapsed:.2f}s\n"
+                footer += "=" * 80 + "\n"
+                self._write(footer)
             # Only close file if we opened it (not if it was provided externally)
             if not self._file_provided:
                 self._file.close()
@@ -542,9 +547,18 @@ class CallbackChain(CallbackBase):
 
     def close(self):
         """Close all callbacks that have a close method."""
+        # One failing close must not leave the later callbacks open; the first
+        # error is re-raised once every callback has been closed.
+        first_error: Exception | None = None
         for callback in self.callbacks:
             if hasattr(callback, "close"):
-                callback.close()
+                try:
+                    callback.close()
+                except Exception as e:
+                    if first_error is None:
+                        first_error = e
+        if first_error is not None:
+            raise first_error
 
     def __del__(self):
         """Ensure all callbacks are closed."""

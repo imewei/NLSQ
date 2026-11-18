@@ -180,13 +180,13 @@ class ConvergenceMonitor:
         if not np.all(np.isfinite(recent_costs)):
             # A NaN/Inf cost is divergence (see detect_divergence), not stagnation.
             return False, 0.0
-        cost_variance = float(np.var(recent_costs))
         cost_mean = float(np.mean(recent_costs))
 
         if cost_mean == 0:
-            relative_variance = cost_variance
+            relative_variance = float(np.var(recent_costs))
         else:
-            relative_variance = cost_variance / cost_mean**2  # scale-free (CV squared)
+            # Scale-free (CV squared); normalising first avoids mean**2 under/overflow.
+            relative_variance = float(np.var(np.asarray(recent_costs) / cost_mean))
 
         # Check gradient stagnation
         if len(self.gradient_history) >= 3:

@@ -105,6 +105,7 @@ from __future__ import annotations
 
 import functools
 import math
+import threading
 import time
 import warnings
 from collections.abc import Callable
@@ -448,21 +449,32 @@ def _gradient_status(
     return None
 
 
+_fit_depth = threading.local()  # per-thread nesting of fits (callbacks may fit)
+
+
 def _saves_iteration_history(method: Callable[..., Any]) -> Callable[..., Any]:
     """Write this fit's iteration history when NLSQ_SAVE_ITERATIONS is set.
 
     The logger is shared by every fit, so the history is cleared first: each
-    saved file holds one fit. Saving never masks the fit's own outcome.
+    saved file holds one fit. Saving never masks the fit's own outcome. A fit
+    started inside another fit's callback gets its own history; the outer
+    fit's rows are put back when it ends.
     """
 
     @functools.wraps(method)
     def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         enabled = _save_iterations_setting() is not None
+        depth = getattr(_fit_depth, "n", 0)
+        outer: list[Any] | None = None
         if enabled:
-            self.logger.optimization_history.clear()
+            history = self.logger.optimization_history
+            outer = list(history) if depth else None
+            history.clear()
+        _fit_depth.n = depth + 1
         try:
             return method(self, *args, **kwargs)
         finally:
+            _fit_depth.n = depth
             if enabled:
                 try:
                     self.logger.save_iteration_data()
@@ -470,6 +482,9 @@ def _saves_iteration_history(method: Callable[..., Any]) -> Callable[..., Any]:
                     self.logger.warning(
                         "Could not save iteration history", error=str(e)
                     )
+                if outer is not None:
+                    history.clear()
+                    history.extend(outer)
 
     return wrapper
 

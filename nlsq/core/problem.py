@@ -735,6 +735,8 @@ def _setup_data_mask_and_padding(
         data_mask = np.asarray(data_mask, dtype=bool)
         if len(data_mask) != m:
             raise ValueError("Data mask doesn't match data lengths.")
+        if m > 0 and not data_mask.any():
+            raise ValueError("data_mask excludes every data point; nothing to fit.")
 
     if ctx.flength is not None:
         len_diff = int(ctx.flength) - m
@@ -999,6 +1001,10 @@ def _apply_padding_if_needed(
     return xdata, ydata, len_diff
 
 
+# Frozen, so one shared default instance is safe (and satisfies ruff B008).
+_DEFAULT_CTX = PrepareContext()
+
+
 def prepare_problem(
     f: Callable,
     x: Any,
@@ -1013,7 +1019,7 @@ def prepare_problem(
     solver: str = "auto",
     batch_size: int | None = None,
     kwargs: dict | None = None,
-    ctx: PrepareContext = PrepareContext(),  # noqa: B008 (frozen, immutable default)
+    ctx: PrepareContext = _DEFAULT_CTX,
 ) -> PreparedProblem:
     """Prepare and validate inputs for curve fitting.
 
@@ -1101,9 +1107,12 @@ def prepare_problem(
     # A user-supplied data_mask is sized to the ORIGINAL data length; if
     # nan_policy='omit' dropped rows, realign it the same way so it isn't
     # rejected by _setup_data_mask_and_padding's length check below.
-    if data_mask is not None and omit_mask is not None:
-        if len(data_mask) == len(omit_mask) and len(data_mask) != m:
-            data_mask = np.asarray(data_mask)[omit_mask]
+    if data_mask is not None and omit_mask is not None and m != len(omit_mask):
+        # A mask the length of the already-shortened data would silently drop
+        # the wrong rows; the contract is the original length.
+        if len(data_mask) != len(omit_mask):
+            raise ValueError("Data mask doesn't match data lengths.")
+        data_mask = np.asarray(data_mask)[omit_mask]
 
     # Step 8: Select optimization method (on cleaned data)
     method = _select_optimization_method(
@@ -1112,7 +1121,7 @@ def prepare_problem(
         xdata,
         ydata,
         p0,
-        bounds,
+        (lb, ub),  # normalized: the caller's bounds may be a scipy Bounds object
         kwargs,
         ctx=ctx,
     )

@@ -7,6 +7,7 @@ normal distribution overlay using pyqtgraph.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -29,6 +30,11 @@ if TYPE_CHECKING:
 
 __all__ = ["HistogramPlotWidget"]
 
+logger = logging.getLogger(__name__)
+
+# scipy.stats.shapiro's p-value is only accurate up to this many samples
+_SHAPIRO_MAX_N = 5000
+
 
 def _histogram(finite_data: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray]:
     """``np.histogram``, falling back to one bar when no finite bin width exists.
@@ -47,7 +53,9 @@ def _histogram(finite_data: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarr
     except ValueError:
         # Subnormal spread: every value is effectively one point.
         centre = finite_data.min() / 2 + finite_data.max() / 2
-        return np.array([finite_data.size]), np.array([centre - 0.5, centre + 0.5])
+        # +-0.5 vanishes next to a large centre (ulp(1e16) = 2): scale with it
+        half = max(0.5, 2 * float(np.spacing(abs(centre))))
+        return np.array([finite_data.size]), np.array([centre - half, centre + half])
 
 
 class HistogramPlotWidget(QWidget):
@@ -241,10 +249,17 @@ class HistogramPlotWidget(QWidget):
             return {}
 
         # Normality test
-        try:
-            _, p_value = stats.shapiro(
-                finite_data[:5000] if len(finite_data) > 5000 else finite_data,
+        sample = finite_data
+        if len(finite_data) > _SHAPIRO_MAX_N:
+            logger.warning(
+                "Normality test uses only the first %d of %d finite residuals "
+                "(Shapiro-Wilk limit); the p-value is not for the full data",
+                _SHAPIRO_MAX_N,
+                len(finite_data),
             )
+            sample = finite_data[:_SHAPIRO_MAX_N]
+        try:
+            _, p_value = stats.shapiro(sample)
         except Exception:
             p_value = None
 

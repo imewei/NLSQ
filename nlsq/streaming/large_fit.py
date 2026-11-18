@@ -62,7 +62,7 @@ def _multistart_kwargs(ms: Multistart) -> dict[str, Any]:
 
 def _reject_output_flags(opts: Mapping[str, Any]) -> None:
     """The chunked engine returns ``(popt, pcov)`` only; fail before any chunk is fit."""
-    for key in ("full_output", "return_eval"):
+    for key in ("full_output", "return_eval", "timeit"):
         if opts.get(key):
             raise TypeError(
                 f"curve_fit_large: {key}=True is not supported on the chunked/large "
@@ -373,7 +373,7 @@ def _exact_ineligible(
     Scalar and signed ``sigma`` are not reasons. Non-finite ``xdata``/``ydata`` under
     ``check_finite=False`` is a data reason (chunked would absorb the NaN silently).
     """
-    from nlsq.streaming.exact_lm import check_model_contract
+    from nlsq.streaming.exact_lm import check_bounds, check_model_contract
     from nlsq.streaming.strategy import normalize_p0_bounds
 
     chunked = auto.chunked
@@ -401,7 +401,10 @@ def _exact_ineligible(
         return "data", "xdata or ydata has non-finite values (check_finite=False)"
     if p0 is not None:
         p0 = np.asarray(p0, dtype=float)
-    p0_arr, _ = normalize_p0_bounds(f, p0, bounds)
+    p0_arr, probe_bounds = normalize_p0_bounds(f, p0, bounds)
+    # the exact solver probes the model at p0 clipped into the box, so must this
+    lo, hi = check_bounds(probe_bounds, len(p0_arr))
+    p0_arr = np.clip(p0_arr, lo, hi)
     try:
         check_model_contract(f, p0_arr, xdata[: min(n_points, _PROBE_POINTS)])
     except ValueError as err:

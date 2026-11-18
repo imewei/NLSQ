@@ -45,6 +45,25 @@ def scaled_norm(v: Any) -> float:
     return m * float(np.sqrt(np.sum((a / m) ** 2)))
 
 
+# Scale-free first-order optimality below which a cost-change stop is accepted
+# (same value as adaptive_hybrid._GN_RELGRAD_SUCCESS).
+_GN_RELGRAD_SUCCESS = 1e-6
+
+
+def _relative_gradient(params, JTJ, JTr, residual_sum_sq, bounds=None) -> float:
+    """``max_j |J_j.r| / (||J_j|| ||r||)``, skipping components held at a bound."""
+    g = np.asarray(JTr, dtype=float)
+    if bounds is not None:
+        lb, ub = (np.asarray(b, dtype=float) for b in bounds)
+        q = np.asarray(params, dtype=float)
+        g = np.where(((q <= lb) & (g <= 0)) | ((q >= ub) & (g >= 0)), 0.0, g)
+    denom = np.sqrt(np.maximum(np.diag(np.asarray(JTJ, dtype=float)), 0.0)) * np.sqrt(
+        max(float(residual_sum_sq), 0.0)
+    )
+    cos = np.where(denom > 0, np.abs(g) / np.where(denom > 0, denom, 1.0), 0.0)
+    return float(np.max(cos)) if cos.size else 0.0
+
+
 def clip_to_radius(step: Any, radius: float) -> Any:
     """``step`` scaled onto the trust-region boundary if it is longer than ``radius``.
 
@@ -411,6 +430,7 @@ class GaussNewtonPhase:
                     residual_sum_sq += res_sq
 
                 final_JTJ = JTJ
+                final_JTr = JTr
                 final_residual_sum_sq = residual_sum_sq
             else:
                 self._consecutive_rejections += 1
@@ -468,7 +488,24 @@ class GaussNewtonPhase:
                 abs(cost_before_step), float(jnp.finfo(jnp.float64).tiny)
             )
 
-            if relative_change < self.config.gauss_newton_tol:
+            # Same stationarity guard as the adaptive optimizer: a rejected or
+            # truncated step with a small cost change is not convergence while the
+            # residual is still correlated with a Jacobian column.
+            if (
+                relative_change < self.config.gauss_newton_tol
+                and _relative_gradient(
+                    current_params,
+                    *self._add_group_variance_terms(
+                        current_params,
+                        final_JTJ,
+                        final_JTr,
+                        final_residual_sum_sq,
+                        n_points,
+                    ),
+                    self.normalized_bounds,
+                )
+                <= _GN_RELGRAD_SUCCESS
+            ):
                 phase_record = {
                     "phase": 2,
                     "name": "gauss_newton",
@@ -539,6 +576,54 @@ class GaussNewtonPhase:
             "gn_result": gn_result,
         }
 
+    def _add_group_variance_terms(
+        self,
+        current_params: jnp.ndarray,
+        JTJ: jnp.ndarray,
+        JTr: jnp.ndarray,
+        total_cost: float,
+        n_points: int,
+    ) -> tuple[jnp.ndarray, jnp.ndarray, float]:
+        """Add the group-variance penalty to ``(J^T J, J^T r, cost)`` at ``current_params``.
+
+        Unchanged when the regularization is disabled. Shared by the step and the
+        stationarity check so both see the same (penalized) objective.
+        """
+        # Add group variance regularization if enabled
+        if (
+            self.config.enable_group_variance_regularization
+            and self.config.group_variance_indices
+        ):
+            var_lambda = self.config.group_variance_lambda
+            # Variance is over PHYSICAL params p = D q + o (D = diag(scales));
+            # chain rule: grad_q = D grad_p, H_q = D H_p D.
+            normalizer = self.normalized_model.normalizer
+            physical = normalizer.denormalize(current_params)
+            scales = normalizer.scales
+            for start, end in self.config.group_variance_indices:
+                group_params = physical[start:end]
+                d = scales[start:end]
+                n_group = end - start
+                group_mean = jnp.mean(group_params)
+
+                grad_var = d * (2.0 / n_group) * (group_params - group_mean)
+                # The cost is SSR + var_lambda*var*n_points, so J^T r (the
+                # negative gradient of cost/2) carries n_points/2 of it.
+                JTr = JTr.at[start:end].add(-0.5 * var_lambda * grad_var * n_points)
+
+                diag_term = (2.0 / n_group) * jnp.eye(n_group)
+                off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
+                    (n_group, n_group),
+                )
+                H_var = d[:, None] * (diag_term - off_diag_term) * d[None, :]
+                JTJ = JTJ.at[start:end, start:end].add(
+                    0.5 * var_lambda * H_var * n_points
+                )
+
+                group_var = jnp.var(group_params)
+                total_cost += var_lambda * float(group_var) * n_points
+        return JTJ, JTr, total_cost
+
     def _gauss_newton_iteration(
         self,
         data_source: tuple[jnp.ndarray, jnp.ndarray],
@@ -591,39 +676,9 @@ class GaussNewtonPhase:
             )
             total_cost += chunk_cost
 
-        # Add group variance regularization if enabled
-        if (
-            self.config.enable_group_variance_regularization
-            and self.config.group_variance_indices
-        ):
-            var_lambda = self.config.group_variance_lambda
-            # Variance is over PHYSICAL params p = D q + o (D = diag(scales));
-            # chain rule: grad_q = D grad_p, H_q = D H_p D.
-            normalizer = self.normalized_model.normalizer
-            physical = normalizer.denormalize(current_params)
-            scales = normalizer.scales
-            for start, end in self.config.group_variance_indices:
-                group_params = physical[start:end]
-                d = scales[start:end]
-                n_group = end - start
-                group_mean = jnp.mean(group_params)
-
-                grad_var = d * (2.0 / n_group) * (group_params - group_mean)
-                # The cost is SSR + var_lambda*var*n_points, so J^T r (the
-                # negative gradient of cost/2) carries n_points/2 of it.
-                JTr = JTr.at[start:end].add(-0.5 * var_lambda * grad_var * n_points)
-
-                diag_term = (2.0 / n_group) * jnp.eye(n_group)
-                off_diag_term = (2.0 / (n_group * n_group)) * jnp.ones(
-                    (n_group, n_group),
-                )
-                H_var = d[:, None] * (diag_term - off_diag_term) * d[None, :]
-                JTJ = JTJ.at[start:end, start:end].add(
-                    0.5 * var_lambda * H_var * n_points
-                )
-
-                group_var = jnp.var(group_params)
-                total_cost += var_lambda * float(group_var) * n_points
+        JTJ, JTr, total_cost = self._add_group_variance_terms(
+            current_params, JTJ, JTr, total_cost, n_points
+        )
 
         gradient_norm = float(jnp.linalg.norm(JTr))
 
@@ -756,7 +811,8 @@ class GaussNewtonPhase:
         normalized_model = self.normalized_model
 
         def model_at_x(p, x_single):
-            return normalized_model(x_single, *p)
+            # one row as a batch of 1: models index x[:, k] for 2-D inputs
+            return jnp.atleast_1d(normalized_model(x_single[None], *p))[0]
 
         jac_fn = jax.vmap(lambda x: jax.jacrev(model_at_x, argnums=0)(params, x))
         return jac_fn(x_chunk)

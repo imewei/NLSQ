@@ -12,6 +12,7 @@ import html
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -365,7 +366,20 @@ class ProfilerVisualization:
         ]
 
         for name, metrics_list in profiles.items():
-            summary = self.profiler.get_summary(name)
+            if not metrics_list:
+                continue
+            # Summary from the same snapshot as the table rows below
+            summary: dict[str, Any] = {
+                "n_runs": len(metrics_list),
+                "success_rate": sum(bool(m["success"]) for m in metrics_list)
+                / len(metrics_list),
+                "total_time": {
+                    "mean": np.mean([m["total_time"] for m in metrics_list])
+                },
+                "iterations": {
+                    "mean": np.mean([m["n_iterations"] for m in metrics_list])
+                },
+            }
 
             html_parts.extend(
                 [

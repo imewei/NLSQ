@@ -246,8 +246,8 @@ def _warn_output_collisions(
         ):
             targets.append(export["results_file"])
             if not (
-                cfg_get(export, "stdout", False)
-                and cfg_get(export, "skip_file_on_stdout", False)
+                export.get("stdout") is True
+                and export.get("skip_file_on_stdout") is True
             ):
                 result_files.append(Path(export["results_file"]).resolve())
         try:
@@ -268,12 +268,12 @@ def _warn_output_collisions(
                         cfg_get(vis, "formats", ["pdf", "png"])
                     )
                 ]
-                targets.append(output_dir / f"{prefix}_combined")
+                targets.extend(vis_files)  # full file names, same as results_file
                 result_files.extend(vis_files)
         except (TypeError, ValueError, AttributeError, CLIError):
             pass  # malformed visualization block: the workflow run reports it
         for target in targets:
-            key = os.path.abspath(target)
+            key = str(Path(target).resolve())
             if key in owners and owners[key] != path:
                 logger.warning(
                     f"Output collision: {owners[key]} and {path} both write "

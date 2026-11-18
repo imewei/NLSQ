@@ -125,6 +125,7 @@ class SparseJacobianComputer:
         x0: np.ndarray,
         xdata_sample: np.ndarray | list,
         n_samples: int = 100,
+        points_last: bool | None = None,
     ) -> tuple[np.ndarray, float]:
         """Detect sparsity pattern of Jacobian from sample evaluations.
 
@@ -140,6 +141,9 @@ class SparseJacobianComputer:
             shape (k, N) for multi-dimensional coordinates.
         n_samples : int
             Number of samples to use for pattern detection
+        points_last : bool, optional
+            Layout of a 2-D array ``xdata_sample`` (``True``: ``(k, N)``);
+            default: inferred from the shape.
 
         Returns
         -------
@@ -163,7 +167,13 @@ class SparseJacobianComputer:
             n_data = min(n_samples, n_data_points)
             # Slice each coordinate array
             xdata_sliced = [coord[:n_data] for coord in xdata_sample]
-        elif xdata_arr.ndim == 2 and xdata_arr.shape[0] < xdata_arr.shape[1]:
+        elif xdata_arr.ndim == 2 and (
+            points_last
+            if points_last is not None
+            else xdata_arr.shape[0] <= xdata_arr.shape[1]
+        ):
+            # shortcut: with more rows than columns a 2-D array is read as
+            # points-first (N, k); pass a list of coordinates to be explicit.
             # 2D array with shape (k, N) - slice along N dimension
             n_data_points = xdata_arr.shape[1]
             n_data = min(n_samples, n_data_points)
@@ -177,7 +187,7 @@ class SparseJacobianComputer:
 
         # Use finite differences to detect sparsity
         eps = FINITE_DIFF_REL_STEP
-        f0 = np.asarray(func(xdata_sliced, *x0))
+        f0 = np.atleast_1d(np.asarray(func(xdata_sliced, *x0)))
         if not np.all(np.isfinite(f0)):
             raise ValueError(
                 "model output at x0 is not finite (NaN/inf); sparsity cannot be "
@@ -278,6 +288,10 @@ class SparseJacobianComputer:
 
         if data_mask is None:
             data_mask = np.ones(n_data, dtype=bool)
+        elif len(data_mask) != n_data:
+            raise ValueError(
+                f"data_mask has {len(data_mask)} entries but ydata has {n_data}"
+            )
 
         # Accumulate COO format data across chunks for fully vectorized construction
         all_rows: list[np.ndarray] = []
@@ -338,7 +352,7 @@ class SparseJacobianComputer:
             # <= the global one, so this keeps a superset that the final
             # global filter below trims. Non-finite entries are always kept.
             J_chunk = np.asarray(J_chunk)
-            expected = (len(mask_chunk), n_params)
+            expected = (end - start, n_params)
             if J_chunk.shape != expected:
                 raise ValueError(
                     f"Jacobian callback returned shape {J_chunk.shape}, expected "
@@ -419,9 +433,9 @@ class SparseJacobianComputer:
         J = np.zeros((n_data, n_params))
 
         # Base function evaluation
-        f0 = func(xdata, *x)
-        f0 = f0 - ydata
-        f0 = np.where(data_mask, f0, 0)
+        # Difference the model outputs directly: subtracting a large ``ydata``
+        # first would round away the (small) change in the model.
+        f0 = np.asarray(func(xdata, *x))
 
         # Compute finite differences
         for j in range(n_params):
@@ -429,11 +443,9 @@ class SparseJacobianComputer:
             step = eps * max(1.0, abs(float(x[j])))
             x_perturb = jnp.asarray(x).at[j].add(step)
 
-            f_perturb = func(xdata, *x_perturb)
-            f_perturb = f_perturb - ydata
-            f_perturb = np.where(data_mask, f_perturb, 0)
+            f_perturb = np.asarray(func(xdata, *x_perturb))
 
-            J[:, j] = (f_perturb - f0) / step
+            J[:, j] = np.where(data_mask, (f_perturb - f0) / step, 0)
 
         return J
 
@@ -526,7 +538,7 @@ class SparseJacobianComputer:
         sparse_gb = sparse_bytes / (1024**3)
 
         # Memory savings
-        savings = (dense_gb - sparse_gb) / dense_gb * 100
+        savings = (dense_gb - sparse_gb) / dense_gb * 100 if dense_gb > 0 else 0.0
 
         return {
             "dense_gb": dense_gb,
@@ -727,6 +739,7 @@ def detect_jacobian_sparsity(
     xdata_sample: np.ndarray | list,
     threshold: float = 0.01,
     n_samples: int = 100,
+    points_last: bool | None = None,
 ) -> tuple[float, dict]:
     """Detect and analyze Jacobian sparsity for a given problem.
 
@@ -747,6 +760,9 @@ def detect_jacobian_sparsity(
         Number of leading points of ``xdata_sample`` that are evaluated. When
         ``xdata_sample`` holds more points, the rest are ignored and the
         truncation is logged.
+    points_last : bool, optional
+        Layout of a 2-D array ``xdata_sample``: ``True`` for ``(k, N)``,
+        ``False`` for ``(N, k)``. Default: inferred from the shape.
 
     Returns
     -------
@@ -760,7 +776,11 @@ def detect_jacobian_sparsity(
     xdata_arr = np.asarray(xdata_sample)
     if isinstance(xdata_sample, list):
         n_data_points = len(xdata_sample[0])
-    elif xdata_arr.ndim == 2 and xdata_arr.shape[0] < xdata_arr.shape[1]:
+    elif xdata_arr.ndim == 2 and (
+        points_last
+        if points_last is not None
+        else xdata_arr.shape[0] <= xdata_arr.shape[1]
+    ):
         # 2D array with shape (k, N) - N is number of data points
         n_data_points = xdata_arr.shape[1]
     else:
@@ -780,6 +800,7 @@ def detect_jacobian_sparsity(
         x0,
         xdata_sample,
         min(n_samples, n_data_points),
+        points_last=points_last,
     )
 
     # Analyze pattern
@@ -791,9 +812,9 @@ def detect_jacobian_sparsity(
         "sparsity": sparsity,
         "nnz": np.sum(pattern),
         "avg_nnz_per_row": np.mean(nnz_per_row),
-        "avg_nnz_per_col": np.mean(nnz_per_col),
+        "avg_nnz_per_col": np.mean(nnz_per_col) if nnz_per_col.size else 0.0,
         "max_nnz_per_row": np.max(nnz_per_row),
-        "max_nnz_per_col": np.max(nnz_per_col),
+        "max_nnz_per_col": np.max(nnz_per_col, initial=0),
         "pattern_shape": pattern.shape,
         "memory_reduction": sparsity * 100,
     }
@@ -871,6 +892,11 @@ def detect_sparsity_at_p0(
     # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)
     xdata = _normalize_xdata(xdata)
     xdata_arr = np.asarray(xdata)
+    # Layout of a 2-D array, decided once and passed to the detector as well
+    points_last = xdata_arr.ndim == 2 and (
+        _is_points_last_2d(xdata_arr, n_residuals)
+        or xdata_arr.shape[0] <= xdata_arr.shape[1]
+    )
 
     if isinstance(xdata, list):
         # xdata is a list of coordinate arrays (e.g., [X, Y] for 2D problems)
@@ -887,7 +913,7 @@ def detect_sparsity_at_p0(
             xdata_sample = [coord[sample_indices] for coord in xdata]
         else:
             xdata_sample = xdata
-    elif xdata_arr.ndim == 2 and xdata_arr.shape[0] < xdata_arr.shape[1]:
+    elif xdata_arr.ndim == 2 and points_last:
         # xdata is a 2D array with shape (k, N) where k is number of coords
         # and N is number of data points (e.g., shape (2, 40000) for X,Y)
         n_data_points = xdata_arr.shape[1]
@@ -924,6 +950,7 @@ def detect_sparsity_at_p0(
         xdata_sample,
         threshold=threshold,
         n_samples=actual_sample_size,
+        points_last=points_last if xdata_arr.ndim == 2 else None,
     )
 
     # Determine if sparse based on sparsity threshold

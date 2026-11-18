@@ -532,6 +532,10 @@ class MemoryBudgetSelector:
 
         logger = logging.getLogger("nlsq")
 
+        # Validate here too: a caller-supplied budget skips MemoryBudget.compute's checks.
+        n_points = _check_count("n_points", n_points)
+        n_params = _check_count("n_params", n_params)
+
         # Compute memory budget (unless the caller already computed one)
         if budget is None:
             budget = MemoryBudget.compute(
@@ -1038,7 +1042,10 @@ class ClusterDetector:
         """
         # Try PBS environment first
         if self.is_pbs_environment():
-            return self.detect_pbs()
+            pbs_info = self.detect_pbs()
+            if pbs_info is not None:
+                return pbs_info
+            # unusable PBS_NODEFILE: fall back to the local GPUs
 
         # Try local multi-GPU
         local_info = self.detect_local_gpus()
@@ -1381,14 +1388,20 @@ def create_checkpoint_directory(base_dir: str | Path | None = None) -> str:
     else:
         base_dir = Path(base_dir)
 
-    # Create timestamp-based subdirectory
+    # Create timestamp-based subdirectory; a second call in the same second gets
+    # a numeric suffix instead of sharing the first call's directory.
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    checkpoint_dir = base_dir / timestamp
-
-    # Create directory (including parents if needed)
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-    return str(checkpoint_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    for attempt in range(10_000):
+        checkpoint_dir = base_dir / (
+            timestamp if attempt == 0 else f"{timestamp}_{attempt}"
+        )
+        try:
+            checkpoint_dir.mkdir()
+        except FileExistsError:
+            continue
+        return str(checkpoint_dir)
+    raise FileExistsError(f"no free checkpoint directory under {base_dir}")
 
 
 __all__ = [

@@ -434,8 +434,17 @@ class DataLoader:
 
         try:
             narrow_float = np.dtype(dtype).kind == "f" and np.dtype(dtype).itemsize < 8
+            is_complex = np.dtype(dtype).kind == "c"
         except TypeError:
-            narrow_float = False  # loadtxt reports the invalid dtype below
+            narrow_float = is_complex = False  # loadtxt reports the invalid dtype below
+        if is_complex:
+            # the float64 cast below would silently drop the imaginary parts
+            raise DataLoadError(
+                f"ascii.dtype {dtype!r} is complex; observations must be real",
+                file_path=file_path,
+                file_format="ascii",
+                suggestion="Use ascii.dtype: float64 (the default).",
+            )
         if narrow_float:
             # float32/float16 would silently round the data before the float64 cast
             raise DataLoadError(
@@ -636,12 +645,17 @@ class DataLoader:
                     file_format="csv",
                     suggestion="Set csv.encoding (e.g. latin-1) to match the file.",
                 ) from e
-            if header_names and all(_is_number(c) for c in header_names):
+            if (
+                header_names
+                and csv_config.get("header") is None  # an explicit header: true wins
+                and all(_is_number(c) for c in header_names)
+            ):
                 # A header-less file read with the default has_header=True would
                 # silently lose its first data row.
                 logger.warning(
                     "CSV 'header' row %r is entirely numeric; treating it as data "
-                    "(set csv.header: false to silence this).",
+                    "(set csv.header: false to silence this, or csv.header: true "
+                    "explicitly to keep it as the header).",
                     header_names,
                 )
                 has_header = False

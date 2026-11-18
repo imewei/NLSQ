@@ -760,7 +760,7 @@ class NLSQLogger:
         if not save_dir:
             return
         # A boolean flag (as set by enable_performance_tracking) is not a path.
-        if save_dir.lower() in ("1", "true", "yes"):
+        if save_dir.strip().lower() in ("1", "true", "yes", "on"):
             save_dir = os.getenv("NLSQ_LOG_DIR", ".")
 
         save_path = Path(save_dir)
@@ -776,7 +776,8 @@ class NLSQLogger:
         # first entry alone would drop that column for the whole fit.
         columns = dict.fromkeys(k for entry in self.optimization_history for k in entry)
         for key in columns:
-            values: list[float] = []
+            values: list[Any] = []
+            labels = False  # a column holding a non-numeric string is kept as text
             for entry in self.optimization_history:
                 val = entry.get(key, np.nan)
                 # Handle string values
@@ -784,9 +785,17 @@ class NLSQLogger:
                     try:
                         val = float(val.replace("e", "E"))
                     except (ValueError, AttributeError):
-                        val = np.nan
+                        labels = True
                 values.append(val)
-            data[key] = np.array(values)
+            if labels:
+                data[key] = np.array(
+                    [
+                        "" if (isinstance(v, float) and np.isnan(v)) else str(v)
+                        for v in values
+                    ]
+                )
+            else:
+                data[key] = np.array(values)
 
         np.savez(str(filename), **data)  # type: ignore[arg-type]
         self.info(f"Saved optimization history to {filename}")
@@ -825,8 +834,9 @@ def get_logger(name: str, level: int | LogLevel | None = None) -> NLSQLogger:
     >>> logger = get_logger("my_module")
     >>> logger.info("Processing started", n_items=100)
     """
-    if name in _loggers:  # Fast path (no lock)
-        return _loggers[name]
+    logger = _loggers.get(name)  # Fast path (no lock); single lookup survives clear()
+    if logger is not None:
+        return logger
     with _loggers_lock:
         if name not in _loggers:  # Double-check under lock
             if len(_loggers) >= 1000:

@@ -306,6 +306,19 @@ def validate_lbfgs_config(
     validate_positive(exploration_step_size, "lbfgs_exploration_step_size")
     validate_positive(refinement_step_size, "lbfgs_refinement_step_size")
     validate_positive(careful_step_size, "lbfgs_careful_step_size")
+    # documented hierarchy (HybridStreamingConfig): exploration <= careful <= refinement
+    validate_less_than_or_equal(
+        exploration_step_size,
+        careful_step_size,
+        "lbfgs_exploration_step_size",
+        "lbfgs_careful_step_size",
+    )
+    validate_less_than_or_equal(
+        careful_step_size,
+        refinement_step_size,
+        "lbfgs_careful_step_size",
+        "lbfgs_refinement_step_size",
+    )
 
 
 def validate_gauss_newton_config(

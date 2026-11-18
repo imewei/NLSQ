@@ -321,13 +321,13 @@ class FactorySource:
         if first is _END:
             raise ValueError("chunk factory yielded no blocks")
         self.weighted = isinstance(first, tuple) and len(first) == 3
-        self._head: list[tuple[Any, ...]] = [self._check(first)]
+        self._head: list[tuple[Any, ...]] = [self._check(first, keep=True)]
         seen = self._head[0][0].shape[0]
         while seen < 2:  # a 1-point probe cannot see a non-pointwise model
             item = next(self._pending, _END)
             if item is _END:  # < 2 points in all: the fit raises after pass 1
                 break
-            self._head.append(self._check(item))
+            self._head.append(self._check(item, keep=True))
             seen += self._head[-1][0].shape[0]
         xs = [b[0] for b in self._head]
         self.first_x: Any = (
@@ -336,7 +336,7 @@ class FactorySource:
             else jnp.concatenate([jnp.asarray(a) for a in xs])[: max(chunk, 2)]
         )
 
-    def _check(self, item: Any) -> tuple[Any, ...]:
+    def _check(self, item: Any, keep: bool = False) -> tuple[Any, ...]:
         if not isinstance(item, tuple) or len(item) not in (2, 3):
             raise ValueError(
                 "chunk factory must yield (x, y) or (x, y, sigma) tuples, got "
@@ -349,6 +349,10 @@ class FactorySource:
                 f"same parts as the first ({3 if self.weighted else 2})"
             )
         parts = tuple(_as64(a) for a in item)
+        if keep:  # a buffer-reusing factory would overwrite a retained view
+            parts = tuple(
+                np.array(a) if isinstance(a, np.ndarray) else a for a in parts
+            )
         for name, a in zip(("x", "y", "sigma"), parts, strict=False):
             if a.ndim != 1 and not (name == "sigma" and a.ndim == 0):
                 raise ValueError(f"block {name} must be 1-D, got shape {a.shape}")

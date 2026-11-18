@@ -236,8 +236,9 @@ def estimate_p0_exponential_decay(
     p0 : list
         [amplitude, rate, offset]
     """
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    # float64: signed amplitude/midpoint arithmetic wraps for unsigned/int inputs
+    xdata = np.asarray(xdata, dtype=np.float64)
+    ydata = np.asarray(ydata, dtype=np.float64)
 
     y_max = np.max(ydata)
     y_min = np.min(ydata)
@@ -360,28 +361,27 @@ def estimate_p0_exponential_growth(
     p0 : list
         [amplitude, rate, offset]
     """
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    xdata = np.asarray(xdata, dtype=np.float64)
+    ydata = np.asarray(ydata, dtype=np.float64)
 
     y_min = np.min(ydata)
     y_max = np.max(ydata)
-
     y_range = y_max - y_min
-    x_range = np.max(xdata) - np.min(xdata)
 
-    if y_min > 0:
-        a = y_min  # Initial value
-        c = 0.0  # Offset
-    else:
-        # bounds() require a >= 0: put the offset just below the data instead
-        c = y_min - (0.1 * y_range if y_range > 0 else 1.0)
-        a = y_min - c
+    # Offset just below the data (bounds() require a >= 0), so that
+    # b is fitted to y - c rather than to y itself.
+    c = y_min - (0.1 * y_range if y_range > 0 else 1.0)
 
-    # Estimate growth rate: b ≈ ln((y_max - c) / a) / x_range
-    if x_range > 0 and y_range > 0:
-        b = np.log((y_max - c) / a) / x_range
+    # Growth rate from the extreme points: b = ln((y_max - c) / (y_min - c)) / dx
+    x_lo = xdata[np.argmin(ydata)]
+    dx = xdata[np.argmax(ydata)] - x_lo
+    if dx > 0 and y_range > 0:
+        b = np.log((y_max - c) / (y_min - c)) / dx
     else:
         b = 0.1
+
+    # The model's amplitude is its value at x = 0, not at the start of the data.
+    a = (y_min - c) * float(np.exp(np.clip(-b * float(x_lo), -50.0, 50.0)))
 
     return [float(a), float(b), float(c)]
 

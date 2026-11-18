@@ -241,7 +241,10 @@ def _parse_fitting_section(config: dict[str, Any], state: SessionState) -> None:
         state.gtol = float(_term(term, "gtol", state.gtol))
         state.ftol = float(_term(term, "ftol", state.ftol))
         state.xtol = float(_term(term, "xtol", state.xtol))
-        state.max_iterations = int(_term(term, "max_iterations", state.max_iterations))
+        state.max_iterations = _nfev(
+            _term(term, "max_iterations", state.max_iterations),
+            "termination.max_iterations",
+        )
         state.max_function_evals = _nfev(
             _term(term, "max_function_evals", state.max_function_evals),
             "termination.max_function_evals",
@@ -337,6 +340,22 @@ def _parse_global_optimization_section(
     state.scale_factor = float(go.get("scale_factor", state.scale_factor))
 
 
+def _check_structure(config: Any) -> None:
+    """Raise ``ValueError`` unless ``config`` is a mapping of mapping sections."""
+    if not isinstance(config, dict):
+        raise ValueError(
+            "Invalid YAML config: expected a mapping at the top level, "
+            f"got {type(config).__name__}",
+        )
+    for key in _SECTION_KEYS:
+        value = config.get(key)
+        if value is not None and not isinstance(value, dict):
+            raise ValueError(
+                f"Invalid YAML config: '{key}' section must be a "
+                f"mapping, got {type(value).__name__}",
+            )
+
+
 def load_yaml_config(file: TextIO | str) -> SessionState:
     """Load a YAML workflow configuration file into a SessionState.
 
@@ -379,18 +398,7 @@ def load_yaml_config(file: TextIO | str) -> SessionState:
     if config is None:
         config = {}
 
-    if not isinstance(config, dict):
-        raise ValueError(
-            "Invalid YAML config: expected a mapping at the top level, "
-            f"got {type(config).__name__}",
-        )
-    for _section_key in _SECTION_KEYS:
-        _section_value = config.get(_section_key)
-        if _section_value is not None and not isinstance(_section_value, dict):
-            raise ValueError(
-                f"Invalid YAML config: '{_section_key}' section must be a "
-                f"mapping, got {type(_section_value).__name__}",
-            )
+    _check_structure(config)
 
     # A heading whose children are all commented out parses as None; the CLI
     # treats that as an empty section, so the parsers below must too.
@@ -492,6 +500,7 @@ def validate_yaml_config(yaml_content: str) -> tuple[bool, str | None]:
 
         if not isinstance(config, dict):
             return False, "YAML content must be a dictionary"
+        _check_structure(config)
 
         # Basic structure validation
         valid_sections = {
@@ -527,6 +536,8 @@ def validate_yaml_config(yaml_content: str) -> tuple[bool, str | None]:
 
     except yaml.YAMLError as e:
         return False, f"YAML parsing error: {e}"
+    except ValueError as e:
+        return False, str(e)
 
 
 def merge_configs(

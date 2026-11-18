@@ -297,7 +297,11 @@ class PerformanceProfiler:
         summary : dict
             Summary statistics
         """
-        metrics_list = self.get_metrics(name)
+        return self._summarize(self.get_metrics(name))
+
+    @staticmethod
+    def _summarize(metrics_list: list[ProfileMetrics]) -> dict:
+        """Summary statistics of one captured snapshot of runs."""
         if not metrics_list:
             return {}
 
@@ -350,7 +354,7 @@ class PerformanceProfiler:
         if not metrics_list:
             return f"No profiling data for '{name}'"
 
-        summary = self.get_summary(name)
+        summary = self._summarize(metrics_list)  # same snapshot as the detail rows
 
         lines = [
             f"Performance Report: {name}",

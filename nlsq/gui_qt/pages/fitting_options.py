@@ -610,6 +610,9 @@ class FittingOptionsPage(QWidget):
             {**self._default_options, **PRESETS["Robust"]}
         )
         self._app_state.state.preset = "Robust"
+        # manual initial guesses / bounds are options too (Run Fit reads them)
+        self._param_config.reset()
+        self._sync_parameters_to_state(*self._param_config.get_values())
         self._cost_plot.reset()
         self._iteration_table.clear()
         self._status_label.setText("Ready")

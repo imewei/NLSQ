@@ -84,6 +84,8 @@ def test_missing_covariance_has_no_claimed_uncertainty(qapp, app_state):
 
 def test_shortcut_navigation_respects_guards(qapp, app_state, main_window):
     _loaded(app_state, main_window)
+    # Fitting Options opens only once a model is applied (data alone stops at Model)
+    app_state.set_model("custom", model_func=lambda x, a: a * x)
     main_window._nav_list.setCurrentRow(0)
     for _ in range(4):
         main_window._navigate_next()  # Results/Export need a fit result

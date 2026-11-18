@@ -233,13 +233,16 @@ class GradientMonitor:
         Variance is computed as M2 / (n - 1) when needed.
         """
         gradient = np.asarray(gradient)
+        if gradient.dtype.kind in "iub":
+            # np.abs(INT_MIN) wraps negative in the integer dtype
+            gradient = gradient.astype(np.float64)
 
         if gradient.size == 0:
             raise ValueError("Gradient array cannot be empty")
 
-        # Check for numerical issues
-        if np.any(np.isnan(gradient)) or np.any(np.isinf(gradient)):
-            self._has_numerical_issues = True
+        # Check for numerical issues (the flag is set only after validation below)
+        nonfinite = bool(np.any(np.isnan(gradient)) or np.any(np.isinf(gradient)))
+        if nonfinite:
             # Replace non-finite values with safe large values (avoid overflow in Welford's)
             gradient = np.nan_to_num(gradient, nan=0.0, posinf=1e100, neginf=-1e100)
 
@@ -248,6 +251,15 @@ class GradientMonitor:
                 f"gradient shape {gradient.shape} does not match the "
                 f"{self._n_params} parameters recorded so far"
             )
+        # Validate everything before mutating state: a rejected call must leave
+        # the monitor exactly as it was.
+        if params is not None and np.shape(params) != gradient.shape:
+            raise ValueError(
+                f"params shape {np.shape(params)} does not match gradient shape "
+                f"{gradient.shape}"
+            )
+        if nonfinite:
+            self._has_numerical_issues = True
         self.iteration_count += 1
         n_params = len(gradient)
 
@@ -273,11 +285,6 @@ class GradientMonitor:
         # Unit-free imbalance: g_j * p_j removes the parameter's units.
         # shortcut: |p_j| = 0 drops that component from the ratio; use column
         # norms of J instead if the callback ever supplies the Jacobian.
-        if params is not None and np.shape(params) != gradient.shape:
-            raise ValueError(
-                f"params shape {np.shape(params)} does not match gradient shape "
-                f"{gradient.shape}"
-            )
         if params is not None:
             abs_params = np.abs(np.asarray(params, dtype=float))
             imbalance_basis = abs_gradient * abs_params

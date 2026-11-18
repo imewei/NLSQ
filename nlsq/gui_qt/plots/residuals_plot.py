@@ -143,9 +143,13 @@ class ResidualsPlotWidget(QWidget):
         # Compute standardized residuals
         # NaN residuals must not poison the scale: use finite values only
         finite = self._residuals[np.isfinite(self._residuals)]
-        std = np.std(finite) if finite.size else 0.0
+        # Rescale by the largest magnitude first so squaring in std() cannot
+        # underflow/overflow; (r/s)/std(r/s) == r/std(r) exactly.
+        scale = np.max(np.abs(finite)) if finite.size else 0.0
+        scaled = self._residuals / scale if scale > 0 else self._residuals
+        std = np.std(scaled[np.isfinite(scaled)]) if scale > 0 else 0.0
         if std > 0:
-            self._std_residuals = self._residuals / std
+            self._std_residuals = scaled / std
         else:
             self._std_residuals = self._residuals
 

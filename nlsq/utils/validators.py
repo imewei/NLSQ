@@ -614,23 +614,25 @@ class InputValidator:
                     expected_len = n_test
 
                 if p0 is not None:
-                    test_result = f(test_x, *p0)
+                    # same normalisation as _validate_initial_guess (scalar p0 is valid)
+                    test_result = f(test_x, *np.atleast_1d(np.asarray(p0)))
                 else:
                     # Try with dummy parameters
                     dummy_params = np.ones(n_params)
                     test_result = f(test_x, *dummy_params)
 
-                # Cache the result (suppress TypeError for non-referenceable callables)
-                with suppress(TypeError):
-                    self._function_cache[f] = True
-
-                # Check output shape/length
-                if hasattr(test_result, "__len__"):
+                # Check output shape/length (0-d arrays have __len__ but no length)
+                if hasattr(test_result, "__len__") and np.ndim(test_result) > 0:
                     if len(test_result) != expected_len:
                         warnings.append(
                             f"Function output length {len(test_result)} doesn't match "
                             f"expected length {expected_len}",
                         )
+
+                # Cache only after the probe completed (suppress TypeError for
+                # non-referenceable callables)
+                with suppress(TypeError):
+                    self._function_cache[f] = True
 
         except Exception as e:
             errors.append(f"Cannot evaluate function: {e}")
@@ -978,11 +980,6 @@ class InputValidator:
         if bounds is None:
             return errors
 
-        # Check method compatibility
-        if method == "lm":
-            errors.append("Levenberg-Marquardt method does not support bounds")
-            return errors
-
         # Validate bounds structure
         try:
             lb, ub = bounds
@@ -990,10 +987,17 @@ class InputValidator:
 
             lb, ub = prepare_bounds((lb, ub), len(x0))
 
+            # LM rejects only *finite* bounds; the solver accepts (-inf, inf).
+            if method == "lm" and (np.any(np.isfinite(lb)) or np.any(np.isfinite(ub))):
+                errors.append("Levenberg-Marquardt method does not support bounds")
+                return errors
+
             if len(lb) != len(x0) or len(ub) != len(x0):
                 errors.append("bounds must have same length as x0")
 
-            if np.any(lb >= ub):
+            if np.any(np.isnan(lb)) or np.any(np.isnan(ub)):
+                errors.append("bounds must not contain NaN")
+            elif np.any(lb >= ub):
                 errors.append("Lower bounds must be less than upper bounds")
 
             # Check x0 within bounds
@@ -1379,6 +1383,50 @@ class InputValidator:
         return errors, warnings_list, x0
 
 
+def _bind_call(func: Callable, args: tuple, kwargs: dict) -> tuple:
+    """Accessors over a call bound to ``func``'s signature.
+
+    Lets the validators see keyword-passed required arguments and
+    positionally-passed options. Returns ``(opt, required, forward)``.
+    """
+    try:
+        sig = signature(func)
+        bound = sig.bind_partial(*args, **kwargs).arguments
+        names = [
+            p.name
+            for p in sig.parameters.values()
+            if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)  # keyword-only too
+        ]
+    except (TypeError, ValueError):
+        bound, names = {}, []
+
+    def opt(name: str, default: Any = None) -> Any:
+        return bound[name] if name in bound else kwargs.get(name, default)
+
+    def required(n: int) -> list[Any]:
+        """First ``n`` required args: positional first, then by name."""
+        vals = list(args[:n])
+        for i in range(len(vals), n):
+            if i < len(names) and names[i] in kwargs:
+                vals.append(kwargs[names[i]])
+            else:
+                break
+        return vals
+
+    def forward(cleaned: list[Any]) -> tuple[tuple, dict]:
+        """Put cleaned required args back where they were passed."""
+        new_args = list(args)
+        new_kwargs = dict(kwargs)
+        for i, val in enumerate(cleaned):
+            if i < len(new_args):
+                new_args[i] = val
+            else:
+                new_kwargs[names[i]] = val
+        return tuple(new_args), new_kwargs
+
+    return opt, required, forward
+
+
 def validate_inputs(validation_type: str = "curve_fit") -> Callable:
     """Decorator for automatic input validation.
 
@@ -1397,24 +1445,25 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             validator = InputValidator()
+            opt, required, forward = _bind_call(func, args, kwargs)
 
             if validation_type == "curve_fit":
                 # Extract arguments
-                if len(args) < 3:
+                req = required(3)
+                if len(req) < 3:
                     raise ValueError(
                         "curve_fit requires at least 3 arguments (f, xdata, ydata)",
                     )
 
-                f, xdata, ydata = args[:3]
-                remaining_args = args[3:]
+                f, xdata, ydata = req
 
                 # Get optional arguments
-                p0 = kwargs.get("p0")
-                bounds = kwargs.get("bounds")
-                sigma = kwargs.get("sigma")
-                absolute_sigma = kwargs.get("absolute_sigma", True)
-                check_finite = kwargs.get("check_finite", True)
-                method = kwargs.get("method")
+                p0 = opt("p0")
+                bounds = opt("bounds")
+                sigma = opt("sigma")
+                absolute_sigma = opt("absolute_sigma", True)
+                check_finite = opt("check_finite", True)
+                method = opt("method")
 
                 # Validate
                 errors, warnings_list, xdata_clean, ydata_clean = (
@@ -1439,25 +1488,25 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                     warnings.warn(warning, UserWarning, stacklevel=2)
 
                 # Replace with cleaned data
-                args = (f, xdata_clean, ydata_clean, *remaining_args)
+                args, kwargs = forward([f, xdata_clean, ydata_clean])
 
             elif validation_type == "least_squares":
                 # Extract arguments
-                if len(args) < 2:
+                req = required(2)
+                if len(req) < 2:
                     raise ValueError(
                         "least_squares requires at least 2 arguments (fun, x0)",
                     )
 
-                fun, x0 = args[:2]
-                remaining_args = args[2:]
+                fun, x0 = req
 
                 # Get optional arguments
-                bounds = kwargs.get("bounds")
-                method = kwargs.get("method", "trf")
-                ftol = kwargs.get("ftol", 1e-8)
-                xtol = kwargs.get("xtol", 1e-8)
-                gtol = kwargs.get("gtol", 1e-8)
-                max_nfev = kwargs.get("max_nfev")
+                bounds = opt("bounds")
+                method = opt("method", "trf")
+                ftol = opt("ftol", 1e-8)
+                xtol = opt("xtol", 1e-8)
+                gtol = opt("gtol", 1e-8)
+                max_nfev = opt("max_nfev")
 
                 # Validate
                 errors, warnings_list, x0_clean = (
@@ -1481,7 +1530,7 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                     warnings.warn(warning, UserWarning, stacklevel=2)
 
                 # Replace with cleaned data
-                args = (fun, x0_clean, *remaining_args)
+                args, kwargs = forward([fun, x0_clean])
 
             else:
                 raise ValueError(f"Unknown validation type: {validation_type}")

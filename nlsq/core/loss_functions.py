@@ -51,7 +51,9 @@ def _stack_rhos(rho0, rho1, rho2):
 def _huber1(z):
     mask = z <= 1
 
-    return jnp.where(mask, z, 2 * z**0.5 - 1), mask
+    # sqrt of a masked-safe z: sqrt'(0) = inf would turn the unused branch's 0 * inf
+    # into NaN under jax.grad
+    return jnp.where(mask, z, 2 * jnp.where(mask, 1.0, z) ** 0.5 - 1), mask
 
 
 @jit
@@ -96,7 +98,7 @@ def _arctan1(z):
 @jit
 def _arctan2(z):
     t = 1 + z**2
-    return 1 / t, -2 * z / t**2
+    return 1 / t, -2 * (z / t) / t  # z / t first: t**2 overflows for huge z
 
 
 @jit

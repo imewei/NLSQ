@@ -162,7 +162,7 @@ class FitStatisticsWidget(QWidget):
         self._mae_card = StatCard("MAE (Mean Absolute Error)")
         self._aic_card = StatCard("AIC (Akaike Information Criterion)")
         self._bic_card = StatCard("BIC (Bayesian Information Criterion)")
-        self._iter_card = StatCard("Iterations")
+        self._iter_card = StatCard("Function evaluations")
         self._status_card = StatCard("Convergence")
 
         # Arrange in grid
@@ -192,7 +192,8 @@ class FitStatisticsWidget(QWidget):
             mae: Mean absolute error
             aic: Akaike information criterion
             bic: Bayesian information criterion
-            n_iterations: Number of iterations
+            n_iterations: Number of function evaluations (shown on the
+                "Function evaluations" card)
             converged: Whether the fit converged
         """
         # R² with theme-aware semantic color coding
@@ -223,7 +224,7 @@ class FitStatisticsWidget(QWidget):
         # BIC
         self._bic_card.set_value(f"{bic:.2f}")
 
-        # Iterations
+        # Function evaluations (result.nfev)
         self._iter_card.set_value(str(n_iterations))
 
         # Convergence status

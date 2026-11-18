@@ -208,7 +208,8 @@ def solve_with_cholesky_fallback(
         # nonsingular A is still solved exactly instead of returning a
         # ~1/eps-sized (or wrong) vector. In scaled units eps*max(max|lambda|, 1)
         # is finfo.eps * max(max|lambda_u|, 1/s) (s = 1 unless extreme).
-        eps = jnp.finfo(A.dtype).eps * jnp.maximum(jnp.max(jnp.abs(eigvals)), 1.0 / s)
+        lam_max = jnp.max(jnp.abs(eigvals))
+        eps = jnp.finfo(A.dtype).eps * jnp.where(lam_max > 0, lam_max, 1.0 / s)
         # Within n*eps*max (rank-style tolerance, as rounding noise of a
         # rank-deficient Gram matrix exceeds a bare eps) the HEAD clamp
         # max(lambda, eps) applies; only larger |lambda| keep their sign.
@@ -872,11 +873,10 @@ class NumericalStabilityGuard:
         robust_std = 1.4826 * mad
 
         deviation = jnp.abs(residuals - median_res)
-        if robust_std < jnp.finfo(residuals.dtype).eps:
-            outlier_mask = _zero_mad_outliers(
-                np.asarray(deviation, dtype=float),
-                float(jnp.finfo(residuals.dtype).eps),
-            )
+        # Relative to the residual scale: an absolute floor misreads tiny-unit data.
+        tiny = float(jnp.finfo(residuals.dtype).eps * jnp.max(jnp.abs(residuals)))
+        if robust_std <= tiny:
+            outlier_mask = _zero_mad_outliers(np.asarray(deviation, dtype=float), tiny)
         else:
             # Detect outliers (more than 5 robust std from median)
             outlier_mask = deviation > 5 * robust_std
@@ -928,8 +928,15 @@ class NumericalStabilityGuard:
                 result = float(self._safe_norm_jit(x, max_val))
                 if np.isfinite(result):
                     return result
+            # Negative vector orders are dominated by the smallest entry: scaling by
+            # the max would overflow its reciprocal power, so scale by the min instead.
+            scale = max_val
+            if ord < 0 and x.ndim == 1:
+                min_val = jnp.min(jnp.abs(x))
+                if min_val > 0:
+                    scale = min_val
             # Multiply in Python floats: the norm itself may exceed the dtype's max.
-            return float(jnp.linalg.norm(x / max_val, ord=ord)) * float(max_val)
+            return float(jnp.linalg.norm(x / scale, ord=ord)) * float(scale)
         return float(jnp.linalg.norm(x, ord=ord))
 
     def detect_numerical_issues(self, x: jnp.ndarray) -> dict:

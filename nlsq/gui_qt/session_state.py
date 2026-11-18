@@ -9,10 +9,13 @@ fitting workflow, matching the fields from workflow_config_template.yaml.
 """
 
 import copy
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def n_points(xdata: Any) -> int:
@@ -546,11 +549,30 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
     # Add parameter configuration if present
     if state.p0 is not None:
         config["model"]["parameters"] = []
+        names = [f"param_{i}" for i in range(len(state.p0))]
+        if state.transforms:
+            # transforms are keyed by parameter name: export the model's own names
+            try:
+                from nlsq.gui_qt.adapters.model_adapter import get_model_info
+
+                model_names = get_model_info(state.model_func)["param_names"]
+            except Exception:  # no model applied yet, or a model without names
+                model_names = []
+            if len(model_names) == len(names):
+                names = list(model_names)
+            else:
+                logger.warning(
+                    "YAML export dropped parameter transforms %s: the model's "
+                    "parameter names are unknown.",
+                    sorted(state.transforms),
+                )
         for i, val in enumerate(state.p0):
             param_config: dict[str, Any] = {
-                "name": f"param_{i}",
+                "name": names[i],
                 "initial": float(val),
             }
+            if names[i] in state.transforms:
+                param_config["transform"] = state.transforms[names[i]]
             if state.bounds is not None:
                 param_config["bounds"] = [
                     state.bounds[0][i] if state.bounds[0] else None,

@@ -29,6 +29,7 @@ from nlsq.cli.errors import (
     CLIError,
     ConfigError,
     beside_workflow_file,
+    cfg_bool,
     cfg_get,
     setup_logging,
 )
@@ -178,10 +179,9 @@ def run_fit(
 
     export_config = config.get("export") or {}
     results_file = export_config.get("results_file")
-    json_stdout = bool(cfg_get(export_config, "stdout", False))
-    skip_file = json_stdout and bool(
-        cfg_get(export_config, "skip_file_on_stdout", False)
-    )
+    json_stdout = cfg_bool(export_config, "stdout", False, "export")
+    skip_requested = cfg_bool(export_config, "skip_file_on_stdout", False, "export")
+    skip_file = json_stdout and skip_requested
     if results_file is not None and not skip_file and Path(results_file).is_dir():
         raise ConfigError(
             f"export.results_file {str(results_file)!r} is a directory",
@@ -190,10 +190,7 @@ def run_fit(
         )
     if (
         results_file
-        and not (
-            cfg_get(export_config, "stdout", False)
-            and cfg_get(export_config, "skip_file_on_stdout", False)
-        )
+        and not skip_file
         and Path(results_file).resolve() == workflow_file.resolve()
     ):
         raise CLIError("Results file must not overwrite the workflow configuration")
@@ -238,10 +235,7 @@ def run_fit(
             sources.add(Path(input_file).resolve())
         if model.get("type") == "custom" and model.get("path"):
             sources.add(Path(model["path"]).resolve())
-        if results_file and not (
-            cfg_get(export_config, "stdout", False)
-            and cfg_get(export_config, "skip_file_on_stdout", False)
-        ):
+        if results_file and not skip_file:
             sources.add(Path(results_file).resolve())
         output_dir = Path(cfg_get(vis_config, "output_dir", "figures"))
         # POSIX resolve() raises on NUL; Windows does not, so reject it here

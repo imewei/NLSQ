@@ -82,20 +82,22 @@ class TestRestoreStateValidation:
     def test_sigma_nan_rejected(self, tmp_path):
         """NaN sigma is invalid and must be rejected."""
         manager, mock_state = self._make_manager(tmp_path)
-        data = {"sigma": [0.1, float("nan"), 0.3]}
+        data = {**self._XY, "sigma": [0.1, float("nan"), 0.3]}
 
         manager._restore_state(data)
 
         assert mock_state.state.sigma is None
+        assert mock_state.state.xdata is None  # all-or-nothing: x/y dropped too
 
     def test_sigma_zero_rejected(self, tmp_path):
         """sigma=0 is invalid (division by zero) and must be rejected."""
         manager, mock_state = self._make_manager(tmp_path)
-        data = {"sigma": [0.0, 0.1, 0.2]}
+        data = {**self._XY, "sigma": [0.0, 0.1, 0.2]}
 
         manager._restore_state(data)
 
         assert mock_state.state.sigma is None
+        assert mock_state.state.xdata is None  # all-or-nothing: x/y dropped too
 
     def test_mismatched_xdata_ydata_length_rejected(self, tmp_path):
         """xdata/ydata of different lengths must not be restored (would silently
@@ -216,14 +218,14 @@ class TestAtomicWrite:
         mock_state.state.p0 = mock_state.state.bounds = None
         mock_state.state.auto_p0 = True
 
-        def torn_dump(obj, f, **kw):
-            f.write('{"timestamp": "torn')  # partial write, then crash
+        def torn_fsync(fd):
+            # the temp file holds the new snapshot; the flush to disk fails
             raise OSError("disk full")
 
         with (
             patch("nlsq.gui_qt.autosave.AUTOSAVE_DIR", tmp_path),
             patch("nlsq.gui_qt.autosave.AUTOSAVE_FILE", final),
-            patch("nlsq.gui_qt.autosave.json.dump", torn_dump),
+            patch("nlsq.gui_qt.autosave.os.fsync", torn_fsync),
         ):
             manager = AutosaveManager.__new__(AutosaveManager)
             manager._app_state = mock_state

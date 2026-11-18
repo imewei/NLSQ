@@ -655,6 +655,7 @@ def _fit_with_config(
             sigma=np.asarray(sigma) if sigma is not None else None,
             absolute_sigma=absolute_sigma,
             method=method,
+            check_finite=check_finite,
             **kwargs,
         )
         return result
@@ -1338,7 +1339,8 @@ def _fit_global_cmaes(
         ydata,
         sigma,
         absolute_sigma,
-        result_dict["pcov"],
+        # an unrefined CMA-ES result carries an inf placeholder, not a covariance
+        result_dict["pcov"] if kwargs.get("compute_covariance", True) else None,
     )
 
 
@@ -1410,20 +1412,6 @@ def _fit_global_multistart(
             **kwargs,
         )
     if strategy == "chunked":
-        # sigma would need to be sliced consistently with each chunk, which
-        # LargeDatasetFitter's chunked-fit dispatch (each chunk goes through
-        # its own curve_fit() call) doesn't do -- fail loudly instead of
-        # silently returning an unweighted fit. Matches the identical fix
-        # already applied to _curve_fit_auto_memory's chunked strategy.
-        if sigma is not None:
-            raise NotImplementedError(
-                f"workflow='{workflow_name}' chunked multi-start strategy "
-                "does not support the 'sigma' parameter yet (chunking "
-                "splits the data and sigma is not sliced consistently "
-                "across chunks). Use a memory_limit_gb override that "
-                "avoids the chunked strategy, or omit sigma.",
-            )
-
         # Chunked processing with multi-start
         from nlsq.streaming.large_dataset import LDMemoryConfig
         from nlsq.streaming.strategy import build_large_strategy
@@ -1454,6 +1442,7 @@ def _fit_global_multistart(
             n_starts=n_starts,
             check_finite=check_finite,
             absolute_sigma=absolute_sigma,
+            **({"sigma": sigma} if sigma is not None else {}),
             **kwargs,
         )
         # LargeDatasetFitter's own exception handling returns a
@@ -1465,13 +1454,13 @@ def _fit_global_multistart(
                 f"workflow='{workflow_name}' chunked multi-start fit "
                 f"failed: {result.get('message', 'unknown error')}",
             )
+        x_fit, y_fit, s_fit = _rows_actually_fit(xdata, ydata, sigma, kwargs)
         if not isinstance(result, CurveFitResult):
-            x_fit, y_fit, _ = _rows_actually_fit(xdata, ydata, None, kwargs)
             result = CurveFitResult(result)
             result["model"] = f
             result["xdata"] = x_fit
             result["ydata"] = y_fit
-        _store_sigma(result, sigma, absolute_sigma)  # sigma is None on this path
+        _store_sigma(result, s_fit, absolute_sigma)
         return result
     # Streaming with multi-start (FR-004)
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
@@ -2863,6 +2852,11 @@ def _run_multistart_optimization(
         "max_jacobian_elements_for_svd", _DEFAULT_MAX_JACOBIAN_ELEMENTS
     )
 
+    # flength/use_dynamic_sizing/cache_config are CurveFit constructor options too
+    flength = kwargs.pop("flength", None)
+    use_dynamic_sizing = kwargs.pop("use_dynamic_sizing", False)
+    cache_config = kwargs.pop("cache_config", None)
+
     # Extract bounds from kwargs
     bounds = kwargs.get("bounds", (-np.inf, np.inf))
 
@@ -2877,7 +2871,12 @@ def _run_multistart_optimization(
     # Create orchestrator
     orchestrator = MultiStartOrchestrator(
         config=multistart_config,
-        curve_fit_instance=CurveFit(max_jacobian_elements_for_svd=svd_limit),
+        curve_fit_instance=CurveFit(
+            flength=flength,
+            use_dynamic_sizing=use_dynamic_sizing,
+            cache_config=cache_config,
+            max_jacobian_elements_for_svd=svd_limit,
+        ),
     )
 
     # Run multi-start optimization
@@ -3418,7 +3417,7 @@ def curve_fit(
     args = ()
     # A positional ``method`` was bound into kwargs above; the routing below
     # reads the named parameter.
-    method = method or kwargs.pop("method", None)
+    method = kwargs.pop("method", None) if method is None else method
 
     # scipy.optimize.Bounds -> (lb, ub) once, so every route (TRF, CMA-ES,
     # multistart, streaming) sees the tuple form.
@@ -3978,10 +3977,10 @@ class CurveFit:
         if sigma is None:
             return None
 
-        # Convert scalar/list sigma to ndarray before shape checks.
-        # SciPy accepts scalar sigma as sigma * ones(m).
-        if not isinstance(sigma, np.ndarray):
-            sigma = np.asarray(sigma, dtype=float)
+        # Convert scalar/list sigma to float64 before shape checks (SciPy accepts
+        # scalar sigma as sigma * ones(m)). A float32 ndarray must be widened too:
+        # 1/sigma in float32 overflows for sigma below ~1e-38.
+        sigma = np.asarray(sigma, dtype=float)
 
         # Negative len_diff means the data exceeds flength and was not padded.
         len_diff = max(len_diff, 0)
@@ -4458,6 +4457,26 @@ class CurveFit:
             # This method takes scipy's (k, M) x; the hybrid method is
             # points-first, so adapt the model and x on the way in.
             f_engine, x_engine = scipy_layout_to_points_first(f, xdata)
+            # An explicit config makes _curve_fit_hybrid_streaming reject every
+            # leftover kwarg, but the standard/chunked routes of this same
+            # method="auto" call accept the ordinary tolerances: map gtol, warn
+            # for the ones the hybrid engine has no equivalent for.
+            if "gtol" in kwargs:
+                gtol = kwargs.pop("gtol")
+                # gtol None/0 means "test disabled" on the standard route; the
+                # hybrid engine needs a positive tolerance, so use the smallest
+                # one (never satisfied: it stops on its iteration limits).
+                if gtol is None or gtol <= 0:
+                    gtol = np.finfo(float).tiny
+                config = dataclasses.replace(config, gauss_newton_tol=gtol)
+            self._warn_unsupported_args(
+                "method='auto' (streaming strategy)",
+                compute_diagnostics=bool(compute_diagnostics),
+                **{
+                    k: kwargs.pop(k, None) is not None
+                    for k in ("ftol", "xtol", "max_nfev")
+                },
+            )
             result = self._curve_fit_hybrid_streaming(
                 f=f_engine,
                 xdata=x_engine,
@@ -4494,26 +4513,15 @@ class CurveFit:
                     "method='auto' chunked strategy (the GLS combiner needs "
                     "the per-chunk covariances). Use method='trf' to skip it."
                 )
-            # sigma/data_mask would need to be sliced consistently with each
-            # chunk, which LargeDatasetFitter doesn't do -- fail loudly
-            # instead of silently returning an unweighted/unmasked fit
-            # (matches AdaptiveHybridStreamingOptimizer.fit()'s own sigma
-            # NotImplementedError for the same reason).
-            if sigma is not None or data_mask is not None:
-                raise NotImplementedError(
-                    "method='auto' chunked strategy does not support the "
-                    "'sigma' or 'data_mask' parameters yet (chunking splits "
-                    "the data and neither is sliced consistently across "
-                    "chunks). Use method='trf' directly, or a "
-                    "memory_limit_gb override that avoids the chunked "
-                    "strategy.",
-                )
-
             self._warn_unsupported_args(
                 "method='auto' (chunked strategy)",
                 jac=jac is not None,
                 solver=solver != "auto",
+                callback=callback is not None,
+                compute_diagnostics=bool(compute_diagnostics),
             )
+            if _is_auto_p0(p0):
+                p0 = _resolve_auto_p0(f, xdata, ydata)
 
             # Delegate to LargeDatasetFitter
             from nlsq.streaming.strategy import build_large_strategy
@@ -4534,6 +4542,8 @@ class CurveFit:
                 bounds=bounds,
                 check_finite=check_finite,
                 absolute_sigma=absolute_sigma,
+                **({"sigma": sigma} if sigma is not None else {}),
+                **({"data_mask": data_mask} if data_mask is not None else {}),
                 **kwargs,
             )
 
@@ -4557,27 +4567,34 @@ class CurveFit:
             pcov = result.get("pcov", np.full((n_params, n_params), np.inf))
             curve_fit_result = CurveFitResult(result)
             # The chunk engine applied nan_policy itself; store the rows it fit.
-            x_fit, y_fit, _ = _rows_actually_fit(xdata, ydata, None, kwargs)
+            x_fit, y_fit, s_fit = _rows_actually_fit(
+                xdata, ydata, sigma, {**kwargs, "data_mask": data_mask}
+            )
             curve_fit_result["model"] = f
             curve_fit_result["xdata"] = x_fit
             curve_fit_result["ydata"] = y_fit
             curve_fit_result["pcov"] = pcov
-            _store_sigma(curve_fit_result, sigma, absolute_sigma)  # sigma is None here
+            _store_sigma(curve_fit_result, s_fit, absolute_sigma)
             if full_output and not return_eval:
-                # infodict['fvec'] as on the standard path (unweighted here:
-                # sigma is rejected above); evaluated chunk-wise, but the
-                # vector itself is O(n) like the standard path's.
-                curve_fit_result["fun"] = _residuals_in_chunks(
-                    f, x_fit, y_fit, curve_fit_result.popt
+                # infodict['fvec'] as on the standard path (sigma-weighted);
+                # evaluated chunk-wise, but the vector itself is O(n) like the
+                # standard path's.
+                fvec = _residuals_in_chunks(f, x_fit, y_fit, curve_fit_result.popt)
+                curve_fit_result["fun"] = (
+                    fvec if s_fit is None else fvec / np.asarray(s_fit, float)
                 )
+            # return_eval covers every caller row after nan omission, before the
+            # data_mask (as on the standard route), not just the fitted rows.
+            x_eval = _rows_actually_fit(xdata, ydata, sigma, kwargs)[0]
             out = _apply_output_flags(
                 curve_fit_result,
                 f,
-                np.asarray(x_fit, float),
+                np.asarray(x_eval, float),
                 {
                     "return_eval": return_eval,
                     "full_output": full_output,
                     "timeit": timeit,
+                    "data_mask": data_mask,
                 },
                 ctime=ctime,
                 post_time=time.perf_counter() - t_post,
@@ -4618,12 +4635,18 @@ class CurveFit:
             **kwargs,
         )
 
-    def _warn_if_overflow_clipped(self, f: Callable, jnp_xdata, popt) -> None:
+    def _warn_if_overflow_clipped(
+        self, f: Callable, jnp_xdata, popt, data_mask=None
+    ) -> None:
         """Make enable_overflow_check's silent clipping visible (see stable_f)."""
         if not self.enable_overflow_check:
             return
-        # Evaluate once at popt (outside JIT).
-        fmax = float(jnp.max(jnp.abs(f(jnp_xdata, *popt))))
+        # Evaluate once at popt (outside JIT). Padding rows (EPS coordinates) and
+        # masked rows are not data, so f(EPS) of e.g. a/x must not trigger it.
+        fabs = jnp.abs(f(jnp_xdata, *popt))
+        if data_mask is not None and fabs.shape == np.shape(data_mask):
+            fabs = jnp.where(jnp.asarray(data_mask, dtype=bool), fabs, 0.0)
+        fmax = float(jnp.max(fabs))
         if fmax > _OVERFLOW_CLIP_BOUND:
             msg = (
                 f"enable_overflow_check clipped the model output "
@@ -4917,76 +4940,6 @@ class CurveFit:
 
         Parameters
         ----------
-        compute_covariance : bool, optional
-            When False, skip the final covariance and return ``pcov=None``
-            in every return shape. See :func:`nlsq.curve_fit`.
-        method : str | None, optional
-            Optimization algorithm. Options:
-
-            - 'trf' (default): Trust Region Reflective
-            - 'lm': accepted for SciPy compatibility (unbounded problems only);
-              currently runs the same trust-region solver as 'trf'
-            - 'hybrid_streaming': Adaptive Hybrid Streaming Optimizer (for large datasets)
-            - 'auto': Memory-based automatic selection (streaming/chunked/standard)
-
-            If None, auto-selects 'trf'.
-        """
-        absolute_sigma = coerce_absolute_sigma(absolute_sigma)
-
-        # Check for hybrid_streaming method early and delegate
-        if method == "hybrid_streaming":
-            return self._curve_fit_hybrid_streaming(
-                f=f,
-                xdata=xdata,
-                ydata=ydata,
-                p0=p0,
-                sigma=sigma,
-                absolute_sigma=absolute_sigma,
-                check_finite=check_finite,
-                bounds=bounds,
-                data_mask=data_mask,
-                callback=callback,
-                jac=jac,
-                solver=solver,
-                timeit=timeit,
-                return_eval=return_eval,
-                full_output=full_output,
-                compute_covariance=compute_covariance,
-                **kwargs,
-            )
-
-        # Memory-based automatic method selection (method="auto")
-        if method == "auto":
-            return self._curve_fit_auto_memory(
-                f=f,
-                xdata=xdata,
-                ydata=ydata,
-                p0=p0,
-                sigma=sigma,
-                absolute_sigma=absolute_sigma,
-                check_finite=check_finite,
-                bounds=bounds,
-                solver=solver,
-                batch_size=batch_size,
-                jac=jac,
-                data_mask=data_mask,
-                timeit=timeit,
-                return_eval=return_eval,
-                callback=callback,
-                compute_diagnostics=compute_diagnostics,
-                diagnostics_level=diagnostics_level,
-                diagnostics_config=diagnostics_config,
-                full_output=full_output,
-                compute_covariance=compute_covariance,
-                **kwargs,
-            )
-
-        """
-        Use non-linear least squares to fit a function, f, to data.
-        Assumes ``ydata = f(xdata, \\*params) + eps``.
-
-        Parameters
-        ----------
         f : callable
             The model function, f(x, ...). It must take the independent
             variable as the first argument and the parameters to fit as
@@ -5038,10 +4991,19 @@ class CurveFit:
             taken to be the same for all parameters). Use ``np.inf`` with an
             appropriate sign to disable bounds on all or some parameters.
             .. versionadded:: 0.17
-        method : {'trf'}, optional
-            Method to use for optimization. See `least_squares` for more details.
-            Currently only 'trf' is implemented.
-            .. versionadded:: 0.17
+        compute_covariance : bool, optional
+            When False, skip the final covariance and return ``pcov=None``
+            in every return shape. See :func:`nlsq.curve_fit`.
+        method : str | None, optional
+            Optimization algorithm. Options:
+
+            - 'trf' (default): Trust Region Reflective
+            - 'lm': accepted for SciPy compatibility (unbounded problems only);
+              currently runs the same trust-region solver as 'trf'
+            - 'hybrid_streaming': Adaptive Hybrid Streaming Optimizer (for large datasets)
+            - 'auto': Memory-based automatic selection (streaming/chunked/standard)
+
+            If None, auto-selects 'trf'.
         solver : {'auto', 'svd', 'cg', 'lsqr', 'minibatch'}, optional
             Solver method for handling large datasets and different problem types:
             - 'auto' (default): Automatically selects the best solver based on problem size
@@ -5145,6 +5107,55 @@ class CurveFit:
         >>> plt.legend()
         >>> plt.show()
         """
+        absolute_sigma = coerce_absolute_sigma(absolute_sigma)
+
+        # Check for hybrid_streaming method early and delegate
+        if method == "hybrid_streaming":
+            return self._curve_fit_hybrid_streaming(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                data_mask=data_mask,
+                callback=callback,
+                jac=jac,
+                solver=solver,
+                timeit=timeit,
+                return_eval=return_eval,
+                full_output=full_output,
+                compute_covariance=compute_covariance,
+                **kwargs,
+            )
+
+        # Memory-based automatic method selection (method="auto")
+        if method == "auto":
+            return self._curve_fit_auto_memory(
+                f=f,
+                xdata=xdata,
+                ydata=ydata,
+                p0=p0,
+                sigma=sigma,
+                absolute_sigma=absolute_sigma,
+                check_finite=check_finite,
+                bounds=bounds,
+                solver=solver,
+                batch_size=batch_size,
+                jac=jac,
+                data_mask=data_mask,
+                timeit=timeit,
+                return_eval=return_eval,
+                callback=callback,
+                compute_diagnostics=compute_diagnostics,
+                diagnostics_level=diagnostics_level,
+                diagnostics_config=diagnostics_config,
+                full_output=full_output,
+                compute_covariance=compute_covariance,
+                **kwargs,
+            )
 
         # scipy.optimize.Bounds -> (lb, ub): the stability-time algorithm
         # selection unpacks the tuple form (the wrapper normalizes too).
@@ -5231,7 +5242,7 @@ class CurveFit:
             res["gradient_health_report"] = _gradient_monitor.get_report()
 
         popt = res.x
-        self._warn_if_overflow_clipped(f, jnp_xdata, popt)
+        self._warn_if_overflow_clipped(f, jnp_xdata, popt, data_mask)
         self.logger.debug(
             "Optimization succeeded",
             final_cost=res.cost,
@@ -5267,7 +5278,8 @@ class CurveFit:
         if return_eval:
             _record_attempt(res)
             feval = f(jnp_xdata, *popt)
-            feval = np.array(feval)
+            # the optimizer broadcasts a scalar model output over the observations
+            feval = np.array(np.broadcast_to(np.asarray(feval), np.shape(ydata)))
             if none_mask:
                 return np.asarray(popt), _pcov, feval[data_mask]
             # A user data_mask leaves padding rows (flength) in feval; strip them.

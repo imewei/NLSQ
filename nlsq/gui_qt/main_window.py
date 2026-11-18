@@ -552,14 +552,17 @@ class MainWindow(QMainWindow):
                 if self._autosave.recover():
                     self._status_label.setText("Session recovered")
                     self._update_navigation_guards()
-                else:
-                    QMessageBox.warning(
-                        self,
-                        "Recovery Failed",
-                        "Failed to recover the previous session.",
-                    )
+                    # Keep the snapshot: it is the only copy of the recovered
+                    # session until the first autosave replaces it (a second
+                    # crash before then would otherwise lose everything).
+                    return
+                QMessageBox.warning(
+                    self,
+                    "Recovery Failed",
+                    "Failed to recover the previous session.",
+                )
 
-            # Clear recovery file regardless of choice
+            # Declined or unreadable: the snapshot has no further use
             self._autosave.clear_recovery()
 
     def closeEvent(self, event: QCloseEvent) -> None:

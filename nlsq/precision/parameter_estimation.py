@@ -105,7 +105,9 @@ def _finite_points(xdata, ydata):
         )
     except (TypeError, ValueError):
         return xdata, ydata
-    if mask.all() or not mask.any() or ydata.ndim != 1:
+    if not mask.any():
+        raise ValueError("Cannot estimate p0: no observation has finite x and y")
+    if mask.all() or ydata.ndim != 1:
         return xdata, ydata
     return (xdata[mask] if xdata.ndim == 1 else xdata[..., mask]), ydata[mask]
 
@@ -487,7 +489,8 @@ def estimate_p0_for_pattern(
     xdata, ydata = _sorted_by_x(*_finite_points(xdata, ydata))
     if pattern == "linear":
         # Linear: y = a*x + b
-        if n_params >= 2:
+        # multi-dimensional x has no single slope: use the generic fallback below
+        if n_params >= 2 and xdata.ndim == 1 and xdata.shape == ydata.shape:
             # Simple linear regression
             A = np.vstack([xdata, np.ones(len(xdata))]).T
             try:
@@ -529,11 +532,12 @@ def estimate_p0_for_pattern(
         # Estimate sigma from FWHM
         half_max = (np.max(ydata) + np.min(ydata)) / 2
         indices = np.where(ydata > half_max)[0]
+        sigma = 0.0
         if len(indices) > 1:
             fwhm = xdata[indices[-1]] - xdata[indices[0]]
             sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
-        else:
-            sigma = (np.max(xdata) - np.min(xdata)) / 4
+        if not sigma > 0:  # one point, or all above-half points share one x
+            sigma = (np.max(xdata) - np.min(xdata)) / 4 or 1.0  # 0 width: undefined
 
         p0 = [amp, mu, sigma][:n_params]
         p0.extend([1.0] * (n_params - len(p0)))

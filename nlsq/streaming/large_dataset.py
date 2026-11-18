@@ -1090,6 +1090,11 @@ class LargeDatasetFitter:
     - Scales to datasets of unlimited size using streaming (processes all data)
     - Provides linear time complexity with respect to chunk count
 
+    Thread Safety
+    -------------
+    A fitter is single-owner: it keeps per-fit chunk-combination state, so do not
+    run two ``fit`` calls on one instance concurrently; use one fitter per thread.
+
     Model Validation Caching
     ------------------------
     Model functions are validated once per unique function identity using a cache
@@ -1098,8 +1103,9 @@ class LargeDatasetFitter:
 
     Parameters
     ----------
-    memory_limit_gb : float, default 8.0
-        Maximum memory usage in GB. System memory is auto-detected if None.
+    memory_limit_gb : float or None, default 8.0
+        Maximum memory usage in GB. Available system memory is auto-detected if None
+        (ignored when ``config`` is given).
     config : LDMemoryConfig, optional
         Advanced configuration for fine-tuning memory management behavior.
     curve_fit_class : nlsq.core.minpack.CurveFit, optional
@@ -1229,7 +1235,7 @@ class LargeDatasetFitter:
 
     def __init__(
         self,
-        memory_limit_gb: float = 8.0,
+        memory_limit_gb: float | None = 8.0,
         config: LDMemoryConfig | None = None,
         curve_fit_class: CurveFit | None = None,
         logger: Logger | None = None,
@@ -1242,8 +1248,8 @@ class LargeDatasetFitter:
 
         Parameters
         ----------
-        memory_limit_gb : float, optional
-            Memory limit in GB (default: 8.0)
+        memory_limit_gb : float or None, optional
+            Memory limit in GB (default: 8.0); None auto-detects available memory.
         config : LDMemoryConfig, optional
             Custom memory configuration
         curve_fit_class : nlsq.core.minpack.CurveFit, optional
@@ -1264,6 +1270,8 @@ class LargeDatasetFitter:
             Options: 'lhs' (Latin Hypercube), 'sobol', 'halton'.
         """
         if config is None:
+            if memory_limit_gb is None:  # documented: auto-detect system memory
+                memory_limit_gb = MemoryEstimator.get_available_memory_gb()
             config = LDMemoryConfig(memory_limit_gb=memory_limit_gb)
 
         self.config = config
@@ -1869,10 +1877,20 @@ class LargeDatasetFitter:
         """Internal implementation of fitting algorithm."""
 
         fit_start_time = time.perf_counter()
+        for key in ("full_output", "return_eval", "timeit"):
+            if kwargs.get(key):  # curve_fit would return more than (popt, pcov)
+                raise TypeError(
+                    f"LargeDatasetFitter: {key}=True is not supported (the chunk fits "
+                    "need curve_fit to return only (popt, pcov))"
+                )
         if getattr(xdata, "ndim", 1) > 1:
             # scipy layout (k, M) -> points-first (M, k); see _scipy_x.
             xdata = np.asarray(xdata).T
         n_points = len(xdata)
+
+        # Normalize initial guess (a scalar p0 is a one-parameter guess)
+        if p0 is not None:
+            p0 = np.atleast_1d(np.asarray(p0, dtype=float))
 
         # Estimate number of parameters from function signature or p0
         if p0 is not None:
@@ -1886,15 +1904,18 @@ class LargeDatasetFitter:
             except Exception:
                 n_params = 2  # Conservative default
 
-        # Normalize initial guess dtype
-        if p0 is not None:
-            p0 = np.asarray(p0, dtype=float)
-
         # Get processing statistics and strategy
         stats = self.estimate_requirements(n_points, n_params)
 
         # Determine if chunking is needed
         needs_chunking = stats.n_chunks > 1
+        # A single chunk fails gracefully inside curve_fit; chunk slicing would
+        # silently drop the unmatched tail of the longer array.
+        if needs_chunking and len(ydata) != n_points:
+            raise ValueError(
+                f"`xdata` and `ydata` must have the same length: {n_points} vs "
+                f"{len(ydata)}."
+            )
 
         # Initialize multi-start diagnostics
         multistart_diagnostics = {
@@ -2924,6 +2945,13 @@ class LargeDatasetFitter:
             # Not-estimated convention: all-inf, not identity (see comment
             # on the streaming-fit failure fallback above).
             result["pcov"] = np.full((len(result["popt"]), len(result["popt"])), np.inf)
+            # Keep the per-chunk records: they say which chunks failed and why.
+            result["chunk_results"] = chunk_results
+            result["n_chunks"] = stats.n_chunks
+            result["success_rate"] = success_rate
+            result["failure_summary"] = self._create_failure_summary(
+                chunk_results, chunk_times
+            )
             return result
 
         # Success - assemble final result

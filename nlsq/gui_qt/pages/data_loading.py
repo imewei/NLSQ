@@ -88,6 +88,8 @@ class DataLoadingPage(QWidget):
         self._ydata: NDArray[np.float64] | None = None
         self._sigma: NDArray[np.float64] | None = None
         self._column_names: list[str] = []
+        # z / sigma positions of the last npz/hdf5 load (None for tables)
+        self._key_columns: dict[str, int | None] | None = None
 
         self._setup_ui()
         self._connect_signals()
@@ -304,11 +306,18 @@ class DataLoadingPage(QWidget):
         if file_path:
             self._load_file(Path(file_path))
 
-    def _load_file(self, file_path: Path) -> None:
+    def _load_file(
+        self, file_path: Path, key_config: dict[str, Any] | None = None
+    ) -> bool:
         """Load data from a file.
 
         Args:
             file_path: Path to the file to load
+            key_config: Optional YAML ``npz`` / ``hdf5`` sections (array keys
+                and dataset paths) forwarded to the loader
+
+        Returns:
+            True if the file was loaded; False after showing an error
         """
         from nlsq.cli.data_loaders import DataLoader
         from nlsq.gui_qt.adapters.data_adapter import (
@@ -320,7 +329,10 @@ class DataLoadingPage(QWidget):
         config: dict[str, Any] = {
             "format": format_value,
             "columns": {"x": 0, "y": 1},
+            **(key_config or {}),
         }
+        # Set only by npz/hdf5 loads: where z / sigma landed in the raw table
+        key_columns: dict[str, int | None] | None = None
 
         try:
             file_format = DataLoader().detect_format(file_path, config)
@@ -337,31 +349,53 @@ class DataLoadingPage(QWidget):
                 # npz / hdf5: keys, not columns, define the arrays
                 xdata, ydata, sigma = load_from_file(str(file_path), config)
                 cols = [xdata.T if xdata.ndim == 2 else xdata, ydata]
+                n_coords = 2 if xdata.ndim == 2 else 1
                 if sigma is not None:
                     cols.append(sigma)
                 self._raw_data = np.column_stack(cols)
                 self._column_names = [
                     f"Column {i}" for i in range(self._raw_data.shape[1])
                 ]
+                key_columns = {
+                    "x": 0,
+                    "y": 1,
+                    "z": 2 if n_coords == 2 else None,
+                    "sigma": n_coords + 1 if sigma is not None else None,
+                }
 
             # Update UI
             self._file_path_label.setText(str(file_path))
             self._file_path_label.setStyleSheet("")
             self._column_selector.set_columns(self._column_names)
+            self._key_columns = key_columns
+            if key_columns is not None:
+                # set_columns picks 1-D defaults: re-select the loaded layout
+                # so a surface's z is not read as sigma
+                self._column_selector.set_mode(
+                    "2d" if key_columns["z"] is not None else "1d"
+                )
+                self._column_selector.set_selection(key_columns)
             self._update_preview()
+            return True
 
         except Exception as e:
             self._show_error("File Load Error", str(e))
+            return False
 
     def _set_table(self, rows: list[list[float]], header: list[str] | None) -> None:
-        """Store parsed rows; drop all-NaN columns with no header (trailing delimiter)."""
+        """Store parsed rows; drop trailing all-NaN unnamed columns (trailing delimiter).
+
+        Interior empty columns stay so positional selectors keep their meaning.
+        """
         raw = np.array(rows, dtype=np.float64)
         names = header if header and len(header) == raw.shape[1] else None
-        keep = [
-            i
-            for i in range(raw.shape[1])
-            if not (np.isnan(raw[:, i]).all() and not (names and names[i]))
-        ]
+        keep = list(range(raw.shape[1]))
+        while (
+            keep
+            and np.isnan(raw[:, keep[-1]]).all()
+            and not (names and names[keep[-1]])
+        ):
+            keep.pop()
         self._raw_data = raw[:, keep]
         self._column_names = (
             [names[i] for i in keep]
@@ -579,8 +613,15 @@ class DataLoadingPage(QWidget):
         """
         state = self._app_state.state
         if state.xdata is None or state.ydata is None:
+            # cleared / reset elsewhere: do not leave the old dataset applicable
+            if self._raw_data is not None:
+                self.reset()
             return
-        if state.xdata is self._xdata and state.ydata is self._ydata:
+        if (
+            state.xdata is self._xdata
+            and state.ydata is self._ydata
+            and state.sigma is self._sigma
+        ):
             return
 
         self._xdata = state.xdata
@@ -648,6 +689,7 @@ class DataLoadingPage(QWidget):
         self._ydata = None
         self._sigma = None
         self._column_names = []
+        self._key_columns = None
 
         self._file_path_label.setText("No file selected")
         self._file_path_label.setStyleSheet("color: gray; font-style: italic;")
@@ -690,8 +732,12 @@ class DataLoadingPage(QWidget):
                             self._format_combo.setCurrentIndex(i)
                             break
 
-                # Load the file
-                self._load_file(data_file)
+                # Load the file (npz/hdf5 key sections define sigma / z there)
+                key_config = {
+                    k: data_config[k] for k in ("npz", "hdf5") if k in data_config
+                }
+                if not self._load_file(data_file, key_config):
+                    return  # keep the error; never re-select the previous dataset
 
                 columns = {
                     "x": 0,
@@ -700,6 +746,8 @@ class DataLoadingPage(QWidget):
                     "sigma": None,
                     **data_config.get("columns", {}),
                 }
+                if self._key_columns is not None:
+                    columns = self._key_columns  # keys, not columns, pick arrays
                 self._column_selector.set_mode(
                     "2d" if columns["z"] is not None else "1d"
                 )

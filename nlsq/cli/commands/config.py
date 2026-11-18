@@ -12,7 +12,11 @@ From command line:
     $ nlsq config -o my_workflow.yaml --workflow  # Custom output name
 """
 
+import contextlib
+import os
+import secrets
 import shutil
+import tempfile
 from pathlib import Path
 
 from nlsq.cli.model_validation import validate_path
@@ -37,6 +41,51 @@ def _prepare_dest(cwd: Path, dest_name: str, force: bool) -> Path:
         msg = f"Cannot create directory for '{dest_name}': {e}"
         raise ValueError(msg) from e
     return dest
+
+
+def _publish_all(pairs: list[tuple[Path, Path]], force: bool) -> None:
+    """Move each staged file onto its destination, all or nothing.
+
+    Without ``force`` a destination is claimed with ``os.link`` (fails if anything
+    appeared there since the preflight, never clobbers). With ``force`` the old
+    file is first moved aside. Any failure undoes the installs already made.
+    """
+    done: list[tuple[Path, Path | None, bool]] = []  # (dest, backup, installed)
+    try:
+        for tmp, dest in pairs:
+            backup: Path | None = None
+            if force:
+                if dest.is_dir() and not dest.is_symlink():
+                    raise IsADirectoryError(f"'{dest}' is a directory")
+                if os.path.lexists(dest):
+                    backup = dest.with_name(f".nlsq-{secrets.token_hex(6)}.bak")
+                    os.replace(dest, backup)
+                done.append((dest, backup, False))
+                os.replace(tmp, dest)
+                done[-1] = (dest, backup, True)
+            else:
+                try:
+                    os.link(tmp, dest)
+                except FileExistsError:
+                    raise
+                except OSError:  # no hard links here: fall back to a checked rename
+                    if os.path.lexists(dest):
+                        raise FileExistsError(
+                            f"File '{dest}' already exists."
+                        ) from None
+                    os.replace(tmp, dest)
+                done.append((dest, None, True))
+    except BaseException:
+        for dest, backup, installed in reversed(done):
+            with contextlib.suppress(OSError):
+                if installed:
+                    dest.unlink()
+                if backup is not None:
+                    os.replace(backup, dest)
+        raise
+    for _, backup, _ in done:
+        if backup is not None:
+            backup.unlink(missing_ok=True)
 
 
 def run_config(
@@ -86,27 +135,35 @@ def run_config(
     copied_files: list[Path] = []
     cwd = Path.cwd()
 
-    # Copy workflow template
+    # Validate every destination before writing any, so a failure on the second
+    # one cannot leave the first template behind.
+    jobs: list[tuple[Path, Path, str]] = []
     if copy_workflow:
-        src = get_workflow_template()
         dest = _prepare_dest(cwd, output or "workflow_config.yaml", force)
-
-        shutil.copy(src, dest)
-        copied_files.append(dest)
-
-        if verbose:
-            print(f"Copied workflow template to: {dest}")
-
-    # Copy custom model template
+        jobs.append((get_workflow_template(), dest, "workflow"))
     if copy_model:
-        src = get_custom_model_template()
         dest = _prepare_dest(cwd, output or "custom_model.py", force)
+        jobs.append((get_custom_model_template(), dest, "custom model"))
 
-        shutil.copy(src, dest)
-        copied_files.append(dest)
+    # Stage every copy beside its destination, then publish all of them or none.
+    staged: list[tuple[Path, Path, str]] = []
+    try:
+        for src, dest, label in jobs:
+            fd, tmp_name = tempfile.mkstemp(
+                dir=dest.parent, prefix=".nlsq-", suffix=".tmp"
+            )
+            os.close(fd)  # short fixed-length name: never derived from the destination
+            staged.append((Path(tmp_name), dest, label))
+            shutil.copy(src, tmp_name)
+        _publish_all([(tmp, dest) for tmp, dest, _ in staged], force)
+        for _, dest, label in staged:
+            copied_files.append(dest)
 
-        if verbose:
-            print(f"Copied custom model template to: {dest}")
+            if verbose:
+                print(f"Copied {label} template to: {dest}")
+    finally:
+        for tmp, _, _ in staged:
+            tmp.unlink(missing_ok=True)
 
     # Print summary
     if copied_files:

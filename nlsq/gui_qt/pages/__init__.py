@@ -72,13 +72,11 @@ class PageState:
             PageState with computed access flags
         """
         data_loaded = state.xdata is not None and state.ydata is not None
+        # model_type defaults to "builtin": a model counts as selected only once
+        # one is applied (model_func set) or custom code exists.
         model_selected = bool(state.model_type) and (
-            state.model_type in {"builtin", "polynomial"}
-            or (
-                state.model_type == "custom"
-                # ModelSelectionPage stores model_func/model_config, never custom_code
-                and (bool(state.custom_code) or state.model_func is not None)
-            )
+            state.model_func is not None
+            or (state.model_type == "custom" and bool(state.custom_code))
         )
         fit_complete = state.fit_result is not None
         fit_running = getattr(state, "fit_running", False)

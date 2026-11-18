@@ -165,7 +165,13 @@ def _apply_data_mask(xdata, ydata, sigma, data_mask):
         return xdata, ydata, sigma
     if xdata.ndim > 1 and xdata.shape[0] == xdata.shape[-1] == len(ydata):
         raise ValueError("Cannot apply data_mask: sample axis is ambiguous")
-    axis = -1 if xdata.shape[-1] == len(ydata) else 0
+    axis = -1 if xdata.ndim and xdata.shape[-1] == len(ydata) else 0
+    if xdata.ndim == 0 or xdata.shape[axis] != len(ydata):
+        # np.compress would silently truncate xdata to the mask length
+        raise ValueError(
+            f"Cannot apply data_mask: xdata {xdata.shape} has no sample axis of "
+            f"length len(ydata)={len(ydata)}"
+        )
     xdata = np.compress(mask, xdata, axis=axis)
     ydata = ydata[mask]
     if sigma is not None:
@@ -174,6 +180,62 @@ def _apply_data_mask(xdata, ydata, sigma, data_mask):
         elif sigma.ndim == 2:
             sigma = sigma[np.ix_(mask, mask)]
     return xdata, ydata, sigma
+
+
+def _check_chunk_invariance(
+    model_func: Callable,
+    xdata: jax.Array,
+    axis: int,
+    chunk: int,
+    lower: jax.Array,
+    upper: jax.Array,
+) -> None:
+    """Raise if the model's predictions visibly depend on how the samples are batched.
+
+    Chunked fitness evaluates the model per block, so a batch-dependent model (mean,
+    cumulative sum, ...) would silently minimise a different objective. Best-effort
+    guard, not a proof: it compares the first, a middle and the last ``chunk`` samples
+    evaluated alone and together, at several in-bounds parameter points (midpoint,
+    quartiles, alternating fractions, so a model that is batch-independent only at the
+    midpoint is still caught). A dependence that vanishes at every probe point, or that
+    shows only in other chunks, is not detected.
+    """
+    n = xdata.shape[axis]
+    starts = sorted({0, (n // chunk // 2) * chunk, n - chunk})
+    blocks = [jax.lax.slice_in_dim(xdata, s, s + chunk, axis=axis) for s in starts]
+    both = jnp.concatenate(blocks, axis=axis)
+    k = len(blocks)
+    odd = (jnp.arange(lower.shape[0]) % 2).astype(lower.dtype)
+    fractions = (
+        jnp.full_like(lower, 0.5),
+        jnp.full_like(lower, 0.25),
+        jnp.full_like(lower, 0.75),
+        0.3 + 0.4 * odd,
+        0.7 - 0.4 * odd,
+    )
+    for frac in fractions:
+        params = lower + frac * (upper - lower)
+        try:
+            got = jnp.atleast_1d(model_func(both, *params))
+            want = [jnp.atleast_1d(model_func(x, *params)) for x in blocks]
+        except Exception:
+            return  # the real evaluation reports model errors
+        if any(w.shape != (chunk,) for w in want) or got.shape != (k * chunk,):
+            return  # not a per-sample prediction (or an N-d layout): cannot compare
+        ref = jnp.concatenate(want)
+        scale = jnp.max(jnp.where(jnp.isfinite(ref), jnp.abs(ref), 0.0))
+        if not bool(
+            jnp.allclose(got, ref, rtol=1e-5, atol=1e-5 * scale, equal_nan=True)
+        ):
+            raise ValueError(
+                "CMA-ES data chunking (data_chunk_size, set explicitly or chosen from "
+                "the memory estimate) requires a model whose prediction at each sample "
+                "does not depend on the other samples in the batch (found "
+                "batch-dependent output, e.g. a mean or cumulative sum of x); chunking "
+                "would change the objective. Use a per-sample model, or set "
+                "CMAESConfig(data_chunk_size=None) and population_batch_size to bound "
+                "memory instead."
+            )
 
 
 def _create_fitness_function(
@@ -229,6 +291,14 @@ def _create_fitness_function(
         # entries are masked out of the SSR below.
         n_chunks = -(-n_data // data_chunk_size)
 
+        _check_chunk_invariance(
+            model_func,
+            xdata,
+            sample_axis,
+            data_chunk_size,
+            lower_bounds,
+            upper_bounds,
+        )
         xdata_chunked = _chunk_samples(xdata, sample_axis, 0.0, data_chunk_size)
         ydata_chunked = _chunk_samples(ydata, 0, 0.0, data_chunk_size)
         # Pad sigma with 1.0 to avoid division issues (residual will be 0)
@@ -1359,8 +1429,10 @@ class CMAESOptimizer:
                     run_best_fitness = state.best_fitness
                     run_best_solution = state.best_solution
 
-                # Record fitness history
-                diagnostics.fitness_history.append(float(run_best_fitness))
+                # Record the best over all restarts, as the single-run path does
+                diagnostics.fitness_history.append(
+                    min(float(run_best_fitness), float(restarter.best_fitness))
+                )
 
                 # Budget first: a convergence/stagnation break below must not
                 # skip it, or a restart schedule would silently overrun.

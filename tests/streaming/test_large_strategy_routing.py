@@ -1909,9 +1909,11 @@ def test_auto_global_chunked_failure_and_sigma_guard(rec: Recorder) -> None:
         )
     assert [c.engine for c in rec.ctors()] == [FITTER, FITTER]
     rec.calls.clear()
-    with pytest.raises(NotImplementedError, match="sigma"):
+    # sigma is no longer rejected: it reaches the chunk engine (which slices it
+    # per chunk), so the stubbed engine's failure is what surfaces
+    with pytest.raises(RuntimeError, match="chunked multi-start fit failed: boom"):
         _drive_auto_global(CHUNKED_LIMIT_GB, sigma=SIG)
-    assert rec.ctors() == []
+    assert [c.engine for c in rec.ctors()] == [FITTER]
 
 
 def test_curve_fit_auto_chunked_failure_and_guards(rec: Recorder) -> None:
@@ -1921,7 +1923,9 @@ def test_curve_fit_auto_chunked_failure_and_guards(rec: Recorder) -> None:
             MODEL, X, Y, p0=P0, method="auto", memory_limit_gb=CHUNKED_LIMIT_GB
         )
     rec.calls.clear()
-    with pytest.raises(NotImplementedError, match="sigma"):
+    # sigma is no longer rejected: it reaches the chunk engine (which slices it
+    # per chunk), so the stubbed engine's failure is what surfaces
+    with pytest.raises(RuntimeError, match="method='auto' chunked fit failed: boom"):
         nlsq.curve_fit(
             MODEL,
             X,
@@ -1931,6 +1935,8 @@ def test_curve_fit_auto_chunked_failure_and_guards(rec: Recorder) -> None:
             memory_limit_gb=CHUNKED_LIMIT_GB,
             sigma=SIG,
         )
+    assert [c.engine for c in rec.ctors()] == [FITTER]
+    rec.calls.clear()
     with pytest.raises(NotImplementedError, match="data_mask"):
         nlsq.curve_fit(
             MODEL,

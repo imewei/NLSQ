@@ -91,6 +91,17 @@ def cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
     return default if value is None else value
 
 
+def cfg_bool(cfg: Any, key: str, default: bool, section: str) -> bool:
+    """``cfg_get`` that requires a real YAML boolean (``"false"`` is truthy)."""
+    value = cfg_get(cfg, key, default)
+    if not isinstance(value, bool):
+        raise CLIError(
+            f"{section}.{key} must be true or false, got {value!r}",
+            suggestion=f"Use an unquoted YAML boolean: `{key}: true`.",
+        )
+    return value
+
+
 class CLIError(Exception):
     """Base exception class for NLSQ CLI errors.
 

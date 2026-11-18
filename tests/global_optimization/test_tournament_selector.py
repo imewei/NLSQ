@@ -434,3 +434,20 @@ class TestTournamentSelectorEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_integer_batches_do_not_wrap_the_loss():
+    """int32 residuals squared in int32 wrap negative and outrank the true best."""
+    config = GlobalOptimizationConfig(
+        n_starts=2, elimination_rounds=0, batches_per_round=1
+    )
+    selector = TournamentSelector(
+        candidates=np.array([[1], [50000]], dtype=np.int32), config=config
+    )
+
+    def model(x, a):
+        return a + jnp.zeros_like(x)
+
+    batch = (np.array([0], dtype=np.int32), np.array([0], dtype=np.int32))
+    best = selector.run_tournament(iter([batch]), model, top_m=1)
+    assert int(best[0][0]) == 1

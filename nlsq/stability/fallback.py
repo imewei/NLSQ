@@ -223,16 +223,13 @@ class AdjustTolerancesStrategy(FallbackStrategy):
         modified = kwargs.copy()
 
         # Default tolerances
-        ftol = modified.get("ftol", 1e-8)
-        xtol = modified.get("xtol", 1e-8)
-        gtol = modified.get("gtol", 1e-8)
-
         # Relax by factor
         self.current_factor *= self.relaxation_factor
         self._relaxations += 1
-        modified["ftol"] = ftol * self.current_factor
-        modified["xtol"] = xtol * self.current_factor
-        modified["gtol"] = gtol * self.current_factor
+        for key in ("ftol", "xtol", "gtol"):
+            tol = modified.get(key, 1e-8)
+            if tol is not None:  # None disables that test: nothing to relax
+                modified[key] = tol * self.current_factor
 
         return modified
 
@@ -316,7 +313,6 @@ class UseRobustLossStrategy(FallbackStrategy):
 
         if self.current_index < len(self.loss_sequence):
             modified["loss"] = self.loss_sequence[self.current_index]
-            modified["f_scale"] = modified.get("f_scale", 1.0)
             self.current_index += 1
 
         return modified
@@ -945,6 +941,7 @@ class FallbackOrchestrator:
         # (perturbations, loss sequence, ...) get re-queried until exhausted.
         pending = list(self.strategies)
         flags = _flags(kwargs)
+        idle_passes = 0
         while pending and self.total_attempts < self.max_attempts:
             spent = self.total_attempts
             for strategy in list(pending):
@@ -1002,9 +999,15 @@ class FallbackOrchestrator:
                     pending.remove(strategy)
 
             if self.total_attempts == spent:
-                # A whole pass proposed only no-ops (skips spend no attempt):
-                # nothing new is left to try, so the loop must end here.
-                break
+                # A pass of only no-ops spends no attempt, but progressive
+                # strategies advanced (pending keeps those with has_more()), so a
+                # later pass can still propose a new variant. Bound the idle
+                # passes so a strategy stuck on has_more() cannot loop forever.
+                idle_passes += 1
+                if idle_passes > self.max_attempts:
+                    break
+            else:
+                idle_passes = 0
 
         if best is not None:
             # No attempt converged: hand back the lowest-cost result, still

@@ -405,6 +405,14 @@ def _svd_no_bounds_on_host(
     return J_h, U, s, V, uf
 
 
+def _on_device_of(J: jnp.ndarray, *arrays):
+    """Move fallback factors back to ``J``'s device (committed arrays cannot mix)."""
+    devices = J.devices()
+    if len(devices) != 1:
+        return arrays
+    return jax.device_put(arrays, next(iter(devices)))
+
+
 def _svd_no_bounds(
     J: jnp.ndarray,
     d: jnp.ndarray,
@@ -427,7 +435,9 @@ def _svd_no_bounds(
     except Exception as e:
         if is_gpu_error(e):
             J_h = J * d
-            U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
+            U, s, V = _on_device_of(
+                J, *compute_svd_with_fallback(J_h, full_matrices=False)
+            )
             uf = U.T.dot(f)
             return J_h, U, s, V, uf
         raise
@@ -453,7 +463,9 @@ def _svd_bounds(
             J_h = J * d
             J_augmented = jnp.concatenate([J_h, J_diag])
             f_augmented = jnp.concatenate([f, f_zeros])
-            U, s, V = compute_svd_with_fallback(J_augmented, full_matrices=False)
+            U, s, V = _on_device_of(
+                J, *compute_svd_with_fallback(J_augmented, full_matrices=False)
+            )
             uf = U.T.dot(f_augmented)
             return J_h, U, s, V, uf
         raise

@@ -237,6 +237,7 @@ class UnifiedCache:
         kwargs: dict,
         static_argnums: tuple[int, ...],
         donate_argnums: tuple[int, ...] = (),
+        func_hash: str | None = None,
     ) -> str:
         """Generate cache key from function and arguments (shape-relaxed).
 
@@ -262,6 +263,9 @@ class UnifiedCache:
             and two calls differing only in donate_argnums would otherwise
             collide and reuse a compiled function that donates the wrong
             buffers.
+        func_hash : str, optional
+            Precomputed ``_get_function_hash(func)``; hashing reads the source
+            file, so ``cached_jit`` computes it once per decorated function.
 
         Returns
         -------
@@ -271,7 +275,8 @@ class UnifiedCache:
         key_parts = []
 
         # 1. Function hash
-        func_hash = self._get_function_hash(func)
+        if func_hash is None:
+            func_hash = self._get_function_hash(func)
         key_parts.append(f"func:{func_hash}")
 
         # 2. Static/donate argnums
@@ -304,6 +309,7 @@ class UnifiedCache:
         kwargs: dict,
         static_argnums: tuple[int, ...] = (),
         donate_argnums: tuple[int, ...] = (),
+        func_hash: str | None = None,
     ) -> Callable:
         """Get the cached ``jax.jit`` wrapper for ``func`` or build and cache it.
 
@@ -327,6 +333,8 @@ class UnifiedCache:
             Indices of static arguments for JIT
         donate_argnums : tuple of int, default=()
             Indices of arguments to donate for memory efficiency
+        func_hash : str, optional
+            Precomputed ``_get_function_hash(func)`` (see ``_generate_cache_key``)
 
         Returns
         -------
@@ -335,7 +343,7 @@ class UnifiedCache:
         """
         # Generate cache key (pure computation, no shared state)
         cache_key = self._generate_cache_key(
-            func, args, kwargs, static_argnums, donate_argnums
+            func, args, kwargs, static_argnums, donate_argnums, func_hash
         )
 
         # Check cache under lock; record miss stats in the same acquisition
@@ -495,6 +503,11 @@ def clear_cache():
 
     The ``MemoryManager`` array pool is not cleared; use
     ``get_memory_manager().clear_pool()`` for that.
+
+    Also calls ``jax.clear_caches()``: the cached wrappers share JAX's own
+    per-function trace cache, which would otherwise keep serving the old
+    compilation of an unchanged function object. Every JIT-compiled function
+    in the process is therefore recompiled on its next call.
     """
     global _global_unified_cache  # noqa: PLW0602
     if _global_unified_cache is not None:
@@ -503,6 +516,7 @@ def clear_cache():
     from nlsq.core.least_squares import clear_wrapper_cache
 
     clear_wrapper_cache()
+    jax.clear_caches()
 
 
 def cached_jit(
@@ -542,15 +556,19 @@ def cached_jit(
 
     def decorator(f: Callable) -> Callable:
         cache = get_global_cache()
+        func_hash: list[str] = []  # lazily filled: hashing reads the source file
 
         @wraps(f)
         def wrapper(*args, **kwargs):
+            if not func_hash:
+                func_hash.append(cache._get_function_hash(f))
             compiled_func = cache.get_or_compile(
                 f,
                 args,
                 kwargs,
                 static_argnums=static_argnums,
                 donate_argnums=donate_argnums,
+                func_hash=func_hash[0],
             )
             return compiled_func(*args, **kwargs)
 

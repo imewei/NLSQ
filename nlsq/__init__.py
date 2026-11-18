@@ -48,7 +48,8 @@ _NLSQ_DEBUG = os.environ.get("NLSQ_DEBUG", "").strip().lower() in {
 
 
 def _dbg(msg: str) -> None:
-    if _NLSQ_DEBUG:
+    # sys.stderr may be None (pythonw, embedded hosts)
+    if _NLSQ_DEBUG and sys.stderr is not None:
         sys.stderr.write(f"[nlsq] {msg}\n")
         sys.stderr.flush()
 
@@ -161,6 +162,8 @@ if TYPE_CHECKING:
 
 # Mapping of lazy export names to their source modules
 _LAZY_MODULES: dict[str, str] = {
+    # Result container returned by curve_fit (scipy.stats is imported with it)
+    "CurveFitResult": "nlsq.result",
     # Streaming & Large Dataset (h5py dependency, specialty use case)
     "AdaptiveHybridStreamingOptimizer": "nlsq.streaming.adaptive_hybrid",
     "DefenseLayerTelemetry": "nlsq.streaming.adaptive_hybrid",
@@ -313,6 +316,7 @@ __all__ = [
     "CallbackChain",
     "ConvergenceMonitor",
     "CurveFit",
+    "CurveFitResult",
     "DefenseLayerTelemetry",
     "DiagnosticLevel",
     "DiagnosticPlugin",
@@ -596,10 +600,22 @@ def fit(
 
     # No workflow: pick curve_fit or curve_fit_large by point count.
     # Input validation
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
-    # scipy convention: 2-D xdata is (k, M), point count is the last axis
-    n_points = xdata.shape[-1] if xdata.ndim > 1 else len(xdata)
+    # Out-of-core sources (h5py/zarr datasets, memmaps, chunk factories) must reach
+    # curve_fit_large unread: count points from shape/len and convert only
+    # objects without a shape (lists, tuples).
+    from nlsq.streaming.normal_equations import is_chunk_factory
+
+    factory = is_chunk_factory(xdata)
+    if not factory:
+        if not hasattr(xdata, "shape"):
+            xdata = np.asarray(xdata)
+        if not hasattr(ydata, "shape"):
+            ydata = np.asarray(ydata)
+        # scipy convention: 2-D xdata is (k, M), point count is the last axis
+        n_points = xdata.shape[-1] if len(xdata.shape) > 1 else len(xdata)
+    else:
+        # a factory's length is unknown: it can only be streamed
+        n_points = size_threshold
 
     # goal: validated and applied here exactly as minpack.fit does for
     # workflow=..., instead of leaking into curve_fit's ignored **kwargs.
@@ -690,6 +706,11 @@ def fit(
             **kwargs,
         )
 
+    auto_kwargs: dict[str, Any] = (
+        {"memory_limit_gb": memory_limit_gb}
+        if method == "auto" and memory_limit_gb is not None
+        else {}
+    )
     # Use standard curve_fit
     return curve_fit(
         f,
@@ -706,6 +727,8 @@ def fit(
         sampler=sampler,
         center_on_p0=center_on_p0,
         scale_factor=scale_factor,
+        # only method="auto" reads it (memory routing); other methods warn on it
+        **auto_kwargs,
         **kwargs,
     )
 

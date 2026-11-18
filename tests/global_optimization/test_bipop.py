@@ -9,6 +9,8 @@ Tests cover:
 
 from __future__ import annotations
 
+import itertools
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -213,3 +215,26 @@ class TestBIPOPRestarterBestSolution:
         best_sol, best_fit = restarter.get_best()
         assert np.allclose(best_sol, [2.0, 2.0])
         assert best_fit == 8.0
+
+
+def test_bipop_fitness_history_tracks_global_best() -> None:
+    """The history must end at the returned best, not at the last restart's best."""
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
+    from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+    x = np.linspace(0, 10, 200)
+    y = 2 * np.sin(3 * x)
+    config = CMAESConfig(
+        max_generations=30,
+        max_restarts=4,
+        restart_strategy="bipop",
+        seed=4,
+        refine_with_nlsq=False,
+    )
+    result = CMAESOptimizer(config).fit(
+        lambda x, a, b: a * jnp.sin(b * x), x, y, bounds=([0, 0], [5, 10])
+    )
+    cd = result["cmaes_diagnostics"]
+    history = cd["fitness_history"]
+    assert history[-1] == pytest.approx(cd["best_fitness"], rel=1e-9)
+    assert all(b <= a for a, b in itertools.pairwise(history))

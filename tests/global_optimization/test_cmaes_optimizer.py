@@ -869,3 +869,17 @@ class TestStreamingFitnessScan:
             )
             counts.append(_count_eqns(jax.make_jaxpr(f)(pop).jaxpr))
         assert counts[0] == counts[1]
+
+
+def test_fitness_improvement_is_none_for_non_finite_endpoint():
+    from nlsq.global_optimization.cmaes_diagnostics import CMAESDiagnostics
+
+    assert (
+        CMAESDiagnostics(
+            fitness_history=[float("inf"), 50.0, 10.0]
+        ).get_fitness_improvement()
+        is None
+    )
+    assert CMAESDiagnostics(
+        fitness_history=[100.0, 10.0]
+    ).get_fitness_improvement() == pytest.approx(0.9)

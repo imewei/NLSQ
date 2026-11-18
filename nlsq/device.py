@@ -49,11 +49,7 @@ def _is_accelerator_device(d: object) -> bool:
     mocks/older JAX that lack it. The old code only matched "cuda", which
     silently reported TPU and ROCm devices as CPU-only.
     """
-    platform = getattr(d, "platform", None)
-    if isinstance(platform, str) and platform:
-        return platform in ("gpu", "tpu")
-    s = str(d).lower()
-    return "cuda" in s or "gpu" in s or "tpu" in s
+    return _device_platform(d) in ("gpu", "tpu")
 
 
 def get_system_cuda_version() -> tuple[str | None, int | None]:
@@ -261,6 +257,9 @@ def check_gpu_availability(warn: bool = True, *, warn_on_error: bool = True) -> 
         gpu_name, sm_version = get_gpu_info()
         cuda_version, cuda_major = get_system_cuda_version()
 
+        # No NVIDIA hardware: return before touching jax.devices(). This runs on
+        # every `import nlsq`; querying devices would initialize the JAX backend
+        # at import time and lock `jax_platforms` before the user can set it.
         if gpu_name is None:
             _logger.debug("No GPU hardware detected")
             return False

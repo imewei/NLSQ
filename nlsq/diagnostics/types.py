@@ -11,6 +11,7 @@ patterns.
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
@@ -66,6 +67,10 @@ def _validate_fim(fim: np.ndarray) -> str | None:
     if not np.allclose(normalized, normalized.T, rtol=1e-8, atol=1e-10):
         return "FIM must be symmetric"
 
+    # The round-off tolerance is relative to the largest eigenvalue (documented
+    # limit): an indefinite block whose scale lies below that round-off floor is
+    # indistinguishable from noise, so callers mixing parameter units by many
+    # orders of magnitude should rescale the FIM to comparable units first.
     eigvals = np.linalg.eigvalsh(normalized)
     max_abs_eig = float(np.max(np.abs(eigvals))) if eigvals.size else 0.0
     tol = fim.shape[0] * eps * max_abs_eig
@@ -791,6 +796,20 @@ class DiagnosticsConfig:
             if value <= 0:
                 raise ValueError(f"{name} must be positive")
             object.__setattr__(self, name, int(value))
+        # The monitor's norm history holds gradient_window_size samples: a larger
+        # stagnation window could never fill (GRAD-003 silently disabled).
+        if self.stagnation_window > self.gradient_window_size:
+            raise ValueError(
+                f"stagnation_window ({self.stagnation_window}) must not exceed "
+                f"gradient_window_size ({self.gradient_window_size})"
+            )
+        if self.gradient_window_size < 5:
+            warnings.warn(
+                "gradient_window_size < 5: vanishing-gradient detection (GRAD-001) "
+                "needs 5 samples and will never fire",
+                UserWarning,
+                stacklevel=3,
+            )
         if (
             not math.isfinite(self.stagnation_tolerance)
             or self.stagnation_tolerance <= 0

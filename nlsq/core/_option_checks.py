@@ -108,7 +108,11 @@ def validate_max_nfev(
         return None
     if isinstance(value, (bool, np.bool_)):
         raise ValueError("`max_nfev` must be None or positive integer, not bool.")
-    if allow_fractional and isinstance(value, numbers.Real):
+    if allow_fractional and isinstance(value, numbers.Integral):
+        # float() would round above 2**53 and overflow for huge ints
+        if int(value) > 0:
+            return int(value)
+    elif allow_fractional and isinstance(value, numbers.Real):
         num = float(value)
         if math.isfinite(num) and num > 0:
             return num if num != int(num) else int(num)

@@ -295,6 +295,8 @@ class AdaptiveHybridStreamingOptimizer:
         # Residual weighting state for weighted least squares
         # Allows domain-specific weighting of residuals during optimization
         self._residual_weights_jax: jnp.ndarray | None = None  # Per-group weights
+        # Weights set via set_residual_weights() survive the next fit()'s setup.
+        self._residual_weights_override: jnp.ndarray | None = None
 
         # Pre-compiled Jacobian function (set up in _setup_jacobian_fn)
         # This avoids recompilation overhead in _compute_jacobian_chunk
@@ -589,6 +591,10 @@ class AdaptiveHybridStreamingOptimizer:
         if not self.config.enable_residual_weighting:
             return
 
+        if self._residual_weights_override is not None:
+            self._residual_weights_jax = self._residual_weights_override
+            return
+
         if self.config.residual_weights is None:
             _logger.warning(
                 "Residual weighting enabled but no weights provided. "
@@ -629,6 +635,12 @@ class AdaptiveHybridStreamingOptimizer:
             wMSE = sum(w[group_idx] * residuals^2) / sum(w[group_idx])
         """
         self._residual_weights_jax = jnp.asarray(weights, dtype=jnp.float64)
+        self._residual_weights_override = self._residual_weights_jax
+        if not self.config.enable_residual_weighting:
+            _logger.warning(
+                "set_residual_weights() has no effect while "
+                "config.enable_residual_weighting is False."
+            )
 
         _logger.debug(
             f"Updated residual weights: range=[{float(self._residual_weights_jax.min()):.3f}, "
@@ -1630,8 +1642,9 @@ class AdaptiveHybridStreamingOptimizer:
             if grad_norm < self.config.gradient_norm_threshold:
                 return True, "Gradient norm below threshold"
 
-        # Check loss plateau criterion
-        if "plateau" in active_criteria:
+        # Check loss plateau criterion. Iteration 0 compares the initial loss with
+        # itself (both are the pre-step loss), so it can never show a plateau.
+        if "plateau" in active_criteria and iteration > 0:
             # Compute relative loss change
             eps = jnp.finfo(jnp.float64).eps
             relative_change = jnp.abs(current_loss - prev_loss) / (
@@ -2161,6 +2174,24 @@ class AdaptiveHybridStreamingOptimizer:
                     self.normalized_params = current_params
                     self._save_checkpoint(checkpoint_path)
 
+            # Progress callback, before the switch test so a due callback is never
+            # skipped by a phase switch (no-op if fit() wasn't given one). loss_value
+            # is the loss AT params_before_step (see docstring of
+            # _lbfgs_step), so pair it with that point, not the post-step
+            # current_params, to keep callback telemetry internally consistent.
+            # The warmup loss is a mean; 0.5 * n * loss is 0.5 * SSR (exact for the
+            # default unweighted, unregularized loss), the Phase 2/TRF cost unit.
+            self._invoke_fit_callback(
+                params_before_step,
+                0.5 * len(x_data) * loss_value,
+                iteration + 1,
+                phase=1,
+                gradient_norm=grad_norm,
+            )
+            if self._stop_requested:
+                stop_iterations = iteration + 1
+                break
+
             # Check switch criteria after minimum warmup iterations
             if iteration + 1 >= self.config.warmup_iterations:
                 should_switch, reason = self._check_phase1_switch_criteria(
@@ -2201,23 +2232,6 @@ class AdaptiveHybridStreamingOptimizer:
                         lr_mode=lr_mode,
                         relative_loss=relative_loss,
                     )
-
-            # Progress callback (no-op if fit() wasn't given one). loss_value
-            # is the loss AT params_before_step (see docstring of
-            # _lbfgs_step), so pair it with that point, not the post-step
-            # current_params, to keep callback telemetry internally consistent.
-            # The warmup loss is a mean; 0.5 * n * loss is 0.5 * SSR (exact for the
-            # default unweighted, unregularized loss), the Phase 2/TRF cost unit.
-            self._invoke_fit_callback(
-                params_before_step,
-                0.5 * len(x_data) * loss_value,
-                iteration + 1,
-                phase=1,
-                gradient_norm=grad_norm,
-            )
-            if self._stop_requested:
-                stop_iterations = iteration + 1
-                break
 
             # Update previous loss
             prev_loss = loss_value
@@ -2414,7 +2428,7 @@ class AdaptiveHybridStreamingOptimizer:
         JTJ: jnp.ndarray,
         JTr: jnp.ndarray,
         trust_radius: float,
-        regularization: float = 1e-10,
+        regularization: float | None = None,
     ) -> tuple[jnp.ndarray, float]:
         """Solve Gauss-Newton step using SVD following trf.py patterns.
 
@@ -2433,8 +2447,9 @@ class AdaptiveHybridStreamingOptimizer:
             Accumulated J^T r vector of shape (n_params,)
         trust_radius : float
             Trust region radius (maximum allowed step norm)
-        regularization : float, default=1e-10
-            Tikhonov regularization parameter for numerical stability
+        regularization : float, optional
+            Tikhonov term added to the Jacobi-scaled J^T J; defaults to
+            ``config.regularization_factor``.
 
         Returns
         -------
@@ -2454,6 +2469,11 @@ class AdaptiveHybridStreamingOptimizer:
         3. Scale step if norm exceeds trust radius
         """
         n_params = JTJ.shape[0]
+        if regularization is None:
+            # getattr: the solver is also called unbound (self=None) in tests
+            regularization = getattr(
+                getattr(self, "config", None), "regularization_factor", 1e-10
+            )
 
         # Jacobi (diagonal) scaling: with Jacobian columns of very different
         # magnitude, the relative singular-value cutoff below would zero the
@@ -2494,7 +2514,9 @@ class AdaptiveHybridStreamingOptimizer:
         # zero their contribution (1/s -> 0) rather than flooring s to
         # s_threshold, which would instead divide by a near-zero floor and
         # amplify null-space noise components by up to ~1/threshold.
-        s_threshold = jnp.max(s) * 1e-10
+        # n*eps (as in pcov_from_normal): a looser cutoff froze ill-conditioned
+        # directions (scaled cond 1e5-1e6) and stopped short of the optimum.
+        s_threshold = jnp.max(s) * n_params * jnp.finfo(jnp.float64).eps
         # Guard the denominator itself (not just its result) so 1.0/s never
         # evaluates 1/0 -> inf for an exactly-zero singular value before
         # `where` discards it -- transient inf/nan can otherwise trip
@@ -3174,8 +3196,13 @@ class AdaptiveHybridStreamingOptimizer:
             # (fixed ones get an identity row so their step component is exactly 0).
             gradient_norm = float(jnp.linalg.norm(jnp.where(free, JTr, 0.0)))
             solve_JTr = jnp.where(free, JTr, 0.0)
+            # The fixed rows' diagonal must be on the free curvature's scale: an
+            # absolute 1.0 would dominate the solver's relative cutoff and zero
+            # every free column of a small-valued problem.
+            fixed_diag = jnp.max(jnp.where(free, jnp.diag(JTJ), 0.0))
+            fixed_diag = jnp.where(fixed_diag > 0, fixed_diag, 1.0)
             solve_JTJ = jnp.where(free[:, None] & free[None, :], JTJ, 0.0) + jnp.diag(
-                (~free).astype(JTJ.dtype)
+                jnp.where(free, 0.0, fixed_diag)
             )
 
         # Solve for Gauss-Newton step
@@ -3555,6 +3582,12 @@ class AdaptiveHybridStreamingOptimizer:
         # SSR at float64 rounding level of y: an exact (noise-free) fit sits
         # here, where neither relative test below can resolve progress.
         cost_floor = (10 * np.finfo(np.float64).eps) ** 2 * float(jnp.sum(y_data**2))
+        # A zero data residual does not end the fit while the group penalty is
+        # still non-zero: test the penalized cost then.
+        penalty_active = bool(
+            self.config.enable_group_variance_regularization
+            and self.config.group_variance_indices
+        )
 
         def _stopped_by_callback(iterations: int, gradient_norm: float) -> dict:
             self.phase_history.append(
@@ -3735,7 +3768,8 @@ class AdaptiveHybridStreamingOptimizer:
             # <= so an exactly-zero residual (scale 0, gradient 0) converges.
             if not retry_exhausted and (
                 gradient_norm <= self.config.gauss_newton_tol * gradient_scale
-                or float(final_residual_sum_sq) <= cost_floor
+                or float(best_cost if penalty_active else final_residual_sum_sq)
+                <= cost_floor
             ):
                 # Record Phase 2 completion
                 phase_record = {
@@ -3909,22 +3943,43 @@ class AdaptiveHybridStreamingOptimizer:
             All ``inf`` (after one ``OptimizeWarning``) when no direction survives the
             cutoff or J^T J or the result is non-finite.
         """
-        # Equilibrate first: pinv(JTJ) = D^-1 pinv(D^-1 JTJ D^-1) D^-1 with
-        # D = sqrt(diag(JTJ)), so the eigenvalue cutoff sees the correlation
-        # structure, not column-scale disparity left by the normalization
-        # (which otherwise zeroed well-determined directions).
+        # pcov_from_normal equilibrates internally for the rank cutoff and, when
+        # the equilibrated matrix is still singular, returns the Moore-Penrose
+        # pseudo-inverse of J^T J itself (a pre-scaling here changed that
+        # pseudo-inverse for collinear columns of unequal norm).
         JTJ = np.asarray(JTJ)
-        d = np.sqrt(np.abs(np.diag(JTJ)))
-        d = np.where(np.isfinite(d) & (d > 0), d, 1.0)
-        cov_eq, _ = pcov_from_normal(
-            JTJ / np.outer(d, d),
+        cov, _ = pcov_from_normal(
+            JTJ,
             0.0,  # unused: absolute_sigma=True leaves the variance to the caller
             JTJ.shape[0] + 1,
             JTJ.shape[0],
             absolute_sigma=True,
             cond_warn=False,
         )
-        return jnp.asarray(cov_eq / np.outer(d, d))
+        return jnp.asarray(cov)
+
+    def _compute_original_covariance(self, JTJ: jnp.ndarray) -> jnp.ndarray:
+        """Covariance in ORIGINAL parameter space: pinv of the un-normalized J^T J.
+
+        ``p = D q + o`` gives ``H_orig = D^-1 H_norm D^-1``. A pseudo-inverse is not
+        congruence-invariant, so for a rank-deficient ``H`` the inverse must be taken
+        in the coordinates the user sees (``pinv(H_norm)`` rescaled by ``D`` is a
+        different matrix). Full-rank ``H`` gives the same result as
+        ``D pinv(H_norm) D``. Falls back to that route if the un-normalization is not
+        finite.
+        """
+        if self.normalization_jacobian is None:
+            raise RuntimeError(
+                "Normalization Jacobian not available. Call _setup_normalization first.",
+            )
+        scales = np.asarray(jnp.diag(self.normalization_jacobian), dtype=float)
+        H = np.asarray(JTJ, dtype=float)
+        if np.all(np.isfinite(scales) & (scales > 0)):
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                H_orig = (H / scales[:, None]) / scales[None, :]
+            if np.isfinite(H_orig).all():
+                return self._compute_normalized_covariance(H_orig)
+        return self._transform_covariance(self._compute_normalized_covariance(JTJ))
 
     def _transform_covariance(self, cov_norm: jnp.ndarray) -> jnp.ndarray:
         """Transform covariance from normalized to original parameter space.
@@ -4136,8 +4191,8 @@ class AdaptiveHybridStreamingOptimizer:
         - perr: Standard errors (not returned by scipy but useful)
 
         The covariance transformation follows:
-        1. Cov_norm = pinv(J^T J)  [in normalized space]
-        2. Cov_orig = D @ Cov_norm @ D^T  [transform to original space]
+        1. H_orig = D^-1 J^T J D^-1  [un-normalize J^T J]
+        2. Cov_orig = pinv(H_orig)  [in original space]
         3. Cov_final = sigma^2 * Cov_orig  [scale by residual variance]
         """
         phase_start = time.time()
@@ -4145,13 +4200,11 @@ class AdaptiveHybridStreamingOptimizer:
         # Step 1: Denormalize parameters to original space
         popt = self._denormalize_params(optimized_params_normalized)
 
-        # Step 2: Compute covariance in normalized space (all-inf + one
-        # OptimizeWarning if J^T J is degenerate or non-finite)
-        cov_norm = self._compute_normalized_covariance(JTJ_final)
-        degenerate = bool(jnp.isinf(cov_norm).any())
-
-        # Step 3: Transform covariance to original space
-        cov_orig = self._transform_covariance(cov_norm)
+        # Steps 2-3: covariance in original space, from the pseudo-inverse of the
+        # un-normalized J^T J (all-inf + one OptimizeWarning if J^T J is degenerate
+        # or non-finite)
+        cov_orig = self._compute_original_covariance(JTJ_final)
+        degenerate = bool(jnp.isinf(cov_orig).any())
 
         # Step 4: Apply residual variance scaling
         if absolute_sigma:
@@ -4478,6 +4531,12 @@ class AdaptiveHybridStreamingOptimizer:
             x_data = jnp.asarray(x_data, dtype=jnp.float64)
             y_data = jnp.asarray(y_data, dtype=jnp.float64)
             n_points = len(x_data)
+            if n_points == 0 or y_data.ndim == 0 or len(y_data) != n_points:
+                raise ValueError(
+                    "xdata and ydata must be non-empty with the same number of "
+                    f"observations; got {n_points} and "
+                    f"{'a scalar' if y_data.ndim == 0 else len(y_data)}."
+                )
         else:
             raise NotImplementedError(
                 "Only tuple data sources (x_data, y_data) currently supported",

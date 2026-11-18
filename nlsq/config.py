@@ -547,6 +547,14 @@ class JAXConfig:
         ...     # Code here runs with 32-bit precision
         ...     result = some_computation()
         >>> # Back to previous precision setting
+
+        Notes
+        -----
+        ``jax_enable_x64`` is one process-wide flag, so contexts must nest
+        strictly (last entered, first exited). Threads are serialized by a lock;
+        asyncio tasks of one thread are not: do not keep a ``precision_context``
+        open across an ``await`` while another task of the same thread enters its
+        own, or the exits restore the wrong precision.
         """
         instance = cls()
 

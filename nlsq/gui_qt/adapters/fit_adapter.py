@@ -112,6 +112,8 @@ class FitConfig:
     layer2_enabled: bool = True
     layer3_enabled: bool = True
     layer4_enabled: bool = True
+    enable_checkpoints: bool = False
+    checkpoint_dir: str | None = None
 
 
 @runtime_checkable
@@ -479,6 +481,30 @@ def _note_ignored_streaming_controls(config: FitConfig, notes: list[str]) -> Non
         )
 
 
+def _global_search_kwargs(
+    config: FitConfig, workflow: str, notes: list[str]
+) -> dict[str, Any]:
+    """Multi-start and checkpoint kwargs for the workflows that support them."""
+    # hpc delegates to auto_global, so it takes the same multi-start controls
+    if workflow in ("auto_global", "hpc") and config.n_starts > 0:
+        kwargs: dict[str, Any] = {
+            "n_starts": config.n_starts,
+            "sampler": config.sampler,
+            "center_on_p0": config.center_on_p0,
+            "scale_factor": config.scale_factor,
+        }
+        # checkpointing is implemented by the library for these workflows only
+        if config.enable_checkpoints and config.checkpoint_dir:
+            kwargs["checkpoint_dir"] = config.checkpoint_dir
+        return kwargs
+    if config.enable_checkpoints:
+        notes.append(
+            "checkpointing applies only to the auto_global and hpc workflows "
+            "and is not used by this fit"
+        )
+    return {}
+
+
 def execute_fit(
     xdata: np.ndarray,
     ydata: np.ndarray,
@@ -540,6 +566,10 @@ def execute_fit(
         lower = [-float("inf") if v is None else float(v) for v in bounds[0]]
         upper = [float("inf") if v is None else float(v) for v in bounds[1]]
         bounds = (np.asarray(lower), np.asarray(upper))
+        if bounds[0].size == 1 and bounds[1].size == 1:
+            # a single (scalar) bound applies to every parameter: fit() only
+            # broadcasts 0-d bounds, so (1,) would fail for n_params > 1
+            bounds = (bounds[0].reshape(()), bounds[1].reshape(()))
 
     # Prepare callback wrapper
     callback_wrapper = (
@@ -551,10 +581,10 @@ def execute_fit(
         "gtol": config.gtol,
         "ftol": config.ftol,
         "xtol": config.xtol,
-        # Every iteration costs >= 1 function evaluation, so capping nfev at
-        # max_iterations bounds the iteration count (the solver has no
-        # separate iteration limit).
-        "max_nfev": min(config.max_function_evals, config.max_iterations),
+        # nfev counts the initial residual evaluation, and every iteration costs
+        # >= 1 more, so max_iterations + 1 bounds the iteration count (the
+        # solver has no separate iteration limit).
+        "max_nfev": min(config.max_function_evals, config.max_iterations + 1),
         "loss": config.loss,
         "absolute_sigma": config.absolute_sigma,
         "check_finite": config.check_finite,
@@ -579,12 +609,7 @@ def execute_fit(
     # Determine goal
     goal = config.goal
 
-    # For auto_global workflow, pass n_starts parameter
-    if workflow == "auto_global" and config.n_starts > 0:
-        fit_kwargs["n_starts"] = config.n_starts
-        fit_kwargs["sampler"] = config.sampler
-        fit_kwargs["center_on_p0"] = config.center_on_p0
-        fit_kwargs["scale_factor"] = config.scale_factor
+    fit_kwargs.update(_global_search_kwargs(config, workflow, notes))
 
     # fit()'s workflow API has no chunking control (memory-based selection).
     if config.chunk_size != FitConfig().chunk_size:
@@ -889,6 +914,8 @@ def create_fit_config_from_state(state: Any) -> FitConfig:
         layer2_enabled=getattr(state, "layer2_enabled", True),
         layer3_enabled=getattr(state, "layer3_enabled", True),
         layer4_enabled=getattr(state, "layer4_enabled", True),
+        enable_checkpoints=bool(getattr(state, "enable_checkpoints", False)),
+        checkpoint_dir=getattr(state, "checkpoint_dir", None),
     )
 
 

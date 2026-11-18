@@ -2,6 +2,7 @@
 
 import logging
 import warnings
+from typing import Any, cast
 
 import numpy as np
 
@@ -332,7 +333,7 @@ class CurveFitResult(OptimizeResult):
 
         def compute():
             if self.get("model") is not None and self.get("xdata") is not None:
-                return np.array(self.model(self.xdata, *self.popt))
+                return self._eval(self.xdata, *self.popt)
             # Fallback: back-calculate from fun = (f - y) / sigma
             if self.get("ydata") is not None and self.get("fun") is not None:
                 return np.array(self.ydata) + self._unweighted_fun()
@@ -709,7 +710,7 @@ class CurveFitResult(OptimizeResult):
         popt = np.asarray(popt, dtype=float)
         n_params = len(popt)
 
-        y_pred = np.atleast_1d(np.array(self.model(x, *popt)))
+        y_pred = np.atleast_1d(self._eval(x, *popt))
         # Size from the predictions: 2-D xdata is (k, N), so len(x) would be k.
         n_points = y_pred.shape[0]
         try:
@@ -719,7 +720,10 @@ class CurveFitResult(OptimizeResult):
             jac = jax.jacfwd(lambda p: jnp.asarray(self.model(x, *p)))(
                 jnp.asarray(popt)
             )
-            jac = np.asarray(jac, dtype=float).reshape(n_points, n_params)
+            # a scalar model output (broadcast over the points) has a single row
+            jac = np.broadcast_to(
+                np.asarray(jac, dtype=float).reshape(-1, n_params), (n_points, n_params)
+            )
             if np.all(np.isfinite(jac)):
                 return y_pred, jac
             # non-finite autodiff (e.g. sqrt at 0, or a NaN-gradient trap):
@@ -938,7 +942,7 @@ class CurveFitResult(OptimizeResult):
 
         t_val, dof = self._interval_quantile(alpha, "Prediction intervals")
         if t_val is None:  # undefined: no need (or right) to differentiate
-            n_out = np.atleast_1d(np.array(self.model(x, *popt))).shape[0]
+            n_out = np.atleast_1d(self._eval(x, *popt)).shape[0]
             return np.full((n_out, 2), np.nan)
         y_pred, jacobian = self._finite_diff_jacobian(x, popt)
 
@@ -959,6 +963,23 @@ class CurveFitResult(OptimizeResult):
         # Return as (n, 2) array
         intervals = np.column_stack([lower, upper])
         return intervals
+
+    def _n_obs(self, x) -> int:
+        """Number of observations in ``x``: its last axis, or its first axis for the
+        points-first ``(n_points, n_features)`` layout of the hybrid path."""
+        shape = np.shape(x)
+        if len(shape) <= 1:
+            return shape[0] if shape else 1
+        xd, y = np.shape(cast(Any, self.get("xdata"))), self.get("ydata")
+        if y is not None and len(xd) > 1 and xd[0] == len(y) != xd[-1]:
+            return shape[0]
+        return shape[-1]
+
+    def _eval(self, x, *params) -> np.ndarray:
+        """Model values at ``x``; a scalar output is broadcast over the observations,
+        as the optimizer does."""
+        y = np.array(self.model(x, *params))
+        return np.full(self._n_obs(x), y) if y.ndim == 0 else y
 
     def _noise_variance_at(self, x, n: int, dof: int):
         """Observation-noise variance for a prediction interval at ``x``.
@@ -999,7 +1020,7 @@ class CurveFitResult(OptimizeResult):
                     order = np.argsort(xd)
                     sig_x = np.interp(xq, xd[order], sig[order])
                 else:
-                    sig_x = np.full(xq.shape[-1:], float(np.sqrt(np.mean(sig**2))))
+                    sig_x = np.full(self._n_obs(xq), float(np.sqrt(np.mean(sig**2))))
                 return scale * sig_x**2
             warnings.warn(
                 "Stored sigma does not match the residuals (shape "
@@ -1057,7 +1078,7 @@ class CurveFitResult(OptimizeResult):
 
         t_val, _ = self._interval_quantile(alpha, "Confidence bands")
         if t_val is None:  # undefined: no need (or right) to differentiate
-            shape = np.atleast_1d(np.array(self.model(x, *popt))).shape
+            shape = np.atleast_1d(self._eval(x, *popt)).shape
             return np.full(shape, np.nan), np.full(shape, np.nan)
         y0, jacobian = self._finite_diff_jacobian(x, popt)
 
@@ -1142,12 +1163,12 @@ class CurveFitResult(OptimizeResult):
             x_eval = x
             x = np.arange(y.size)
             x_dense = x
-            y_dense = np.array(self.model(x_eval, *self.popt))
+            y_dense = self._eval(x_eval, *self.popt)
             xlabel = "observation"
         else:
             # Dense grid for a smooth line and band
             x_eval = x_dense = np.linspace(x.min(), x.max(), 500)
-            y_dense = np.array(self.model(x_dense, *self.popt))
+            y_dense = self._eval(x_dense, *self.popt)
             xlabel = "x"
 
         # Extract plotting parameters from kwargs

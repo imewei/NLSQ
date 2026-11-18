@@ -453,6 +453,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fallback routes, so the memory selector still runs there.
   `auto_bounds` with `return_eval` ranks attempts by the real status and cost of the result behind each
   `(popt, pcov, f(x))` return (recorded out-of-band, no extra solve), so an unconverged relaxed refit is not picked.
+- **Streaming and CMA-ES review (2026-11-18, F4).** `curve_fit_large` exact path no longer lets a buffer-reusing chunk factory overwrite the retained first block (wrong `popt`/`pcov`); `Auto` probes the model at `p0` clipped into the bounds (as the exact solver does) instead of the raw `p0`; `LargeDatasetFitter` raises `ValueError` on a chunked fit when `len(ydata) != len(xdata)` (the unmatched tail was silently dropped), accepts a scalar `p0`, accepts `memory_limit_gb=None` (auto-detect, as documented), keeps `chunk_results`/`failure_summary` on a below-threshold failure result, and documents its single-owner contract. CMA-ES: `data_chunk_size` now runs a best-effort probe (first/middle/last chunk, several in-bounds parameter points) and raises `ValueError` for a visibly batch-dependent model (e.g. a mean of `x`) instead of silently minimising a different objective; it cannot certify a model, so dependence that vanishes at the probe points or shows only in unprobed chunks is not detected (NEEDS-DECISION: new exception); a `data_mask` with a short `ydata` raises instead of truncating `xdata`; BIPOP `fitness_history` tracks the best over all restarts; a checkpoint save after backup recovery no longer rotates the corrupt primary over the only good `.bak`; tournament losses are computed in float64 so integer batches cannot overflow.
+- **CLI (F5, 2026-11-18).** Model validator (still an AST denylist, not a sandbox): the default
+  visitor now resolves attribute chains rooted at numpy/jax imports and rejects `numpy.testing`
+  (`measure` compiles a code string), `numpy.lib.format/npyio`, `numpy.ctypeslib/f2py`,
+  `jax.debug/export/extend/ffi/interpreters/lib/profiler`, and every `jax.experimental.*` except
+  `ode`, `sparse`, `jet`, `checkify`, `shard_map`, `enable_x64`, `disable_x64`; `logging` is no longer
+  exempt as an attribute name; `xb`/`xla_bridge`/`jtu` re-exports, Python 3.14 `Path.copy/copy_into/move/
+  move_into/lchmod` are blocked (a positional-argument `.copy(...)` off a non-numpy base is rejected).
+  Quoted `export.stdout` / `export.skip_file_on_stdout` now raise instead of being truthy. An explicit
+  `csv.header: true` is honoured even when the header row is numeric (the numeric-header-as-data heuristic
+  now applies only when `csv.header` is unset). `ascii.dtype` complex is rejected. Batch preflight
+  compares full results/figure file names. `nlsq config` checks both destinations before writing either.
+  Failed plot construction closes its figure.
+  Validator `.copy(...)` rule (Python 3.14 `Path.copy`): off a non-numpy/jax base only `.copy()` and a
+  single literal order (`.copy('C')`, `.copy(order='F')`) are accepted; any other argument, keyword,
+  `**` expansion or uncalled `.copy` reference is rejected, so `x.copy(order)` with a variable order needs
+  a literal order or `trusted: true`. `nlsq config` stages both templates and renames them into place.
+  The validator also rejects, on any base, the stdlib re-exports found by a sweep of public numpy/scipy/jax
+  modules (`pathlib`, `Path` and its Pure/Posix/Windows variants as in `jax.version.pathlib` and
+  `numpy.conftest.Path`, `codecs`, and the `tests`/`conftest` packages); a re-exported `Path` can no longer
+  inherit the numeric `.copy` exemption.
+
+- **Hybrid streaming (behaviour changes, review 2026-11-18):** an active bound no
+  longer freezes the free parameters of small-valued problems (the fixed row's diagonal is
+  now on the free curvature's scale instead of an absolute 1.0); the Gauss-Newton
+  truncation cutoff is `n*eps` of the Jacobi-scaled matrix instead of `1e-10`, so
+  ill-conditioned fits (scaled cond 1e5-1e6) reach the optimum instead of stopping short;
+  the zero-residual exit tests the penalized cost when group-variance regularization is on;
+  Phase 3 `pcov` for collinear columns is now the Moore-Penrose pseudo-inverse of `J^T J`
+  (the redundant pre-scaling is gone); `config.regularization_factor` is applied in the
+  Phase 2 solve; the loss-plateau switch can no longer fire at warmup iteration 0 (warmup
+  now runs at least 2 iterations unless another criterion fires); the Phase 1 callback runs
+  before the switch test; `fit()` raises `ValueError` for empty or length-mismatched
+  `xdata`/`ydata`; `set_residual_weights()` survives the next `fit()`; telemetry warmup
+  tokens stay unique across `reset()`; the standalone `WarmupPhase` hands off the evaluated
+  final point. `gc_chunk_interval`, `warmup_lr_refinement/careful`, `min_success_rate` and
+  `lbfgs_line_search='strong_wolfe'` are documented as not read by the hybrid engine.
+
+- **Core least-squares input checks, review 2026-11-18 (F2).** `LeastSquares.least_squares` now raises `ValueError` for a
+  non-finite `x0` (`+-inf`/NaN passed as "converged" before), a `data_mask` whose length differs from the residuals (a
+  one-entry mask broadcast over every row), a non-finite initial cost of a custom `loss`, an invalid `jacobian_mode` on the
+  direct residual route, and, with `enable_stability=True`, a non-finite initial Jacobian whose repair leaves a zero gradient
+  (it reported `gtol` success at `x0`). A reused `LeastSquares` honours a changed `jacobian_mode`/global name in the uncached
+  path; reverse-mode AD no longer yields NaN for a masked row with `sigma == 0`; a 1-D analytic `jac` of a one-parameter model
+  is accepted; the `fallback=True` robust-loss strategy skips the caller's own loss and a `None` tolerance is no longer relaxed
+  (`TypeError`); `estimate_initial_parameters` raises `ValueError` when no observation is finite; `exponential_growth`
+  `p0='auto'` handles a baseline and an x offset. `nlsq.clear_cache()` now also calls `jax.clear_caches()`, so every
+  jitted function in the process recompiles on its next call (the cached wrappers used to keep serving stale traces).
+  `SparseJacobianComputer.compute_sparse_jacobian` raises `ValueError` when `len(data_mask) != len(ydata)`.
+  `NumericalStabilityGuard.check_residuals` judges the zero-MAD case relative to the residual scale, so data in tiny
+  units can now report outliers it used to miss. `FallbackOrchestrator` keeps advancing progressive strategies after a
+  pass whose proposals were all no-ops (e.g. the caller's own `loss='soft_l1'`), so later variants are tried.
+
+- **Core API (F1, 2026-11-18)**: a `data_mask` that excludes every row, or (with `nan_policy="omit"`) a mask the
+  length of the already-shortened data, now raises `ValueError` instead of fitting nothing / dropping the wrong
+  rows; `curve_fit(method="auto")` on the chunked route now applies `sigma`/`data_mask`, resolves `p0="auto"`, and on
+  the streaming route maps `gtol` and warns for ignored `ftol`/`xtol`/`max_nfev`/`compute_diagnostics` (chunked also
+  warns for `callback`/`compute_diagnostics`); `fit()` forwards out-of-core sources and chunk factories unread and
+  honours `memory_limit_gb` below `size_threshold` with `method="auto"`; `create_checkpoint_directory` returns a
+  distinct directory per call; `CallbackChain.close()` closes every callback before re-raising the first error;
+  float32 `sigma`, scalar model outputs (`return_eval`, result bands/intervals), the absolute-sigma covariance and
+  the trust-region helpers no longer overflow or mis-shape (see `tests/core/test_f1_review_2026_11_18.py`).
+  `curve_fit(method="")` used to fall back silently to the default method; it now reaches method validation and
+  raises `ValueError`. `MemoryBudgetSelector.select(..., budget=...)` now validates `n_points`/`n_params` (a
+  non-positive or non-integer count raises `ValueError`) instead of accepting them alongside a precomputed budget.
+  `curve_fit(method="auto", return_eval=True, data_mask=...)` on the chunked route returns predictions for every
+  caller row (as the standard route), not only the fitted rows; `gtol=0`/`None` (disabled) on the streaming route of
+  `method="auto"` maps to the smallest positive hybrid tolerance instead of raising; `solve_lsq_trust_region_jax`
+  keeps float32 SVD dtypes for a float64 JAX-scalar radius.
+
+- **Utils / diagnostics (F6, 2026-11-18)**: `InputValidator` no longer rejects `method="lm"` with infinite bounds (only finite
+  ones) and now reports NaN bounds; slow validation accepts a scalar `p0` and caches a model probe only after it completes;
+  `validate_inputs` reads keyword-passed required arguments and positional options; `safe_loads` raises
+  `SafeSerializationError` on duplicate JSON object members and on non-integer data in an integer-dtype array;
+  `DiagnosticsConfig` now raises `ValueError` when `stagnation_window > gradient_window_size` (GRAD-003 could never fire) and
+  warns when `gradient_window_size < 5` (GRAD-001); `GradientMonitor.record_gradient` validates `params` before mutating
+  state and measures integer gradients in float64; `PluginRegistry.unregister`/`clear` drop plugin references outside the
+  lock; stagnation detection no longer divides by an
+  underflowing squared mean; profiler text/HTML reports derive their summary from one snapshot; `NLSQ_SAVE_ITERATIONS=on`
+  is a flag (not a directory) and text-valued iteration metrics are kept in the saved NPZ; `IterationLogger(file=...)`
+  writes one footer per run and never to a closed file.
+- **Qt GUI adapters/state/autosave/export (three-brain 2026-11-18).** `workflow="hpc"` now forwards the GUI's multi-start
+  controls (`n_starts`, sampler, centring, scale) and, when checkpoints are enabled with a directory, `checkpoint_dir`
+  (other workflows note that checkpointing is unused); the exported script does the same. **Behaviour change:** the
+  GUI iteration limit is `max_nfev = min(max_function_evals, max_iterations + 1)` (the initial evaluation counts), so
+  `max_iterations=1` takes one step instead of stopping at `p0`. Exported scripts emit `absolute_sigma=True` without
+  `sigma`, seed polynomial fits with `np.polyfit` like the GUI model, and the JSON/ZIP export carries the covariance
+  matrix (the ZIP no longer promises plots). Autosave: a second running instance writes its own snapshot and a clean
+  close removes only its own file; an accepted recovery keeps its snapshot until the first autosave replaces it; an
+  out-of-range `p0` no longer half-restores a session; snapshots are written with the C JSON encoder (4x faster) and
+  fsynced. YAML: `validate_yaml_config` rejects non-mapping sections like the loader, fractional `max_iterations` is
+  rejected, export keeps model parameter names and transforms. Custom models drop `**kwargs` from the parameter list,
+  the function picker lists top-level functions only, and quoted CSV cells parse. Data CSV export converts a JAX
+  `y_fit` to NumPy once instead of per element.
+  Recovery cleanup removes a snapshot by atomic rename-to-tombstone plus an identity check (a live instance's newer
+  file is restored); the remaining limit is that for the microseconds between that rename and the restore the other
+  instance's snapshot is absent from its path (no lock file), so a crash of that instance inside the window loses it; without hard links the restore is an existence-checked rename (tiny check-then-rename window), and leftover tombstones are re-adopted at the next startup.
+- **Qt GUI pages/widgets/plots, review 2026-11-18 (F8).** YAML `npz:`/`hdf5:` sections (`sigma_key`, `z_key`, dataset paths) now reach the loader, so the GUI weights/surface-fits like the CLI; a failed YAML data load no longer re-applies the YAML column selectors to the previously staged dataset; interior empty columns are kept (only trailing empty columns are dropped) so positional selectors stay valid; the Data page re-syncs when only sigma changes or when the session is cleared. **Figure export** asks before replacing the `<name>_combined`/`<name>_histogram` files it actually writes, passes the fit's `absolute_sigma` to the confidence band, and is disabled for surface fits (the visualizer rejects them; NEEDS-DECISION: previously the button was enabled and failed on use). Advanced options: the unsupported `random` sampler is no longer offered (restoring an unknown sampler is logged, case-insensitive match), and the multi-start scale factor is no longer rounded to 6 decimals by the control. The statistics card that showed `nfev` as "Iterations" is now "Function evaluations". Plots: no zero-width histogram bin at large magnitude, standardized residuals no longer underflow/overflow, and the Shapiro 5000-sample cap is logged. Fitting Options "Reset" also restores auto initial values and unbounded parameters; the navigation gate no longer opens Fitting Options before a model is applied.
+- **Streaming review wave 2 (2026-11-18, F4).** `timeit=True` (like `full_output`/`return_eval`) in `Chunked(options=...)` or passed to `LargeDatasetFitter.fit` now raises `TypeError` up front instead of failing every chunk with an unpack error; `HybridStreamingConfig` now enforces the documented L-BFGS step-size hierarchy `lbfgs_exploration_step_size <= lbfgs_careful_step_size <= lbfgs_refinement_step_size` (a config with inverted values now raises `ValueError`).
+
+- **Hybrid streaming phases (review 2026-11-18, wave 2):** the standalone `WarmupPhase`
+  counts L-BFGS iterations (telemetry clip/failure rates were always 0%), honours
+  `lbfgs_careful_step_size`, clips updates to `normalized_bounds`, and seeds the shared best
+  tracker on a warm start; `GaussNewtonPhase` no longer reports cost-change convergence while
+  the residual is still correlated with a Jacobian column, and its Jacobian handles 2-D `x`;
+  `PhaseOrchestrator` forwards `residual_weights` and bounds to the warmup. The
+  `warmup_lr_*` fields set by the `conservative`/`aggressive`/`defense_*` presets remain inert
+  for L-BFGS warmup (now stated in their docstrings).
 
 ## [0.8.0] - 2026-11-14
 

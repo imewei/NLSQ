@@ -445,7 +445,8 @@ class TournamentSelector:
         *sigma_opt, model = rest
         sigma_jax = jnp.asarray(sigma_opt[0]) if sigma_opt else None
         x_jax = jnp.asarray(x_batch)
-        y_jax = jnp.asarray(y_batch)
+        # float64 so integer inputs cannot wrap around when squared
+        y_jax = jnp.asarray(y_batch, dtype=jnp.float64)
         # As curve_fit: scalar or one sigma per observation. A column or a
         # covariance matrix would silently broadcast against the residuals.
         if sigma_jax is not None and sigma_jax.ndim and sigma_jax.shape != y_jax.shape:
@@ -462,7 +463,7 @@ class TournamentSelector:
 
             try:
                 params = self.candidates[i]
-                predictions = model(x_jax, *params)
+                predictions = jnp.asarray(model(x_jax, *params), dtype=jnp.float64)
                 residuals = y_jax - predictions
                 if sigma_jax is not None:
                     residuals = residuals / sigma_jax

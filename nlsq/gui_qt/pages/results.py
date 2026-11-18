@@ -437,7 +437,15 @@ class ResultsPage(QWidget):
 
         self._set_status(status_text, status_color)
 
-        self._export_btn.setEnabled(True)
+        # The visualizer only draws a 1-D independent variable
+        surface = xdata is not None and np.ndim(xdata) > 1
+        self._export_btn.setEnabled(not surface)
+        self._export_btn.setToolTip(
+            "Figure export supports 1-D fits only (this fit has multiple "
+            "independent variables)"
+            if surface
+            else ""
+        )
 
     def _on_export_clicked(self) -> None:
         """Handle export button click."""
@@ -478,6 +486,27 @@ class ResultsPage(QWidget):
         ext = path_obj.suffix.lower().lstrip(".")
         formats = [ext] if ext in ["png", "pdf", "svg", "eps"] else ["pdf", "png"]
 
+        # The visualizer writes <prefix>_combined.<fmt> and <prefix>_histogram.<fmt>,
+        # not the path picked in the dialog: confirm those before replacing them.
+        targets = [
+            output_dir / f"{filename_prefix}_{kind}.{fmt}"
+            for kind in ("combined", "histogram")
+            for fmt in formats
+        ]
+        existing = [t.name for t in targets if t.exists()]
+        if existing and (
+            QMessageBox.question(
+                self,
+                "Overwrite Files?",
+                "These files already exist and will be replaced:\n\n"
+                + "\n".join(existing),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
         # Prepare visualizer arguments
         state = self._app_state.state
         xdata = state.xdata
@@ -498,6 +527,8 @@ class ResultsPage(QWidget):
             "pcov": getattr(last, "pcov", None),
             "fun": getattr(last, "fun", None),
             "statistics": dict(self._last_statistics),
+            # the fit's own quantile rule (normal vs Student-t) for the band
+            "absolute_sigma": bool(self._app_state.fit_settings.absolute_sigma),
         }
 
         # Config dict

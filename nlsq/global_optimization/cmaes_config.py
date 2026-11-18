@@ -127,7 +127,12 @@ class CMAESConfig:
     data_chunk_size : int | None
         Chunk size for data streaming. If None, processes full dataset at once.
         Set to smaller values (e.g., 50000) for datasets >10M points to avoid OOM.
-        Must be >= 1024 for numerical stability.
+        Must be >= 1024 for numerical stability. The model must be per-sample
+        (prediction ``i`` depends only on ``x[i]``): a batch statistic such as
+        ``mean(x)`` would change the objective. A best-effort probe at several
+        in-bounds parameter points raises ``ValueError`` for visible batch
+        dependence; it cannot certify a model (dependence that vanishes at the probe
+        points or appears only in unprobed chunks goes undetected).
     refine_with_nlsq : bool
         Whether to refine best solution with NLSQ TRF. Default: True.
     seed : int | None

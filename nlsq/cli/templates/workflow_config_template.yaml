@@ -75,7 +75,9 @@ data:
   # CSV options
   csv:
     delimiter: ","
-    header: true
+    # header: true   # Left unset on purpose: with the key unset, a first row that is
+    #                # entirely numeric is read as data (not a header) with a warning.
+    #                # Set true/false explicitly to override that detection.
     encoding: "utf-8"
     skip_header: 0    # Skip N rows at start of file
     missing_values: ["", "NA", "null", "NaN"]

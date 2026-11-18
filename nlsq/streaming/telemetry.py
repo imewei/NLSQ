@@ -53,6 +53,9 @@ class DefenseLayerTelemetry:
     def __init__(self) -> None:
         """Initialize telemetry with zeroed counters."""
         self._lock = threading.RLock()
+        # Warmup tokens stay unique across reset(): a warmup that is still live
+        # keeps its token, which a restarted counter would hand out again.
+        self._token_seq: int = 0
         self.reset()
 
     def reset(self) -> None:
@@ -96,8 +99,9 @@ class DefenseLayerTelemetry:
         """
         with self._lock:
             self.total_warmup_calls += 1
-            self._live_warmups.add(self.total_warmup_calls)
-            return self.total_warmup_calls
+            self._token_seq += 1
+            self._live_warmups.add(self._token_seq)
+            return self._token_seq
 
     def record_warmup_end(self, token: int | None) -> None:
         """Mark a warmup finished so its de-duplication state may be evicted."""
@@ -230,7 +234,7 @@ class DefenseLayerTelemetry:
         """
         with self._lock:
             self.lbfgs_line_search_failures += 1
-            token = self.total_warmup_calls if warmup is None else warmup
+            token = self._token_seq if warmup is None else warmup
             seen = self._failed_steps.setdefault(token, set())
             for old in [
                 t

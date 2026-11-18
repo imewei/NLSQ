@@ -238,11 +238,13 @@ class PluginRegistry:
         >>> PluginRegistry.unregister("my-plugin")  # already removed
         False
         """
+        # Pop under the lock but drop the last reference after releasing it: a
+        # plugin finalizer that consults the registry would deadlock otherwise.
         with cls._lock:
-            if name in cls._plugins:
-                del cls._plugins[name]
-                return True
-            return False
+            removed = cls._plugins.pop(name, None)
+        found = removed is not None
+        del removed
+        return found
 
     @classmethod
     def get(cls, name: str) -> DiagnosticPlugin | None:
@@ -302,8 +304,10 @@ class PluginRegistry:
         >>> PluginRegistry.clear()
         >>> assert len(PluginRegistry.all()) == 0
         """
-        with cls._lock:
+        with cls._lock:  # swap out, so finalizers run after the lock is released
+            old = list(cls._plugins.values())
             cls._plugins.clear()
+        del old
 
 
 def _normalize_issue(issue: Any) -> ModelHealthIssue | None:

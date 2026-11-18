@@ -245,39 +245,49 @@ class FitVisualizer:
             vis_config
         )  # matplotlib stubs want Literal keys
         with _DRAW_LOCK, plt.rc_context(rc=rc):
-            # Generate combined plot (main + residuals)
-            fig_combined = self._create_combined_figure(result, data, model, vis_config)
+            # figures built before a failure (plot() raising mid-construction)
+            # are never reached by the per-figure finally blocks below
+            open_before = set(plt.get_fignums())
             try:
-                output_paths.extend(
-                    self._save_figure(
-                        fig_combined,
-                        output_dir,
-                        f"{filename_prefix}_combined",
-                        formats,
-                        vis_config,
-                    )
+                # Generate combined plot (main + residuals)
+                fig_combined = self._create_combined_figure(
+                    result, data, model, vis_config
                 )
-            finally:
-                plt.close(fig_combined)
-
-            # Generate histogram if enabled
-            histogram_config = vis_config.get("histogram") or {}
-            if cfg_get(histogram_config, "enabled", False):
-                residuals = self._get_residuals(result, data, model)
-                if residuals is not None:
-                    fig_hist = self._create_histogram_figure(residuals, vis_config)
-                    try:
-                        output_paths.extend(
-                            self._save_figure(
-                                fig_hist,
-                                output_dir,
-                                f"{filename_prefix}_histogram",
-                                formats,
-                                vis_config,
-                            )
+                try:
+                    output_paths.extend(
+                        self._save_figure(
+                            fig_combined,
+                            output_dir,
+                            f"{filename_prefix}_combined",
+                            formats,
+                            vis_config,
                         )
-                    finally:
-                        plt.close(fig_hist)
+                    )
+                finally:
+                    plt.close(fig_combined)
+
+                # Generate histogram if enabled
+                histogram_config = vis_config.get("histogram") or {}
+                if cfg_get(histogram_config, "enabled", False):
+                    residuals = self._get_residuals(result, data, model)
+                    if residuals is not None:
+                        fig_hist = self._create_histogram_figure(residuals, vis_config)
+                        try:
+                            output_paths.extend(
+                                self._save_figure(
+                                    fig_hist,
+                                    output_dir,
+                                    f"{filename_prefix}_histogram",
+                                    formats,
+                                    vis_config,
+                                )
+                            )
+                        finally:
+                            plt.close(fig_hist)
+            except BaseException:
+                for num in set(plt.get_fignums()) - open_before:
+                    plt.close(num)
+                raise
 
         return output_paths
 

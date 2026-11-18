@@ -124,7 +124,8 @@ class HybridStreamingConfig:
         Line search method for L-BFGS step acceptance. Options:
 
         - **'wolfe'**: Standard Wolfe conditions (default)
-        - **'strong_wolfe'**: Strong Wolfe conditions (stricter)
+        - **'strong_wolfe'**: Currently builds the same zoom line search as
+          ``'wolfe'`` (identical runs)
         - **'backtracking'**: Simple backtracking line search
 
     lbfgs_exploration_step_size : float, default=0.1
@@ -155,7 +156,8 @@ class HybridStreamingConfig:
 
     regularization_factor : float, default=1e-10
         Regularization factor for rank-deficient J^T J matrices.
-        Added to diagonal: J^T J + regularization_factor * I.
+        Added to the diagonal of the Jacobi-scaled (unit-diagonal) J^T J in the
+        Phase 2 Gauss-Newton solve: scaled(J^T J) + regularization_factor * I.
 
     cg_max_iterations : int, default=100
         Maximum iterations for Conjugate Gradient solver in Phase 2.
@@ -217,6 +219,8 @@ class HybridStreamingConfig:
         Larger chunks = faster but more memory. Typical: 5000-50000.
 
     gc_chunk_interval : int, default=10
+        Validated but not read by the hybrid engine (only ``LDMemoryConfig`` /
+        ``LargeDatasetFitter`` use a chunk GC interval); changing it has no effect here.
         Chunks between gc.collect() calls (FR-007).
         Controls how often garbage collection runs during chunked processing.
         Higher values reduce GC overhead but may increase memory usage.
@@ -355,6 +359,8 @@ class HybridStreamingConfig:
 
     # Layer 2: Adaptive Step Size - scale step size based on initial loss quality
     enable_adaptive_warmup_lr: bool = True
+    # warmup_lr_refinement / warmup_lr_careful are validated but not read by the
+    # hybrid engine: Layer 2 picks its step from the lbfgs_*_step_size fields.
     warmup_lr_refinement: float = 1e-6  # For relative_loss < 0.1 (excellent)
     warmup_lr_careful: float = 1e-5  # For relative_loss < 1.0 (good)
     # warmup_learning_rate (0.001) used for relative_loss >= 1.0 (poor)
@@ -420,7 +426,7 @@ class HybridStreamingConfig:
     validate_numerics: bool = True
     enable_fault_tolerance: bool = True
     max_retries_per_batch: int = 2
-    min_success_rate: float = 0.5
+    min_success_rate: float = 0.5  # validated; not read by the hybrid engine
 
     # Progress monitoring
     callback_frequency: int = 10
@@ -571,6 +577,10 @@ class HybridStreamingConfig:
     def aggressive(cls):
         """Create aggressive profile: faster convergence with L-BFGS, looser tolerances.
 
+        Note: the ``warmup_lr_*`` / ``warmup_learning_rate`` values set here are
+        inert for the L-BFGS warmup (its step sizes come from the
+        ``lbfgs_*_step_size`` fields, which this preset leaves at their defaults).
+
         This preset prioritizes speed over robustness:
         - L-BFGS warmup with reduced iterations (50 vs 300 with Adam)
         - Higher learning rate for faster progress
@@ -608,6 +618,10 @@ class HybridStreamingConfig:
     @classmethod
     def conservative(cls):
         """Create conservative profile: slower but robust, tighter tolerances.
+
+        Note: the ``warmup_lr_*`` / ``warmup_learning_rate`` values set here are
+        inert for the L-BFGS warmup (its step sizes come from the
+        ``lbfgs_*_step_size`` fields, which this preset leaves at their defaults).
 
         This preset prioritizes solution quality over speed:
         - L-BFGS warmup with conservative iterations
@@ -727,6 +741,10 @@ class HybridStreamingConfig:
     def defense_strict(cls):
         """Create strict defense layer profile for near-optimal scenarios.
 
+        Note: the ``warmup_lr_*`` / ``warmup_learning_rate`` values set here are
+        inert for the L-BFGS warmup (its step sizes come from the
+        ``lbfgs_*_step_size`` fields, which this preset leaves at their defaults).
+
         This preset maximizes protection against divergence when initial
         parameters are expected to be close to optimal (warm starts, refinement):
         - Very low warm start threshold (triggers at 1% relative loss)
@@ -779,6 +797,10 @@ class HybridStreamingConfig:
     @classmethod
     def defense_relaxed(cls):
         """Create relaxed defense layer profile for exploration-heavy scenarios.
+
+        Note: the ``warmup_lr_*`` / ``warmup_learning_rate`` values set here are
+        inert for the L-BFGS warmup (its step sizes come from the
+        ``lbfgs_*_step_size`` fields, which this preset leaves at their defaults).
 
         This preset reduces defense layer sensitivity for problems where
         significant parameter exploration is needed:

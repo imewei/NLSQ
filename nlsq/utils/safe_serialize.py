@@ -414,6 +414,12 @@ def _deserialize_ndarray(obj: dict) -> np.ndarray:
         isinstance(v, bool) for v in np.asarray(data, dtype=object).ravel()
     ):
         raise SafeSerializationError("Boolean array data must contain only booleans")
+    # np.array([1.5], dtype=int64) truncates silently: integer arrays take JSON ints only.
+    if dtype.kind in ("i", "u") and not all(
+        isinstance(v, int) and not isinstance(v, bool)
+        for v in np.asarray(data, dtype=object).ravel()
+    ):
+        raise SafeSerializationError("Integer array data must contain only integers")
     try:
         return np.array(data, dtype=dtype).reshape(shape)
     except (ValueError, TypeError, OverflowError) as e:
@@ -561,6 +567,18 @@ def safe_dumps(obj: Any) -> bytes:
         raise SafeSerializationError(f"Serialization failed: {e}") from e
 
 
+def _reject_duplicate_members(pairs: list[tuple[str, Any]]) -> dict:
+    """json ``object_pairs_hook``: duplicate members would silently keep the last."""
+    result: dict = {}
+    for key, value in pairs:
+        if key in result:
+            raise SafeSerializationError(
+                f"Duplicate JSON object member in serialized data: {key!r}",
+            )
+        result[key] = value
+    return result
+
+
 def safe_loads(data: bytes) -> Any:
     """Deserialize bytes to object using JSON.
 
@@ -591,7 +609,9 @@ def safe_loads(data: bytes) -> Any:
     True
     """
     try:
-        parsed = json.loads(data.decode("utf-8"))
+        parsed = json.loads(
+            data.decode("utf-8"), object_pairs_hook=_reject_duplicate_members
+        )
         return _convert_from_serializable(parsed)
     except (
         json.JSONDecodeError,
