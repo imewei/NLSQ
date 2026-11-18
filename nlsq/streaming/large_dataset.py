@@ -314,11 +314,15 @@ class LDMemoryConfig:  # Renamed to avoid conflict with config.py
     max_chunk_size : int
         Maximum chunk size in data points (default: 1000000)
     use_streaming : bool
-        Use adaptive hybrid streaming optimization for unlimited data (default: True)
+        Reserved (default: True): ``LargeDatasetFitter`` always uses its single-chunk
+        or precision-weighted chunked route and never selects hybrid streaming from
+        this flag. Pass ``strategy=Hybrid()`` to ``curve_fit_large`` for streaming.
     streaming_batch_size : int
-        Chunk size for adaptive hybrid streaming (default: 50000)
+        Reserved with ``use_streaming``: chunk size for adaptive hybrid streaming
+        (default: 50000)
     streaming_max_epochs : int
-        Maximum Gauss-Newton iterations for adaptive hybrid streaming (default: 10)
+        Reserved with ``use_streaming``: maximum Gauss-Newton iterations for adaptive
+        hybrid streaming (default: 10)
     min_success_rate : float
         Minimum success rate for chunked fitting (default: 0.5)
         If success rate falls below this threshold, fitting is considered failed
@@ -440,8 +444,8 @@ class GPUMemoryEstimator:
     def get_available_gpu_memory_gb(self) -> float:
         """Get available GPU memory in GB.
 
-        Queries GPU memory via `jax.devices()[i].memory_stats()` and aggregates
-        available memory across all GPUs. Returns 0 for CPU-only environments.
+        Queries GPU memory via `jax.devices()[i].memory_stats()` and returns the
+        smallest per-device free memory. Returns 0 for CPU-only environments.
 
         Returns
         -------
@@ -451,10 +455,12 @@ class GPUMemoryEstimator:
         Notes
         -----
         - Re-evaluates on each call (no caching) per requirements.
-        - Handles multiple GPUs by summing available memory.
+        - Multiple GPUs: the minimum free memory of one device, because a fit (and
+          each multi-start worker) keeps its working arrays on a single device;
+          summing would size chunks that overflow it.
         - Returns 0.0 gracefully for CPU-only environments or when detection fails.
         """
-        total_available_bytes = 0.0
+        per_device_bytes: list[float] = []
 
         try:
             devices = get_cached_devices()
@@ -476,7 +482,7 @@ class GPUMemoryEstimator:
                         available = bytes_limit - bytes_in_use
 
                         if available > 0:
-                            total_available_bytes += available
+                            per_device_bytes.append(available)
                             self._logger.debug(
                                 f"GPU device {device}: "
                                 f"{available / (1024**3):.2f} GB available "
@@ -494,7 +500,7 @@ class GPUMemoryEstimator:
             self._logger.debug(f"GPU device enumeration failed: {e}")
             return 0.0
 
-        return total_available_bytes / (1024**3)
+        return min(per_device_bytes, default=0.0) / (1024**3)
 
     def get_total_gpu_memory_gb(self) -> float:
         """Get total GPU memory capacity in GB.
@@ -757,15 +763,15 @@ def _rss_bytes() -> int:
     return psutil.Process().memory_info().rss
 
 
-# Options of ``CurveFit.curve_fit`` (minpack.py) that drop, reweight or change
-# the shape of the residuals, so ``res.cost`` would no longer equal half of the
-# plain sigma-weighted SSR of the chunk: ``data_mask`` drops rows, ``nan_policy``
-# other than "raise" drops/imputes rows, a non-linear ``loss`` reweights them
-# (``f_scale`` only acts with such a loss), and the output flags
-# (``return_eval``/``full_output``/``timeit``) return something other than a
-# ``CurveFitResult``. Verified NOT to change ``res.cost``: bounds, x_scale, jac,
-# solver, batch_size, max_nfev, ftol/xtol/gtol, tr_solver, callback, diagnostics*,
-# absolute_sigma, check_finite, p0, f_scale under a linear loss. ``sigma`` is fine: ``_fit_chunked`` slices it per chunk and
+# Options of ``CurveFit.curve_fit`` (minpack.py) that drop rows or change the shape
+# of the result, so ``res.cost`` would no longer be the cost of the chunk's rows:
+# ``data_mask`` drops rows, ``nan_policy`` other than "raise" drops/imputes rows, and
+# the output flags (``return_eval``/``full_output``/``timeit``) return something other
+# than a ``CurveFitResult``. A robust ``loss`` is not a blocker: ``res.cost`` is then
+# the robust cost and ``_chunk_ssr`` evaluates the same loss on the fallback path.
+# Verified NOT to change ``res.cost``: bounds, x_scale, jac, solver, batch_size,
+# max_nfev, ftol/xtol/gtol, tr_solver, callback, diagnostics*, absolute_sigma,
+# check_finite, p0. ``sigma`` is fine: ``_fit_chunked`` slices it per chunk and
 # ``res.cost`` is then 0.5 * sum(((y - f) / sigma) ** 2), as ``_chunk_ssr`` computes.
 _SSR_REUSE_BLOCKERS = ("data_mask", "return_eval", "full_output", "timeit")
 
@@ -828,6 +834,17 @@ def _ssr_reuse_eligible(kwargs: dict) -> bool:
         kwargs.get(k) is not None and kwargs[k] is not False
         for k in _SSR_REUSE_BLOCKERS
     )
+
+
+def _weighted_rows(sigma: Any, n: int) -> int:
+    """``n`` less the rows with ``sigma=inf``: zero weight, so not observations (as in
+    ``curve_fit``, whose dof and pcov scale exclude them). Only a 1-D sigma has such rows."""
+    from nlsq.core.problem import _real_weights
+
+    s = None if sigma is None else _real_weights(sigma)
+    if s is None or s.ndim != 1 or s.shape[0] != n:
+        return n
+    return n - int(np.isinf(s).sum())
 
 
 def _chunk_ssr_from_result(res, n_valid: int) -> float | None:
@@ -1084,8 +1101,9 @@ class LargeDatasetFitter:
 
     Performance Characteristics
     ---------------------------
-    - Combines per-chunk fits by precision weighting; exact only for linear models and
-      an approximation for nonlinear ones
+    - Combines per-chunk fits by precision weighting; exact only for linear models with
+      the default linear loss and no bounds (a robust loss, a nonlinear model or a bound
+      makes it an approximation)
     - Bounds memory use by processing the data in chunks sized from the available memory
     - Scales to datasets of unlimited size using streaming (processes all data)
     - Provides linear time complexity with respect to chunk count
@@ -1477,11 +1495,16 @@ class LargeDatasetFitter:
         xdata: np.ndarray,
         ydata: np.ndarray,
         p0: np.ndarray | list | None,
+        *,
+        bounds: tuple | None = None,
+        row_mask: np.ndarray | None = None,
     ) -> None:
         """Validate model function shape compatibility before chunked processing.
 
         Tests the model function with a small subset of data to catch shape
-        mismatches early with clear error messages.
+        mismatches early with clear error messages. The probe point is ``p0`` (or the
+        feasible default) clipped into ``bounds`` and the rows are the ones ``row_mask``
+        keeps, so the model is never evaluated outside the domain the fit uses.
 
         Parameters
         ----------
@@ -1539,18 +1562,23 @@ class LargeDatasetFitter:
         self.logger.debug("Validating model function shape compatibility...")
 
         try:
-            # Test with first 100 points to avoid expensive computation
-            test_size = min(100, len(xdata))
-            x_test = xdata[:test_size]
-            y_test = ydata[:test_size]
+            # Test with the first 100 retained points to avoid expensive computation
+            if row_mask is None:
+                test_idx = slice(0, min(100, len(xdata)))
+            else:
+                test_idx = np.flatnonzero(row_mask)[:100]
+            x_test = xdata[test_idx]
+            y_test = ydata[test_idx]
 
             # Get initial parameters for testing
             if p0 is None:
                 # Try to infer from function signature
                 try:
-                    from nlsq.streaming.strategy import default_p0
+                    from nlsq.streaming.strategy import normalize_p0_bounds
 
-                    p0_test = default_p0(f)
+                    p0_test = normalize_p0_bounds(
+                        f, None, (-np.inf, np.inf) if bounds is None else bounds
+                    )[0]
                 except Exception:
                     # Fallback to 2 parameters
                     p0_test = np.ones(2)
@@ -1559,6 +1587,14 @@ class LargeDatasetFitter:
                     )
             else:
                 p0_test = np.array(p0)
+                if bounds is not None:
+                    from nlsq.core.least_squares import prepare_bounds
+
+                    lb, ub = prepare_bounds(bounds, len(p0_test))
+                    if (
+                        lb.shape == ub.shape == p0_test.shape
+                    ):  # else curve_fit reports it
+                        p0_test = np.clip(p0_test, lb, ub)
 
             # Call model function with test data
             try:
@@ -1587,7 +1623,8 @@ class LargeDatasetFitter:
                 )
 
             # Validate shapes match
-            if output_test.shape != y_test.shape:
+            # a scalar output broadcasts (curve_fit accepts a constant model)
+            if output_test.shape not in (y_test.shape, ()):
                 raise ValueError(
                     f"Model function SHAPE MISMATCH detected!\n"
                     f"\n"
@@ -2005,7 +2042,8 @@ class LargeDatasetFitter:
 
         Multi-chunk results are a precision-weighted combination of per-chunk
         fits (see ``_update_parameters_convergence``), which is exact only for
-        linear models, so they are flagged and warned about once per fit.
+        linear models with the default linear loss and no bounds, so they are
+        flagged and warned about once per fit.
         """
         equivalent = n_chunks == 1
         result["equivalent_to_full_batch"] = equivalent
@@ -2013,8 +2051,9 @@ class LargeDatasetFitter:
             self.logger.warning(
                 f"Fit used {n_chunks} chunks and is not equivalent to a "
                 "full-batch fit; the combined estimate is a precision-weighted "
-                "combination of per-chunk fits, exact only for linear models "
-                "and an approximation for nonlinear ones."
+                "combination of per-chunk fits, exact only for linear models with "
+                "the default linear loss and no bounds, and an approximation for "
+                "nonlinear models, robust losses and bounded fits."
             )
         return result
 
@@ -2229,9 +2268,9 @@ class LargeDatasetFitter:
         Each chunk yields an estimate ``theta_k`` with covariance ``C_k``. The
         full-dataset estimate is the precision-weighted (BLUE/GLS) combination
         ``theta = (sum_k C_k^{-1})^{-1} (sum_k C_k^{-1} theta_k)``, which equals
-        the exact full-batch least-squares solution for a linear model and is the
-        standard Laplace approximation for a nonlinear one (so chunked != full-batch
-        in general for nonlinear models). The ``C_k`` must be *unscaled*
+        the exact full-batch least-squares solution for a linear model under the
+        default linear loss and is the standard Laplace approximation for a nonlinear
+        model or a robust loss (so chunked != full-batch in general there). The ``C_k`` must be *unscaled*
         (``absolute_sigma=True``): a covariance rescaled by each chunk's own
         residual variance would over-weight low-residual chunks. The pooled
         residual variance is applied once to the combined covariance instead
@@ -2275,9 +2314,10 @@ class LargeDatasetFitter:
             else:
                 self._accum_information = self._accum_information + prec
                 self._accum_info_vector = self._accum_info_vector + contrib_vec
-            if chunk_ssr is not None:
+            if chunk_ssr is not None and not self._absolute_sigma:
                 # Kept per chunk (not folded into running totals) so the pooled
-                # SSR can use the subtraction-free form in _pooled_variance.
+                # SSR can use the subtraction-free form in _pooled_variance, which
+                # absolute_sigma never reads (it would retain one p x p matrix per chunk).
                 self._accum_chunks.append(_ChunkFit(popt_chunk.copy(), prec, chunk_ssr))
                 self._accum_n += chunk_n
 
@@ -2541,9 +2581,15 @@ class LargeDatasetFitter:
             # _accum_information has started accumulating.
             chunk_result["pcov_chunk"] = pcov_chunk
             chunk_result["ssr_chunk"] = self._chunk_ssr(
-                f, x_valid, y_valid, popt_chunk, kwargs.get("sigma")
+                f,
+                x_valid,
+                y_valid,
+                popt_chunk,
+                kwargs.get("sigma"),
+                kwargs.get("loss", "linear"),
+                kwargs.get("f_scale", 1.0),
             )
-            chunk_result["n_chunk"] = len(y_valid)
+            chunk_result["n_chunk"] = _weighted_rows(kwargs.get("sigma"), len(y_valid))
 
             return chunk_result, popt_chunk
 
@@ -2568,12 +2614,23 @@ class LargeDatasetFitter:
             return chunk_result, None
 
     @staticmethod
-    def _chunk_ssr(f, x, y, popt, sigma=None) -> float:
-        """Sum of squared (sigma-weighted) residuals of ``f`` at ``popt``."""
+    def _chunk_ssr(f, x, y, popt, sigma=None, loss="linear", f_scale=1.0) -> float:
+        """``2 *`` the cost the chunk fit minimises at ``popt``: the sum of squared
+        (sigma-weighted) residuals, or its robust ``loss`` counterpart (what
+        ``2 * res.cost`` gives on the reuse path, and what ``curve_fit`` scales pcov by)."""
         r = np.asarray(y, dtype=float) - np.asarray(f(_scipy_x(x), *popt), dtype=float)
         if sigma is not None:
             r = r / np.asarray(sigma, dtype=float)
-        return float(r @ r)
+        if loss is None or (isinstance(loss, str) and loss == "linear"):
+            return float(r @ r)
+        import jax.numpy as jnp
+
+        from nlsq.core.loss_functions import LossFunctionsJIT
+
+        cost = LossFunctionsJIT().get_loss_function(loss)(
+            jnp.asarray(r), f_scale, cost_only=True
+        )
+        return 2.0 * float(cost)
 
     def _create_failure_summary(
         self,
@@ -2690,8 +2747,14 @@ class LargeDatasetFitter:
             )
         return active
 
-    def _pooled_variance(self, pcov: np.ndarray) -> float:
+    def _pooled_variance(
+        self, pcov: np.ndarray, center: np.ndarray | None = None
+    ) -> float:
         """Pooled residual variance ``SSR_total / (n - p)`` for ``pcov``.
+
+        ``SSR_total`` is evaluated at ``center`` (the returned estimate, which a
+        bounded fit clips away from the unconstrained GLS combination); ``None``
+        uses the GLS combination.
 
         Matches ``curve_fit(absolute_sigma=False)`` semantics. Returns 1.0 when
         the caller asked for ``absolute_sigma=True`` (chunks are fitted
@@ -2715,6 +2778,10 @@ class LargeDatasetFitter:
         # form (sum theta_k' H_k theta_k - b' A^-1 b) which cancels
         # catastrophically when |theta| is large relative to its uncertainty.
         theta = pcov @ self._accum_info_vector
+        if center is not None:
+            center = np.asarray(center, dtype=float)
+            if center.shape == theta.shape and np.all(np.isfinite(center)):
+                theta = center
         ssr = 0.0
         for theta_k, prec_k, ssr_k in self._accum_chunks:
             d = theta - theta_k
@@ -2779,7 +2846,7 @@ class LargeDatasetFitter:
                 if pcov is not None:
                     pcov = 0.5 * (pcov + pcov.T)  # symmetrize
                     if np.all(np.isfinite(pcov)):
-                        scale = self._pooled_variance(pcov)
+                        scale = self._pooled_variance(pcov, current_params)
                         # inf, not pcov * inf: exact zeros would become nan
                         return (
                             np.full_like(pcov, np.inf)
@@ -2981,9 +3048,6 @@ class LargeDatasetFitter:
 
         self.logger.info(f"Fitting dataset using {stats.n_chunks} chunks")
 
-        # Validate model function shape compatibility
-        self._validate_model_function(f, xdata, ydata, p0)
-
         # sigma is aligned with the full xdata/ydata, not any one chunk -- pop
         # it out and re-slice per chunk below instead of forwarding it whole
         # via **kwargs (which would raise a per-chunk shape mismatch).
@@ -2995,6 +3059,11 @@ class LargeDatasetFitter:
                 raise ValueError("Data mask doesn't match data lengths.")
             if not full_mask.any():
                 raise ValueError("Data mask excludes all data points.")
+
+        # Validate model function shape compatibility
+        self._validate_model_function(
+            f, xdata, ydata, p0, bounds=bounds, row_mask=full_mask
+        )
         # Chunks are fitted with absolute_sigma=True so their covariances are
         # unscaled and combine as true information; the caller's choice is
         # honoured once, on the combined covariance (_pooled_variance).
@@ -3003,7 +3072,10 @@ class LargeDatasetFitter:
         self._accum_chunks = []  # (theta_k, C_k^-1, SSR_k) per usable chunk
         self._accum_n = 0
         if full_sigma is not None:
-            full_sigma = np.asarray(full_sigma)
+            from nlsq.core.problem import coerce_real_sigma
+
+            # an object column of real numbers is real weights, as on the standard route
+            full_sigma = coerce_real_sigma(np.asarray(full_sigma))
             if full_sigma.ndim == 0:
                 full_sigma = np.broadcast_to(full_sigma, (len(xdata),))
             if full_sigma.ndim != 1:
@@ -3036,6 +3108,12 @@ class LargeDatasetFitter:
                     np.asarray(xdata)[full_mask],
                     np.asarray(ydata)[full_mask],
                 )
+            # Whole-problem contract shared with every other route: a fit with no
+            # weighted row at all is rejected here, so the chunk loop below may skip
+            # a chunk without one (it holds no observations) instead of failing it.
+            from nlsq.core.problem import reject_all_zero_weight
+
+            reject_all_zero_weight(full_sigma, full_mask)
 
         # Contiguous chunking biases fits on ordered/monotonic x (each chunk
         # covers only a narrow x-window, so per-chunk local optima can land
@@ -3158,6 +3236,8 @@ class LargeDatasetFitter:
                         if sigma_valid is not None:
                             sigma_valid = sigma_valid[mask_valid]
                     if sigma_valid is not None:
+                        if _weighted_rows(sigma_valid, len(y_valid)) == 0:
+                            continue  # no weighted row: no observation, like a masked chunk
                         chunk_kwargs = {**kwargs, "sigma": sigma_valid}
                     chunk_res = self.curve_fit.curve_fit(
                         f,
@@ -3186,7 +3266,13 @@ class LargeDatasetFitter:
                     )
                     if chunk_ssr is None:
                         chunk_ssr = self._chunk_ssr(
-                            f, x_valid, y_valid, popt_chunk, sigma_valid
+                            f,
+                            x_valid,
+                            y_valid,
+                            popt_chunk,
+                            sigma_valid,
+                            chunk_kwargs.get("loss", "linear"),
+                            chunk_kwargs.get("f_scale", 1.0),
                         )
 
                     # Build the chunk result BEFORE accumulating: anything raising
@@ -3223,7 +3309,7 @@ class LargeDatasetFitter:
                         chunk_idx,
                         stats.n_chunks,
                         chunk_ssr=chunk_ssr,
-                        chunk_n=len(y_valid),
+                        chunk_n=_weighted_rows(sigma_valid, len(y_valid)),
                     )
 
                     # Early stopping if parameters converged

@@ -430,6 +430,16 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "sympy",  # sympify()/parse_expr() eval strings
         "numexpr",
         "h5py",
+        # Runtime dependencies that are not numeric libraries: evosax unpickles
+        # in-memory bytes (load_pkl_object), pytest imports and runs any file
+        # (numpy.test/scipy.test delegate to it), psutil can lift the loader's
+        # RLIMIT_AS and signal other processes, tqdm.contrib posts to remote
+        # services, jaxlib exposes the native XLA client.
+        "evosax",
+        "pytest",
+        "psutil",
+        "tqdm",
+        "jaxlib",
         "torch",  # torch.load unpickles
         "dask",
         "ray",
@@ -488,6 +498,8 @@ _DANGEROUS_STRING_SUBSTRINGS: tuple[str, ...] = (
     "__code__",
     "__import__",
     "__loader__",
+    # jax.jit(compiler_options={"xla_dump_to": DIR}) / XLA_FLAGS write files
+    "xla_dump",
     # PyYAML python tags (consumed by an unsafe loader)
     "!!python/",
 )
@@ -573,8 +585,22 @@ _REEXPORT_ATTRS: frozenset[str] = frozenset(
         "codecs",
         "tests",
         "conftest",
+        # numpy.test / scipy.test / np.linalg.test ... are PytestTester objects
+        # that call pytest.main(extra_argv, tests=[any .py file])
+        "test",
     }
 )
+
+
+# The nlsq package re-exports its own model functions (``from nlsq.core.functions
+# import gaussian``); everything else under ``nlsq`` (cli.model_registry loads and
+# executes files, cli.result_exporter writes any path, curve_fit checkpoints) is
+# off limits to a model file.
+_NLSQ_ALLOWED: tuple[str, ...] = ("nlsq.core.functions", "nlsq.functions")
+
+
+def _nlsq_import_ok(dotted: str) -> bool:
+    return any(dotted == a or dotted.startswith(a + ".") for a in _NLSQ_ALLOWED)
 
 
 def _blocked_numeric_path(dotted: str) -> bool:
@@ -621,6 +647,7 @@ ALLOWLIST_BLOCKED_ATTRS: frozenset[str] = frozenset(
         "numpy.ctypeslib",
         "numpy.f2py",
         "numpy.testing",
+        "numpy.test",  # PytestTester: pytest.main on an arbitrary file
         "numpy.distutils",
         "numpy.lib.format",
         "numpy.lib.npyio",
@@ -903,6 +930,20 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         # numpy.load(..., allow_pickle=...) executes pickle payloads
         if any(k.arg == "allow_pickle" for k in node.keywords):
             self.violations.append("Dangerous keyword argument: allow_pickle")
+        # jax.jit(..., compiler_options={"xla_dump_to": DIR}) writes files
+        if any(k.arg == "compiler_options" for k in node.keywords):
+            self.violations.append("Dangerous keyword argument: compiler_options")
+        # `jax.jit(f, **opts)`: the compiler_options keyword can be built at runtime
+        if (
+            isinstance(node.func, (ast.Name, ast.Attribute))
+            and (node.func.id if isinstance(node.func, ast.Name) else node.func.attr)
+            in ("jit", "pmap")
+            and any(k.arg is None for k in node.keywords)
+        ):
+            self.violations.append(
+                "Dangerous call: jit/pmap with ** keyword unpacking "
+                "(compiler_options can write files)"
+            )
         # np.load(file, mmap_mode, allow_pickle, ...): mmap_mode "r+"/"w+"
         # writes or truncates the file, allow_pickle unpickles. Fail closed on
         # any call shape that can supply either (or hide arguments); only a
@@ -1170,6 +1211,14 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """Check for dangerous module imports."""
         for alias in node.names:
             module_root = alias.name.split(".")[0]
+            # `import nlsq` / `import nlsq.core.functions` bind the package root
+            if module_root == "nlsq" and not (
+                alias.asname and _nlsq_import_ok(alias.name)
+            ):
+                self.violations.append(
+                    f"Dangerous import: import {alias.name} (only "
+                    "`import nlsq.core.functions as name` is allowed from nlsq)"
+                )
             if alias.asname:
                 self._aliases[alias.asname] = alias.name
             else:
@@ -1212,6 +1261,14 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                 f"Dangerous import: from {node.module} import ...",
             )
         for alias in node.names:
+            if module_root == "nlsq" and not node.level:
+                if alias.name == "*" or not _nlsq_import_ok(
+                    f"{node.module}.{alias.name}"
+                ):
+                    self.violations.append(
+                        f"Dangerous import: from {node.module} import {alias.name} "
+                        "(only nlsq.core.functions is allowed from nlsq)"
+                    )
             self._aliases[alias.asname or alias.name] = (
                 f"{node.module}.{alias.name}" if node.module else alias.name
             )
@@ -1462,6 +1519,9 @@ def validate_model(
         if source is None:
             source = path.read_bytes()
         tree = ast.parse(source, filename=str(path))
+        # ast.parse defers placement checks (top-level return/yield, ...) to the
+        # compiler; the registry executes the file, so reject what it cannot compile.
+        compile(tree, str(path), "exec", dont_inherit=True)
     except SyntaxError as e:
         return ModelValidationResult(
             path=path,
@@ -1471,6 +1531,7 @@ def validate_model(
         )
 
     violations.extend(_find_protocol_hook_violations(tree))
+    violations.extend(_find_module_machinery_violations(tree))
 
     # Visit all nodes to find violations
     visitor = AllowlistVisitor() if strict else DangerousPatternVisitor()
@@ -1546,9 +1607,39 @@ _PROTOCOL_HOOK_NAMES: frozenset[str] = frozenset(
 _PROTOCOL_HOOK_KEYWORDS: frozenset[str] = frozenset({"assigned", "updated"})
 
 
+def _local_hook_keyword_targets(tree: ast.AST) -> dict[str, set[str]]:
+    """Hook-keyword names (``updated``) that each file-local function declares as
+    its own parameter, for functions whose name is bound exactly once. A call
+    ``scale(x, updated=a)`` to such a function is an ordinary numeric argument."""
+    params: dict[str, set[str]] = {}
+    bindings: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            a = node.args
+            own = {x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs)}
+            params[node.name] = own & _PROTOCOL_HOOK_KEYWORDS
+            bindings[node.name] = bindings.get(node.name, 0) + 1
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            bindings[node.id] = bindings.get(node.id, 0) + 1
+        elif isinstance(node, (ast.ClassDef, ast.alias)):
+            n = (
+                node.name
+                if isinstance(node, ast.ClassDef)
+                else node.asname or node.name
+            )
+            bindings[n.split(".")[0]] = bindings.get(n.split(".")[0], 0) + 1
+    return {n: p for n, p in params.items() if p and bindings.get(n) == 1}
+
+
 def _find_protocol_hook_violations(tree: ast.AST) -> list[str]:
     """Flag names and keywords that fetch attributes by runtime string."""
     found: list[str] = []
+    local_ok = _local_hook_keyword_targets(tree)
+    exempt_kw: set[int] = set()  # id() of keyword nodes passed to a local function
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            allowed = local_ok.get(node.func.id, set())
+            exempt_kw.update(id(k) for k in node.keywords if k.arg in allowed)
     for node in ast.walk(tree):
         names: list[str] = []
         if isinstance(node, ast.Name):
@@ -1559,12 +1650,80 @@ def _find_protocol_hook_violations(tree: ast.AST) -> list[str]:
             names.append(node.name)
         elif isinstance(node, ast.alias):
             names.append(node.name.rsplit(".", 1)[-1])
-        elif isinstance(node, ast.keyword) and node.arg in _PROTOCOL_HOOK_KEYWORDS:
+        elif (
+            isinstance(node, ast.keyword)
+            and node.arg in _PROTOCOL_HOOK_KEYWORDS
+            and id(node) not in exempt_kw
+        ):
             found.append(f"Dangerous keyword argument: {node.arg}=")
         found.extend(
             f"Dangerous attribute-by-name hook: {n}"
             for n in names
             if n in _PROTOCOL_HOOK_NAMES
+        )
+    return found
+
+
+# Module-machinery dunders. Assigning ``__package__`` makes a relative import
+# resolve against any package (``__package__ = "os"; from . import system``), which
+# skips every module-name check, so none of these may be bound by a model file.
+_MODULE_MACHINERY_NAMES: frozenset[str] = frozenset(
+    {
+        "__package__",
+        "__spec__",
+        "__path__",
+        "__loader__",
+        "__builtins__",
+        "__name__",
+        "__file__",
+        "__cached__",
+        "__import__",
+    }
+)
+
+
+def _find_module_machinery_violations(tree: ast.AST) -> list[str]:
+    """Flag relative imports and any binding of module-machinery dunders.
+
+    A model file runs as a standalone module, so a relative import is never
+    legitimate; and rebinding ``__package__`` & co. would redirect one.
+    """
+    found: list[str] = []
+    for node in ast.walk(tree):
+        bound: list[str | None] = []
+        if isinstance(node, ast.ImportFrom) and node.level:
+            found.append(
+                f"Dangerous import: relative import (from {'.' * node.level}"
+                f"{node.module or ''} import ...)"
+            )
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            bound.append(node.id)
+        elif isinstance(node, ast.Attribute) and isinstance(
+            node.ctx, (ast.Store, ast.Del)
+        ):
+            bound.append(node.attr)
+        elif isinstance(node, ast.alias):
+            bound.append(node.asname)
+        elif isinstance(
+            node,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.ClassDef,
+                ast.ExceptHandler,
+                ast.MatchAs,
+                ast.MatchStar,
+            ),
+        ):
+            bound.append(node.name)
+        elif isinstance(node, ast.MatchMapping):
+            bound.append(node.rest)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            bound.extend(node.names)
+        found.extend(
+            f"Dangerous module attribute binding: {n}"
+            for n in bound
+            if n in _MODULE_MACHINERY_NAMES
         )
     return found
 
@@ -1592,6 +1751,23 @@ def _accelerator_backend_active() -> bool:
         # Any failure probing the backend -> conservatively report no
         # accelerator so the (safe) CPU memory cap path is taken.
         return False
+
+
+def _warm_jax_cpu_runtime() -> None:
+    """Compile one trivial op on an already-imported JAX before the AS baseline.
+
+    XLA's CPU runtime maps compiler arenas and worker-thread stacks on first
+    compile. Taking the VmSize baseline before that makes a module-level
+    ``jnp``/``jax.jit`` call in a model exceed the cap, and XLA aborts the whole
+    process (SIGABRT) instead of raising ``MemoryError``.
+    """
+    jax_mod = sys.modules.get("jax")
+    if jax_mod is None:
+        return
+    try:
+        jax_mod.jit(lambda v: v + 1)(1.0).block_until_ready()
+    except Exception:  # best effort: the cap is still applied from the old baseline
+        logger.debug("JAX CPU warm-up before RLIMIT_AS baseline failed", exc_info=True)
 
 
 def _current_virtual_memory_bytes() -> int | None:
@@ -1702,6 +1878,8 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     # it. So when a JAX accelerator backend is already active we skip the AS cap
     # and rely on the timeout alone.
     accelerator_active = _accelerator_backend_active()
+    if not accelerator_active:
+        _warm_jax_cpu_runtime()
     current_vsize = None if accelerator_active else _current_virtual_memory_bytes()
     enforce_mem = current_vsize is not None
     # Placeholders (ints) so mypy sees a concrete tuple type for setrlimit; they

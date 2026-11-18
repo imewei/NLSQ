@@ -129,8 +129,25 @@ def _ensure_private_dir(path: Path) -> None:
         path.chmod(0o700)
 
 
-def _write_autosave(data: dict[str, Any], path: Path | None = None) -> None:
-    """Atomically replace the recovery file with a private temporary file."""
+# File the running session writes; the crash hook updates this one, not the shared name.
+_active_target: Path | None = None
+_active_token: str | None = None  # owner token this session wrote into that file
+
+
+class _ExclusiveUnsupported(OSError):
+    """The filesystem cannot publish a file without replacing an existing one."""
+
+
+def _write_autosave(
+    data: dict[str, Any], path: Path | None = None, *, exclusive: bool = False
+) -> None:
+    """Atomically replace the recovery file with a private temporary file.
+
+    ``exclusive`` publishes with a hard link, which fails with FileExistsError
+    instead of replacing a file another session published meanwhile. Where hard
+    links are unsupported it raises ``_ExclusiveUnsupported`` (nothing is
+    written): the caller must then use a name no other session can choose.
+    """
     path = path or AUTOSAVE_FILE
     fd, tmp_name = tempfile.mkstemp(
         dir=path.parent, prefix=AUTOSAVE_FILE.stem + ".", suffix=".tmp"
@@ -142,7 +159,17 @@ def _write_autosave(data: dict[str, Any], path: Path | None = None) -> None:
             f.write(json.dumps(data))
             f.flush()
             os.fsync(f.fileno())  # data must reach disk before the rename does
-        os.replace(tmp_name, path)
+        if exclusive:
+            try:
+                os.link(tmp_name, path)
+            except FileExistsError:
+                raise
+            except OSError as exc:  # no hard links on this filesystem
+                raise _ExclusiveUnsupported(str(exc)) from exc
+            else:
+                os.unlink(tmp_name)
+        else:
+            os.replace(tmp_name, path)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp_name)
@@ -244,6 +271,7 @@ class AutosaveManager(QObject):
     _token: str = ""  # identifies this session inside the files it writes
     _own_file: Path | None = None  # file this session writes (see _target_file)
     _own_file_base: Path | None = None  # AUTOSAVE_FILE the choice was made for
+    _claimed_base: Path | None = None  # AUTOSAVE_FILE this session already published to
     _recovery_file: Path | None = None  # snapshot offered/adopted on startup
     _recovery_identity: tuple[int, int, int] | None = None  # its identity when chosen
     _recovery_token: Any = None  # owner token inside it when chosen
@@ -379,6 +407,25 @@ class AutosaveManager(QObject):
             return
         _restore_tombstone(tomb, path)
 
+    def _remove_if_owned(self, path: Path) -> None:
+        """Delete ``path`` only if it carries this session's owner token.
+
+        The file is first renamed away (atomic), checked, and then deleted or
+        put back, so a snapshot another session published at that path is
+        never removed.
+        """
+        tomb = path.with_name(f"{path.name}.{uuid.uuid4().hex}.rm")
+        try:
+            os.rename(path, tomb)
+        except OSError:
+            return  # already gone
+        owner = (_read_snapshot(tomb) or {}).get("owner")
+        if isinstance(owner, dict) and owner.get("token") == self._session_token():
+            with contextlib.suppress(OSError):
+                tomb.unlink()
+        else:
+            _restore_tombstone(tomb, path)
+
     def _recovery_still_selected(self) -> bool:
         """True if the chosen snapshot is the very file chosen and still unowned.
 
@@ -450,8 +497,7 @@ class AutosaveManager(QObject):
         """
         own = self._own_file if self._own_file_base == AUTOSAVE_FILE else None
         if own is not None:
-            with contextlib.suppress(FileNotFoundError):
-                own.unlink()
+            self._remove_if_owned(own)
         if self._recovery_file != own:
             self._remove_selected_recovery()
         self._select_recovery(None)
@@ -466,7 +512,26 @@ class AutosaveManager(QObject):
             data = self._serialize_state()
             data["owner"] = {"pid": os.getpid(), "token": self._session_token()}
             target = self._target_file()
-            _write_autosave(data, target)
+            if target == AUTOSAVE_FILE and self._claimed_base != AUTOSAVE_FILE:
+                # First publish to the shared name: claim it atomically so two
+                # sessions starting together cannot both think they own it.
+                try:
+                    _write_autosave(data, target, exclusive=True)
+                except (FileExistsError, _ExclusiveUnsupported):
+                    # Never replace a file this session did not create (it may
+                    # be another session's, live or stale): use the private
+                    # name; a stale snapshot is cleaned up identity-aware via
+                    # the recovery selection below.
+                    target = self._own_file = AUTOSAVE_FILE.with_name(
+                        f"{AUTOSAVE_FILE.stem}.{self._session_token()}"
+                        f"{AUTOSAVE_FILE.suffix}"
+                    )
+                    _write_autosave(data, target)
+                self._claimed_base = AUTOSAVE_FILE if target == AUTOSAVE_FILE else None
+            else:
+                _write_autosave(data, target)
+            global _active_target, _active_token
+            _active_target, _active_token = target, self._session_token()
             # The recovered snapshot is superseded only once this one is on disk.
             if self._recovery_file != target:
                 self._remove_selected_recovery()

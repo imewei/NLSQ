@@ -182,6 +182,12 @@ class CurveFitResult(OptimizeResult):
         object.__setattr__(self, "_predictions_cache", None)
         object.__setattr__(self, "_residuals_cache", None)
 
+    def __dir__(self):
+        # OptimizeResult lists only the dict keys; keep the statistics and methods
+        # of this class visible to tab completion too.
+        public = (n for n in dir(type(self)) if not n.startswith("_"))
+        return sorted(set(super().__dir__()) | set(public))
+
     def __setattr__(self, name, value):
         # OptimizeResult maps attribute assignment to dict keys, which a
         # read-only property would then silently shadow (``result.popt = v``
@@ -408,7 +414,10 @@ class CurveFitResult(OptimizeResult):
             raise AttributeError("Cannot compute R²: ydata not available")
 
         y = np.array(self.ydata)
-        ss_res = np.sum(self.residuals**2)
+        used = self._used_rows()
+        if used is not None:
+            y = y[used]
+        ss_res = np.sum(self._used_residuals() ** 2)
         ss_tot = np.sum((y - np.mean(y)) ** 2)
 
         if not np.isfinite(ss_tot) or ss_tot < np.finfo(float).tiny:
@@ -443,7 +452,7 @@ class CurveFitResult(OptimizeResult):
         if not hasattr(self, "ydata"):
             raise AttributeError("Cannot compute adjusted R²: ydata not available")
 
-        n = len(self.ydata)
+        n = self._n_used()
         p = len(self.popt)
         r2 = self.r_squared
 
@@ -471,7 +480,7 @@ class CurveFitResult(OptimizeResult):
         RMSE has the same units as ydata and provides intuitive error measure.
         Lower values indicate better fit.
         """
-        return np.sqrt(np.mean(self.residuals**2))
+        return np.sqrt(np.mean(self._used_residuals() ** 2))
 
     @property
     def mae(self):
@@ -486,7 +495,7 @@ class CurveFitResult(OptimizeResult):
         -----
         MAE is more robust to outliers than RMSE.
         """
-        return np.mean(np.abs(self.residuals))
+        return np.mean(np.abs(self._used_residuals()))
 
     @property
     def aic(self):
@@ -512,6 +521,30 @@ class CurveFitResult(OptimizeResult):
         Used for model selection. Penalizes model complexity.
         """
         return self._information_criterion("AIC", 2.0)
+
+    def _used_rows(self):
+        """Boolean mask of the rows that carry weight, or None when all do.
+
+        A 1-D ``sigma`` entry of ``inf`` is a zero-weight row: the fit ignores it, so
+        it is not an observation for R^2, RMSE/MAE, AIC/BIC or the degrees of freedom.
+        """
+        sig = self.get("sigma")
+        if sig is None or np.ndim(sig) != 1:
+            return None
+        used = ~np.isinf(np.asarray(sig, dtype=float))
+        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
+        return None if used.all() or used.shape != (n,) else used
+
+    def _n_used(self) -> int:
+        """Effective sample size: observations with non-zero weight."""
+        used = self._used_rows()
+        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
+        return n if used is None else int(used.sum())
+
+    def _used_residuals(self):
+        r = np.asarray(self.residuals)
+        used = self._used_rows()
+        return r if used is None else r[used]
 
     def _noise_known(self) -> bool:
         """True when the noise scale is known: ``absolute_sigma=True`` (with the
@@ -544,7 +577,7 @@ class CurveFitResult(OptimizeResult):
         if not hasattr(self, "ydata"):
             raise AttributeError(f"Cannot compute {name}: ydata not available")
 
-        n = len(self.ydata)
+        n = self._n_used()
         k = len(self.popt)
         chi2 = self._chi2()
         if chi2 is not None and self._noise_known():
@@ -554,7 +587,7 @@ class CurveFitResult(OptimizeResult):
                 )
                 return np.nan
             return penalty_per_param * k + chi2
-        ss = np.sum(self.residuals**2) if chi2 is None else chi2
+        ss = np.sum(self._used_residuals() ** 2) if chi2 is None else chi2
         if not np.isfinite(ss) or ss <= 0:
             warnings.warn(
                 f"RSS ≤ 0 or NaN, {name} undefined.", OptimizeWarning, stacklevel=3
@@ -585,7 +618,7 @@ class CurveFitResult(OptimizeResult):
         """
         if not hasattr(self, "ydata"):
             raise AttributeError("Cannot compute BIC: ydata not available")
-        return self._information_criterion("BIC", float(np.log(len(self.ydata))))
+        return self._information_criterion("BIC", float(np.log(self._n_used())))
 
     def confidence_intervals(self, alpha: float = 0.95):
         """Compute parameter confidence intervals.
@@ -647,7 +680,7 @@ class CurveFitResult(OptimizeResult):
         """
         from scipy import stats
 
-        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
+        n = self._n_used()
         p = len(self.popt)
         dof = max(n - p, 1)
         tail = (1.0 - alpha) / 2.0
@@ -951,8 +984,7 @@ class CurveFitResult(OptimizeResult):
         variance = self._propagated_variance(jacobian, pcov)
 
         # Residual variance (inherent data variability)
-        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
-        s2 = self._noise_variance_at(x, n, dof)
+        s2 = self._noise_variance_at(x, self._n_used(), dof)
 
         # Prediction interval = confidence band variance + residual variance
         se_pred = np.sqrt(np.maximum(variance, 0) + s2)
@@ -970,6 +1002,8 @@ class CurveFitResult(OptimizeResult):
         shape = np.shape(x)
         if len(shape) <= 1:
             return shape[0] if shape else 1
+        if self.get("x_points_first"):  # recorded by the hybrid solver: (n_points, k)
+            return shape[0]
         xd, y = np.shape(cast(Any, self.get("xdata"))), self.get("ydata")
         if y is not None and len(xd) > 1 and xd[0] == len(y) != xd[-1]:
             return shape[0]
@@ -1005,10 +1039,14 @@ class CurveFitResult(OptimizeResult):
                 # covariance-matrix sigma: marginal variance per observation
                 sig = np.sqrt(np.abs(np.diag(sig)))
             sig = np.abs(sig)  # the noise scale is |sigma| (solver accepts signed)
+            # sigma=inf is a zero-weight row (the fit ignores it): it carries no noise
+            # information, so it is left out of the interpolation/average below.
+            fin = np.isfinite(sig)
             if (
                 sig.ndim == 1
                 and sig.shape == resid.shape
-                and np.all(np.isfinite(sig))
+                and not np.any(np.isnan(sig))
+                and fin.any()
                 and np.all(sig > 0)
             ):
                 scale = 1.0 if self._noise_known() else self._chi2() / dof
@@ -1017,10 +1055,12 @@ class CurveFitResult(OptimizeResult):
                 if xq.shape == xd.shape and np.array_equal(xq, xd):
                     sig_x = sig
                 elif xd.ndim == 1 and xq.ndim == 1:
-                    order = np.argsort(xd)
-                    sig_x = np.interp(xq, xd[order], sig[order])
+                    order = np.argsort(xd[fin])
+                    sig_x = np.interp(xq, xd[fin][order], sig[fin][order])
                 else:
-                    sig_x = np.full(self._n_obs(xq), float(np.sqrt(np.mean(sig**2))))
+                    sig_x = np.full(
+                        self._n_obs(xq), float(np.sqrt(np.mean(sig[fin] ** 2)))
+                    )
                 return scale * sig_x**2
             warnings.warn(
                 "Stored sigma does not match the residuals (shape "
@@ -1278,16 +1318,24 @@ class CurveFitResult(OptimizeResult):
         # Goodness of fit
         print("\nGoodness of Fit:")
         print("-" * 70)
-        print(f"R²                : {self.r_squared:>12.6f}")
-        print(f"Adjusted R²       : {self.adj_r_squared:>12.6f}")
-        print(f"RMSE              : {self.rmse:>12.6f}")
-        print(f"MAE               : {self.mae:>12.6f}")
+
+        def stat(name: str, spec: str) -> str:
+            # a result built without ydata/model has no residual-based statistics
+            try:
+                return f"{getattr(self, name):>12{spec}}"
+            except AttributeError:
+                return f"{'N/A':>12}"
+
+        print(f"R²                : {stat('r_squared', '.6f')}")
+        print(f"Adjusted R²       : {stat('adj_r_squared', '.6f')}")
+        print(f"RMSE              : {stat('rmse', '.6f')}")
+        print(f"MAE               : {stat('mae', '.6f')}")
 
         # Model selection
         print("\nModel Selection Criteria:")
         print("-" * 70)
-        print(f"AIC               : {self.aic:>12.2f}")
-        print(f"BIC               : {self.bic:>12.2f}")
+        print(f"AIC               : {stat('aic', '.2f')}")
+        print(f"BIC               : {stat('bic', '.2f')}")
 
         # Convergence
         print("\nConvergence Information:")

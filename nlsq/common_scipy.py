@@ -135,7 +135,8 @@ def solve_lsq_trust_region(
         p_norm = norm(suf / denom)
         phi = p_norm - Delta
         safe_p_norm = p_norm if p_norm != 0 else np.finfo(float).tiny
-        phi_prime = -np.sum(suf**2 / denom**3) / safe_p_norm
+        # (suf/denom)**2 / denom: cubing denom first over/underflows at representable scales.
+        phi_prime = -np.sum((suf / denom) ** 2 / denom) / safe_p_norm
         return phi, phi_prime
 
     suf = s * uf
@@ -304,9 +305,10 @@ def minimize_quadratic_1d(a, b, lb, ub, c=0):
         if lb < extremum < ub:
             t.append(extremum)
     t = np.asarray(t)
-    y = t * (a * t + b) + c
+    # Compare without `c` (a large constant would round candidates to ties).
+    y = t * (a * t + b)
     min_index = np.argmin(y)
-    return t[min_index], y[min_index]
+    return t[min_index], y[min_index] + c
 
 
 def evaluate_quadratic(J, g, s, diag=None):
@@ -521,6 +523,7 @@ def reflective_transformation(y, lb, ub):
     if in_bounds(y, lb, ub):
         return y, np.ones_like(y)
 
+    feasible = (y >= lb) & (y <= ub)
     lb_finite = np.isfinite(lb)
     ub_finite = np.isfinite(ub)
 
@@ -541,6 +544,7 @@ def reflective_transformation(y, lb, ub):
     x[mask] = lb[mask] + np.minimum(t, 2 * d[mask] - t)
     g_negative[mask] = t > d[mask]
 
+    x[feasible] = y[feasible]  # untouched coordinates must not pick up rounding
     g = np.ones_like(y)
     g[g_negative] = -1
 

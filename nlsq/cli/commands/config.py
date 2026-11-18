@@ -171,16 +171,25 @@ def run_config(
         for f in copied_files:
             print(f"  - {f.name}")
 
+        # Name the files that were actually written (--output renames them).
+        def shown(dest: Path) -> str:
+            try:
+                return dest.relative_to(cwd).as_posix()
+            except ValueError:  # reached through a symlinked prefix
+                return str(dest)
+
+        names = {label: shown(dest) for _, dest, label in staged}
         print("\nNext steps:")
         if copy_workflow:
             print(
-                "  1. Edit workflow_config.yaml with your data path and model settings",
+                f"  1. Edit {names['workflow']} with your data path and model settings",
             )
-            print("  2. Run: nlsq fit workflow_config.yaml")
+            print(f"  2. Run: nlsq fit {names['workflow']}")
         if copy_model:
-            print("  - Edit custom_model.py to define your model function")
+            print(f"  - Edit {names['custom model']} to define your model function")
             print(
-                "  - Reference it in your workflow: model.type: custom, model.path: custom_model.py",
+                "  - Reference it in your workflow: model.type: custom, "
+                f"model.path: {names['custom model']}",
             )
 
     return copied_files

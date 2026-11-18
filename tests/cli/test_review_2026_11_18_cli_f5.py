@@ -228,7 +228,7 @@ def test_failed_plot_construction_closes_figure(tmp_path):
     plt.close("all")
 
     def scalar_model(x, a):
-        return a  # plot() rejects a scalar against 500 grid points
+        return a * np.ones(3)  # plot() rejects 3 values against 500 grid points
 
     cfg = {"visualization": {"output_dir": str(tmp_path), "formats": ["png"]}}
     data = {"xdata": np.array([0.0, 1.0]), "ydata": np.array([1.0, 1.0])}

@@ -463,15 +463,19 @@ class ProfileContext:
         self.profiler = profiler
         self.name = name
         self.metrics: ProfileMetrics | None = None
+        # One entry per active ``with`` so a context reused inside itself ends
+        # each run separately.
+        self._active: list[ProfileMetrics] = []
 
     def __enter__(self):
         """Enter context."""
         self.metrics = self.profiler.start_profile(self.name)
+        self._active.append(self.metrics)
         return self.metrics
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context."""
-        self.profiler.end_profile(self.metrics)
+        self.profiler.end_profile(self._active.pop())
         return False
 
 

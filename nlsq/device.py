@@ -307,40 +307,53 @@ def _print_gpu_warning(
     cuda_major: int | None,
     plugin_issues: list[str] | None = None,
 ) -> None:
-    """Print warning about GPU acceleration availability."""
-    print("\nGPU AVAILABLE BUT NOT USED")
-    print("===========================")
-    print(f"  GPU: {gpu_name} (SM {sm_version})")
-    print(f"  System CUDA: {cuda_version or 'Not found'}")
-    print("  JAX backend: CPU-only")
+    """Print the "GPU available but not used" advisory to stderr.
+
+    stderr, not stdout: this runs on ``import nlsq`` and must not precede machine-readable
+    stdout output (``nlsq fit ... --stdout`` prints JSON).
+    """
+
+    def out(text: str = "") -> None:
+        print(text, file=sys.stderr)
+
+    out("\nGPU AVAILABLE BUT NOT USED")
+    out("===========================")
+    out(f"  GPU: {gpu_name} (SM {sm_version})")
+    out(f"  System CUDA: {cuda_version or 'Not found'}")
+    out("  JAX backend: CPU-only")
 
     if plugin_issues:
-        print("\n  Issues detected:")
+        out("\n  Issues detected:")
         for issue in plugin_issues:
-            print(f"    - {issue}")
+            out(f"    - {issue}")
 
-    print()
+    out()
 
-    if cuda_major is None:
-        print("To enable GPU acceleration:")
-        print("  1. Install CUDA toolkit (12.x or 13.x)")
-        print("  2. Ensure nvcc is in PATH")
-        print("  3. Run: make install-jax-gpu")
+    # Same compatibility rules as get_recommended_package(): only these CUDA/SM
+    # pairs have a JAX wheel, so never suggest one that check would reject.
+    supported = (cuda_major == 13 and (sm_version or 0) >= 7.5) or (
+        cuda_major == 12 and (sm_version or 0) >= 5.2
+    )
+    if not supported:
+        out("To enable GPU acceleration:")
+        out("  1. Install CUDA toolkit (12.x or 13.x) supporting this GPU")
+        out("  2. Ensure nvcc is in PATH")
+        out("  3. Run: make install-jax-gpu")
     else:
         pkg = f"jax[cuda{cuda_major}-local]"
-        print("Enable GPU acceleration:")
-        print("  make install-jax-gpu")
-        print()
-        print("Or manually:")
-        print(
+        out("Enable GPU acceleration:")
+        out("  make install-jax-gpu")
+        out()
+        out("Or manually:")
+        out(
             "  pip uninstall -y jax jaxlib "
             "jax-cuda13-plugin jax-cuda13-pjrt "
             "jax-cuda12-plugin jax-cuda12-pjrt",
         )
-        print(f'  pip install "{pkg}"')
+        out(f'  pip install "{pkg}"')
 
-    print("\nNote: GPU acceleration is supported on Linux only.")
-    print("See README.md for details.\n")
+    out("\nNote: GPU acceleration is supported on Linux only.")
+    out("See README.md for details.\n")
 
 
 def get_device_info() -> dict:

@@ -534,10 +534,9 @@ class TestCGConfiguration:
             HybridStreamingConfig(cg_param_threshold=0)
 
     def test_memory_optimized_preset_cg_params(self):
-        """Test memory_optimized preset has aggressive CG usage."""
+        """memory_optimized must not lower the threshold below the default."""
         config = HybridStreamingConfig.memory_optimized()
 
-        # Should have lower threshold for more aggressive CG usage
-        assert config.cg_param_threshold == 1000, (
-            "memory_optimized should use lower CG threshold for memory savings"
-        )
+        # Phase 2 raises for p >= threshold (no CG solver), so a lower value would
+        # make supported problem sizes fail.
+        assert config.cg_param_threshold == HybridStreamingConfig().cg_param_threshold

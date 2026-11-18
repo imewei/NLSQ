@@ -66,7 +66,8 @@ def phi_and_derivative_jax(
     p_norm = jnp.linalg.norm(suf / denom)
     phi = p_norm - Delta
     safe_p_norm = jnp.where(p_norm == 0.0, jnp.finfo(p_norm.dtype).tiny, p_norm)
-    phi_prime = -jnp.sum(suf**2 / denom**3) / safe_p_norm
+    # (suf/denom)**2 / denom: cubing denom first over/underflows at representable scales.
+    phi_prime = -jnp.sum((suf / denom) ** 2 / denom) / safe_p_norm
     return phi, phi_prime
 
 
@@ -609,8 +610,9 @@ class CommonJIT:
 
         Parameters
         ----------
-        J : ndarray, sparse matrix or LinearOperator, shape (m, n)
-            Jacobian matrix, affects the quadratic term.
+        J : jnp.ndarray, shape (m, n)
+            Dense Jacobian matrix, affects the quadratic term (SciPy sparse
+            matrices and LinearOperators are not accepted).
         g : ndarray, shape (n,)
             Gradient, defines the linear term.
         s : ndarray, shape (n,)
@@ -711,8 +713,9 @@ class CommonJIT:
 
         Parameters
         ----------
-        J : ndarray, sparse matrix or LinearOperator, shape (m, n)
-            Jacobian matrix, affects the quadratic term.
+        J : jnp.ndarray, shape (m, n)
+            Dense Jacobian matrix, affects the quadratic term (SciPy sparse
+            matrices and LinearOperators are not accepted).
         g : ndarray, shape (n,)
             Gradient, defines the linear term.
         s : ndarray, shape (k, n) or (n,)
@@ -1081,12 +1084,14 @@ def minimize_quadratic_1d_jax(
         Minimum value.
     """
     # Evaluate at endpoints
-    y_lb = lb * (a * lb + b) + c
-    y_ub = ub * (a * ub + b) + c
+    # Compare candidates without the constant (a large c would round them to ties);
+    # it is added to the reported value only.
+    y_lb = lb * (a * lb + b)
+    y_ub = ub * (a * ub + b)
 
     # Check if extremum is in bounds
     extremum = -0.5 * b / jnp.where(a != 0, a, 1.0)
-    y_ext = extremum * (a * extremum + b) + c
+    y_ext = extremum * (a * extremum + b)
     ext_valid = (a != 0) & (lb < extremum) & (extremum < ub)
 
     # Select minimum among valid candidates
@@ -1098,4 +1103,4 @@ def minimize_quadratic_1d_jax(
     t_min = jnp.where(ext_valid & (y_ext < y_min), extremum, t_min)
     y_min = jnp.where(ext_valid & (y_ext < y_min), y_ext, y_min)
 
-    return t_min, y_min
+    return t_min, y_min + c

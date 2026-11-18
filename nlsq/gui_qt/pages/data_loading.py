@@ -339,12 +339,11 @@ class DataLoadingPage(QWidget):
             if file_format in ("ascii", "csv"):
                 # Load the whole numeric table so the ColumnSelector can pick
                 # sigma / z columns (same parsing as the clipboard path).
-                rows, header = parse_table_text(
-                    file_path.read_text(encoding="utf-8-sig")
-                )
+                file_text = file_path.read_text(encoding="utf-8-sig")
+                rows, header = parse_table_text(file_text)
                 if not rows:
                     raise ValueError("No valid numeric data found.")
-                self._set_table(rows, header)
+                self._set_table(rows, header, file_text)
             else:
                 # npz / hdf5: keys, not columns, define the arrays
                 xdata, ydata, sigma = load_from_file(str(file_path), config)
@@ -382,17 +381,35 @@ class DataLoadingPage(QWidget):
             self._show_error("File Load Error", str(e))
             return False
 
-    def _set_table(self, rows: list[list[float]], header: list[str] | None) -> None:
-        """Store parsed rows; drop trailing all-NaN unnamed columns (trailing delimiter).
+    def _set_table(
+        self, rows: list[list[float]], header: list[str] | None, text: str
+    ) -> None:
+        """Store parsed rows; drop trailing all-empty unnamed columns (trailing delimiter).
 
-        Interior empty columns stay so positional selectors keep their meaning.
+        Interior empty columns stay so positional selectors keep their meaning,
+        and so does a column whose cells are written out (``nan``): that is data
+        the user entered, not delimiter padding.
         """
+        from nlsq.gui_qt.adapters.data_adapter import (
+            _clean_table_lines,
+            _split_cells,
+            detect_delimiter,
+        )
+
         raw = np.array(rows, dtype=np.float64)
         names = header if header and len(header) == raw.shape[1] else None
+        lines = _clean_table_lines(text)
+        delimiter = detect_delimiter("\n".join(lines))
+        data_lines = lines[1:] if header else lines
+        written = np.zeros(raw.shape[1], dtype=bool)
+        for line in data_lines:
+            for j, cell in enumerate(_split_cells(line, delimiter)[: raw.shape[1]]):
+                written[j] |= bool(cell.strip())
         keep = list(range(raw.shape[1]))
         while (
             keep
             and np.isnan(raw[:, keep[-1]]).all()
+            and not written[keep[-1]]
             and not (names and names[keep[-1]])
         ):
             keep.pop()
@@ -421,7 +438,7 @@ class DataLoadingPage(QWidget):
                 return
 
             # Convert to numpy array
-            self._set_table(rows, header)
+            self._set_table(rows, header, raw_text)
 
             # Update UI
             self._file_path_label.setText("(Clipboard data)")
@@ -720,6 +737,13 @@ class DataLoadingPage(QWidget):
             data_config = config.get("data", {})
             input_file = data_config.get("input_file", data_config.get("file"))
             if input_file:
+                # validate the whole mapping before anything is staged, so a bad
+                # one leaves the page exactly as it was
+                extra_columns = data_config.get("columns", {})
+                if not isinstance(extra_columns, dict):
+                    raise ValueError(
+                        f"data.columns must be a mapping, got {extra_columns!r}"
+                    )
                 data_file = Path(input_file)
                 if not data_file.is_absolute():
                     data_file = config_path.parent / data_file
@@ -744,14 +768,20 @@ class DataLoadingPage(QWidget):
                     "y": 1,
                     "z": None,
                     "sigma": None,
-                    **data_config.get("columns", {}),
+                    **extra_columns,
                 }
                 if self._key_columns is not None:
                     columns = self._key_columns  # keys, not columns, pick arrays
-                self._column_selector.set_mode(
-                    "2d" if columns["z"] is not None else "1d"
-                )
-                self._column_selector.set_selection(columns)
+                try:
+                    self._column_selector.set_mode(
+                        "2d" if columns["z"] is not None else "1d"
+                    )
+                    self._column_selector.set_selection(columns)
+                except Exception:
+                    # a bad mapping must not leave the guessed default columns
+                    # staged and Apply enabled
+                    self.reset()
+                    raise
 
         except Exception as e:
             self._show_error("YAML Config Error", f"Failed to load configuration: {e}")

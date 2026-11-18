@@ -68,6 +68,10 @@ from nlsq.utils.logging import get_logger
 __all__ = ["TournamentSelector"]
 
 
+class _OutputShapeError(ValueError):
+    """Model output does not have one value per observation (a caller bug)."""
+
+
 class TournamentSelector:
     """Tournament selector for progressive elimination in multi-start optimization.
 
@@ -356,7 +360,12 @@ class TournamentSelector:
         )
 
         if n_to_eliminate > 0:
-            self._eliminate_worst(n_to_eliminate, avg_round_losses)
+            # A candidate that failed (inf loss) in any earlier batch or round stays
+            # disqualified: rank it worst even if it is finite in this round.
+            self._eliminate_worst(
+                n_to_eliminate,
+                np.where(np.isfinite(self.loss_sums), avg_round_losses, np.inf),
+            )
 
         # Record round history
         self.round_history.append(
@@ -464,6 +473,12 @@ class TournamentSelector:
             try:
                 params = self.candidates[i]
                 predictions = jnp.asarray(model(x_jax, *params), dtype=jnp.float64)
+                if predictions.shape not in (y_jax.shape, ()):
+                    # Broadcasting (n, 1) against (n,) would score an (n, n) matrix.
+                    raise _OutputShapeError(
+                        f"model output shape {predictions.shape} does not match "
+                        f"y batch shape {y_jax.shape}"
+                    )
                 residuals = y_jax - predictions
                 if sigma_jax is not None:
                     residuals = residuals / sigma_jax
@@ -477,6 +492,8 @@ class TournamentSelector:
                     self.numerical_failures += 1
                     self.logger.debug(f"Candidate {i}: Non-finite loss {loss}")
 
+            except _OutputShapeError:
+                raise
             except Exception as e:
                 self.numerical_failures += 1
                 self.logger.debug(f"Candidate {i} failed evaluation: {str(e)[:50]}")

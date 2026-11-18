@@ -390,6 +390,8 @@ class ResultExporter:
         fun = result.get("fun")
         if fun is not None:
             residuals = np.asarray(fun)
+            if residuals.dtype.kind in "iubf":  # square in float64, not int32/float32
+                residuals = residuals.astype(np.float64)
 
             if not np.all(np.isfinite(residuals)):
                 statistics["statistics_warnings"] = (

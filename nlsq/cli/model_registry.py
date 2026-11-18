@@ -39,6 +39,7 @@ import difflib
 import functools
 import inspect
 import logging
+import sys
 import types
 import uuid
 from collections.abc import Callable
@@ -503,9 +504,16 @@ class ModelRegistry:
             module = types.ModuleType(module_name)
             module.__file__ = str(path)
             code = compile(source, str(path), "exec")
-            with resource_limits():
-                # Intentional: runs the exact bytes validate_model() approved.
-                exec(code, module.__dict__)  # nosec B102
+            # dataclasses resolve the defining module through sys.modules while
+            # the class body runs (postponed annotations). Register it only for
+            # the exec, so repeated loads do not accumulate modules.
+            sys.modules[module_name] = module
+            try:
+                with resource_limits():
+                    # Intentional: runs the exact bytes validate_model() approved.
+                    exec(code, module.__dict__)  # nosec B102
+            finally:
+                sys.modules.pop(module_name, None)
             return module
         except SyntaxError as e:
             raise ModelError(
@@ -590,6 +598,25 @@ class ModelRegistry:
                 suggestion="Define model as f(x, *params) where x is the independent variable",
             )
 
+        # The fitter supplies fit parameters positionally: a required keyword-only
+        # parameter can never be bound.
+        required_kwonly = [
+            p.name
+            for p in sig.parameters.values()
+            if p.kind is p.KEYWORD_ONLY and p.default is p.empty
+        ]
+        if required_kwonly:
+            raise ModelError(
+                f"Model function '{function_name}' has required keyword-only "
+                f"parameter(s) {required_kwonly}; fit parameters are passed "
+                "positionally",
+                model_name=function_name,
+                model_type="custom",
+                context={"path": str(path), "parameters": params},
+                suggestion="Define model as f(x, *params): give keyword-only "
+                "parameters a default or make them positional",
+            )
+
         return model
 
     def _attach_model_utilities(
@@ -640,20 +667,28 @@ class ModelRegistry:
             variadic = any(p.kind == p.VAR_POSITIONAL for p in parameters)
             return positional >= 2 or (positional >= 1 and variadic)
 
+        # A decorated model (``@jax.jit``) is a wrapper object, not a function:
+        # judge it by the function it wraps, but keep the wrapper for identity.
+        def definition(f: Any) -> Any:
+            try:
+                return inspect.unwrap(f)
+            except ValueError:  # cyclic __wrapped__ chain
+                return f
+
         models = sorted(
             (
-                f
+                (f, definition(f))
                 for n, f in vars(module).items()
-                if inspect.isfunction(f)
-                and f.__module__ == module.__name__
+                if inspect.isfunction(definition(f))
+                and definition(f).__module__ == module.__name__
                 and n not in ("estimate_p0", "bounds", "parameter_names")
                 and not n.startswith(("_", "estimate_"))
                 and not n.endswith(("_bounds", "_p0", "_parameter_names"))
-                and has_fit_parameters(f)
+                and has_fit_parameters(definition(f))
             ),
-            key=lambda f: f.__code__.co_firstlineno,
+            key=lambda pair: pair[1].__code__.co_firstlineno,
         )
-        owns_bare = not models or models[0] is model
+        owns_bare = not models or models[0][0] is model
 
         if not callable(fn_p0) and owns_bare:
             fn_p0 = getattr(module, "estimate_p0", None)

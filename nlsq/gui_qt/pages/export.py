@@ -587,6 +587,13 @@ class ExportPage(QWidget):
                 f"    center_on_p0={state.center_on_p0!r},",
                 f"    scale_factor={state.scale_factor!r},",
             ]
+            # same condition as the GUI fit (_global_search_kwargs)
+            if (
+                workflow in ("auto_global", "hpc")
+                and state.enable_checkpoints
+                and state.checkpoint_dir
+            ):
+                extra.append(f"    checkpoint_dir={state.checkpoint_dir!r},")
         if state.sigma is not None:
             extra.insert(0, "    sigma=sigma,")
         if state.absolute_sigma:  # fit()'s default is False; applies without sigma too
@@ -658,7 +665,7 @@ class ExportPage(QWidget):
                 if nonfinite
                 else []
             ),
-            "from nlsq import fit",
+            "from nlsq import fit as nlsq_fit  # a model named fit cannot shadow it",
             "",
         ]
 
@@ -768,7 +775,7 @@ class ExportPage(QWidget):
             [
                 "",
                 "# Run curve fitting using workflow preset",
-                "result = fit(",
+                "result = nlsq_fit(",
                 "    model,",
                 "    xdata,",
                 "    ydata,",

@@ -147,8 +147,10 @@ class HybridStreamingConfig:
         Typical values: 50-200.
 
     gauss_newton_tol : float, default=1e-8
-        Convergence tolerance for Phase 2 (gradient norm threshold).
-        Optimization stops if: ||gradient|| < tol.
+        Convergence tolerance for Phase 2. It is used twice: as a gradient test
+        capped by the problem scale, ``||g|| <= tol * min(1, ||J||_F * ||r||)``, and
+        as the relative cost-change threshold (which also needs a small relative
+        gradient).
 
     trust_region_initial : float, default=1.0
         Initial trust region radius for Gauss-Newton step control.
@@ -177,9 +179,8 @@ class HybridStreamingConfig:
         Parameter count threshold for auto-selecting CG vs materialized solver.
 
         - **p < threshold**: Use materialized J^T J with SVD solve (faster for small p)
-        - **p >= threshold**: Use CG with implicit matvec (O(p) memory vs O(p^2))
-
-        Threshold balances memory savings vs additional data passes for CG.
+        - **p >= threshold**: ``AdaptiveHybridStreamingOptimizer.fit`` raises
+          ``NotImplementedError``: the CG solver is not wired into Phase 2.
 
     enable_group_variance_regularization : bool, default=False
         Enable variance regularization for parameter groups. When enabled,
@@ -230,7 +231,7 @@ class HybridStreamingConfig:
         Save checkpoints for diagnostics (resume is not supported).
 
     checkpoint_frequency : int, default=100
-        Save checkpoint every N iterations (across all phases).
+        Save checkpoint every N iterations; the count restarts in each phase.
 
     validate_numerics : bool, default=True
         Enable NaN/Inf validation at gradient, parameter, and loss computation points.
@@ -455,6 +456,15 @@ class HybridStreamingConfig:
         # Set default for mutable default (list)
         if self.active_switching_criteria is None:
             self.active_switching_criteria = ["plateau", "gradient", "max_iter"]
+        # An empty list is allowed (no early switch); a typo or a bare string is not,
+        # since the engine tests membership and would silently skip the check.
+        if isinstance(self.active_switching_criteria, str) or not set(
+            self.active_switching_criteria
+        ) <= {"plateau", "gradient", "max_iter"}:
+            raise ValueError(
+                "active_switching_criteria must be a list drawn from "
+                f"['plateau', 'gradient', 'max_iter']; got {self.active_switching_criteria!r}"
+            )
 
         try:
             # Validate enum-like parameters
@@ -682,7 +692,7 @@ class HybridStreamingConfig:
         >>> config.warmup_iterations
         40
         >>> config.cg_param_threshold
-        1000
+        2000
         """
         return cls(
             # Smaller chunks for memory efficiency
@@ -693,8 +703,8 @@ class HybridStreamingConfig:
             # Enable checkpoints (important when memory tight)
             enable_checkpoints=True,
             checkpoint_frequency=50,  # More frequent saves
-            # More aggressive CG usage to avoid O(p^2) J^T J storage
-            cg_param_threshold=1000,  # Lower threshold for memory savings
+            # cg_param_threshold stays at its default: the CG solver is not wired
+            # into Phase 2, so a lower value only makes fits with p >= threshold raise
             # Keep other defaults
         )
 

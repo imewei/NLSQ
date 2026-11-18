@@ -240,6 +240,7 @@ class OptimizationError(RuntimeError):
 
     def __init__(self, result, gtol: float, ftol: float, xtol: float, max_nfev: int):
         self.result = result
+        self._init_args = (gtol, ftol, xtol, max_nfev)
 
         # Analyze failure
         reasons, recommendations = analyze_failure(result, gtol, ftol, xtol, max_nfev)
@@ -272,6 +273,11 @@ class OptimizationError(RuntimeError):
         self.reasons = reasons
         self.recommendations = recommendations
         self.diagnostics = diagnostics
+
+    def __reduce__(self):
+        # The default Exception reduce replays only the formatted message, which
+        # the five-argument constructor rejects (breaks pickling across processes).
+        return (type(self), (self.result, *self._init_args))
 
 
 class ConvergenceWarning(UserWarning):

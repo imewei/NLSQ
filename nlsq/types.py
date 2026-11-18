@@ -104,7 +104,8 @@ LossFunction: TypeAlias = Callable[[FloatArray], FloatArray]
 #     - Unbounded: (-np.inf, np.inf)
 #     - Lower only: (0, np.inf) for positive parameters
 #     - Both: ([-1, 0], [1, 10]) for constrained parameters
-BoundsTuple: TypeAlias = tuple[ArrayLike, ArrayLike]
+#     - Mixed: (0, [2, 2]) -- each side is an array or a scalar broadcast to it
+BoundsTuple: TypeAlias = tuple[ArrayLike | float, ArrayLike | float]
 
 # =============================================================================
 # Configuration types

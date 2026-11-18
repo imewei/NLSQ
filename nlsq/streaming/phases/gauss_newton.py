@@ -80,6 +80,25 @@ def clip_to_radius(step: Any, radius: float) -> Any:
     return jnp.asarray(np.asarray(step, dtype=float) / m * (radius / unit_norm))
 
 
+def validate_phase_data(x_data: Any, y_data: Any) -> None:
+    """Raise ``ValueError`` unless ``y_data`` is 1-D with one value per ``x_data`` row.
+
+    The standalone phases slice both arrays by ``len(x_data)``, so an unmatched
+    tail of ``y_data`` would otherwise be dropped without a trace.
+    """
+    n, m = len(x_data), np.shape(y_data)
+    if n == 0 or len(m) != 1 or m[0] != n:
+        raise ValueError(
+            "xdata and ydata must be non-empty with one 1-D response per "
+            f"observation; got {n} xdata rows and ydata of shape {m}."
+        )
+
+
+def project_to_bounds(params: Any, bounds: Any) -> Any:
+    """``params`` clipped into ``bounds`` (a ``(lb, ub)`` pair or ``None``)."""
+    return params if bounds is None else jnp.clip(params, *bounds)
+
+
 def _pad_chunk_to_bucket(
     x_chunk: jnp.ndarray,
     y_chunk: jnp.ndarray,
@@ -267,7 +286,10 @@ class GaussNewtonPhase:
         """
         # the jitted chunk kernel bakes in model state read at trace time: one run only
         self._normal_eq = None
-        current_params = initial_params
+        x_data, y_data = data_source
+        validate_phase_data(x_data, y_data)
+        # An infeasible start is projected before it is scored or tracked as best.
+        current_params = project_to_bounds(initial_params, self.normalized_bounds)
         trust_radius = self.config.trust_region_initial
 
         # Track best parameters
@@ -275,7 +297,6 @@ class GaussNewtonPhase:
         best_cost = jnp.inf
         prev_cost = jnp.inf
 
-        x_data, y_data = data_source
         n_params = len(current_params)
         validate_group_variance_bounds(self.config, n_params)
         chunk_size = self.config.chunk_size
@@ -445,8 +466,14 @@ class GaussNewtonPhase:
                             f"{trust_radius:.4f}",
                         )
 
-            # Check convergence: gradient norm
-            if gradient_norm < self.config.gauss_newton_tol:
+            # Check convergence: gradient norm, capped by the problem's own scale
+            # (||J||*||r||) so small-valued data cannot satisfy it at the start.
+            gradient_scale = min(
+                1.0,
+                float(np.sqrt(jnp.trace(final_JTJ)))
+                * float(np.sqrt(final_residual_sum_sq)),
+            )
+            if gradient_norm <= self.config.gauss_newton_tol * gradient_scale:
                 phase_record = {
                     "phase": 2,
                     "name": "gauss_newton",
@@ -541,9 +568,10 @@ class GaussNewtonPhase:
                 }
 
         # Maximum iterations reached.
-        # Use prev_cost when steps were accepted, otherwise fall back to new_cost
-        # (prev_cost stays jnp.inf when every step was rejected).
-        reported_final_cost = prev_cost if jnp.isfinite(prev_cost) else new_cost
+        # Use prev_cost when steps were accepted (prev_cost stays jnp.inf when
+        # every step was rejected).
+        # (every step rejected: current_params is still the start, at initial_cost)
+        reported_final_cost = prev_cost if jnp.isfinite(prev_cost) else initial_cost
         phase_record = {
             "phase": 2,
             "name": "gauss_newton",
@@ -680,12 +708,33 @@ class GaussNewtonPhase:
             current_params, JTJ, JTr, total_cost, n_points
         )
 
-        gradient_norm = float(jnp.linalg.norm(JTr))
+        # Active set (as the adaptive engine / exact_lm.free_set): a variable on a
+        # bound whose descent direction points out of the box is held fixed.
+        free = None
+        if self.normalized_bounds is not None:
+            lb, ub = self.normalized_bounds
+            at_bound = ((current_params <= lb) & (JTr <= 0)) | (
+                (current_params >= ub) & (JTr >= 0)
+            )
+            if bool(jnp.any(at_bound)):
+                free = ~at_bound
+
+        if free is None:
+            gradient_norm = float(scaled_norm(JTr))
+            solve_JTJ, solve_JTr = JTJ, JTr
+        else:
+            gradient_norm = float(scaled_norm(jnp.where(free, JTr, 0.0)))
+            solve_JTr = jnp.where(free, JTr, 0.0)
+            fixed_diag = jnp.max(jnp.where(free, jnp.diag(JTJ), 0.0))
+            fixed_diag = jnp.where(fixed_diag > 0, fixed_diag, 1.0)
+            solve_JTJ = jnp.where(free[:, None] & free[None, :], JTJ, 0.0) + jnp.diag(
+                jnp.where(free, 0.0, fixed_diag)
+            )
 
         # Solve for Gauss-Newton step
         step, predicted_reduction = self._solve_gauss_newton_step(
-            JTJ,
-            JTr,
+            solve_JTJ,
+            solve_JTr,
             trust_radius,
         )
 
@@ -695,7 +744,16 @@ class GaussNewtonPhase:
         # Clip to bounds if available
         if self.normalized_bounds is not None:
             lb, ub = self.normalized_bounds
+            unclipped = new_params
             new_params = jnp.clip(new_params, lb, ub)
+            if free is not None or not bool(jnp.array_equal(new_params, unclipped)):
+                # Predicted reduction must describe the step actually taken
+                step = new_params - current_params
+                predicted_reduction = float(
+                    jnp.maximum(
+                        jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step), 0.0
+                    )
+                )
 
         # Evaluate cost at new parameters
         new_cost = self._compute_cost(new_params, x_data, y_data)
@@ -717,10 +775,14 @@ class GaussNewtonPhase:
 
         min_trust_radius = getattr(self.config, "min_trust_radius", 1e-8)
         max_trust_radius = getattr(self.config, "max_trust_radius", 1000.0)
-        step_norm = float(jnp.linalg.norm(step))
+        step_norm = float(scaled_norm(step))
 
         if reduction_ratio < 0.25:
             new_trust_radius = trust_radius * 0.5
+            if actual_reduction <= 0:
+                # Rejected: shrink relative to the step actually taken, else a radius
+                # larger than ||step|| re-proposes the identical step.
+                new_trust_radius = 0.5 * min(trust_radius, step_norm)
             if new_trust_radius < min_trust_radius and gradient_norm > 1e-4:
                 scaled_grad = 0.1 * gradient_norm / max(1.0, gradient_norm)
                 new_trust_radius = min(scaled_grad, 1.0)
@@ -808,21 +870,17 @@ class GaussNewtonPhase:
         if self._jacobian_fn_compiled is not None:
             return self._jacobian_fn_compiled(params, x_chunk)
 
-        normalized_model = self.normalized_model
-
-        def model_at_x(p, x_single):
-            # one row as a batch of 1: models index x[:, k] for 2-D inputs
-            return jnp.atleast_1d(normalized_model(x_single[None], *p))[0]
-
-        jac_fn = jax.vmap(lambda x: jax.jacrev(model_at_x, argnums=0)(params, x))
-        return jac_fn(x_chunk)
+        # the chunk model the residuals use, so batch-dependent models stay exact
+        return jax.jacfwd(
+            lambda p: jnp.reshape(self.normalized_model(x_chunk, *p), (-1,))
+        )(params)
 
     def _solve_gauss_newton_step(
         self,
         JTJ: jnp.ndarray,
         JTr: jnp.ndarray,
         trust_radius: float,
-        regularization: float = 1e-10,
+        regularization: float | None = None,
     ) -> tuple[jnp.ndarray, float]:
         """Solve Gauss-Newton step using SVD.
 
@@ -834,8 +892,9 @@ class GaussNewtonPhase:
             Accumulated J^T r vector.
         trust_radius : float
             Trust region radius.
-        regularization : float
-            Tikhonov regularization parameter.
+        regularization : float, optional
+            Tikhonov term on the Jacobi-scaled J^T J; defaults to
+            ``config.regularization_factor``.
 
         Returns
         -------
@@ -844,31 +903,18 @@ class GaussNewtonPhase:
         predicted_reduction : float
             Predicted reduction in cost function.
         """
-        n_params = JTJ.shape[0]
+        # One solver for both engines: Jacobi-scaled J^T J, the n*eps rank cutoff,
+        # the configured ``regularization_factor`` and the trust-region solve.
+        from nlsq.streaming.adaptive_hybrid import AdaptiveHybridStreamingOptimizer
 
-        # Add Tikhonov regularization
-        JTJ_reg = JTJ + regularization * jnp.eye(n_params)
-
-        # Compute SVD
-        U, s, Vt = jnp.linalg.svd(JTJ_reg, full_matrices=False)
-
-        # Solve using SVD
-        UTb = U.T @ JTr
-        s_threshold = jnp.max(s) * 1e-10
-        # Truncated pseudo-inverse: zero the null-space directions (as
-        # adaptive_hybrid does) instead of dividing noise by the threshold.
-        s_safe = jnp.where(s > s_threshold, s, 1.0)
-        step_hat = UTb * jnp.where(s > s_threshold, 1.0 / s_safe, 0.0)
-        step = Vt.T @ step_hat
-
-        # Apply trust region constraint
-        step = clip_to_radius(step, trust_radius)
-
-        # Compute predicted reduction
-        pred_red = jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step)
-        predicted_reduction = float(max(float(pred_red), 0.0))
-
-        return step, predicted_reduction
+        step, predicted = AdaptiveHybridStreamingOptimizer._solve_gauss_newton_step(
+            self,  # type: ignore[arg-type]  # only ``self.config`` is read
+            JTJ,
+            JTr,
+            trust_radius,
+            regularization,
+        )
+        return step, float(predicted)
 
     def _compute_cost(
         self,

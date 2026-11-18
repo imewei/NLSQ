@@ -73,6 +73,12 @@ def _autodiff_jacobian(
     return J if J.shape == (n_data, len(x0)) else None
 
 
+def _reject_complex(what: str, arr: Any) -> None:
+    """Raise for complex data: the sparse paths use real transposes (real-only rule)."""
+    if np.iscomplexobj(arr):
+        raise ValueError(f"complex {what} is not supported (real-valued fits only)")
+
+
 def _check_threshold(threshold: float) -> float:
     """Return ``threshold`` if it is a finite number in ``[0, 1)``, else raise."""
     try:
@@ -293,6 +299,18 @@ class SparseJacobianComputer:
                 f"data_mask has {len(data_mask)} entries but ydata has {n_data}"
             )
 
+        # Predictor and response must describe the same observations: a short
+        # chunk would otherwise broadcast into invented rows.
+        n_x = (
+            len(xdata[0])
+            if isinstance(xdata, list)
+            else len(xdata)
+            if isinstance(xdata, np.ndarray | jax.Array) and xdata.ndim == 1
+            else n_data
+        )
+        if n_x != n_data:
+            raise ValueError(f"xdata has {n_x} points but ydata has {n_data}")
+
         # Accumulate COO format data across chunks for fully vectorized construction
         all_rows: list[np.ndarray] = []
         all_cols: list[np.ndarray] = []
@@ -352,6 +370,7 @@ class SparseJacobianComputer:
             # <= the global one, so this keeps a superset that the final
             # global filter below trims. Non-finite entries are always kept.
             J_chunk = np.asarray(J_chunk)
+            _reject_complex("Jacobian", J_chunk)
             expected = (end - start, n_params)
             if J_chunk.shape != expected:
                 raise ValueError(
@@ -432,10 +451,23 @@ class SparseJacobianComputer:
         n_params = len(x)
         J = np.zeros((n_data, n_params))
 
+        # Exact derivative first: a difference quotient rounds away the effect of
+        # a small step on a large model output (e.g. 1e10 + a * x).
+        J_ad = _autodiff_jacobian(func, xdata, x, n_data)
+        if J_ad is not None:
+            _reject_complex("model derivative", J_ad)
+            return np.where(np.asarray(data_mask, dtype=bool)[:, None], J_ad, 0.0)
+
         # Base function evaluation
         # Difference the model outputs directly: subtracting a large ``ydata``
         # first would round away the (small) change in the model.
         f0 = np.asarray(func(xdata, *x))
+        _reject_complex("model output", f0)
+        if f0.shape != (n_data,):
+            raise ValueError(
+                f"model returned shape {f0.shape} for {n_data} observations; "
+                "xdata and ydata must describe the same points"
+            )
 
         # Compute finite differences
         for j in range(n_params):
@@ -493,6 +525,9 @@ class SparseJacobianComputer:
         rhs : np.ndarray
             Right-hand side -J^T @ f
         """
+
+        _reject_complex("Jacobian", J_sparse)
+        _reject_complex("residual", f)
 
         def matvec(v):
             """Compute (J^T @ J) @ v without forming J^T @ J."""
@@ -893,9 +928,13 @@ def detect_sparsity_at_p0(
     xdata = _normalize_xdata(xdata)
     xdata_arr = np.asarray(xdata)
     # Layout of a 2-D array, decided once and passed to the detector as well
+    # An unambiguous residual-count match beats the shape heuristic.
     points_last = xdata_arr.ndim == 2 and (
         _is_points_last_2d(xdata_arr, n_residuals)
-        or xdata_arr.shape[0] <= xdata_arr.shape[1]
+        or (
+            xdata_arr.shape[0] != n_residuals
+            and xdata_arr.shape[0] <= xdata_arr.shape[1]
+        )
     )
 
     if isinstance(xdata, list):

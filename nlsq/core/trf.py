@@ -466,9 +466,11 @@ def _saves_iteration_history(method: Callable[..., Any]) -> Callable[..., Any]:
         enabled = _save_iterations_setting() is not None
         depth = getattr(_fit_depth, "n", 0)
         outer: list[Any] | None = None
+        outer_dropped = 0
         if enabled:
             history = self.logger.optimization_history
             outer = list(history) if depth else None
+            outer_dropped = history.dropped
             history.clear()
         _fit_depth.n = depth + 1
         try:
@@ -485,6 +487,7 @@ def _saves_iteration_history(method: Callable[..., Any]) -> Callable[..., Any]:
                 if outer is not None:
                     history.clear()
                     history.extend(outer)
+                    history.dropped = outer_dropped
 
     return wrapper
 
@@ -1268,7 +1271,7 @@ class TrustRegionReflective(TrustRegionJITFunctions):
 
             step_h_norm = jnorm(step_h)
 
-            # Check for numerical issues
+            # Check for numerical issues (a callable loss never sees non-finite f)
             if not self.check_isfinite(f_new):
                 Delta = TR_REDUCTION_FACTOR * step_h_norm
                 continue
@@ -1279,6 +1282,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             else:
                 cost_new_jnp = self.default_loss_func(f_new)
             cost_new = cost_new_jnp
+            if not self.check_isfinite(cost_new_jnp):  # non-finite trial cost: reject
+                Delta = TR_REDUCTION_FACTOR * step_h_norm
+                continue
             actual_reduction = cost - cost_new
 
             # Update trust region radius (JIT-compiled, stays on device)
@@ -1790,6 +1796,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 cost_new = loss_function(f_new, f_scale, data_mask, cost_only=True)
             else:
                 cost_new = self.default_loss_func(f_new)
+            if not self.check_isfinite(cost_new):  # non-finite trial cost: reject
+                Delta = 0.25 * step_h_norm
+                continue
 
             actual_reduction = cost - cost_new
             Delta_new, ratio = update_tr_radius_jax(
@@ -2137,16 +2146,11 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                         g_norm,
                     )
 
-                if termination_status is not None or nfev >= max_nfev:
-                    if nfev >= max_nfev:
-                        self.logger.warning(
-                            "Maximum number of function evaluations reached",
-                            nfev=nfev,
-                        )
-                    break
+                stop = termination_status is not None or nfev >= max_nfev
 
-                # Log iteration details (call-site guard avoids kwargs construction)
-                if self.logger.records_iterations():
+                # Log iteration details (call-site guard avoids kwargs construction).
+                # A fit that stops at its initial point still records that state.
+                if (not stop or iteration == 0) and self.logger.records_iterations():
                     self.logger.optimization_step(
                         iteration=iteration,
                         cost=cost,
@@ -2154,6 +2158,14 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                         step_size=Delta if iteration > 0 else None,
                         nfev=nfev,
                     )
+
+                if stop:
+                    if nfev >= max_nfev:
+                        self.logger.warning(
+                            "Maximum number of function evaluations reached",
+                            nfev=nfev,
+                        )
+                    break
 
                 # Solve trust region subproblem using helper
                 subproblem_result = self._solve_trust_region_subproblem(
@@ -2247,6 +2259,8 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                         cost=float(cost),
                         gradient=np.asarray(g),
                         step_size=float(step_norm) if step_norm is not None else None,
+                        nfev=nfev,
+                        njev=njev,
                     )
 
                 # Invoke user callback if provided using helper
@@ -2474,10 +2488,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     g_norm,
                 )
 
-            if termination_status is not None or nfev >= max_nfev:
-                break
-
-            if self.logger.records_iterations():
+            stop = termination_status is not None or nfev >= max_nfev
+            # A fit that stops at its initial point still records that state.
+            if (not stop or iteration == 0) and self.logger.records_iterations():
                 self.logger.optimization_step(
                     iteration=iteration,
                     cost=cost,
@@ -2485,6 +2498,8 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     step_size=Delta if iteration > 0 else None,
                     nfev=nfev,
                 )
+            if stop:
+                break
 
             # Update v with scaling
             mask = dv != 0
@@ -2593,6 +2608,8 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                     cost=float(cost),
                     gradient=np.asarray(g),
                     step_size=float(step_norm) if step_norm is not None else None,
+                    nfev=nfev,
+                    njev=njev,
                 )
 
             # Invoke user callback using helper

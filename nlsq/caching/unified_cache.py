@@ -352,14 +352,17 @@ class UnifiedCache:
                 if self.enable_stats:
                     self._stats["hits"] += 1
                 self._cache.move_to_end(cache_key)
-                logger.debug(f"Cache hit for key {cache_key[:8]}...")
-                return self._cache[cache_key]
-
-            # Cache miss -- update stats while we still hold the lock
-            if self.enable_stats:
-                self._stats["misses"] += 1
-                self._stats["compilations"] += 1
-            generation = self._generation
+                hit = self._cache[cache_key]
+            else:
+                hit = None
+                # Cache miss -- update stats while we still hold the lock
+                if self.enable_stats:
+                    self._stats["misses"] += 1
+                generation = self._generation
+        if hit is not None:
+            # Logged outside the (non-reentrant) lock: a handler may call get_stats().
+            logger.debug(f"Cache hit for key {cache_key[:8]}...")
+            return hit
 
         # Build the jit wrapper outside the lock. This is lazy: tracing and XLA
         # compilation happen on the wrapper's first call, not here.
@@ -381,9 +384,14 @@ class UnifiedCache:
         compile_time_ms = (time.time() - start_time) * 1000
 
         # Store under lock (re-check to avoid duplicate compilation)
+        evicted: Callable | None = None  # released after the lock is dropped
+        evicted_key: str | None = None
         with self._lock:
             if generation != self._generation:
                 return compiled_func
+            if self.enable_stats:
+                # Counted only once jax.jit accepted the options above.
+                self._stats["compilations"] += 1
             # Another thread may have stored while we compiled
             if cache_key in self._cache:
                 # Use the already-stored version, discard ours
@@ -393,19 +401,20 @@ class UnifiedCache:
             self._compile_times[cache_key] = compile_time_ms
 
             if len(self._cache) >= self.maxsize:
-                oldest_key = next(iter(self._cache))
-                del self._cache[oldest_key]
-                if oldest_key in self._compile_times:
-                    del self._compile_times[oldest_key]
+                evicted_key = next(iter(self._cache))
+                evicted = self._cache.pop(evicted_key)
+                self._compile_times.pop(evicted_key, None)
                 if self.enable_stats:
                     self._stats["evictions"] += 1
-                logger.debug(f"Evicted cache entry {oldest_key[:8]}... (LRU)")
 
             self._cache[cache_key] = compiled_func
 
             if self.enable_stats:
                 self._stats["cache_size"] = len(self._cache)
 
+        if evicted_key is not None:
+            logger.debug(f"Evicted cache entry {evicted_key[:8]}... (LRU)")
+        del evicted
         return compiled_func
 
     def get_stats(self) -> dict[str, Any]:
@@ -448,8 +457,11 @@ class UnifiedCache:
         """Clear all cached compilations and reset statistics."""
         with self._lock:
             self._generation += 1
-            self._cache.clear()
-            self._compile_times.clear()
+            # Swap, not clear(): dropping the wrappers can run user finalizers,
+            # which must not execute while the non-reentrant lock is held.
+            dropped = self._cache
+            self._cache = OrderedDict()
+            self._compile_times = {}
 
             if self.enable_stats:
                 self._stats = {
@@ -460,6 +472,10 @@ class UnifiedCache:
                     "cache_size": 0,
                 }
 
+        del dropped
+        # The wrappers share JAX's per-function trace cache; without this a
+        # rebuilt wrapper would reuse the stale trace of an unchanged function.
+        jax.clear_caches()
         logger.info("Unified cache cleared")
 
     def __repr__(self) -> str:
@@ -504,10 +520,10 @@ def clear_cache():
     The ``MemoryManager`` array pool is not cleared; use
     ``get_memory_manager().clear_pool()`` for that.
 
-    Also calls ``jax.clear_caches()``: the cached wrappers share JAX's own
-    per-function trace cache, which would otherwise keep serving the old
-    compilation of an unchanged function object. Every JIT-compiled function
-    in the process is therefore recompiled on its next call.
+    Also calls ``jax.clear_caches()`` (via ``UnifiedCache.clear``): the cached
+    wrappers share JAX's own per-function trace cache, which would otherwise
+    keep serving the old compilation of an unchanged function object. Every
+    JIT-compiled function in the process is therefore recompiled on its next call.
     """
     global _global_unified_cache  # noqa: PLW0602
     if _global_unified_cache is not None:
@@ -516,7 +532,7 @@ def clear_cache():
     from nlsq.core.least_squares import clear_wrapper_cache
 
     clear_wrapper_cache()
-    jax.clear_caches()
+    jax.clear_caches()  # also covers a never-created global cache
 
 
 def cached_jit(

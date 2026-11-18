@@ -206,7 +206,9 @@ def test_telemetry_tokens_stay_unique_across_reset():
     t.record_lbfgs_iteration()
     t.record_lbfgs_line_search_failure(0, "a", warmup=a)
     t.record_lbfgs_line_search_failure(0, "b", warmup=b)
-    assert t.lbfgs_line_search_failed_steps == 2
+    # a began before reset(): its failure belongs to the wiped counters (round 2:
+    # counting it exceeded 100% against the new denominator)
+    assert t.lbfgs_line_search_failed_steps == 1
 
 
 # --- wave 2 (Agy P04) -----------------------------------------------------------

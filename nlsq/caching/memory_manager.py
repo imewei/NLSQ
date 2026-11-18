@@ -913,7 +913,10 @@ class MemoryManager:
                 f"n_points and n_params must be >= 0, got {n_points}, {n_params}"
             )
         if memory_limit_gb is None:
-            memory_limit = self.get_available_memory() * 0.8  # Use 80% of available
+            # Fresh reading (not the TTL cache): the plan is checked against a fresh query later
+            memory_limit = (
+                self.get_available_memory(refresh=True) * 0.8
+            )  # 80% of available
         else:
             if not (np.isfinite(memory_limit_gb) and memory_limit_gb > 0):
                 raise ValueError(

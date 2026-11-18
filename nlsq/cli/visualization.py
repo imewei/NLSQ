@@ -267,8 +267,17 @@ class FitVisualizer:
                     plt.close(fig_combined)
 
                 # Generate histogram if enabled
-                histogram_config = vis_config.get("histogram") or {}
-                if cfg_get(histogram_config, "enabled", False):
+                histogram_config = vis_config.get("histogram")
+                # a bare bool (`histogram: true`) is not a section: disabled, as
+                # in `nlsq fit` / `nlsq batch`
+                if histogram_config is True:
+                    logger.warning(
+                        "visualization.histogram: true is ignored; use "
+                        "`histogram: {enabled: true}`."
+                    )
+                if isinstance(histogram_config, dict) and cfg_get(
+                    histogram_config, "enabled", False
+                ):
                     residuals = self._get_residuals(result, data, model)
                     if residuals is not None:
                         fig_hist = self._create_histogram_figure(residuals, vis_config)
@@ -524,7 +533,29 @@ class FitVisualizer:
         x_fit = np.linspace(xdata.min(), xdata.max(), n_fit_points)
 
         if len(popt) > 0:
-            y_fit = model(x_fit, *popt)
+            order = None  # set when drawn at the observed x (sorted for the line)
+            x_eval = x_fit  # where the model (and its band) are evaluated
+            try:
+                y_fit = model(x_fit, *popt)
+                if np.ndim(y_fit) == 0:  # constant model: broadcast like the fit does
+                    y_fit = np.broadcast_to(np.asarray(y_fit), x_fit.shape)
+                elif np.shape(y_fit) != x_fit.shape:
+                    raise ValueError("model output does not follow the grid")
+            except Exception:
+                # A model tied to the data length cannot run on a dense grid:
+                # evaluate at the observed x locations (as the GUI does).
+                order = np.argsort(xdata, kind="stable")
+                x_eval = np.asarray(
+                    xdata
+                )  # observation order: the model may depend on it
+                x_fit = x_eval[order]
+                y_obs = np.asarray(model(np.asarray(xdata), *popt))
+                if y_obs.shape != np.shape(xdata):  # nothing sensible to draw
+                    raise ValueError(
+                        f"model returned shape {y_obs.shape} for {np.shape(xdata)} "
+                        "observed points"
+                    ) from None
+                y_fit = y_obs[order]
 
             # Plot confidence band if enabled
             if cfg_get(confidence_config, "enabled", False) and pcov is not None:
@@ -538,7 +569,7 @@ class FitVisualizer:
 
                 lower, upper = self._calculate_confidence_band(
                     model,
-                    x_fit,
+                    x_eval,
                     popt,
                     pcov,
                     confidence_level,
@@ -546,6 +577,8 @@ class FitVisualizer:
                     sigma=sigma,
                     absolute_sigma=bool(_field(result, "absolute_sigma") or False),
                 )
+                if order is not None:  # same permutation as the fitted values
+                    lower, upper = lower[order], upper[order]
                 if np.isfinite(lower).all() and np.isfinite(upper).all():
                     ax.fill_between(
                         x_fit,
@@ -720,6 +753,18 @@ class FitVisualizer:
 
         # Get bins
         bins = cfg_get(histogram_config, "bins", "auto")
+        if residuals.size == 0:  # e.g. a diverged fit: nothing to bin
+            ax.text(
+                0.5,
+                0.5,
+                "No finite residuals",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_xlabel(histogram_config.get("x_label") or "Residual")
+            ax.set_ylabel(histogram_config.get("y_label") or "Density")
+            return fig
         if bins == "sqrt":
             bins = int(np.sqrt(len(residuals)))
         elif bins == "sturges":

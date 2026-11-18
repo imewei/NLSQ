@@ -18,6 +18,7 @@ From Python:
 """
 
 import contextlib
+import os
 import sys
 import threading
 from pathlib import Path
@@ -179,6 +180,12 @@ def run_fit(
 
     export_config = config.get("export") or {}
     results_file = export_config.get("results_file")
+    if results_file is not None and not isinstance(results_file, (str, os.PathLike)):
+        raise ConfigError(
+            f"export.results_file must be a file name string, got {results_file!r}",
+            config_file=workflow_path,
+            suggestion="Quote the name in YAML, e.g. results_file: 'results.json'",
+        )
     json_stdout = cfg_bool(export_config, "stdout", False, "export")
     skip_requested = cfg_bool(export_config, "skip_file_on_stdout", False, "export")
     skip_file = json_stdout and skip_requested

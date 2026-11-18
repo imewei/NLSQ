@@ -437,7 +437,7 @@ def _resolve_workflow(
         raise ValueError(
             f"Unknown workflow {workflow!r}; expected one of {sorted(VALID_WORKFLOWS)}"
         )
-    if workflow == "auto_global" and not (
+    if workflow in ("auto_global", "hpc") and not (
         bounds is not None
         and np.all(np.isfinite(bounds[0]))
         and np.all(np.isfinite(bounds[1]))

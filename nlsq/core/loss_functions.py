@@ -180,7 +180,7 @@ class LossFunctionsJIT:
 
     The derivatives are used in the optimization algorithm:
     - Gradient: g = J^T (rho'(z) ⊙ f)
-    - Hessian: H ≈ J^T diag(rho'(z)) J + J^T diag(rho''(z) ⊙ f²) J
+    - Hessian: H ≈ J^T diag(rho'(z) + 2 rho''(z) ⊙ f²) J
 
     Performance Characteristics
     ----------------------------
@@ -360,6 +360,9 @@ class LossFunctionsJIT:
 
     def construct_single_loss_function(self, loss):
         def loss_function(f, f_scale, data_mask=None, cost_only=False):
+            if cost_only and data_mask is not None:
+                # excluded rows must not enter the nonlinear ops (0 * NaN in grad)
+                f = jnp.where(data_mask, f, 0)
             z = self.zscale(f, f_scale)
             rho = loss(z, cost_only=cost_only)
             if cost_only:
@@ -385,6 +388,8 @@ class LossFunctionsJIT:
             return self.loss_funcs[loss]
 
         def loss_function(f, f_scale, data_mask=None, cost_only=False):
+            if cost_only and data_mask is not None:
+                f = jnp.where(data_mask, f, 0)
             z = self.zscale(f, f_scale)
             rho = loss(z)
             if cost_only:

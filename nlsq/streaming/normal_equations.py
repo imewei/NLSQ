@@ -241,6 +241,13 @@ def iter_blocks(
     same length.
     """
     n = _source_len(source_x)
+    for name, a in (("y", source_y), ("sigma", source_sigma)):
+        # slices run to len(x): a longer y or sigma would be silently ignored
+        if a is not None and not _is_scalar(a) and _source_len(a) != n:
+            raise ValueError(
+                f"{name} has {_source_len(a)} rows but x has {n}: x, y and sigma must "
+                "all have the same length on every pass"
+            )
     full = jnp.ones(chunk, dtype=bool)
     for s in range(0, n, chunk):
         e = min(s + chunk, n)
@@ -317,6 +324,7 @@ class FactorySource:
         self._from_n_points = n is not None
         self.passes = 0
         self._pending: Iterator[Any] | None = iter(factory(chunk))
+        self._active: Iterator[Any] | None = None  # the pass being read, if any
         first = next(self._pending, _END)
         if first is _END:
             raise ValueError("chunk factory yielded no blocks")
@@ -335,6 +343,14 @@ class FactorySource:
             if len(xs) == 1
             else jnp.concatenate([jnp.asarray(a) for a in xs])[: max(chunk, 2)]
         )
+
+    def close(self) -> None:
+        """Close the factory's open iterators (an aborted fit would otherwise leave
+        e.g. a file handle held by the generator alive through the traceback)."""
+        for it in (self._pending, self._active):
+            if it is not None and hasattr(it, "close"):
+                it.close()
+        self._pending = self._active = None
 
     def _check(self, item: Any, keep: bool = False) -> tuple[Any, ...]:
         if not isinstance(item, tuple) or len(item) not in (2, 3):
@@ -377,6 +393,7 @@ class FactorySource:
             items, head, self._pending = self._pending, self._head, None
             self._head, self.first_x = [], None  # not retained for the whole fit
         self.passes += 1
+        self._active = items
         full = jnp.ones(self.chunk, dtype=bool)
         count = 0
         while True:

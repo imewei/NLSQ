@@ -480,7 +480,11 @@ def _fit_succeeded(result, flags=None) -> bool:
     if kind is None:
         return bool(getattr(result, "success", True))
     if kind == "full":
-        return result[4] in (1, 2, 3, 4)
+        # A callback stop (status -2, success=True) is reported as ier=5; the
+        # message is the only trace left, so keep it a success (no retries).
+        from nlsq.core.least_squares import TERMINATION_MESSAGES
+
+        return result[4] in (1, 2, 3, 4) or result[3] == TERMINATION_MESSAGES[-2]
     finite = bool(np.all(np.isfinite(np.asarray(result[0], dtype=float))))
     if kind == "timeit":
         return finite and bool(result[2].get("success", True))

@@ -140,8 +140,11 @@ class ParameterNormalizer:
         self.original_bounds = bounds
         if bounds is not None:
             # Fail early: a wrong-length bound would broadcast and silently
-            # change the optimisation dimension.
-            self._broadcast_bounds(bounds)
+            # change the optimisation dimension, and an empty box admits no
+            # point under any strategy (also 'none'/'p0', which ignore bounds).
+            lb_, ub_ = self._broadcast_bounds(bounds)
+            if bool(jnp.any(lb_ > ub_)):
+                raise ValueError("lower bounds must not exceed upper bounds")
 
         # Validate strategy
         valid_strategies = ("bounds", "p0", "none", "auto")
@@ -285,6 +288,18 @@ class ParameterNormalizer:
         """
         return self._normalization_jacobian
 
+    def _check_width(self, params: jnp.ndarray) -> jnp.ndarray:
+        """Reject a parameter vector of the wrong length (it would broadcast against
+        the per-parameter scales and invent or drop parameters)."""
+        if params.ndim == 0 and self.n_params == 1:
+            return params
+        if params.ndim == 0 or params.shape[-1] != self.n_params:
+            raise ValueError(
+                f"expected {self.n_params} parameters (last axis), got shape "
+                f"{tuple(params.shape)}"
+            )
+        return params
+
     def normalize(self, params: jnp.ndarray) -> jnp.ndarray:
         """Normalize parameters to scaled space.
 
@@ -298,7 +313,7 @@ class ParameterNormalizer:
         jax.Array
             Normalized parameters of shape (n_params,)
         """
-        params = jnp.asarray(params, dtype=jnp.float64)
+        params = self._check_width(jnp.asarray(params, dtype=jnp.float64))
 
         # Apply normalization: (params - offset) / scale
         normalized = (params - self.offsets) / self.scales
@@ -320,7 +335,9 @@ class ParameterNormalizer:
         jax.Array
             Parameters in original space of shape (n_params,)
         """
-        normalized_params = jnp.asarray(normalized_params, dtype=jnp.float64)
+        normalized_params = self._check_width(
+            jnp.asarray(normalized_params, dtype=jnp.float64)
+        )
 
         # Apply denormalization: params = normalized * scale + offset
         params = normalized_params * self.scales + self.offsets

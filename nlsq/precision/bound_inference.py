@@ -491,6 +491,16 @@ def merge_bounds(
             "user bounds must not contain NaN, +inf lower or -inf upper values"
         )
 
+    # A scalar or one value per parameter: a column/matrix would broadcast against
+    # the parameter vector into a multidimensional "box".
+    n_inferred = np.size(lower_inferred)
+    for name, arr in (("lower", lower_user_arr), ("upper", upper_user_arr)):
+        if arr.ndim > 1 or arr.size not in (1, n_inferred):
+            raise ValueError(
+                f"user {name} bounds must be a scalar or have {n_inferred} "
+                f"elements, got shape {arr.shape}"
+            )
+
     # Check if user bounds are effectively infinite (all -inf, all +inf)
     if np.all(np.isneginf(lower_user_arr)) and np.all(np.isposinf(upper_user_arr)):
         return lower_inferred, upper_inferred

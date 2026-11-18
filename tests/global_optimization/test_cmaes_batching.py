@@ -288,17 +288,17 @@ class TestMemoryEstimation:
         memory_gb = estimate_cmaes_memory_gb(
             10_000_000, popsize=16, data_chunk_size=50000
         )
-        # With data_chunk=50K: (50K * 16 * 3 * 8) / 1024^3 ≈ 0.018 GB
-        # No data overhead since streaming doesn't load full dataset
-        assert memory_gb < 0.05
+        # Chunk working set ≈ 0.018 GB, plus the resident x and y (10M * 2 * 8 B ≈ 0.149 GB):
+        # chunking bounds the working set, not the resident arrays (review 2026-11-18, P06)
+        assert 0.15 < memory_gb < 0.2
 
     def test_estimate_memory_combined_batching(self):
         """Test memory estimation with both batching strategies."""
         memory_gb = estimate_cmaes_memory_gb(
             100_000_000, popsize=32, population_batch_size=4, data_chunk_size=50000
         )
-        # Minimal memory: (50K * 4 * 3 * 8) / 1024^3 ≈ 0.0045 GB
-        assert memory_gb < 0.01
+        # Chunk working set ≈ 0.0045 GB, plus resident x and y (100M * 2 * 8 B ≈ 1.49 GB)
+        assert 1.49 < memory_gb < 1.51
 
     def test_auto_configure_small_dataset(self):
         """Test auto-configuration for small dataset (no batching needed)."""

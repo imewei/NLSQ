@@ -703,9 +703,18 @@ class JAXConfig:
         """
         cls()  # make sure the process-wide config is initialised
         token = _memory_override.set(copy.deepcopy(memory_config))
+        # configure_for_large_datasets() writes both configs: scope the large-dataset
+        # one to this block too, instead of letting it overwrite the process-wide value.
+        ld_token = (
+            _large_dataset_override.set(cls.get_large_dataset_config())
+            if _large_dataset_override.get() is None
+            else None
+        )
         try:
             yield
         finally:
+            if ld_token is not None:
+                _large_dataset_override.reset(ld_token)
             _memory_override.reset(token)
 
     @classmethod
@@ -901,8 +910,9 @@ def configure_for_large_datasets(
     )
     JAXConfig.set_memory_config(memory_config)
 
-    # Configure large dataset settings
-    large_dataset_config = LargeDatasetConfig(
+    # Configure large dataset settings (keeping the thresholds already configured)
+    large_dataset_config = dataclasses.replace(
+        get_large_dataset_config(),
         enable_automatic_solver_selection=True,
     )
     JAXConfig.set_large_dataset_config(large_dataset_config)

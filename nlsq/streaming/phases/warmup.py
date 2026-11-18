@@ -19,8 +19,12 @@ import jax.numpy as jnp
 import numpy as np
 import optax  # type: ignore[import-not-found,import-untyped]
 
+from nlsq.streaming.phases.gauss_newton import project_to_bounds, validate_phase_data
 from nlsq.streaming.telemetry import get_defense_telemetry
-from nlsq.streaming.validators import validate_group_variance_bounds
+from nlsq.streaming.validators import (
+    validate_group_variance_bounds,
+    validate_residual_weighting_config,
+)
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -30,6 +34,19 @@ if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 _logger = get_logger("warmup_phase")
+
+
+def coerce_residual_weights(weights: Any) -> jnp.ndarray:
+    """Validate per-group residual weights and return them as a float64 JAX array.
+
+    Raises ``ValueError`` for complex, non-1-D, empty, non-positive or non-finite
+    weights (a complex array would otherwise lose its imaginary part silently).
+    """
+    arr = np.asarray(weights)
+    if np.iscomplexobj(arr):
+        raise ValueError("residual weights must be real, got a complex array")
+    validate_residual_weighting_config(True, arr)
+    return jnp.asarray(arr, dtype=jnp.float64)
 
 
 def _validate_group_labels(x_data: Any, weights: Any) -> None:
@@ -526,7 +543,9 @@ class WarmupPhase:
         weights : array_like or None
             Per-group weights for weighted MSE computation.
         """
-        self._residual_weights = weights
+        self._residual_weights = (
+            None if weights is None else coerce_residual_weights(weights)
+        )
 
     def run(
         self,
@@ -578,8 +597,10 @@ class WarmupPhase:
         x_data, y_data = data_source
         x_data = jnp.asarray(x_data, dtype=jnp.float64)
         y_data = jnp.asarray(y_data, dtype=jnp.float64)
+        validate_phase_data(x_data, y_data)
 
-        current_params = initial_params
+        # An infeasible start is projected before it is scored or tracked as best.
+        current_params = project_to_bounds(initial_params, self.normalized_bounds)
 
         if self.config.enable_residual_weighting and self._residual_weights is not None:
             _validate_group_labels(x_data, self._residual_weights)
@@ -745,7 +766,7 @@ class WarmupPhase:
                     return result
 
             # Check switch criteria after minimum warmup iterations
-            if iteration >= self.config.warmup_iterations:
+            if iteration + 1 >= self.config.warmup_iterations:
                 should_switch, reason = self._check_switch_criteria(
                     iteration=iteration,
                     current_loss=loss_value,
@@ -1221,7 +1242,9 @@ class WarmupPhase:
             if grad_norm < self.config.gradient_norm_threshold:
                 return True, "Gradient norm below threshold"
 
-        if "plateau" in active_criteria:
+        # iteration 0 compares the initial loss with itself (change 0), as in
+        # the adaptive engine
+        if "plateau" in active_criteria and iteration > 0:
             eps = jnp.finfo(jnp.float64).eps
             relative_change = jnp.abs(current_loss - prev_loss) / (
                 jnp.abs(prev_loss) + eps

@@ -51,6 +51,55 @@ def _downsample(
     return x[::stride], y[::stride]
 
 
+def _unit_spread(values: NDArray) -> tuple[NDArray, float, float]:
+    """Return ``(z, s, k)`` with ``values == min + k * s * z`` and ``z`` in [0, 1].
+
+    Translating before scaling keeps a large common offset (e.g. 1e16 + noise)
+    exact, and scaling afterwards keeps tiny spreads (1e-170) from underflowing
+    in variance arithmetic. ``s`` is 0 when there is no spread; ``k`` (1 or 2) is kept apart so
+    ``k * s`` is never formed (it can overflow when the true spread is ~1e308).
+    """
+    import numpy as np
+
+    lo = values.min()
+    with np.errstate(over="ignore", invalid="ignore"):
+        span = values.max() - lo
+        if np.isfinite(span):
+            t, k = values - lo, 1.0
+        else:  # max - min overflowed: halve (exact) before translating
+            t, k = values / 2 - lo / 2, 2.0
+    s = float(t.max())
+    if not s > 0:
+        return np.zeros(t.shape), 0.0, k
+    return t / s, s, k
+
+
+def population_std(values: NDArray) -> float:
+    """Population standard deviation robust to large offsets and tiny spreads."""
+    import numpy as np
+
+    z, s, k = _unit_spread(values)
+    return k * (s * float(np.std(z))) if s > 0 else 0.0
+
+
+def export_plot_image(plot_item: object, path: str) -> None:
+    """Export a pyqtgraph plot to ``path`` (``.svg`` as SVG, else a raster image).
+
+    Raises:
+        OSError: if the file could not be written (unsupported suffix, missing
+            directory, ...); pyqtgraph's raster exporter only returns False.
+    """
+    from pathlib import Path
+
+    from pyqtgraph.exporters import ImageExporter, SVGExporter
+
+    if Path(path).suffix.lower() == ".svg":
+        SVGExporter(plot_item).export(str(path))
+        return
+    if not ImageExporter(plot_item).export(str(path)):
+        raise OSError(f"Plot export failed: could not write {path!r}")
+
+
 def decimation_note(n: int, threshold: int) -> str:
     """Status-line text describing plot decimation, or "" if none applies."""
     if n <= threshold:

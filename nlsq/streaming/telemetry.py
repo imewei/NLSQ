@@ -6,6 +6,7 @@ used during L-BFGS warmup in the adaptive hybrid streaming optimizer.
 
 from __future__ import annotations
 
+import copy
 import threading
 import time
 from collections import deque
@@ -86,6 +87,9 @@ class DefenseLayerTelemetry:
         self._failed_steps: dict[int, set[int]] = {}
         # Tokens of warmups that started and have not called record_warmup_end.
         self._live_warmups: set[int] = set()
+        # Failures reported by a warmup that began before this reset belong to the
+        # old counters; counting them against the new denominator exceeds 100%.
+        self._first_valid_token: int = self._token_seq + 1
 
         # Detailed event log (last N events)
         self._max_events: int = 1000
@@ -233,6 +237,8 @@ class DefenseLayerTelemetry:
             warmup, which is only right when warmups do not overlap.
         """
         with self._lock:
+            if warmup is not None and warmup < self._first_valid_token:
+                return
             self.lbfgs_line_search_failures += 1
             token = self._token_seq if warmup is None else warmup
             seen = self._failed_steps.setdefault(token, set())
@@ -291,6 +297,7 @@ class DefenseLayerTelemetry:
                 "layer2_refinement_rate": pct(modes["refinement"], calls),
                 "layer2_careful_rate": pct(modes["careful"], calls),
                 "layer2_exploration_rate": pct(modes["exploration"], calls),
+                "layer2_fixed_rate": pct(modes["fixed"], calls),
                 "layer3_cost_guard_rate": pct(self.layer3_cost_guard_triggers, calls),
                 "layer4_clip_rate": pct(self.layer4_clip_triggers, iters),
                 "lbfgs_history_buffer_fill_rate": pct(
@@ -325,6 +332,7 @@ class DefenseLayerTelemetry:
                         "refinement": rates["layer2_refinement_rate"],
                         "careful": rates["layer2_careful_rate"],
                         "exploration": rates["layer2_exploration_rate"],
+                        "fixed": rates["layer2_fixed_rate"],
                     },
                 },
                 "layer3": {
@@ -353,7 +361,8 @@ class DefenseLayerTelemetry:
             Most recent events
         """
         with self._lock:
-            return list(self._event_log)[-n:] if n > 0 else []
+            # detached copies: callers must not edit the collector's history
+            return copy.deepcopy(list(self._event_log)[-n:]) if n > 0 else []
 
     def export_metrics(self) -> dict:
         """Export metrics in a format suitable for monitoring systems.
@@ -376,6 +385,7 @@ class DefenseLayerTelemetry:
                 "nlsq_defense_layer2_exploration_total": self.layer2_lr_mode_counts[
                     "exploration"
                 ],
+                "nlsq_defense_layer2_fixed_total": self.layer2_lr_mode_counts["fixed"],
                 "nlsq_defense_layer3_triggers_total": self.layer3_cost_guard_triggers,
                 "nlsq_defense_layer4_triggers_total": self.layer4_clip_triggers,
                 "nlsq_defense_lbfgs_history_fill_total": (

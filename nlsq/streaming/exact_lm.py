@@ -654,13 +654,15 @@ def tsqr_r_factor(
     *,
     weighted: bool,
     jac: Callable[..., jax.Array] | None = None,
+    n: int | None = None,
 ) -> np.ndarray:
     """The ``min(n, p) x p`` R factor of the full weighted Jacobian at ``theta``, one pass.
 
     TSQR: ``R <- qr(vstack(R, J_chunk), mode="r")`` per chunk, in float64 on the chunk's
     device, so the state is ``O(p^2)`` and the workspace ``O(chunk * p)``. ``J^T J = R^T R``
     without forming ``J^T J``, so ``R`` carries ``cond(J)``, not its square. Chunks and the
-    padded-tail mask are those of :func:`run_pass`; a factory source verifies its count.
+    padded-tail mask are those of :func:`run_pass`; a factory source verifies its count and
+    an array source is checked against ``n`` (the fitted count) when given.
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
     if (
@@ -673,9 +675,16 @@ def tsqr_r_factor(
         if isinstance(source, FactorySource)
         else iter_blocks(*source, chunk)
     )
+    count = jnp.asarray(0)
     for xc, _, sc, mask in blocks:  # exhausted: a factory checks its count at the end
         Jc = jac(th, xc, mask) if sc is None else jac(th, xc, sc, mask)
         R = _qr_append(R, Jc)
+        count = count + jnp.sum(mask)
+    if n is not None and int(count) != n:
+        raise ValueError(
+            f"the covariance pass saw {int(count)} points, expected {n}: the source "
+            "changed length after the fit"
+        )
     return np.asarray(R)
 
 
@@ -885,14 +894,19 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         max_nfev = 100 * p
 
     def evaluate(theta: np.ndarray, nfev: int, first: bool = False) -> PassStats:
-        st = run_pass(
-            stats,
-            theta,
-            source,
-            chunk,
-            check_finite=first and check_finite,
-            check_sigma=first,
-        )
+        try:
+            st = run_pass(
+                stats,
+                theta,
+                source,
+                chunk,
+                check_finite=first and check_finite,
+                check_sigma=first,
+            )
+        except BaseException:
+            if isinstance(source, FactorySource):
+                source.close()
+            raise
         if (
             not factory and st.n_seen != n
         ):  # factory sources verify their count per pass
@@ -907,7 +921,11 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     theta = np.clip(p0_arr, lo, hi)
     source, weighted = _open_source(x, y, sigma, chunk, p, memory_limit_gb, n)
     if isinstance(source, FactorySource):
-        check_model_contract(model, theta, source.first_x)
+        try:
+            check_model_contract(model, theta, source.first_x)
+        except BaseException:
+            source.close()
+            raise
     else:
         # at least 2 points even for chunk_size=1: a 1-point probe proves nothing
         check_model_contract(model, theta, _block(x, 0, min(n, max(chunk, 2))))
@@ -928,9 +946,12 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         raise ValueError("sigma must be nonzero (found a zero value)")
     if not _finite(st):
         # error path only: one extra pass with the finiteness check on names the cause
-        if not run_pass(
-            stats, theta, source, chunk, check_finite=True, check_sigma=False
-        ).data_finite:
+        if (
+            not check_finite  # with check_finite the first pass already verified it
+            and not run_pass(
+                stats, theta, source, chunk, check_finite=True, check_sigma=False
+            ).data_finite
+        ):
             raise ValueError(
                 "xdata or ydata has non-finite values (check_finite=False): clean the "
                 "data, use check_finite=True/nan_policy, or strategy=Chunked()"
@@ -963,7 +984,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             # resolves), and a step is kept if it does not raise the cost beyond that
             # rounding, so the result does not depend on the order of the chunk sums.
             d = _solve(Hf, 0.0, D[free], gf)
-            if d is None:
+            if d is None or not d.any():  # no step (exact stationarity): no pass
                 break
             new = theta.copy()
             new[free] += d
@@ -974,6 +995,24 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             nfev += 1
             if not (_finite(trial) and trial.cost <= cost * (1.0 + POLISH_COST_RISE)):
                 break
+            if trial.cost > cost and (
+                # a rise inside the rounding allowance must not trade the certified
+                # iterate for one that is no longer stationary
+                _stationary(
+                    trial.cost,
+                    trial.g,
+                    trial.H,
+                    free_set(new, trial.g, lo, hi),
+                    new,
+                    lo,
+                    hi,
+                    gtol,
+                    ftol,
+                    trial.rel_resid <= EXACT_FIT_EPS,
+                )
+                is None
+            ):
+                break
             theta, cost, g, H, rel = new, trial.cost, trial.g, trial.H, trial.rel_resid
             polished += 1
             free = free_set(theta, g, lo, hi)
@@ -982,6 +1021,16 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
                 or _remaining_step_sigma2(cost, g, H, free, n, p) <= POLISH_SIGMA**2
             ):
                 break
+            Hf, gf = H[np.ix_(free, free)], g[free]
+            D = _damping(D, H)
+        if polished:
+            # Certify the point that is returned: the polish is judged by the step and the
+            # cost (which rounding can leave unchanged), so a cost that fell or stayed put
+            # does not show the new iterate is stationary. If it is not, the LM loop goes on.
+            free = free_set(theta, g, lo, hi)
+            termination = _stationary(
+                cost, g, H, free, theta, lo, hi, gtol, ftol, rel <= EXACT_FIT_EPS
+            )
             Hf, gf = H[np.ix_(free, free)], g[free]
             D = _damping(D, H)
         if termination:
@@ -1075,7 +1124,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         # normal equations lose cond(J)^2: one more pass for R at theta (not in nfev)
         from nlsq.core.minpack import _covariance_svd  # lazy: minpack is heavy
 
-        R = tsqr_r_factor(model, theta, source, chunk, weighted=weighted, jac=jac)
+        R = tsqr_r_factor(model, theta, source, chunk, weighted=weighted, jac=jac, n=n)
         pcov = pcov_from_jacobian(R, cost, n, p, absolute_sigma, _covariance_svd)[0]
         covariance_method = "tsqr"
         _warn_tsqr_route(H, kappa)

@@ -123,6 +123,8 @@ class AppState(QObject):
         if model_changed:
             self._state.p0 = None
             self._state.bounds = None
+            if model_func is None:  # the old callable would run under the new name
+                self._state.model_func = None
 
         # Store config and function
         if config is not None:

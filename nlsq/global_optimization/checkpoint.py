@@ -357,8 +357,22 @@ class HPCCheckpointManager:
 
             n = int(state_group["mean"].shape[0]) if state_group["mean"].ndim else None
             vec = (n,)
-            expected = {"mean": vec, "C": (n, n), "B": (n, n), "D": vec, "p_c": vec}
-            check_checkpoint_dataset(state_group["key_data"], "key_data")
+            expected = {
+                "mean": vec,
+                "C": (n, n),
+                "B": (n, n),
+                "D": vec,
+                "p_c": vec,
+                "p_std": vec,
+                "best_solution": vec,
+            }
+            # A wrong-length key would pass here and only fail in wrap_key_data on
+            # resume, outside the load()/.bak fallback.
+            check_checkpoint_dataset(
+                state_group["key_data"],
+                "key_data",
+                shape=jax.random.key_data(jax.random.key(0)).shape,
+            )
             for name in _EVOSAX_ARRAY_FIELDS:
                 check_checkpoint_dataset(
                     state_group[name], name, shape=expected.get(name)

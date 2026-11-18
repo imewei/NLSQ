@@ -47,6 +47,7 @@ Example
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 import warnings
@@ -397,6 +398,21 @@ def run_plugins(
     """
     results: dict[str, PluginResult] = {}
 
+    # Plugins get read-only views: an in-place edit raises (and is isolated below)
+    # instead of silently rewriting the caller's data and the fit's residuals.
+    def _frozen(value: Any) -> Any:
+        if isinstance(value, np.ndarray):
+            value = value.view()
+            value.flags.writeable = False
+        return value
+
+    jacobian, parameters, residuals = (
+        _frozen(jacobian),
+        _frozen(parameters),
+        _frozen(residuals),
+    )
+    context = {k: _frozen(v) for k, v in context.items()}
+
     # Key by the registered name, not a re-read ``plugin.name`` that a plugin
     # could change (and so overwrite another plugin's result).
     for plugin_name, plugin in PluginRegistry._items():
@@ -475,9 +491,10 @@ def run_plugins(
                         UserWarning,
                         stacklevel=2,
                     )
+            available = bool(result.available)  # array-valued -> ValueError, isolated
             results[plugin_name] = PluginResult(
                 plugin_name=plugin_name,
-                available=result.available,
+                available=available,
                 error_message=result.error_message,
                 data=result.data,
                 issues=issues,
@@ -488,12 +505,15 @@ def run_plugins(
             # Exception isolation per FR-014 -- covers name access too.
             elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-            # Emit warning about plugin failure
-            warnings.warn(
-                f"Diagnostic plugin '{plugin_name}' failed: {e}",
-                UserWarning,
-                stacklevel=2,
-            )
+            # Emit warning about plugin failure. Under warnings-as-errors the
+            # warning would escape and abort the remaining plugins; the failure
+            # is already recorded in the unavailable result below.
+            with contextlib.suppress(Warning):
+                warnings.warn(
+                    f"Diagnostic plugin '{plugin_name}' failed: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
             # Create unavailable result with error message
             results[plugin_name] = PluginResult(

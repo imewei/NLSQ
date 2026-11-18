@@ -400,6 +400,8 @@ class OptimizationRecovery:
         bounds = state.get("bounds")
         if bounds is not None:
             # Any (lower, upper) pair: tuple, list or 2-row array.
+            if current is not None:
+                current = np.atleast_1d(np.asarray(current))  # scalar p0
             if len(bounds) == 2 and current is not None and len(current) > 0:
                 lower, upper = bounds
                 n_params = len(current)

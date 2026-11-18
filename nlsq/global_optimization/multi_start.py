@@ -49,6 +49,7 @@ latin_hypercube_sample : LHS sampling function
 TournamentSelector : Tournament selection for large datasets
 """
 
+import contextlib
 import copy
 import logging
 import os
@@ -61,6 +62,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from nlsq.core.problem import finite_rows
@@ -108,6 +110,7 @@ def _format_tuple_mode(
     modes: dict[str, Any],
     wall: float,
     data_mask: Any = None,
+    n_rows: int | None = None,
 ) -> Any:
     """The selected attempt in the caller's ``timeit``/``return_eval``/``full_output``
     form, without re-solving (a re-solve would exceed max_nfev and re-run stateful
@@ -116,9 +119,35 @@ def _format_tuple_mode(
         return result._timeit_out  # the winner's own tuple, with its solver timing
     from nlsq.core.minpack import _apply_output_flags
 
+    if n_rows is not None and modes.get("return_eval"):
+        model = f
+
+        def f(x: Any, *params: Any) -> Any:  # constant model: one value per row
+            out = jnp.asarray(model(x, *params))
+            return jnp.broadcast_to(out, (n_rows,)) if out.ndim == 0 else out
+
     return _apply_output_flags(
         result, f, xdata, {**modes, "data_mask": data_mask}, ctime=wall
     )
+
+
+def _eval_rows(xdata: Any, ydata: Any, kwargs: dict) -> tuple[Any, int]:
+    """``(x, n_rows)`` a ``return_eval`` covers: the rows after nan omission (x, y and
+    sigma), before the user data_mask."""
+    if kwargs.get("nan_policy") != "omit":
+        return xdata, len(ydata)
+    from nlsq.core.problem import _omit_nonfinite_rows
+
+    xa, ya = np.asarray(xdata, float), np.asarray(ydata, float)
+    x_out, y_out, *_ = _omit_nonfinite_rows(
+        xa,
+        ya,
+        kwargs.get("sigma"),
+        xa.ndim,
+        xa.shape[-1] == ya.shape[0],
+        data_mask=kwargs.get("data_mask"),
+    )
+    return x_out, len(y_out)
 
 
 def _is_converged(result: Any) -> bool:
@@ -332,8 +361,9 @@ def _select_worker_count(n_starts: int) -> int:
 
     Adapts to hardware:
     - Multi-GPU: one fit per GPU
-    - Single GPU: min(n_starts, 4) to limit memory contention
-    - CPU-only: min(n_starts, cpu_count, 16) to prevent XLA oversubscription
+    - Single device (a lone GPU or the CPU backend): min(n_starts, 4) to limit
+      memory contention and XLA oversubscription
+    - No JAX device reported: min(n_starts, cpu_count, 16)
 
     Parameters
     ----------
@@ -698,10 +728,42 @@ class MultiStartOrchestrator:
             else:
                 # Parallel execution
                 futures = {}
+                # Pool threads start with an empty context: hand them the caller's
+                # memory/large-dataset overrides (not _ATTEMPT_RECORD & co).
+                from nlsq.config import _large_dataset_override, _memory_override
+
+                caller_overrides = (
+                    _memory_override.get(),
+                    _large_dataset_override.get(),
+                )
+
+                devices = jax.devices()
+
+                def run_start(i: int, *args: Any) -> Any:
+                    tokens = (
+                        _memory_override.set(caller_overrides[0]),
+                        _large_dataset_override.set(caller_overrides[1]),
+                    )
+                    try:
+                        # "One fit per device": without this every worker
+                        # allocates on the default device.
+                        # A single device keeps the default context: an explicit
+                        # default_device changes the jit cache key and recompiles.
+                        with (
+                            jax.default_device(devices[i % len(devices)])
+                            if len(devices) > 1
+                            else contextlib.nullcontext()
+                        ):
+                            return _fit_start_quietly(*args)
+                    finally:
+                        _large_dataset_override.reset(tokens[1])
+                        _memory_override.reset(tokens[0])
+
                 with ThreadPoolExecutor(max_workers=n_workers) as executor:
                     for i, p0 in enumerate(starting_points):
                         future = executor.submit(
-                            _fit_start_quietly,
+                            run_start,
+                            i,
                             start_logs[i],
                             f,
                             xdata,
@@ -1070,14 +1132,15 @@ class MultiStartOrchestrator:
             result.multistart_diagnostics = diagnostics  # type: ignore[attr-defined]
 
         if tuple_modes:
+            x_out, n_rows = _eval_rows(xdata, ydata, kwargs)
             return _format_tuple_mode(
                 result,
                 f,
-                # return_eval: rows after nan omission, before the user data_mask
-                x_fin if kwargs.get("nan_policy") == "omit" else xdata,
+                x_out,
                 tuple_modes,
                 diagnostics.get("wall_time_sec", 0.0),
                 kwargs.get("data_mask"),
+                n_rows,
             )
 
         return result

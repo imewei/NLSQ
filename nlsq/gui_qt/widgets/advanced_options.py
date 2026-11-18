@@ -123,8 +123,9 @@ class AdvancedOptionsWidget(QWidget):
         self._abs_sigma_check.setToolTip(
             "Checked: sigma holds true measurement errors and the covariance is "
             "used as is. Unchecked (default): sigma is relative and the "
-            "covariance is rescaled by the reduced chi-square. Only matters "
-            "when a sigma column is loaded.",
+            "covariance is rescaled by the reduced chi-square. Without a sigma "
+            "column, unit sigma (sigma = 1) is assumed, and checking this keeps "
+            "the covariance unscaled.",
         )
         layout.addRow("", self._abs_sigma_check)
 
@@ -176,6 +177,8 @@ class AdvancedOptionsWidget(QWidget):
         self._scale_programmatic = False
         # connected before _emit_options so listeners never see a stale exact value
         self._scale_spin.valueChanged.connect(self._on_scale_edited)
+        # typing/pasting the displayed number leaves valueChanged silent
+        self._scale_spin.lineEdit().textEdited.connect(self._on_scale_edited)
         group_layout.addRow("Scale Factor:", self._scale_spin)
 
         layout.addWidget(self._multistart_group)
@@ -309,7 +312,7 @@ class AdvancedOptionsWidget(QWidget):
         """Emit the current options."""
         self.options_changed.emit(self.get_options())
 
-    def _on_scale_edited(self, _value: float) -> None:
+    def _on_scale_edited(self, _value: object = None) -> None:
         """A user edit retires the exact imported value for good."""
         if not self._scale_programmatic:
             self._scale_exact = None

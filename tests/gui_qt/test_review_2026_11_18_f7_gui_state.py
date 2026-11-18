@@ -204,8 +204,11 @@ def test_recovered_snapshot_survives_until_first_autosave(app_state, autosave_di
     assert mgr.check_recovery()
     assert mgr.recover()
     assert primary.exists()  # still the only copy of the recovered session
-    mgr.save_now()  # first autosave replaces it atomically
-    assert json.loads(primary.read_text())["ydata"] == [3.0, 4.0]
+    mgr.save_now()  # first autosave goes to this session's own file
+    # the stale shared file is never replaced in place; it is removed (identity
+    # checked) once the new snapshot is on disk
+    assert json.loads(mgr._target_file().read_text())["ydata"] == [3.0, 4.0]
+    assert not primary.exists()
 
 
 @pytest.mark.serial

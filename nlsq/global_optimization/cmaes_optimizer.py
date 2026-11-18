@@ -238,6 +238,23 @@ def _check_chunk_invariance(
             )
 
 
+def _residuals(y: jax.Array, predictions: jax.Array) -> jax.Array:
+    """``y - predictions`` in float64, requiring one prediction per observation.
+
+    Without this a ``(n, 1)`` prediction broadcasts against ``(n,)`` data into an
+    ``(n, n)`` residual matrix, and integer operands wrap before the SSR is formed.
+    A scalar prediction (constant model) is broadcast, as ``curve_fit`` does.
+    """
+    y = jnp.asarray(y, dtype=jnp.float64)
+    predictions = jnp.asarray(predictions)
+    if predictions.shape not in (y.shape, ()):
+        raise ValueError(
+            f"model output shape {predictions.shape} does not match ydata shape "
+            f"{y.shape}; CMA-ES needs one prediction per observation"
+        )
+    return y - predictions.astype(jnp.float64)
+
+
 def _create_fitness_function(
     model_func: Callable,
     xdata: jax.Array,
@@ -329,7 +346,7 @@ def _create_fitness_function(
                 x_chunk, y_chunk, sigma_chunk, valid_mask = chunk
                 x_chunk = jnp.moveaxis(x_chunk, 0, sample_axis)
                 predictions = model_func(x_chunk, *params_bounded)
-                residuals = y_chunk - predictions
+                residuals = _residuals(y_chunk, predictions)
                 if chol is not None:
                     # Whitening needs every residual: collect, solve after scan
                     return ssr_total, residuals
@@ -372,7 +389,7 @@ def _create_fitness_function(
             predictions = model_func(xdata, *params_bounded)
 
             # Compute residuals
-            residuals = ydata - predictions
+            residuals = _residuals(ydata, predictions)
 
             # Weight by sigma if provided
             if chol is not None:
@@ -458,6 +475,22 @@ def _bipop_final_reason(
     if best_run_reason is not None:
         return best_run_reason
     return "max_evaluations" if budget_hit else "max_restarts"
+
+
+def _require_bounds_shape(
+    lower_bounds: jax.Array, upper_bounds: jax.Array, n_params: int | None
+) -> None:
+    """Bounds (after scalar broadcast) must be matching 1-D vectors, one entry per parameter."""
+    if (
+        lower_bounds.ndim != 1
+        or upper_bounds.shape != lower_bounds.shape
+        or (n_params is not None and lower_bounds.shape[0] != n_params)
+    ):
+        raise ValueError(
+            "bounds must be scalars or 1-D arrays with one entry per parameter "
+            f"(got lower {lower_bounds.shape}, upper {upper_bounds.shape}"
+            + (f", p0 has {n_params} parameters)" if n_params else ")")
+        )
 
 
 def _require_finite_bounds(lower_bounds: jax.Array, upper_bounds: jax.Array) -> None:
@@ -735,6 +768,7 @@ class CMAESOptimizer:
             if upper_bounds.ndim == 0:
                 upper_bounds = jnp.full(n_params_hint, upper_bounds)
 
+        _require_bounds_shape(lower_bounds, upper_bounds, n_params_hint)
         _require_finite_bounds(lower_bounds, upper_bounds)
         sigma_jax = jnp.asarray(sigma) if sigma is not None else None
 
@@ -1647,9 +1681,24 @@ class CMAESOptimizer:
             for output_flag in ("full_output", "return_eval", "timeit"):
                 refinement_kwargs.pop(output_flag, None)
 
+            # The global search accepts points-first xdata (N, k); curve_fit takes
+            # points-last (k, N). Hand it the transposed data and a model that
+            # transposes back, so refinement fits the same problem.
+            f_fit, x_fit = f, xdata_np
+            n_obs = ydata_np.shape[0]
+            if (
+                xdata_np.ndim > 1
+                and xdata_np.shape[0] == n_obs
+                and xdata_np.shape[-1] != n_obs
+            ):
+                x_fit = np.moveaxis(xdata_np, 0, -1)
+
+                def f_fit(x, *params):
+                    return f(jnp.moveaxis(x, -1, 0), *params)
+
             result = curve_fit(
-                f,
-                xdata_np,
+                f_fit,
+                x_fit,
                 ydata_np,
                 p0=p0_numpy,
                 sigma=sigma_np,

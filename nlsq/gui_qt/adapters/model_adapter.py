@@ -573,7 +573,7 @@ def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
 
         # Copy module contents to namespace
         for name in dir(module):
-            if not name.startswith("_"):
+            if not name.startswith("__"):  # keep _model: the picker lists it
                 namespace[name] = getattr(module, name)
     finally:
         sys.modules.pop("_custom_model_temp", None)

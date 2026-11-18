@@ -145,6 +145,7 @@ class GradientMonitor:
         "_last_params",
         "_max_imbalance_ratio",
         "_n_params",
+        "_norm_sum",
         "_param_count",
         "_param_m2",
         "_param_means",
@@ -186,6 +187,7 @@ class GradientMonitor:
         self._last_gradient_norm: float = 0.0
         self._has_numerical_issues: bool = False
         self._n_params: int = 0
+        self._norm_sum: float = 0.0  # all-iteration sum (the history is windowed)
         self._max_imbalance_ratio: float = 1.0
         # Parameters (min, max of |g*p|) at the iteration that set the ratio.
         self._imbalance_argmin: int | None = None
@@ -233,12 +235,19 @@ class GradientMonitor:
         Variance is computed as M2 / (n - 1) when needed.
         """
         gradient = np.asarray(gradient)
-        if gradient.dtype.kind in "iub":
-            # np.abs(INT_MIN) wraps negative in the integer dtype
+        if gradient.dtype.kind in "iub" or (
+            gradient.dtype.kind == "f" and gradient.dtype.itemsize < 8
+        ):
+            # np.abs(INT_MIN) wraps negative in the integer dtype; a float32 norm
+            # overflows at 1e19 and cannot hold the 1e100 non-finite sentinel.
             gradient = gradient.astype(np.float64)
 
         if gradient.size == 0:
             raise ValueError("Gradient array cannot be empty")
+        if gradient.ndim != 1:
+            raise ValueError(
+                f"gradient must be a 1-D vector, got shape {gradient.shape}"
+            )
 
         # Check for numerical issues (the flag is set only after validation below)
         nonfinite = bool(np.any(np.isnan(gradient)) or np.any(np.isinf(gradient)))
@@ -273,6 +282,7 @@ class GradientMonitor:
         # Compute gradient norm
         gradient_norm = float(np.linalg.norm(gradient))
         self._gradient_norm_history.append(gradient_norm)
+        self._norm_sum += gradient_norm
         self._cost_history.append(cost)
         self._last_gradient_norm = gradient_norm
 
@@ -477,7 +487,8 @@ class GradientMonitor:
         norm_history = list(self._gradient_norm_history)
         cost_history = list(self._cost_history)
 
-        mean_gradient_norm = float(np.mean(norm_history)) if norm_history else 0.0
+        # Mean over every recorded iteration, not just the sliding window.
+        mean_gradient_norm = self._norm_sum / self.iteration_count
         final_gradient_norm = self._last_gradient_norm
 
         # Compute per-parameter variance from Welford's M2
@@ -567,6 +578,7 @@ class GradientMonitor:
         self._last_gradient_norm = 0.0
         self._has_numerical_issues = False
         self._n_params = 0
+        self._norm_sum = 0.0
         self._max_imbalance_ratio = 1.0
         self._imbalance_argmin = None
         self._imbalance_argmax = None

@@ -621,6 +621,11 @@ def fit(
     # workflow=..., instead of leaking into curve_fit's ignored **kwargs.
     goal = kwargs.pop("goal", None)
     strategy = kwargs.pop("strategy", None)
+    if factory and strategy is None:
+        # a chunk factory can only be streamed, and only Exact streams it
+        from nlsq.streaming import Exact
+
+        strategy, chunk_size = Exact(chunk_size=chunk_size), None
     if goal is not None:
         from nlsq.core.minpack import _parse_goal_parameter
         from nlsq.core.workflow import calculate_adaptive_tolerances
@@ -1231,8 +1236,11 @@ def curve_fit_large(
             )
 
     from nlsq.core.minpack import _bounds_as_tuple
+    from nlsq.core.problem import coerce_real_sigma, reject_all_zero_weight
     from nlsq.streaming.large_fit import fit_with_strategy
 
+    sigma = coerce_real_sigma(sigma)
+    reject_all_zero_weight(sigma, kwargs.get("data_mask"))
     bounds = _bounds_as_tuple(bounds)
 
     return fit_with_strategy(

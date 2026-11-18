@@ -397,10 +397,19 @@ class MemoryBudget:
 
         if use_gpu:
             try:
-                from nlsq.streaming.large_dataset import GPUMemoryEstimator
+                from nlsq.streaming.large_dataset import get_cached_devices
 
-                estimator = GPUMemoryEstimator()
-                gpu_memory = estimator.get_available_gpu_memory_gb()
+                # The unsharded solver keeps J and its scaled copy on ONE device,
+                # so budget that device's free memory, not the sum over all GPUs.
+                gpu_memory = 0.0
+                for device in get_cached_devices():
+                    if getattr(device, "platform", "cpu") == "cpu":
+                        continue
+                    stats = device.memory_stats() or {}
+                    gpu_memory = (
+                        stats.get("bytes_limit", 0) - stats.get("bytes_in_use", 0)
+                    ) / (1024**3)
+                    break
                 if gpu_memory > 0:
                     return gpu_memory
                 # No GPU available, fall back to CPU
@@ -528,10 +537,6 @@ class MemoryBudgetSelector:
         ValueError
             If n_points <= 0 or n_params <= 0.
         """
-        import logging
-
-        logger = logging.getLogger("nlsq")
-
         # Validate here too: a caller-supplied budget skips MemoryBudget.compute's checks.
         n_points = _check_count("n_points", n_points)
         n_params = _check_count("n_params", n_params)
@@ -1400,7 +1405,7 @@ def create_checkpoint_directory(base_dir: str | Path | None = None) -> str:
             checkpoint_dir.mkdir()
         except FileExistsError:
             continue
-        return str(checkpoint_dir)
+        return str(checkpoint_dir.absolute())
     raise FileExistsError(f"no free checkpoint directory under {base_dir}")
 
 

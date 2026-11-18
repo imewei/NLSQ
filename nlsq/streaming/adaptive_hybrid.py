@@ -57,6 +57,7 @@ from nlsq.streaming.phases.warmup import (
     _safe_norm,
     _validate_group_labels,
     build_warmup_loss,
+    coerce_residual_weights,
     lbfgs_step_fns,
 )
 from nlsq.streaming.telemetry import (
@@ -629,12 +630,20 @@ class AdaptiveHybridStreamingOptimizer:
             importance to residuals in that group. The group index for each
             data point is determined by the first column of x_data.
 
+        Raises
+        ------
+        ValueError
+            If the weights are not a non-empty 1-D real array of positive finite
+            values.
+
         Notes
         -----
-        Weights must be positive. The weighted MSE is computed as:
+        A call made while Phase 1 is running (e.g. from the ``fit`` callback)
+        rebuilds the warmup objective and restarts L-BFGS from the current point
+        on the next iteration. Weights must be positive. The weighted MSE is computed as:
             wMSE = sum(w[group_idx] * residuals^2) / sum(w[group_idx])
         """
-        self._residual_weights_jax = jnp.asarray(weights, dtype=jnp.float64)
+        self._residual_weights_jax = coerce_residual_weights(weights)
         self._residual_weights_override = self._residual_weights_jax
         if not self.config.enable_residual_weighting:
             _logger.warning(
@@ -691,16 +700,12 @@ class AdaptiveHybridStreamingOptimizer:
                 Jacobian matrix of shape (n_points, n_params)
             """
 
-            def model_at_point(p, x_single):
-                # Model expects a batch axis (n, k): feed a 1-row batch so
-                # multi-feature x[:, j] indexing works, then drop the axis.
-                return jnp.atleast_1d(normalized_model(x_single[None], *p))[0]
+            # Differentiate the chunk model that the residuals use, so a model
+            # that depends on the whole batch (e.g. subtracts mean(x)) is exact.
+            def chunk_model(p):
+                return jnp.reshape(normalized_model(x_chunk, *p), (-1,))
 
-            # jacrev computes gradient w.r.t. first argument (params)
-            # vmap over x_chunk to get Jacobian row for each point
-            return jax.vmap(lambda x: jax.jacrev(model_at_point, argnums=0)(params, x))(
-                x_chunk,
-            )
+            return jax.jacfwd(chunk_model)(params)
 
         # JIT compile the Jacobian function
         # Note: We don't use static_argnums here since params shape is fixed
@@ -1043,7 +1048,7 @@ class AdaptiveHybridStreamingOptimizer:
     ) -> float:
         """Compute total cost including group variance regularization.
 
-        This is a convenience method that computes the MSE cost plus any
+        This is a convenience method that computes the SSR cost plus any
         group variance regularization penalty.
 
         Parameters
@@ -1060,7 +1065,7 @@ class AdaptiveHybridStreamingOptimizer:
         total_cost : float
             Total cost including MSE and variance regularization
         """
-        # Base MSE cost
+        # Base SSR cost (sum of squared residuals)
         total_cost = self._compute_cost_only(params, x_data, y_data)
 
         # Add group variance regularization if enabled
@@ -2094,7 +2099,18 @@ class AdaptiveHybridStreamingOptimizer:
         self._warmup_clip_count = 0
 
         # Warmup loop using L-BFGS
+        weights_in_use = self._residual_weights_jax
         for iteration in range(self.config.max_warmup_iterations):
+            if self._residual_weights_jax is not weights_in_use:
+                # set_residual_weights() changed the objective mid-warmup: rebuild
+                # the loss and restart L-BFGS and the best/previous loss on it.
+                weights_in_use = self._residual_weights_jax
+                loss_fn = self._create_warmup_loss_fn()
+                optimizer, opt_state = self._create_lbfgs_optimizer(
+                    current_params, initial_step_size=initial_step
+                )
+                best_params = current_params
+                best_loss = prev_loss = float(loss_fn(current_params, x_data, y_data))
             # _lbfgs_step returns loss_value computed at the params BEFORE the
             # step (see its docstring: "loss: Loss value before update"), while
             # the returned params are AFTER the step. Keep the pre-step point
@@ -2181,9 +2197,20 @@ class AdaptiveHybridStreamingOptimizer:
             # current_params, to keep callback telemetry internally consistent.
             # The warmup loss is a mean; 0.5 * n * loss is 0.5 * SSR (exact for the
             # default unweighted, unregularized loss), the Phase 2/TRF cost unit.
+            cb_cost = 0.5 * len(x_data) * loss_value
+            if (
+                self._fit_callback is not None
+                and self._residual_weights_jax is not None
+                and self.config.enable_residual_weighting
+                and (iteration + 1) % max(1, self.config.callback_frequency) == 0
+            ):
+                # weighted MSE is not 0.5 * SSR / n: report the documented cost
+                cb_cost = 0.5 * float(
+                    self._compute_cost_only(params_before_step, x_data, y_data)
+                )
             self._invoke_fit_callback(
                 params_before_step,
-                0.5 * len(x_data) * loss_value,
+                cb_cost,
                 iteration + 1,
                 phase=1,
                 gradient_norm=grad_norm,
@@ -2301,12 +2328,9 @@ class AdaptiveHybridStreamingOptimizer:
             return self._jacobian_fn_compiled(params, x_chunk)
 
         # Fallback: inline compilation (for backwards compatibility)
-        # This path is slower due to repeated function tracing
-        def model_at_x(p, x_single):
-            return jnp.atleast_1d(self.normalized_model(x_single[None], *p))[0]
-
-        jac_fn = jax.vmap(lambda x: jax.jacrev(model_at_x, argnums=0)(params, x))
-        return jac_fn(x_chunk)
+        return jax.jacfwd(
+            lambda p: jnp.reshape(self.normalized_model(x_chunk, *p), (-1,))
+        )(params)
 
     def _accumulate_jtj_jtr(
         self,
@@ -2480,12 +2504,12 @@ class AdaptiveHybridStreamingOptimizer:
         # step for the weakly scaled parameters (J^T J squares the spread), and
         # an absolute ridge would swamp J^T J when y (hence J) is tiny-valued.
         # So scale first and add the Tikhonov term in the scaled (unit-diagonal)
-        # space. A column whose curvature is < 1e-20 of the strongest column's
-        # (norm ratio < 1e-10) is unidentifiable: exact GN would give it a huge
-        # step that the trust-region clip then propagates to every parameter,
-        # so it is held fixed instead (d=0 -> zero step component).
+        # space. Only a column with exactly zero (or non-finite) curvature is
+        # unidentifiable and held fixed (d=0 -> zero step component); a weak but
+        # nonzero column is equilibrated to unit diagonal and judged by the
+        # scaled rank test below.
         diag = jnp.diag(JTJ)
-        keep = diag > 1e-20 * jnp.max(diag)
+        keep = jnp.isfinite(diag) & (diag > 0)
         d = jnp.where(keep, 1.0 / jnp.sqrt(jnp.where(keep, diag, 1.0)), 0.0)
         JTJ_reg = JTJ * d[:, None] * d[None, :] + regularization * jnp.eye(
             n_params, dtype=jnp.float64
@@ -2536,7 +2560,7 @@ class AdaptiveHybridStreamingOptimizer:
         # directions, so shrinking it makes tiny, nearly useless steps (the fit
         # then "converges" on the cost-change test far from the optimum).
         step = AdaptiveHybridStreamingOptimizer._damped_step_to_radius(
-            step, JTJ, JTr, keep, trust_radius
+            step, JTJ, JTr, keep, trust_radius, regularization
         )
         step = clip_to_radius(step, trust_radius)
 
@@ -2599,20 +2623,23 @@ class AdaptiveHybridStreamingOptimizer:
         return float(np.max(cos)) if cos.size else 0.0
 
     @staticmethod
-    def _damped_step_to_radius(step, JTJ, JTr, keep, radius):
+    def _damped_step_to_radius(step, JTJ, JTr, keep, radius, regularization=0.0):
         """Euclidean trust-region step of norm ``radius`` when ``step`` is longer.
 
         Solves ``(H + lam I) p = g`` with ``||p||_2 = radius`` (Moré-Sorensen) on
         the identifiable parameters ``keep``, from the eigendecomposition of
         ``H = JTJ``; the damping is in the same (Euclidean) norm the radius is
         measured in. Returns ``step`` unchanged when it already fits or the
-        inputs are not finite.
+        inputs are not finite. ``regularization`` is the configured unit-diagonal
+        (Jacobi-scaled) Tikhonov term, i.e. ``H + regularization * diag(H)``, the
+        same Hessian the unconstrained solve uses.
         """
         step_norm = scaled_norm(step)
         if not np.isfinite(step_norm) or step_norm <= radius or radius <= 0:
             return step
         keep_np = np.asarray(keep, dtype=bool)
         h = np.asarray(JTJ, dtype=float)[np.ix_(keep_np, keep_np)]
+        h = h + regularization * np.diag(np.diag(h))
         g = np.asarray(JTr, dtype=float)[keep_np]
         if not (np.all(np.isfinite(h)) and np.all(np.isfinite(g))):
             return step
@@ -3189,12 +3216,12 @@ class AdaptiveHybridStreamingOptimizer:
                 free = ~at_bound
 
         if free is None:
-            gradient_norm = float(jnp.linalg.norm(JTr))
+            gradient_norm = float(scaled_norm(JTr))
             solve_JTJ, solve_JTr = JTJ, JTr
         else:
             # Projected gradient; the step is solved over the free variables only
             # (fixed ones get an identity row so their step component is exactly 0).
-            gradient_norm = float(jnp.linalg.norm(jnp.where(free, JTr, 0.0)))
+            gradient_norm = float(scaled_norm(jnp.where(free, JTr, 0.0)))
             solve_JTr = jnp.where(free, JTr, 0.0)
             # The fixed rows' diagonal must be on the free curvature's scale: an
             # absolute 1.0 would dominate the solver's relative cutoff and zero
@@ -3761,9 +3788,12 @@ class AdaptiveHybridStreamingOptimizer:
             # fallback, where gradient_norm is a 0.0 sentinel, not a real value)
             # The absolute tolerance is capped by the problem's own scale
             # (||J||*||r||) so a small-valued y cannot satisfy it at the start.
+            # sqrt(tr) * sqrt(SSR), not sqrt(tr * SSR): the product underflows
+            # for y ~ 1e-100 although each factor is representable.
             gradient_scale = min(
                 1.0,
-                float(jnp.sqrt(jnp.trace(final_JTJ) * final_residual_sum_sq)),
+                float(jnp.sqrt(jnp.trace(final_JTJ)))
+                * float(np.sqrt(final_residual_sum_sq)),
             )
             # <= so an exactly-zero residual (scale 0, gradient 0) converges.
             if not retry_exhausted and (
@@ -4463,11 +4493,10 @@ class AdaptiveHybridStreamingOptimizer:
 
         Parameters
         ----------
-        data_source : various types
-            Data source for optimization. Can be:
-            - Tuple of arrays: (x_data, y_data)
-            - Generator yielding (x_batch, y_batch)
-            - HDF5 file path with datasets
+        data_source : tuple
+            ``(x_data, y_data)`` arrays with a one-dimensional ``y_data`` (or one
+            column). Generators and HDF5 paths raise ``NotImplementedError``; use
+            ``nlsq.curve_fit_large`` for out-of-core data.
         func : Callable
             Model function with signature: ``func(x, *params) -> predictions``
         p0 : array_like
@@ -4494,7 +4523,7 @@ class AdaptiveHybridStreamingOptimizer:
             - 'x': Optimized parameters in original space
             - 'success': Boolean indicating success
             - 'message': Status message
-            - 'fun': Final residuals
+            - 'fun': Final residuals, ``f(x, popt) - y`` (as the TRF result)
             - 'pcov': Covariance matrix (Phase 3)
             - 'perr': Standard errors (Phase 3)
             - 'streaming_diagnostics': Phase information, timing, etc.
@@ -4530,12 +4559,14 @@ class AdaptiveHybridStreamingOptimizer:
             x_data, y_data = data_source
             x_data = jnp.asarray(x_data, dtype=jnp.float64)
             y_data = jnp.asarray(y_data, dtype=jnp.float64)
+            if y_data.ndim == 2 and y_data.shape[1] == 1:
+                y_data = y_data[:, 0]  # a column would broadcast (n,1)-(n,) to (n,n)
             n_points = len(x_data)
-            if n_points == 0 or y_data.ndim == 0 or len(y_data) != n_points:
+            if n_points == 0 or y_data.ndim != 1 or len(y_data) != n_points:
                 raise ValueError(
                     "xdata and ydata must be non-empty with the same number of "
                     f"observations; got {n_points} and "
-                    f"{'a scalar' if y_data.ndim == 0 else len(y_data)}."
+                    f"{'a scalar' if y_data.ndim == 0 else y_data.shape}."
                 )
         else:
             raise NotImplementedError(
@@ -4655,6 +4686,7 @@ class AdaptiveHybridStreamingOptimizer:
         # letting an exception here skip Phase 3 entirely and lose whatever
         # best_params_global was already found.
         phase1_failure: str | None = None
+        self.current_phase = 1  # also without checkpoints
         phase1_start = time.time()
         try:
             try:
@@ -4710,6 +4742,7 @@ class AdaptiveHybridStreamingOptimizer:
             print("Phase 2: Streaming Gauss-Newton...")
 
         phase2_failure: str | None = None
+        self.current_phase = 2  # also without checkpoints
         phase2_start = time.time()
         try:
             phase2_result = self._run_phase2_gauss_newton(
@@ -4808,6 +4841,7 @@ class AdaptiveHybridStreamingOptimizer:
         if verbose >= 1:
             print("Phase 3: Computing covariance...")
 
+        self.current_phase = 3  # also without checkpoints
         phase3_start = time.time()
         phase3_result = self._run_phase3_finalize(
             optimized_params_normalized=phase2_result["final_params"],
@@ -4847,7 +4881,7 @@ class AdaptiveHybridStreamingOptimizer:
                     for s in range(0, len(x_data), chunk)
                 ]
             )
-        final_residuals = y_data - final_predictions
+        final_residuals = final_predictions - y_data  # model - data, as TRF
 
         # Build streaming diagnostics
         streaming_diagnostics = {

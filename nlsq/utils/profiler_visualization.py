@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import html
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -36,9 +37,26 @@ def _json_default(obj):
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
+def _finite_json(obj):
+    """Strict-JSON form of ``obj``: non-finite floats become ``None``."""
+    if isinstance(obj, np.generic):
+        obj = obj.item()
+    elif hasattr(obj, "tolist") and not isinstance(obj, (str, bytes)):
+        obj = obj.tolist()
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _finite_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_finite_json(v) for v in obj]
+    return obj
+
+
 def _safe_filename(name: str) -> str:
     """Reduce a profile name to a single path component (no separators, no dots-only)."""
     safe = re.sub(r"[^\w.-]", "_", name).strip(".")
+    # Filesystems cap a component at 255 bytes; leave room for "_series.png" etc.
+    safe = safe.encode("utf-8")[:120].decode("utf-8", errors="ignore")
     return safe or "profile"
 
 
@@ -439,7 +457,13 @@ class ProfilerVisualization:
         data = self.profiler.export_to_dict()
         output_path = Path(output_path)
         output_path.write_text(
-            json.dumps(data, indent=2, default=_json_default), encoding="utf-8"
+            json.dumps(
+                _finite_json(data),
+                indent=2,
+                default=_json_default,
+                allow_nan=False,
+            ),
+            encoding="utf-8",
         )
 
     def export_csv(self, name: str, output_path: str | Path) -> None:

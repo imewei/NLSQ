@@ -38,6 +38,11 @@ def _parse_model_section(config: dict[str, Any], state: SessionState) -> None:
     state.model_name = model.get("name", state.model_name)
     state.auto_p0 = model.get("auto_p0", state.auto_p0)
     state.auto_bounds = model.get("auto_bounds", state.auto_bounds)
+    for flag in ("auto_p0", "auto_bounds"):
+        if not isinstance(getattr(state, flag), bool):
+            raise ValueError(
+                f"model.{flag} must be true or false, got {getattr(state, flag)!r}"
+            )
     state.polynomial_degree = model.get("degree", state.polynomial_degree)
     state.custom_file_path = model.get("path", state.custom_file_path)
     state.custom_function_name = model.get("function", state.custom_function_name)
@@ -500,7 +505,7 @@ def validate_yaml_config(yaml_content: str) -> tuple[bool, str | None]:
 
         if not isinstance(config, dict):
             return False, "YAML content must be a dictionary"
-        _check_structure(config)
+        load_yaml_config(yaml_content)  # the loader's own checks, so they cannot drift
 
         # Basic structure validation
         valid_sections = {
@@ -536,7 +541,7 @@ def validate_yaml_config(yaml_content: str) -> tuple[bool, str | None]:
 
     except yaml.YAMLError as e:
         return False, f"YAML parsing error: {e}"
-    except ValueError as e:
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
         return False, str(e)
 
 

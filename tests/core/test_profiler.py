@@ -181,7 +181,7 @@ class TestTRFProfilerTimeConversion:
     def test_time_conversion_svd_convert(self) -> None:
         """Test timing SVD conversion records a non-negative value."""
         profiler = TRFProfiler()
-        start = time.time()
+        start = time.perf_counter()
 
         profiler.time_conversion("svd_convert", start)
 
@@ -191,7 +191,7 @@ class TestTRFProfilerTimeConversion:
     def test_time_conversion_grad_convert(self) -> None:
         """Test timing gradient conversion."""
         profiler = TRFProfiler()
-        start = time.time()
+        start = time.perf_counter()
 
         profiler.time_conversion("grad_convert", start)
 
@@ -201,7 +201,7 @@ class TestTRFProfilerTimeConversion:
     def test_time_conversion_cost_convert(self) -> None:
         """Test timing cost conversion."""
         profiler = TRFProfiler()
-        start = time.time()
+        start = time.perf_counter()
 
         profiler.time_conversion("cost_convert", start)
 
@@ -211,7 +211,7 @@ class TestTRFProfilerTimeConversion:
     def test_time_conversion_param_convert(self) -> None:
         """Test timing parameter conversion."""
         profiler = TRFProfiler()
-        start = time.time()
+        start = time.perf_counter()
 
         profiler.time_conversion("param_convert", start)
 
@@ -221,7 +221,7 @@ class TestTRFProfilerTimeConversion:
     def test_time_conversion_unknown_operation(self) -> None:
         """Test conversion timing with unknown operation - no recording."""
         profiler = TRFProfiler()
-        start = time.time()
+        start = time.perf_counter()
 
         profiler.time_conversion("unknown", start)
 
@@ -236,7 +236,7 @@ class TestTRFProfilerTimeConversion:
         profiler = TRFProfiler()
 
         for _ in range(3):
-            profiler.time_conversion("svd_convert", time.time())
+            profiler.time_conversion("svd_convert", time.perf_counter())
 
         assert len(profiler.svd_ctimes) == 3
 
@@ -275,7 +275,7 @@ class TestTRFProfilerGetTimingData:
         profiler.time_operation("fun", jnp.array([1.0]))
         profiler.time_operation("jac", jnp.array([[1.0]]))
         profiler.time_operation("svd", jnp.array([1.0]))
-        profiler.time_conversion("svd_convert", time.time())
+        profiler.time_conversion("svd_convert", time.perf_counter())
 
         data = profiler.get_timing_data()
 
@@ -373,14 +373,14 @@ class TestNullProfilerTimeConversion:
         profiler = NullProfiler()
 
         # Should not raise and return None
-        result = profiler.time_conversion("svd_convert", time.time())
+        result = profiler.time_conversion("svd_convert", time.perf_counter())
 
         assert result is None
 
     def test_time_conversion_all_operations(self) -> None:
         """Test that all conversion operations are no-ops."""
         profiler = NullProfiler()
-        start = time.time()
+        start = time.perf_counter()
 
         operations = [
             "svd_convert",
@@ -427,7 +427,7 @@ class TestNullProfilerGetTimingData:
 
         # "Record" some operations
         profiler.time_operation("fun", jnp.array([1.0]))
-        profiler.time_conversion("svd_convert", time.time())
+        profiler.time_conversion("svd_convert", time.perf_counter())
 
         data = profiler.get_timing_data()
 
@@ -460,7 +460,7 @@ class TestProfilerInterfaceCompatibility:
         profiler = profiler_cls()
 
         # Should not raise
-        profiler.time_conversion("svd_convert", time.time())
+        profiler.time_conversion("svd_convert", time.perf_counter())
 
     @pytest.mark.parametrize("profiler_cls", [TRFProfiler, NullProfiler])
     def test_get_timing_data_interface(self, profiler_cls) -> None:
@@ -621,10 +621,10 @@ class TestProfilerPerformance:
         arr = jnp.array([1.0] * 1000)
 
         # Time through NullProfiler
-        start = time.time()
+        start = time.perf_counter()
         for _ in range(1000):
             _ = null_profiler.time_operation("fun", arr)
-        profiled_time = time.time() - start
+        profiled_time = time.perf_counter() - start
 
         # NullProfiler should complete 1000 calls in under 1 second
         # (generous threshold for CI environments with variable load)
@@ -638,10 +638,10 @@ class TestProfilerPerformance:
         arr = jnp.array([1.0])
 
         # Time 1000 operations
-        start = time.time()
+        start = time.perf_counter()
         for _ in range(1000):
             profiler.time_operation("fun", arr)
-        elapsed = time.time() - start
+        elapsed = time.perf_counter() - start
 
         assert len(profiler.ftimes) == 1000
         # Should complete in reasonable time (< 5s)
@@ -700,7 +700,7 @@ class TestEdgeCases:
         """Test conversion timing with negative elapsed time (clock adjustment)."""
         profiler = TRFProfiler()
         # Simulate future time (negative elapsed)
-        future_time = time.time() + 1.0
+        future_time = time.perf_counter() + 1.0
 
         profiler.time_conversion("svd_convert", future_time)
 
