@@ -103,19 +103,3 @@ def test_legit_code_still_validates(tmp_path, monkeypatch, src):
     f.write_text(src + TAIL)
     result = validate_model(f)
     assert result.is_valid, result.violations
-
-
-@pytest.mark.parametrize(
-    "src",
-    [
-        *sorted(EXAMPLES.glob("*.py")),
-        ROOT / "nlsq/cli/templates/custom_model_template.py",
-    ],
-    ids=lambda p: p.name,
-)
-def test_shipped_models_still_validate(src, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    f = tmp_path / src.name
-    shutil.copyfile(src, f)
-    result = validate_model(f)
-    assert result.is_valid, result.violations

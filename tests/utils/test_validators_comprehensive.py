@@ -235,63 +235,6 @@ class TestValidateCurveFitInputs:
             "p0" in warn.lower() and "bound" in warn.lower() for warn in warnings
         )
 
-    def test_valid_method_trf(self):
-        """Test valid method='trf' passes."""
-
-        def model(x, a, b):
-            return a * x + b
-
-        xdata = np.array([1, 2, 3])
-        ydata = np.array([2, 4, 6])
-
-        # Should not raise
-        self.validator.validate_curve_fit_inputs(
-            f=model,
-            xdata=xdata,
-            ydata=ydata,
-            p0=None,
-            sigma=None,
-            bounds=(-np.inf, np.inf),
-        )
-
-    def test_valid_method_dogbox(self):
-        """Test valid method='dogbox' passes."""
-
-        def model(x, a, b):
-            return a * x + b
-
-        xdata = np.array([1, 2, 3])
-        ydata = np.array([2, 4, 6])
-
-        # Should not raise
-        self.validator.validate_curve_fit_inputs(
-            f=model,
-            xdata=xdata,
-            ydata=ydata,
-            p0=None,
-            sigma=None,
-            bounds=(-np.inf, np.inf),
-        )
-
-    def test_valid_method_lm_unbounded(self):
-        """Test method='lm' without bounds passes."""
-
-        def model(x, a, b):
-            return a * x + b
-
-        xdata = np.array([1, 2, 3])
-        ydata = np.array([2, 4, 6])
-
-        # Should not raise
-        self.validator.validate_curve_fit_inputs(
-            f=model,
-            xdata=xdata,
-            ydata=ydata,
-            p0=None,
-            sigma=None,
-            bounds=(-np.inf, np.inf),
-        )
-
     def test_numpy_arrays_accepted(self):
         """Test NumPy arrays are accepted."""
 

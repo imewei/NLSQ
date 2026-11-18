@@ -57,15 +57,6 @@ class TestDecompositionMemory:
         y = y_true + rng.normal(0, 0.1, 10000)
         return x, y
 
-    @pytest.fixture
-    def benchmark_data_100k(self) -> tuple[np.ndarray, np.ndarray]:
-        """Generate 100K point dataset."""
-        rng = np.random.default_rng(42)
-        x = np.linspace(0, 4, 100000)
-        y_true = 2.5 * np.exp(-1.3 * x)
-        y = y_true + rng.normal(0, 0.1, 100000)
-        return x, y
-
     def test_memory_no_leak_repeated_fits(
         self, benchmark_data_10k: tuple[np.ndarray, np.ndarray]
     ) -> None:

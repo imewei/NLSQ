@@ -225,17 +225,6 @@ class TestParameterSensitivityAnalyzer:
         V = np.linalg.qr(np.random.randn(p, p))[0]
         return U @ np.diag(s) @ V.T
 
-    @pytest.fixture
-    def moderate_spread_jacobian(self) -> np.ndarray:
-        """Create a Jacobian with moderate sensitivity spread."""
-        np.random.seed(42)
-        n, p = 100, 4
-        U = np.linalg.qr(np.random.randn(n, p))[0]
-        # Singular values spanning moderate range
-        s = np.array([1e3, 10.0, 0.1, 0.01])
-        V = np.linalg.qr(np.random.randn(p, p))[0]
-        return U @ np.diag(s) @ V.T
-
     # Test basic analysis
     def test_analyze_returns_report(
         self,

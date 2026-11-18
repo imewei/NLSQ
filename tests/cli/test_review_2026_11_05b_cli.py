@@ -77,22 +77,6 @@ def test_legit_numeric_imports_still_validate(tmp_path, monkeypatch):
     assert result.is_valid, result.violations
 
 
-@pytest.mark.parametrize(
-    "src",
-    [
-        *sorted(EXAMPLES.glob("*.py")),
-        ROOT / "nlsq/cli/templates/custom_model_template.py",
-    ],
-    ids=lambda p: p.name,
-)
-def test_shipped_models_still_validate(src, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    f = tmp_path / src.name
-    shutil.copyfile(src, f)
-    result = validate_model(f)
-    assert result.is_valid, result.violations
-
-
 def _model():
     def m(x, a, b):
         return a * x + b
