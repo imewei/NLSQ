@@ -42,7 +42,7 @@ from nlsq.core.covariance import (
     pcov_from_jacobian,
     pcov_from_normal,
 )
-from nlsq.result import OptimizeResult
+from nlsq.result import OptimizeResult, OptimizeWarning
 
 # Moved to normal_equations; re-exported here (tests and benchmarks import and patch them).
 from nlsq.streaming.normal_equations import (
@@ -70,9 +70,25 @@ DEVICE_FRACTION = (
 )
 LAMBDA_MAX = 1e14  # damping ceiling
 ATTEMPT_CAP = 20  # solve attempts per iteration
-DAMPING_FLOOR = 1e-10  # D_ii >= DAMPING_FLOOR * max_j D_jj
 LAM0 = 1e-3  # initial damping; read at call time (tests move it near a limit)
 _CACHE_CONST_BYTES = 1 << 26  # 64 MiB: larger captured constants skip the kernel cache
+# |r_i| <= EXACT_FIT_EPS * max(|y_i|, |f_i|) at every point: the residual is a few ulp of
+# the data, an exact fit at once; a loose 1e3 ulp bound only decides a stalled fit (no step
+# gains), so a small signal on a large offset (misfit >> ulp of its own scale, << 1e3 ulp of
+# |y|) is still fitted. The statistic is tracked by the stats kernel in the same data pass.
+EXACT_FIT_EPS = 4 * np.finfo(float).eps
+STALL_EXACT_EPS = 1e3 * np.finfo(float).eps
+# xtol/ftol after a step are not accepted while the undamped Newton step that remains is
+# above this many standard errors (``g^T H^-1 g / s2`` against its square): a step norm
+# swamped by one large parameter (``||D^1/2 x||``) says nothing about a small parameter
+# that is still off, by ~c*sqrt(n) sigma for a dominant offset (MINPACK escapes through its
+# first trust radius). When no further step lowers the cost (its gain is below the rounding
+# of the cost, ~n >= 1e6 with an offset parameter) the refused stop is accepted after all.
+STEP_BIAS_SIGMA = 0.1
+OFFSET_SPAN = 1e-6  # data range / data size below which the offset parameter dominates
+POLISH_STEPS = 6  # cap on the undamped steps taken after the ftol certificate
+POLISH_SIGMA = 1e-6  # ... which stop once the remaining Newton step is this many sigma
+POLISH_COST_RISE = 1e-12  # relative cost rise tolerated there: rounding of the cost
 TSQR_KAPPA = 1e3  # covariance by TSQR above this sqrt(cond(H)); set by Gate G-cov
 
 Termination = Literal["gtol", "ftol", "xtol", "max_nfev", "stalled"]
@@ -110,7 +126,8 @@ def derive_chunk_size(
 ) -> int:
     """Chunk length for ``n`` points and ``p`` parameters.
 
-    An explicit positive ``chunk_size`` wins, clamped to ``n``. Otherwise ``1 << 22``,
+    An explicit positive ``chunk_size`` wins, clamped to ``n`` (with a ``UserWarning`` when
+    its workspace exceeds ``memory_limit_gb``). Otherwise ``1 << 22``,
     reduced so ``chunk * p * 8 B * 4`` fits ``memory_limit_gb`` (GiB) with a soft floor of
     1024 points (``n`` if ``n < 1024``). Raises ``ValueError`` if even the floor chunk does
     not fit the budget. The budget goes to chunk workspace first; :func:`_place` puts
@@ -119,7 +136,18 @@ def derive_chunk_size(
     if chunk_size is not None:
         if chunk_size <= 0:
             raise ValueError(f"chunk_size must be positive, got {chunk_size}")
-        return min(int(chunk_size), n)
+        chunk = min(int(chunk_size), n)
+        if memory_limit_gb is not None:
+            need = chunk * p * 8 * WORKSPACE_FACTOR
+            if need > memory_limit_gb * 1024**3:
+                warnings.warn(
+                    f"chunk_size={chunk} needs about {need / 1024**3:.3g} GiB of chunk "
+                    f"workspace with {p} parameters, above memory_limit_gb="
+                    f"{memory_limit_gb}; an explicit chunk_size takes precedence",
+                    UserWarning,
+                    skip_file_prefixes=_NLSQ_DIR,
+                )
+        return chunk
     floor = min(CHUNK_FLOOR, n)
     chunk = CHUNK
     if memory_limit_gb is not None:
@@ -261,6 +289,22 @@ def free_set(
     return ~(((theta <= lo) & (g <= 0)) | ((theta >= hi) & (g >= 0)))
 
 
+def _gradient_cosine(
+    cost: float, g: np.ndarray, H: np.ndarray, free: np.ndarray
+) -> float:
+    """MINPACK ``lmder`` gtol statistic: ``max_j |J_j.r| / (|J_j| |r|)`` over the free columns.
+
+    ``g = J^T r``, ``diag(H) = |J_j|^2`` and ``|r| = sqrt(2*cost)``, so this is the largest
+    cosine between the residual and a free Jacobian column. It is invariant to the units of
+    ``y`` and of each parameter (an absolute test on ``g`` fires at the starting point for
+    small-amplitude data); it is SciPy's ``method="lm"`` test, ``curve_fit``'s default.
+    A zero column has ``g_j = 0`` and contributes 0.
+    """
+    norm = np.sqrt(np.diag(H)[free]) * np.sqrt(2.0 * cost)
+    gf = np.abs(g[free])
+    return float(np.max(np.divide(gf, norm, out=np.zeros_like(gf), where=norm > 0)))
+
+
 def _stationary(
     cost: float,
     g: np.ndarray,
@@ -271,10 +315,13 @@ def _stationary(
     hi: np.ndarray,
     gtol: float,
     ftol: float,
+    exact_fit: bool = False,
 ) -> Termination | None:
-    if cost == 0:  # exact fit: decided before any division
+    # exact fit: decided before any division. ``exact_fit`` says every residual is at the
+    # rounding level of its observation (see EXACT_FIT_EPS), where no gradient test works
+    if cost == 0 or exact_fit:
         return "gtol"
-    if not free.any() or np.max(np.abs(g[free])) < gtol:
+    if not free.any() or _gradient_cosine(cost, g, H, free) < gtol:
         return "gtol"
     # spec Termination (iii): the unconstrained decrement certifies only when every
     # variable is free; it is an upper bound on any feasible gain, so it stays valid
@@ -290,11 +337,38 @@ def _stationary(
     return None
 
 
+def _remaining_step_sigma2(
+    cost: float, g: np.ndarray, H: np.ndarray, free: np.ndarray, n: int, p: int
+) -> float:
+    """``g^T H^-1 g / s2`` on the free variables, ``s2 = 2*cost/(n - p)``: the squared size,
+    in standard errors, of the undamped Newton step still to take (0 when not decidable:
+    ``n <= p``, zero cost, no free variable or a truncated rank)."""
+    if not free.any() or n <= p or not cost > 0:
+        return 0.0
+    gs, w, U, truncated = _scaled_eig(g[free], H[np.ix_(free, free)])
+    if truncated or gs.size == 0:
+        return 0.0
+    return float(np.sum((U.T @ gs) ** 2 / w) / (2.0 * cost / (n - p)))
+
+
+def _offset_dominated(st: PassStats) -> bool:
+    """The data vary by less than ``OFFSET_SPAN`` of their own size: a parameter carrying that
+    offset is quantised (``ulp(offset)``) far coarser than the signal it must resolve, which
+    is what leaves a Newton step the cost cannot see. (Noise near the ulp of data that do
+    vary is not an offset: the fit is simply at float64 and has nothing to warn about.)"""
+    scale = max(abs(st.y_hi), abs(st.y_lo))
+    return bool(scale > 0 and st.y_hi - st.y_lo < OFFSET_SPAN * scale)
+
+
 def _damping(D_prev: np.ndarray, H: np.ndarray) -> np.ndarray:
-    """Moré running maximum of diag(H), floored; identity if every diagonal is zero."""
+    """Moré running maximum of diag(H); 1 where it is still zero (a zero column: ``g_j = 0``).
+
+    No floor relative to ``max(D)``: it would swamp a parameter whose ``H_jj`` is >1e10
+    below the largest and freeze it, breaking Marquardt scale invariance (:func:`_solve`
+    works in the ``D``-scaled coordinates, so a wide range of ``D`` costs no accuracy).
+    """
     D = np.maximum(D_prev, np.diag(H))
-    top = D.max()
-    return np.maximum(D, DAMPING_FLOOR * top) if top > 0 else np.ones_like(D)
+    return np.where(D > 0, D, 1.0)
 
 
 def _finite(st: PassStats) -> bool:
@@ -306,11 +380,19 @@ def _finite(st: PassStats) -> bool:
 def _solve(
     Hf: np.ndarray, lam: float, Df: np.ndarray, gf: np.ndarray
 ) -> np.ndarray | None:
-    """Damped step, or None if the solve fails or is non-finite."""
+    """Damped step, or None if the solve fails or is non-finite.
+
+    Solves ``(Hf + lam*diag(Df)) d = gf`` in the coordinates scaled by ``1/sqrt(Df)``
+    (unit damping), so parameters of very different scale do not degrade the LU.
+    """
+    s = 1.0 / np.sqrt(Df)
     try:
-        d = np.linalg.solve(Hf + lam * np.diag(Df), gf)
+        u = np.linalg.solve(
+            (Hf * s[:, None]) * s[None, :] + lam * np.eye(len(s)), gf * s
+        )
     except np.linalg.LinAlgError:
         return None
+    d = u * s
     return d if np.isfinite(d).all() else None
 
 
@@ -385,7 +467,11 @@ def check_model_contract(
     # three np.allclose passes cost ~0.2 s per fit on GPU
     def f(xs: Any) -> jax.Array:
         try:
-            return jnp.asarray(model(xs, *th), dtype=jnp.float64)
+            out = jnp.asarray(model(xs, *th), dtype=jnp.float64)
+            # a constant (scalar or broadcastable) output is pointwise, as in curve_fit
+            if jnp.broadcast_shapes(out.shape, (len(xs),)) == (len(xs),):
+                out = jnp.broadcast_to(out, (len(xs),))
+            return out
         except (TypeError, ValueError) as err:  # e.g. a captured per-point array
             raise ValueError(
                 "model is not pointwise over the sample axis, or it raised on the "
@@ -532,7 +618,7 @@ def _cached_stats(
     if traced is None:
         return (
             model,
-            make_chunk_stats(model, weighted=weighted),
+            make_chunk_stats(model, weighted=weighted, track_rel=True),
             make_chunk_jacobian(model, weighted=weighted),
         )
     key = ("exact_lm_stats", weighted, traced[0])
@@ -545,7 +631,7 @@ def _cached_stats(
     # jax.jit is lazy: the TSQR Jacobian kernel compiles only if that route runs
     entry = (
         m,
-        make_chunk_stats(m, weighted=weighted),
+        make_chunk_stats(m, weighted=weighted, track_rel=True),
         make_chunk_jacobian(m, weighted=weighted),
     )
     with ls._wrapper_cache_lock:
@@ -591,6 +677,21 @@ def tsqr_r_factor(
         Jc = jac(th, xc, mask) if sc is None else jac(th, xc, sc, mask)
         R = _qr_append(R, Jc)
     return np.asarray(R)
+
+
+def _scaled_condition(H: np.ndarray) -> float:
+    """``normal_condition`` of the Jacobi-equilibrated ``H`` (unit diagonal).
+
+    What :func:`pcov_from_normal` and the step solve actually see: the raw
+    ``sqrt(cond(H))`` also counts the parameter units (``1e6*exp(-k x)`` gives 2e5
+    against 2.4 scaled), which cost a wasted extra pass and a false warning. A
+    non-positive or non-finite diagonal (zero column, overflow) keeps the raw value.
+    """
+    d = np.diag(H)
+    if not (np.isfinite(H).all() and (d > 0).all()):
+        return normal_condition(H)
+    r = np.sqrt(d)
+    return normal_condition((H / r[:, None]) / r[None, :])  # twice: denormal-safe
 
 
 def _warn_tsqr_route(H: np.ndarray, kappa: float) -> None:
@@ -678,6 +779,26 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     "stalled"``; success only for the first three), ``n_points`` and
     ``equivalent_to_full_batch=True``. A failed fit is returned, not raised.
 
+    Termination: ``gtol`` is the MINPACK cosine test; ``ftol``/``xtol`` after a step are
+    accepted only once the remaining undamped Newton step is below ``STEP_BIAS_SIGMA``
+    standard errors, or no step lowers the cost any more. The stationarity certificate's
+    ``ftol`` first takes its undamped step (one more pass, repeated until the remaining
+    step is below ``POLISH_SIGMA`` standard errors, at most ``POLISH_STEPS`` times), so
+    ``x`` is the iterate after it, as in MINPACK; that polish is skipped when
+    ``max_nfev`` is reached (``x`` may then be ~ftol-sized short).
+
+    Limits (float64): with a dominant offset parameter (data range below ``OFFSET_SPAN`` of
+    their size) and a dynamic range above ~1e12 (offset / noise) the step the cost can
+    resolve stops short of the optimum, leaving a bias up to ~sqrt(n)*0.2 standard errors
+    that tightening ``xtol`` cannot remove; the fit then ends ``ftol``/``xtol`` with an
+    ``OptimizeWarning`` and a message naming the rounding limit (centre ``y`` or subtract
+    a baseline). Data that vary by more than that and carry noise down to a few ulp are at
+    the float64 limit but not offset-dominated: they end normally, without a warning. A residual within 4 ulp of
+    every observation (``EXACT_FIT_EPS``) is an exact fit at once, so a component of at
+    most ~4 ulp per observation (``y = 1 + 8e-16*x``) is not resolved from a start where
+    it is absent; at a 1e12 offset this shortcut leaves a bias of tens of sigma and an
+    underestimated ``pcov``.
+
     ``pcov`` comes from ``H`` at the final ``x`` when ``sqrt(cond(H)) <= TSQR_KAPPA``
     (``covariance_method="normal"``); above it, from the SVD of the TSQR ``R`` factor of
     the full Jacobian, one extra data pass not counted in ``nfev`` (``"tsqr"``);
@@ -696,7 +817,10 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     handled by an active set: ``p0`` is clipped into the box; each iteration holds the
     variables of :func:`free_set` (on a bound, gradient pointing out), solves the damped
     system on the rest, projects the trial onto the box and predicts the decrease from
-    the projected step. ``gtol`` applies to the free gradient; while a bound is active
+    the projected step. ``gtol`` is MINPACK's (SciPy ``method="lm"``) scale-free test on
+    the free columns: the largest cosine between the residual and a column of ``J`` (see
+    :func:`_gradient_cosine`); a residual at the rounding level of ``y`` is an exact fit
+    (termination ``"gtol"``); while a bound is active
     the free-subspace Newton certificate is not used and :func:`box_certificate` (the
     exact constrained model decrease) takes its place. ``pcov`` uses all ``p``
     parameters for the degrees of freedom, as the legacy path.
@@ -734,6 +858,10 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")
     ftol, xtol, gtol = _check_tolerances(ftol, xtol, gtol)
     absolute_sigma = coerce_absolute_sigma(absolute_sigma)
+    p0_arr = np.asarray(p0, np.float64)
+    if p0_arr.ndim != 1 or not np.isfinite(p0_arr).all():
+        raise ValueError(f"p0 must be a finite 1-D parameter vector, got {p0!r}")
+    p0 = p0_arr
     if memory_limit_gb is not None:
         validate_positive(memory_limit_gb, "memory_limit_gb")
     factory = is_chunk_factory(x)
@@ -776,7 +904,7 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             logger.info("exact_lm pass", nfev=nfev, cost=st.cost)
         return st
 
-    theta = np.clip(np.asarray(p0, np.float64), lo, hi)
+    theta = np.clip(p0_arr, lo, hi)
     source, weighted = _open_source(x, y, sigma, chunk, p, memory_limit_gb, n)
     if isinstance(source, FactorySource):
         check_model_contract(model, theta, source.first_x)
@@ -809,18 +937,58 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             )
         raise ValueError("model cost, gradient or Hessian is not finite at p0")
     cost, g, H = st.cost, st.g, st.H
+
+    rel = (
+        st.rel_resid
+    )  # max relative residual at the current iterate (NaN: never exact)
     nfev, lam, nu = 1, LAM0, 2.0
     D = np.zeros(p)  # Moré running maximum of diag(H)
+    vetoed: Termination | None = None  # step stop the last accepted step was refused
     while True:
         free = free_set(theta, g, lo, hi)
-        termination = _stationary(cost, g, H, free, theta, lo, hi, gtol, ftol)
+        termination = _stationary(
+            cost, g, H, free, theta, lo, hi, gtol, ftol, rel <= EXACT_FIT_EPS
+        )
+        Hf, gf = H[np.ix_(free, free)], g[free]
+        D = _damping(D, H)
+        polished = 0
+        while termination == "ftol" and nfev < max_nfev:
+            # The certificate stops before a step it bounds by ftol*F; take that undamped
+            # step (kept only if it lowers the cost) so popt is the iterate after it, as
+            # MINPACK returns, not one ftol-sized step short (~1e-6 off at the defaults).
+            # Repeated (at most POLISH_STEPS) until the remaining Newton step is below
+            # POLISH_SIGMA standard errors: with a non-zero residual or a held variable one
+            # step cuts the error only ~7x. The test is on the step, not on the cost gain
+            # (a 1e-7 relative error is ~1e-13*F, below what the rounding of the cost
+            # resolves), and a step is kept if it does not raise the cost beyond that
+            # rounding, so the result does not depend on the order of the chunk sums.
+            d = _solve(Hf, 0.0, D[free], gf)
+            if d is None:
+                break
+            new = theta.copy()
+            new[free] += d
+            new = np.clip(new, lo, hi)
+            if not np.isfinite(new).all():
+                break
+            trial = evaluate(new, nfev + 1)
+            nfev += 1
+            if not (_finite(trial) and trial.cost <= cost * (1.0 + POLISH_COST_RISE)):
+                break
+            theta, cost, g, H, rel = new, trial.cost, trial.g, trial.H, trial.rel_resid
+            polished += 1
+            free = free_set(theta, g, lo, hi)
+            if (
+                polished >= POLISH_STEPS
+                or _remaining_step_sigma2(cost, g, H, free, n, p) <= POLISH_SIGMA**2
+            ):
+                break
+            Hf, gf = H[np.ix_(free, free)], g[free]
+            D = _damping(D, H)
         if termination:
             break
         if nfev >= max_nfev:
             termination = "max_nfev"
             break
-        Hf, gf = H[np.ix_(free, free)], g[free]
-        D = _damping(D, H)
         accepted = out_of_budget = False
         attempts = 0
         while attempts < ATTEMPT_CAP and lam <= LAMBDA_MAX:
@@ -837,6 +1005,11 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             new = np.clip(new, lo, hi)
             s = new - theta
             pred = s @ g - 0.5 * s @ H @ s  # quadratic-model decrease in 0.5*sum r^2
+            if not (pred > 0 and np.isfinite(new).all()):
+                # rejected whatever the data say: no pass (the trial must gain, and
+                # theta must stay finite)
+                lam, nu = lam * nu, nu * 2
+                continue
             trial = evaluate(new, nfev + 1)
             nfev += 1
             actual = cost - trial.cost
@@ -865,18 +1038,40 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
             ftol,
             xtol,
         )
-        theta, cost, g, H = new, trial.cost, trial.g, trial.H
+        theta, cost, g, H, rel = new, trial.cost, trial.g, trial.H, trial.rel_resid
+        vetoed = None
+        if step:
+            free_new = free_set(theta, g, lo, hi)
+            if _remaining_step_sigma2(cost, g, H, free_new, n, p) > STEP_BIAS_SIGMA**2:
+                vetoed, step = step, None  # swamped step test: keep iterating
         if step:
             termination = step
             break
-    message = _MESSAGES[termination]
+    message = None
+    if termination == "stalled" and (vetoed or rel <= STALL_EXACT_EPS):
+        # no step lowers the cost: the residual is at the rounding level, or the remaining
+        # step is below the resolution of the cost. A still-large Newton step is a bias the
+        # caller must hear about, not a converged gradient
+        free_end = free_set(theta, g, lo, hi)
+        remaining = _remaining_step_sigma2(cost, g, H, free_end, n, p)
+        if remaining > STEP_BIAS_SIGMA**2 and _offset_dominated(st):
+            termination = vetoed or "ftol"
+            message = (
+                f"{_MESSAGES[termination]}; limited by floating-point rounding at this "
+                "data offset (dominant offset parameter): the parameters may be biased "
+                "by up to ~sqrt(n)*0.2 standard errors; centre y or subtract a baseline"
+            )
+            warnings.warn(message, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
+        else:
+            termination = "gtol" if rel <= STALL_EXACT_EPS else vetoed
+    message = message or _MESSAGES[termination]
     if termination == "stalled" and _scaled_eig(g, H)[3]:
         message += "; rank cannot be certified from normal equations"
     # The parameter shadows the module function compute_covariance
     if not compute_covariance:
         pcov, covariance_method = None, "skipped"
         logger.debug("covariance skipped", reason="compute_covariance=False")
-    elif (kappa := normal_condition(H)) > TSQR_KAPPA:
+    elif (kappa := _scaled_condition(H)) > TSQR_KAPPA:
         # normal equations lose cond(J)^2: one more pass for R at theta (not in nfev)
         from nlsq.core.minpack import _covariance_svd  # lazy: minpack is heavy
 
@@ -885,7 +1080,8 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
         covariance_method = "tsqr"
         _warn_tsqr_route(H, kappa)
     else:
-        pcov = pcov_from_normal(H, cost, n, p, absolute_sigma)[0]
+        # scaled kappa <= TSQR_KAPPA < COND_WARN: the raw-kappa warning would be false
+        pcov = pcov_from_normal(H, cost, n, p, absolute_sigma, cond_warn=False)[0]
         covariance_method = "normal"
     return OptimizeResult(
         x=theta,

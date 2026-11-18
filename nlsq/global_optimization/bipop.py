@@ -110,11 +110,16 @@ class BIPOPRestarter:
         -------
         int
             Population size to use for next CMA-ES run.
-            Large runs use 2x base_popsize, small runs use base_popsize/2 to base_popsize.
+            Large runs use ``2**(k+1) * base_popsize`` (at most 32x) for the k-th
+            large run (0-based; IPOP-style growth); small runs draw uniformly from
+            base_popsize/2 to base_popsize (a simplification of Hansen's budget-matched
+            small regime).
         """
         if self._use_large_pop:
-            # Large population: doubled base
-            popsize = self.base_popsize * 2
+            # Large regime doubles on every large restart; the first large run is 2x
+            # (not Hansen's 1x -- the default size is covered by the small runs).
+            # Capped at 32x so a large max_restarts cannot exhaust memory.
+            popsize = self.base_popsize * 2 ** min(self.restart_count // 2 + 1, 5)
             logger.debug(f"BIPOP: Using large population (popsize={popsize})")
         else:
             # Small population: random between base/2 and base

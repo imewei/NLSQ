@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -11,6 +12,9 @@ import pytest
 
 class TestRestoreStateValidation:
     """Tests for _restore_state input validation in AutosaveManager."""
+
+    # sigma only restores together with the x/y it was recorded for
+    _XY: ClassVar[dict] = {"xdata": [1.0, 2.0, 3.0], "ydata": [4.0, 5.0, 6.0]}
 
     def _make_manager(self, tmp_path):
         from nlsq.gui_qt.autosave import AutosaveManager
@@ -59,7 +63,7 @@ class TestRestoreStateValidation:
     def test_sigma_positive_finite_accepted(self, tmp_path):
         """Sigma with positive finite values must be accepted."""
         manager, mock_state = self._make_manager(tmp_path)
-        data = {"sigma": [0.1, 0.2, 0.3]}
+        data = {**self._XY, "sigma": [0.1, 0.2, 0.3]}
 
         manager._restore_state(data)
 
@@ -68,7 +72,7 @@ class TestRestoreStateValidation:
     def test_sigma_inf_accepted(self, tmp_path):
         """sigma=inf is the SciPy convention for 'no weight' — must be accepted."""
         manager, mock_state = self._make_manager(tmp_path)
-        data = {"sigma": [float("inf"), float("inf"), float("inf")]}
+        data = {**self._XY, "sigma": [float("inf"), float("inf"), float("inf")]}
 
         manager._restore_state(data)
 

@@ -433,6 +433,19 @@ class FittingOptionsPage(QWidget):
             self._fit_worker.abort()
             self._status_label.setText("Aborting...")
 
+    def _fit_is_stale(self) -> bool:
+        """True when data or model changed after the running fit started."""
+        return getattr(self, "_fit_epoch", self._app_state.input_epoch) != (
+            self._app_state.input_epoch
+        )
+
+    def _discard_stale_fit(self) -> None:
+        """Release the UI for a fit whose inputs are gone, without reporting it."""
+        self._set_running_state(False)
+        self._app_state.set_fit_running(False)
+        self._status_label.setText("Fit discarded: data or model changed")
+        self._status_label.setStyleSheet("color: #FF9800;")
+
     def _on_fit_progress(self, iteration: int, cost: float) -> None:
         """Handle fit progress update.
 
@@ -452,14 +465,9 @@ class FittingOptionsPage(QWidget):
         Args:
             result: Fit result object
         """
-        if getattr(self, "_fit_epoch", self._app_state.input_epoch) != (
-            self._app_state.input_epoch
-        ):
+        if self._fit_is_stale():
             # data/model changed mid-fit: the result belongs to the old inputs
-            self._set_running_state(False)
-            self._app_state.set_fit_running(False)
-            self._status_label.setText("Fit discarded: data or model changed")
-            self._status_label.setStyleSheet("color: #FF9800;")
+            self._discard_stale_fit()
             return
         self._set_running_state(False)
         self._status_label.setText("Fit completed")
@@ -475,6 +483,9 @@ class FittingOptionsPage(QWidget):
         Args:
             message: Error message
         """
+        if self._fit_is_stale():
+            self._discard_stale_fit()
+            return
         self._set_running_state(False)
 
         self._app_state.set_fit_running(False)
@@ -489,6 +500,9 @@ class FittingOptionsPage(QWidget):
 
     def _on_fit_aborted(self) -> None:
         """Handle a fit stopped by the user."""
+        if self._fit_is_stale():
+            self._discard_stale_fit()
+            return
         self._set_running_state(False)
         self._app_state.set_fit_running(False)
         self._status_label.setText("Fit aborted")

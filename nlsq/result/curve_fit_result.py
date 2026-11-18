@@ -1,10 +1,29 @@
 """Enhanced result objects for curve fitting with convenience methods."""
 
+import logging
 import warnings
 
 import numpy as np
 
 from nlsq.result.optimize_result import OptimizeResult
+from nlsq.result.optimize_warning import OptimizeWarning
+
+_logger = logging.getLogger(__name__)
+
+
+def _check_alpha(alpha) -> float:
+    """Confidence level must be finite and strictly inside (0, 1)."""
+    a = float(alpha)
+    if not np.isfinite(a) or not 0.0 < a < 1.0:
+        raise ValueError(
+            f"alpha is the confidence level and must be in (0, 1), got {alpha!r}"
+        )
+    return a
+
+
+def _rel_diff(d1, d2) -> float:
+    with np.errstate(all="ignore"):
+        return np.linalg.norm(d1 - d2) / max(np.linalg.norm(d1), np.finfo(float).tiny)
 
 
 class CurveFitResult(OptimizeResult):
@@ -28,6 +47,21 @@ class CurveFitResult(OptimizeResult):
         result.plot()
         result.summary()
 
+    Unlike a plain ``dict``, iterating a result (``iter(result)``,
+    ``tuple(result)``, tuple unpacking) yields ``(popt, pcov)``, and integer
+    indexing (``result[0]``) selects from that pair. ``keys()``, ``items()``,
+    ``len()``, ``in`` and string indexing still describe the dict keys.
+
+    A result is a snapshot: do not mutate ``xdata``, ``ydata``, ``sigma`` or
+    ``fun`` arrays in place. Reassigning an attribute (``result["x"] = ...``)
+    invalidates the cached ``predictions``/``residuals``; in-place edits are not
+    detected.
+
+    Derived properties (``predictions``, ``residuals``, ``r_squared`` ...) are
+    read-only and assigning to them raises ``AttributeError``; ``popt``,
+    ``pcov`` and ``diagnostics`` can be assigned and write through to the
+    underlying keys (``x``, ``pcov``, ``_diagnostics_report``).
+
     Additional Attributes
     ---------------------
     model : callable
@@ -40,7 +74,7 @@ class CurveFitResult(OptimizeResult):
         Fitted parameters (alias for self.x).
     pcov : array_like
         Parameter covariance matrix.
-    diagnostics : DiagnosticsReport | None
+    diagnostics : ModelHealthReport | None
         Model health diagnostics report (if compute_diagnostics=True).
 
     Statistical Properties
@@ -147,6 +181,21 @@ class CurveFitResult(OptimizeResult):
         object.__setattr__(self, "_predictions_cache", None)
         object.__setattr__(self, "_residuals_cache", None)
 
+    def __setattr__(self, name, value):
+        # OptimizeResult maps attribute assignment to dict keys, which a
+        # read-only property would then silently shadow (``result.popt = v``
+        # left ``result.popt`` unchanged). Route to the property setter or fail.
+        prop = getattr(type(self), name, None)
+        if isinstance(prop, property):
+            if prop.fset is None:
+                raise AttributeError(
+                    f"'{name}' is a read-only derived property of CurveFitResult; "
+                    "set the underlying key instead (e.g. result['x'] = ...)"
+                )
+            prop.fset(self, value)
+        else:
+            self[name] = value
+
     def __iter__(self):
         """Support tuple unpacking: popt, pcov = curve_fit(...)"""
         return iter((self.popt, self.pcov))
@@ -168,6 +217,10 @@ class CurveFitResult(OptimizeResult):
         """
         return np.asarray(self.x)
 
+    @popt.setter
+    def popt(self, value):
+        self["x"] = value
+
     @property
     def pcov(self):
         """Parameter covariance matrix.
@@ -182,6 +235,10 @@ class CurveFitResult(OptimizeResult):
         if _pcov is not None:
             return np.asarray(_pcov)
         return _pcov
+
+    @pcov.setter
+    def pcov(self, value):
+        self["pcov"] = value
 
     @property
     def diagnostics(self):
@@ -213,10 +270,55 @@ class CurveFitResult(OptimizeResult):
         nlsq.diagnostics.IdentifiabilityReport : Identifiability analysis
         nlsq.diagnostics.GradientHealthReport : Gradient health monitoring
         """
-        # Access diagnostics directly from dict (set by minpack.py)
-        # Note: Due to OptimizeResult's __setattr__ = dict.__setitem__,
-        # result.diagnostics = value actually stores to result['diagnostics']
+        # Stored under "_diagnostics_report" (set by minpack.py); assigning
+        # ``result.diagnostics = v`` writes the same key via the setter below.
         return self.get("_diagnostics_report")
+
+    @diagnostics.setter
+    def diagnostics(self, value):
+        self["_diagnostics_report"] = value
+
+    def _cached(self, attr: str, compute):
+        """Memoise ``compute()`` until the inputs it depends on are replaced.
+
+        The key holds the model/data/fun/sigma objects (compared by identity) and the
+        bytes of ``popt``, so reassigning ``x``, ``xdata``, ``ydata``, ``model``
+        ``fun`` or ``sigma`` recomputes. Mutating ``xdata``/``ydata`` in place is not
+        detected.
+        """
+        refs = tuple(self.get(k) for k in ("model", "xdata", "ydata", "fun", "sigma"))
+        xb = None if self.get("x") is None else np.asarray(self.get("x")).tobytes()
+        cached = getattr(self, attr)
+        if (
+            cached is not None
+            and all(c is r for c, r in zip(cached[0], refs, strict=True))
+            and cached[1] == xb
+        ):
+            return cached[2]
+        value = compute()
+        object.__setattr__(self, attr, (refs, xb, value))
+        return value
+
+    def _unweighted_fun(self):
+        """Optimizer residual ``f - y`` with the sigma weighting undone.
+
+        ``fun`` is ``(f - y) / sigma`` for a 1-D sigma and ``L^-1 (f - y)`` for
+        a covariance sigma (``C = L L^T``).
+        """
+        fun = np.asarray(self.fun, dtype=float)
+        sigma = self.get("sigma")
+        if sigma is None:
+            return fun
+        sig = np.asarray(sigma, dtype=float)
+        if sig.ndim == 0 or (sig.ndim == 1 and sig.shape == fun.shape):
+            return fun * sig
+        if sig.ndim == 2 and sig.shape == (fun.size, fun.size):
+            return np.linalg.cholesky(sig) @ fun
+        raise ValueError(
+            "Cannot undo the sigma weighting of `fun`: sigma shape "
+            f"{sig.shape} does not match the residuals {fun.shape}. "
+            "Provide model and xdata on the result instead."
+        )
 
     @property
     def predictions(self):
@@ -227,26 +329,19 @@ class CurveFitResult(OptimizeResult):
         predictions : ndarray
             Model predictions: f(xdata, \\*popt)
         """
-        if self._predictions_cache is None:
-            if hasattr(self, "model") and hasattr(self, "xdata"):
-                object.__setattr__(
-                    self,
-                    "_predictions_cache",
-                    np.array(self.model(self.xdata, *self.popt)),
-                )
-            # Fallback: use fun (residuals) to back-calculate
-            elif hasattr(self, "ydata") and hasattr(self, "fun"):
-                object.__setattr__(
-                    self,
-                    "_predictions_cache",
-                    np.array(self.ydata) + np.array(self.fun),
-                )
-            else:
-                raise AttributeError(
-                    "Cannot compute predictions: model and xdata not available. "
-                    "This may occur if result was created without these attributes.",
-                )
-        return self._predictions_cache
+
+        def compute():
+            if self.get("model") is not None and self.get("xdata") is not None:
+                return np.array(self.model(self.xdata, *self.popt))
+            # Fallback: back-calculate from fun = (f - y) / sigma
+            if self.get("ydata") is not None and self.get("fun") is not None:
+                return np.array(self.ydata) + self._unweighted_fun()
+            raise AttributeError(
+                "Cannot compute predictions: model and xdata not available. "
+                "This may occur if result was created without these attributes.",
+            )
+
+        return self._cached("_predictions_cache", compute)
 
     @property
     def residuals(self):
@@ -262,7 +357,8 @@ class CurveFitResult(OptimizeResult):
         For a good fit, residuals should be randomly distributed around zero
         with no systematic patterns.
         """
-        if self._residuals_cache is None:
+
+        def compute():
             # Goodness-of-fit residuals are the RAW residuals (observed -
             # predicted), NOT the optimizer's `fun` vector. When sigma weighting
             # is used, `fun` is the *weighted* residual (model - ydata)/sigma,
@@ -271,25 +367,21 @@ class CurveFitResult(OptimizeResult):
             # the opposite sign. Recompute from the model so the documented
             # "ydata - predictions" definition holds regardless of weighting.
             if (
-                hasattr(self, "model")
-                and hasattr(self, "xdata")
-                and hasattr(self, "ydata")
+                self.get("model") is not None
+                and self.get("xdata") is not None
+                and self.get("ydata") is not None
             ):
-                object.__setattr__(
-                    self,
-                    "_residuals_cache",
-                    np.array(self.ydata) - np.array(self.model(self.xdata, *self.popt)),
+                return np.array(self.ydata) - np.array(
+                    self.model(self.xdata, *self.popt)
                 )
-            elif hasattr(self, "ydata") and hasattr(self, "fun"):
-                # No model available: best-effort fallback. This is the
-                # negated optimizer residual and is only the raw residual when
-                # no sigma weighting was applied.
-                object.__setattr__(self, "_residuals_cache", -np.array(self.fun))
-            else:
-                raise AttributeError(
-                    "Cannot compute residuals: neither model+data nor fun available",
-                )
-        return self._residuals_cache
+            if self.get("ydata") is not None and self.get("fun") is not None:
+                # No model available: undo the sigma weighting of `fun`.
+                return -self._unweighted_fun()
+            raise AttributeError(
+                "Cannot compute residuals: neither model+data nor fun available",
+            )
+
+        return self._cached("_residuals_cache", compute)
 
     @property
     def r_squared(self):
@@ -321,6 +413,8 @@ class CurveFitResult(OptimizeResult):
         if not np.isfinite(ss_tot) or ss_tot < np.finfo(float).tiny:
             warnings.warn(
                 "Total sum of squares is zero or NaN (constant/NaN data). R² undefined.",
+                OptimizeWarning,
+                stacklevel=2,
             )
             return np.nan
 
@@ -353,7 +447,11 @@ class CurveFitResult(OptimizeResult):
         r2 = self.r_squared
 
         if n - p <= 0:
-            warnings.warn("Not enough degrees of freedom for adjusted R².")
+            warnings.warn(
+                "Not enough degrees of freedom for adjusted R².",
+                OptimizeWarning,
+                stacklevel=2,
+            )
             return np.nan
 
         return 1 - (1 - r2) * (n - 1) / (n - p)
@@ -414,9 +512,22 @@ class CurveFitResult(OptimizeResult):
         """
         return self._information_criterion("AIC", 2.0)
 
+    def _noise_known(self) -> bool:
+        """True when the noise scale is known: ``absolute_sigma=True`` (with the
+        given ``sigma``, or the solver's implicit unit sigma when omitted)."""
+        return bool(self.get("absolute_sigma", False))
+
+    def _effective_sigma(self):
+        """The sigma the fit used: the stored one, a unit sigma when omitted
+        with ``absolute_sigma=True``, else None (unweighted, estimated noise)."""
+        sigma = self.get("sigma")
+        if sigma is None and self._noise_known():
+            return np.float64(1.0)
+        return sigma
+
     def _chi2(self):
         """Sigma-weighted chi-square at popt, or None for unweighted fits."""
-        sigma = getattr(self, "sigma", None)
+        sigma = self._effective_sigma()
         if sigma is None:
             return None
         r = np.asarray(self.residuals, dtype=float)
@@ -435,14 +546,18 @@ class CurveFitResult(OptimizeResult):
         n = len(self.ydata)
         k = len(self.popt)
         chi2 = self._chi2()
-        if chi2 is not None and bool(getattr(self, "absolute_sigma", False)):
+        if chi2 is not None and self._noise_known():
             if not np.isfinite(chi2):
-                warnings.warn(f"chi² is NaN/inf, {name} undefined.")
+                warnings.warn(
+                    f"chi² is NaN/inf, {name} undefined.", OptimizeWarning, stacklevel=3
+                )
                 return np.nan
             return penalty_per_param * k + chi2
         ss = np.sum(self.residuals**2) if chi2 is None else chi2
         if not np.isfinite(ss) or ss <= 0:
-            warnings.warn(f"RSS ≤ 0 or NaN, {name} undefined.")
+            warnings.warn(
+                f"RSS ≤ 0 or NaN, {name} undefined.", OptimizeWarning, stacklevel=3
+            )
             return np.nan
 
         return penalty_per_param * k + n * np.log(ss / n)
@@ -502,23 +617,11 @@ class CurveFitResult(OptimizeResult):
                 "(the fit was run with compute_covariance=False).",
             )
 
-        from scipy import stats
-
-        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
+        alpha = _check_alpha(alpha)
         p = len(self.popt)
-
-        # Degrees of freedom
-        if n <= p:
-            warnings.warn(
-                f"Underdetermined fit: {n} data points and {p} parameters. "
-                "Confidence intervals are unreliable (dof forced to 1).",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-        dof = max(n - p, 1)
-
-        # t-value for confidence level
-        t_val = stats.t.ppf((1 + alpha) / 2, dof)
+        t_val, _ = self._interval_quantile(alpha, "Confidence intervals")
+        if t_val is None:
+            return np.full((p, 2), np.nan)
 
         # Standard errors from covariance diagonal
         perr = np.sqrt(np.diag(self.pcov))
@@ -530,6 +633,50 @@ class CurveFitResult(OptimizeResult):
 
         return intervals
 
+    def _interval_quantile(self, alpha: float, what: str):
+        """Return ``(quantile, dof)`` for a two-sided ``alpha`` interval.
+
+        With a known noise scale (``sigma`` with ``absolute_sigma=True``) the
+        covariance is exact and the quantile is Gaussian for every ``n``;
+        otherwise it is Student-t with ``dof = n - p``. With ``n <= p`` and an
+        estimated noise scale there is no residual degree of freedom: warn
+        (from the public caller's frame) and return ``None`` (bounds
+        undefined). The upper-tail form ``isf((1 - alpha) / 2)`` keeps the
+        representable tail probability when ``alpha`` is within an ULP of 1.
+        """
+        from scipy import stats
+
+        n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
+        p = len(self.popt)
+        dof = max(n - p, 1)
+        tail = (1.0 - alpha) / 2.0
+        known_noise = self._noise_known()
+        if n > p or known_noise:
+            if n <= p:
+                warnings.warn(
+                    f"Underdetermined fit: {n} data points and {p} parameters. "
+                    f"{what} use the normal quantile (known absolute sigma).",
+                    RuntimeWarning,
+                    stacklevel=3,
+                )
+            return (
+                stats.norm.isf(tail) if known_noise else stats.t.isf(tail, dof)
+            ), dof
+        warnings.warn(
+            f"Underdetermined fit: {n} data points and {p} parameters. "
+            f"{what} are undefined (NaN): no residual degrees of freedom.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return None, dof
+
+    @staticmethod
+    def _propagated_variance(jacobian, pcov):
+        """Diagonal of ``J pcov J^T``; infinite when ``pcov`` is not finite."""
+        if not np.all(np.isfinite(pcov)):
+            return np.full(jacobian.shape[0], np.inf)
+        return np.sum((jacobian @ pcov) * jacobian, axis=1)
+
     def _finite_diff_jacobian(
         self, x, popt, eps: float = float(np.sqrt(np.finfo(float).eps))
     ):
@@ -537,14 +684,32 @@ class CurveFitResult(OptimizeResult):
         ``x``. Shared by ``prediction_interval`` and ``confidence_band``, which
         both need the same parameter-uncertainty propagation through the model.
 
-        The Jacobian is exact (``jax.jacfwd``); models that cannot be traced
-        fall back to central differences with step
-        ``eps**(2/3) * max(|p|, 1)``.
+        The Jacobian is exact (``jax.jacfwd``). Central differences are only a
+        fallback for models ``jax.jacfwd`` cannot trace (e.g. NumPy-only), and
+        assume the model is smooth on the scale of the standard step
+        ``cbrt(eps) * max(|p|, 1)``. Models that oscillate or vary on a scale
+        comparable to that step can alias (two neighbouring step sizes may agree
+        on a wrong value); write such models with ``jax.numpy`` so autodiff is
+        exact.
+
+        Fallback details: a ladder of steps ``h_a * 10**k`` around ``h_a`` is
+        tried lazily (rung 0 plus one neighbour when the standard step is well
+        resolved; otherwise descending). It reaches down to about
+        ``1e-12 * |p|`` (``|p|`` is floored at 1e-8 only for ``p == 0`` or
+        non-finite ``p``) so probes can stay inside a nearby domain edge, with
+        a hard cap of ``k >= -40`` (smallest step 6e-46) and ``k <= 3``: at most
+        44 rungs, i.e. 88 model evaluations per parameter. Non-finite estimates,
+        probes that raise ``ValueError``/``ArithmeticError``, and steps whose
+        function difference is within rounding noise of ``f`` are discarded;
+        steps more than ``1e3 * |p|`` are "nonlocal" and are used only when two
+        adjacent ones agree. A parameter with no effect gets an exact 0.
+        ``FloatingPointError`` is raised when no finite, local derivative can
+        be obtained (including when some probes raised and the rest were non-finite); if every probe raised, the model's own error is re-raised.
         """
         popt = np.asarray(popt, dtype=float)
         n_params = len(popt)
 
-        y_pred = np.array(self.model(x, *popt))
+        y_pred = np.atleast_1d(np.array(self.model(x, *popt)))
         # Size from the predictions: 2-D xdata is (k, N), so len(x) would be k.
         n_points = y_pred.shape[0]
         try:
@@ -554,25 +719,164 @@ class CurveFitResult(OptimizeResult):
             jac = jax.jacfwd(lambda p: jnp.asarray(self.model(x, *p)))(
                 jnp.asarray(popt)
             )
-            return y_pred, np.asarray(jac, dtype=float).reshape(n_points, n_params)
-        except Exception:  # untraceable (e.g. numpy-only) model
-            pass
+            jac = np.asarray(jac, dtype=float).reshape(n_points, n_params)
+            if np.all(np.isfinite(jac)):
+                return y_pred, jac
+            # non-finite autodiff (e.g. sqrt at 0, or a NaN-gradient trap):
+            # let central differences decide; they raise if it is undefined too
+            _logger.debug("non-finite jax.jacfwd Jacobian; using finite differences")
+        except (
+            TypeError,  # incl. jax.errors.JAXTypeError (tracer/concretization)
+            ValueError,  # e.g. pure_callback has no JVP rule
+            NotImplementedError,  # primitive without a JVP rule
+            jax.errors.JAXIndexError,
+        ) as exc:
+            # untraceable (e.g. numpy-only) model: fall back to finite differences
+            _logger.debug("jax.jacfwd failed (%s); using finite differences", exc)
 
         jacobian = np.zeros((n_points, n_params))
         step = eps ** (2.0 / 3.0)  # = cbrt(machine eps), optimal for central diff
-        for i in range(n_params):
-            # floor: h << ulp(f) for tiny p would lose the column
-            h = step * max(abs(popt[i]), 1.0)
-            params_plus = popt.copy()
-            params_minus = popt.copy()
-            params_plus[i] += h
-            params_minus[i] -= h
-            y_plus = np.array(self.model(x, *params_plus))
-            y_minus = np.array(self.model(x, *params_minus))
-            # divide by the representable step actually taken
-            jacobian[:, i] = (y_plus - y_minus) / (params_plus[i] - params_minus[i])
 
+        for i in range(n_params):
+            jacobian[:, i] = self._fd_derivative(x, popt, i, step)
+
+        if not np.all(np.isfinite(jacobian)):
+            raise FloatingPointError(
+                "Finite-difference Jacobian is not finite; the model is not "
+                "differentiable at popt in float64 (use a JAX-traceable model)."
+            )
         return y_pred, jacobian
+
+    def _fd_central(self, x, popt, i: int, h: float):
+        """Central difference at step ``h``: ``(derivative, strong, weak, exc)``.
+
+        ``weak``: finite and ``|f+ - f-|`` above ``8 eps |f|`` (a single-ULP
+        change is rounding noise and fails). ``strong``: above ``1e4 eps |f|``
+        (roundoff error below ~1e-4 relative). A probe that raises a
+        numerical/domain error (``ValueError``, ``ArithmeticError``) is invalid
+        (``exc`` is that error); any other exception propagates.
+        """
+        eps_f = np.finfo(float).eps
+        plus, minus = popt.copy(), popt.copy()
+        plus[i] += h
+        minus[i] -= h
+        try:
+            with np.errstate(all="ignore"):
+                f_plus = np.asarray(np.atleast_1d(self.model(x, *plus)), dtype=float)
+                f_minus = np.asarray(np.atleast_1d(self.model(x, *minus)), dtype=float)
+                dy = f_plus - f_minus
+        except (ValueError, ArithmeticError) as exc:
+            return np.array(np.nan), False, False, exc
+        with np.errstate(all="ignore"):
+            # divide by the representable step actually taken
+            d = dy / (plus[i] - minus[i])
+            scale = eps_f * np.linalg.norm(np.maximum(abs(f_plus), abs(f_minus)))
+            finite = bool(np.all(np.isfinite(d)))
+            dy_norm = np.linalg.norm(dy)
+            return (
+                d,
+                finite and dy_norm > 1e4 * scale,
+                finite and dy_norm > 8 * scale,
+                None,
+            )
+
+    def _fd_derivative(self, x, popt, i: int, step: float):  # noqa: C901 - one linear decision list
+        """Finite-difference column ``df/dp_i`` (see ``_finite_diff_jacobian``)."""
+        first_exc: list[Exception] = []
+        n_completed = [0]  # probes that returned (finite or not) instead of raising
+
+        def central(i, h):
+            d, strong, weak, exc = self._fd_central(x, popt, i, h)
+            if exc is not None:
+                first_exc.append(exc)
+            else:
+                n_completed[0] += 1
+            return d, strong, weak
+
+        # Ladder of central differences at h_k = h_a * 10**k around the
+        # standard step h_a = cbrt(eps)*max(|p|, 1) (the first choice), for
+        # k_lo <= k <= k_hi. Down to about 1e-12*|p| (|p| floored at 1e-8 only if
+        # p == 0 or non-finite), so probes stay inside a nearby domain edge,
+        # and up to 1e-2*|p|. Rungs above 1e3*|p| are "nonlocal" (they perturb p
+        # by many multiples of itself).
+        # Budget: k_lo >= -40 and k_hi <= 3 -> at most 44 rungs = 88 model
+        # evaluations per parameter (smallest step 6e-46). Rungs are evaluated
+        # lazily, so the common case costs rung 0 plus one neighbour
+        # (4 evaluations).
+        p_i = abs(popt[i])
+        finite_p = bool(np.isfinite(p_i) and p_i > 0)
+        scale = p_i if finite_p else 1e-8
+        h_a = step * max(p_i if np.isfinite(p_i) else 0.0, 1.0)
+        # logs (not ratios): scale can be subnormal, so 1e-12*scale underflows
+        log_a = np.log10(h_a)
+        k_lo = max(min(-1, -int(np.ceil(log_a - (np.log10(scale) - 12.0) - 1e-9))), -40)
+        k_hi = int(np.floor(np.log10(max(h_a, 1e-2 * scale)) - log_a + 1e-9))
+        rungs = {}
+
+        def rung(k):
+            if k not in rungs:
+                rungs[k] = central(i, h_a * 10.0**k)
+            return rungs[k]
+
+        def local(k):
+            return not finite_p or h_a * 10.0**k <= 1e3 * p_i * (1 + 1e-9)
+
+        d0, strong0, _ = rung(0)
+        # 1. The standard step, when local, well resolved and in agreement
+        #    with a neighbouring rung (a few percent), is used as is.
+        if (
+            strong0
+            and local(0)
+            and any(
+                k_lo <= k <= k_hi and rung(k)[2] and _rel_diff(d0, rung(k)[0]) <= 2e-2
+                for k in (-1, 1)
+            )
+        ):
+            return d0
+        # 2. Otherwise descend lazily (largest steps first, least roundoff)
+        #    and stop at the first adjacent pair of local rungs, both clearly
+        #    above rounding noise, that agree to 1e-4; keep its larger step.
+        for k in [*range(0, k_lo - 1, -1), *range(1, k_hi + 1)]:
+            if rung(k)[2] and local(k):
+                for kn in (k + 1, k - 1):
+                    if kn in rungs and rungs[kn][2] and local(kn):
+                        if _rel_diff(rung(k)[0], rungs[kn][0]) <= 1e-4:
+                            return rung(max(k, kn))[0]
+        # 3. No such pair: Ridders-style, the best-agreeing adjacent pair
+        #    among rungs clearly above noise (non-finite and one-ULP rungs are
+        #    discarded). Local rungs first; nonlocal ones only as an agreeing pair.
+        ok = [k for k in range(k_lo, k_hi + 1) if rung(k)[2]]
+        ok_local = [k for k in ok if local(k)]
+        ok_nonlocal = [k for k in ok if not local(k)]
+
+        def pairs_of(ks, tol=np.inf):
+            out = [
+                (_rel_diff(rung(k)[0], rung(k + 1)[0]), k + 1)
+                for k in ks
+                if k + 1 in ks
+            ]
+            return [t for t in out if t[0] <= tol]
+
+        if pairs_of(ok_local):
+            return rung(min(pairs_of(ok_local))[1])[0]
+        if ok_local:  # no adjacent pair: the best-resolved local survivor
+            return rung(ok_local[-1])[0]
+        if pairs_of(ok_nonlocal, 2e-2):  # consistent over decades: ~linear
+            return rung(min(pairs_of(ok_nonlocal, 2e-2))[1])[0]
+        if ok_nonlocal:  # lone nonlocal probe(s): not evidence of a derivative
+            raise FloatingPointError(
+                f"Finite-difference derivative with respect to parameter {i} "
+                f"(|p| = {p_i:.3g}) is only resolved at steps far larger than "
+                "the parameter; use a JAX-traceable model."
+            )
+        fin = [d for d, _, _ in rungs.values() if np.all(np.isfinite(d))]
+        if fin:
+            # nothing clears the noise floor: f is (nearly) unchanged at every
+            # rung, i.e. a zero (or unresolvable) derivative -> standard step
+            return d0 if np.all(np.isfinite(d0)) else fin[0]
+        if first_exc and not n_completed[0]:  # every probe raised: keep its error
+            raise first_exc[0]
+        return d0
 
     def prediction_interval(self, x=None, alpha: float = 0.95):
         """Compute prediction interval at x values.
@@ -601,6 +905,12 @@ class CurveFitResult(OptimizeResult):
         and inherent data variability. For an unweighted fit the latter is the
         pooled residual variance; for a fit with ``sigma`` it is weighted by
         ``sigma(x)**2`` (see ``_noise_variance_at``).
+
+        ``x`` may be a scalar (treated as one point). With no residual degrees
+        of freedom (``n <= n_params``) a ``RuntimeWarning`` is issued and, unless
+        the noise is known (``sigma`` with ``absolute_sigma=True``, which then
+        uses the normal quantile), every bound is NaN. ``confidence_intervals``
+        and ``confidence_band`` behave the same way.
         """
         if not hasattr(self, "model"):
             raise AttributeError(
@@ -612,8 +922,6 @@ class CurveFitResult(OptimizeResult):
                 "(the fit was run with compute_covariance=False).",
             )
 
-        from scipy import stats
-
         # Use self.xdata if x not provided
         if x is None:
             if not hasattr(self, "xdata"):
@@ -623,24 +931,24 @@ class CurveFitResult(OptimizeResult):
                 )
             x = self.xdata
 
-        x = np.asarray(x)
+        alpha = _check_alpha(alpha)
+        x = np.atleast_1d(np.asarray(x))
         popt = self.popt
         pcov = self.pcov
-        n_params = len(popt)
 
+        t_val, dof = self._interval_quantile(alpha, "Prediction intervals")
+        if t_val is None:  # undefined: no need (or right) to differentiate
+            n_out = np.atleast_1d(np.array(self.model(x, *popt))).shape[0]
+            return np.full((n_out, 2), np.nan)
         y_pred, jacobian = self._finite_diff_jacobian(x, popt)
 
         # Variance of the mean response (parameter-uncertainty contribution),
         # same as confidence_band: J @ pcov @ J.T (diagonal)
-        variance = np.sum((jacobian @ pcov) * jacobian, axis=1)
+        variance = self._propagated_variance(jacobian, pcov)
 
         # Residual variance (inherent data variability)
         n = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
-        dof = max(n - n_params, 1)
         s2 = self._noise_variance_at(x, n, dof)
-
-        # t-value
-        t_val = stats.t.ppf((1 + alpha) / 2, dof)
 
         # Prediction interval = confidence band variance + residual variance
         se_pred = np.sqrt(np.maximum(variance, 0) + s2)
@@ -660,10 +968,14 @@ class CurveFitResult(OptimizeResult):
         its diagonal) the noise follows the fit's weighting: ``sigma(x)**2`` times
         the reduced chi-square (``absolute_sigma=False``) or ``sigma(x)**2``
         alone (``absolute_sigma=True``); ``sigma(x)`` is the data sigma at the
-        data points and interpolated in x elsewhere (1-D x only).
+        data points and linearly interpolated in x elsewhere (1-D x only;
+        ``np.interp`` clamps, so outside the data range ``sigma(x)`` is the edge
+        value, not an extrapolation). If the stored ``sigma`` does not match the
+        residuals (or is non-finite / non-positive) the pooled variance is used
+        and a ``RuntimeWarning`` is issued.
         """
         resid = np.asarray(self.residuals, dtype=float)
-        sigma = getattr(self, "sigma", None)
+        sigma = self._effective_sigma()
         if sigma is not None:
             sig = np.asarray(sigma, dtype=float)
             if sig.ndim == 0:
@@ -671,17 +983,14 @@ class CurveFitResult(OptimizeResult):
             elif sig.ndim == 2 and sig.shape[0] == sig.shape[1]:
                 # covariance-matrix sigma: marginal variance per observation
                 sig = np.sqrt(np.abs(np.diag(sig)))
+            sig = np.abs(sig)  # the noise scale is |sigma| (solver accepts signed)
             if (
                 sig.ndim == 1
                 and sig.shape == resid.shape
                 and np.all(np.isfinite(sig))
                 and np.all(sig > 0)
             ):
-                scale = (
-                    1.0
-                    if bool(getattr(self, "absolute_sigma", False))
-                    else self._chi2() / dof
-                )
+                scale = 1.0 if self._noise_known() else self._chi2() / dof
                 xd = np.asarray(getattr(self, "xdata", []), dtype=float)
                 xq = np.asarray(x, dtype=float)
                 if xq.shape == xd.shape and np.array_equal(xq, xd):
@@ -692,6 +1001,14 @@ class CurveFitResult(OptimizeResult):
                 else:
                     sig_x = np.full(xq.shape[-1:], float(np.sqrt(np.mean(sig**2))))
                 return scale * sig_x**2
+            warnings.warn(
+                "Stored sigma does not match the residuals (shape "
+                f"{sig.shape} vs {resid.shape}) or is non-finite/non-positive; "
+                "the prediction interval uses the pooled unweighted variance "
+                "while pcov is sigma-weighted.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
         return np.sum(resid**2) / dof
 
     def confidence_band(self, x=None, alpha: float = 0.95):
@@ -725,8 +1042,6 @@ class CurveFitResult(OptimizeResult):
                 "(the fit was run with compute_covariance=False).",
             )
 
-        from scipy import stats
-
         if x is None:
             if not hasattr(self, "xdata"):
                 raise AttributeError(
@@ -734,23 +1049,21 @@ class CurveFitResult(OptimizeResult):
                 )
             x = self.xdata
 
-        # Ensure inputs are numpy arrays
-        x = np.asarray(x)
+        alpha = _check_alpha(alpha)
+        # Ensure inputs are numpy arrays (a scalar x is one point)
+        x = np.atleast_1d(np.asarray(x))
         popt = self.popt
         pcov = self.pcov
-        n_params = len(popt)
 
+        t_val, _ = self._interval_quantile(alpha, "Confidence bands")
+        if t_val is None:  # undefined: no need (or right) to differentiate
+            shape = np.atleast_1d(np.array(self.model(x, *popt))).shape
+            return np.full(shape, np.nan), np.full(shape, np.nan)
         y0, jacobian = self._finite_diff_jacobian(x, popt)
 
         # Variance of the mean response: J @ pcov @ J.T (diagonal)
-        # element-wise for diagonal
-        variance = np.sum((jacobian @ pcov) * jacobian, axis=1)
+        variance = self._propagated_variance(jacobian, pcov)
         std_error = np.sqrt(np.maximum(variance, 0))
-
-        # t-statistic
-        n_data = len(self.ydata) if hasattr(self, "ydata") else len(self.residuals)
-        dof = max(n_data - n_params, 1)
-        t_val = stats.t.ppf((1 + alpha) / 2, dof)
 
         lower = y0 - t_val * std_error
         upper = y0 + t_val * std_error
@@ -862,9 +1175,7 @@ class CurveFitResult(OptimizeResult):
                     label="95% CI",
                 )
             except Exception:
-                import logging
-
-                logging.getLogger(__name__).warning(
+                _logger.warning(
                     "Confidence band calculation failed",
                     exc_info=True,
                 )
@@ -962,7 +1273,9 @@ class CurveFitResult(OptimizeResult):
         print("-" * 70)
         print(f"Success           : {self.success}")
         print(f"Message           : {self.message}")
-        print(f"Iterations        : {self.nfev if hasattr(self, 'nfev') else 'N/A'}")
+        print(f"Function evals    : {self.nfev if hasattr(self, 'nfev') else 'N/A'}")
+        if self.get("nit") is not None:
+            print(f"Iterations        : {self['nit']}")
         print(f"Final cost        : {self.cost if hasattr(self, 'cost') else 'N/A'}")
         # self.optimality is None for CMA-ES results and absent entirely for
         # hybrid-streaming/multistart results -- applying the ':.6e' numeric

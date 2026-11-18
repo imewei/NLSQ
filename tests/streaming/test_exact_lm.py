@@ -284,7 +284,8 @@ def test_derive_chunk_size_precedence():
     # explicit positive chunk wins (even over an impossible budget) and is clamped to n
     assert lm.derive_chunk_size(3000, 3, None, 1024) == 1024
     assert lm.derive_chunk_size(3000, 3, None, 10**9) == 3000
-    assert lm.derive_chunk_size(3000, 3, 1e-12, 512) == 512
+    with pytest.warns(UserWarning, match="memory_limit_gb"):
+        assert lm.derive_chunk_size(3000, 3, 1e-12, 512) == 512
     with pytest.raises(ValueError, match="chunk_size"):
         lm.derive_chunk_size(3000, 3, None, 0)
     # default 1 << 22, clamped to n
@@ -1082,8 +1083,9 @@ def test_stationary_does_not_certify_from_free_subspace():
     assert lm.newton_certificate(g[free], H[np.ix_(free, free)], F, 1e-8)  # the trap
     assert lm._stationary(F, g, H, free, theta, lo, hi, 1e-8, 1e-8) is None
     # a tiny free gradient (above gtol) and an outward held one: the box certificate fires
+    # gtol is the MINPACK cosine |g_1| / (sqrt(H_11) |r|) = 4e-14 here (was absolute 1e-9)
     g0 = np.array([-1.0, 1e-9])
-    assert lm._stationary(F, g0, H, free, theta, lo, hi, 1e-12, 1e-8) == "ftol"
+    assert lm._stationary(F, g0, H, free, theta, lo, hi, 1e-15, 1e-8) == "ftol"
 
 
 @pytest.mark.parametrize(
@@ -1262,8 +1264,10 @@ exp_decay = lambda x, a, b, c: a * jnp.exp(-b * x) + c
 x = np.linspace(0.0, 5.0, 3001)
 noise = 1e-3 * np.random.default_rng(0).standard_normal(x.size)
 y_exp = np.asarray(exp_decay(x, 2.5, 1.3, 0.5)) + noise
-# cond(J) ~ 8e6 here, ~2e5 at the fitted popt. The plan's original rate 1.0001 is
-# numerically rank-deficient at popt; see test_rank_deficient_original_input_regression.
+# cond(J) ~ 2e5 at the fitted popt, but only 22 after Jacobi scaling (parameter units, not
+# collinearity): the TSQR gate uses the scaled value, so tests of the TSQR route lower
+# TSQR_KAPPA below it. The plan's original rate 1.0001 is numerically rank-deficient at
+# popt; see test_rank_deficient_original_input_regression.
 TRUE_ILL = (2.0, 1.0, 1.5, 1.02)
 y_ill = np.asarray(two_exp(x, *TRUE_ILL)) + noise
 P0_ILL = [2.0, 0.9, 1.5, 1.1]
@@ -1371,7 +1375,8 @@ def test_tsqr_r_factor_rank_deficient():
 @pytest.mark.filterwarnings(
     "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
 )
-def test_ill_conditioned_exact_uses_tsqr(spy_tsqr):
+def test_ill_conditioned_exact_uses_tsqr(spy_tsqr, monkeypatch):
+    monkeypatch.setattr(lm, "TSQR_KAPPA", 10.0)  # below the scaled kappa (22)
     res = lm.exact_lm_fit(two_exp, x, y_ill, P0_ILL, chunk_size=1000, **TIGHT)
     assert res.success
     ref, _ = pcov_from_jacobian(
@@ -1398,6 +1403,7 @@ def test_skip_never_calls_tsqr(spy_tsqr):
 
 def test_flag_off_emits_no_conditioning_warnings(spy_tsqr):
     """Ill-conditioned problem, compute_covariance=False: no COND_WARN / TSQR-route warning."""
+    y_ill = np.asarray(two_exp(x, 2.0, 1.0, 1.5, 1.00001)) + noise  # scaled kappa > 1e4
     with warnings.catch_warnings(record=True) as off:
         warnings.simplefilter("always")
         lm.exact_lm_fit(
@@ -1565,6 +1571,7 @@ def test_tsqr_jacobian_reflects_the_models_current_state():
 )
 def test_tsqr_covariance_of_a_refit_mutated_model_is_current(monkeypatch):
     """Uncached (cache disabled) model, mutated between two ill-conditioned fits."""
+    monkeypatch.setattr(lm, "TSQR_KAPPA", 10.0)  # below the scaled kappa (22)
     monkeypatch.setenv("NLSQ_DISABLE_WRAPPER_CACHE", "1")
 
     def make(scale):

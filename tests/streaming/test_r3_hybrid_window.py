@@ -43,3 +43,17 @@ def test_infinite_bounds_unchanged_and_finite():
     c = _cands([1.0, 1.0], [0.0, -np.inf], [np.inf, np.inf], scale_factor=0.5)
     assert np.all(np.isfinite(c))
     assert np.all(c[:, 0] >= 0)
+
+
+def test_wide_finite_box_is_not_treated_as_unbounded():
+    # ub - lb overflows to inf for this finite box; the window must still be the box
+    # (scale_factor=1), not p0 +/- (|p0| + 0.1).
+    c = _cands([0.0], [-1e308], [1e308], scale_factor=1.0)
+    assert np.all(np.isfinite(c)) and np.all(np.abs(c) <= 1e308)
+    assert np.ptp(c) > 1e307
+
+
+def test_wide_finite_box_scaled_window_is_centered_and_inside():
+    c = _cands([0.0], [-1e308], [1e308], scale_factor=0.5)
+    assert np.all(np.abs(c) <= 0.5e308 * (1 + 1e-12))
+    assert np.ptp(c) > 0.4e308

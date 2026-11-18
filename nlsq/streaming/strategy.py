@@ -81,7 +81,7 @@ class _HybridStrategy:
     def unpack(self, native: Any, /) -> tuple[np.ndarray, np.ndarray]:
         x = native["x"]
         if not native.get("success", True):
-            if native.get("message") != "Maximum iterations reached":
+            if native.get("convergence_reason") != "Maximum iterations reached":
                 raise RuntimeError(
                     f"hybrid_streaming fit failed: {native.get('message')}"
                 )

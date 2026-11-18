@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from nlsq.streaming.large_dataset import get_bucket_size
 from nlsq.streaming.normal_equations import NormalEquations, cached_kernel
@@ -29,6 +30,35 @@ if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 _logger = get_logger("gauss_newton_phase")
+
+
+def scaled_norm(v: Any) -> float:
+    """Euclidean norm that cannot overflow/underflow while squaring.
+
+    ``jnp.linalg.norm`` squares first, so a finite vector with entries above
+    ~1e154 gets an ``inf`` norm. Non-finite entries give ``inf``/``nan``.
+    """
+    a = np.abs(np.asarray(v, dtype=float))
+    m = float(a.max(initial=0.0))
+    if m == 0.0 or not np.isfinite(m):
+        return m
+    return m * float(np.sqrt(np.sum((a / m) ** 2)))
+
+
+def clip_to_radius(step: Any, radius: float) -> Any:
+    """``step`` scaled onto the trust-region boundary if it is longer than ``radius``.
+
+    Overflow-safe: a finite step of norm 1e180 is clipped, not zeroed. A
+    non-finite step is returned unchanged.
+    """
+    a = np.abs(np.asarray(step, dtype=float))
+    m = float(a.max(initial=0.0))
+    if m == 0.0 or not np.isfinite(m):
+        return step
+    unit_norm = float(np.sqrt(np.sum((a / m) ** 2)))  # ||step|| = m * unit_norm
+    if m * unit_norm <= radius:
+        return step
+    return jnp.asarray(np.asarray(step, dtype=float) / m * (radius / unit_norm))
 
 
 def _pad_chunk_to_bucket(
@@ -769,14 +799,14 @@ class GaussNewtonPhase:
         # Solve using SVD
         UTb = U.T @ JTr
         s_threshold = jnp.max(s) * 1e-10
-        s_safe = jnp.where(s > s_threshold, s, s_threshold)
-        step_hat = UTb / s_safe
+        # Truncated pseudo-inverse: zero the null-space directions (as
+        # adaptive_hybrid does) instead of dividing noise by the threshold.
+        s_safe = jnp.where(s > s_threshold, s, 1.0)
+        step_hat = UTb * jnp.where(s > s_threshold, 1.0 / s_safe, 0.0)
         step = Vt.T @ step_hat
 
         # Apply trust region constraint
-        step_norm = jnp.linalg.norm(step)
-        if step_norm > 0 and step_norm > trust_radius:
-            step = step * (trust_radius / step_norm)
+        step = clip_to_radius(step, trust_radius)
 
         # Compute predicted reduction
         pred_red = jnp.dot(JTr, step) - 0.5 * jnp.dot(step, JTJ @ step)

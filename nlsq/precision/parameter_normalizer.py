@@ -134,8 +134,14 @@ class ParameterNormalizer:
         """
         self.zero_p0_scales = zero_p0_scales
         self.p0 = jnp.atleast_1d(jnp.asarray(p0, dtype=jnp.float64))
+        if self.p0.ndim != 1:
+            raise ValueError(f"p0 must be 1-D, got shape {self.p0.shape}")
         self.n_params = len(self.p0)
         self.original_bounds = bounds
+        if bounds is not None:
+            # Fail early: a wrong-length bound would broadcast and silently
+            # change the optimisation dimension.
+            self._broadcast_bounds(bounds)
 
         # Validate strategy
         valid_strategies = ("bounds", "p0", "none", "auto")
@@ -160,6 +166,21 @@ class ParameterNormalizer:
         # Compute normalization Jacobian (denormalization Jacobian)
         self._normalization_jacobian = self._compute_jacobian()
 
+    def _broadcast_bounds(self, bounds) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Validate bounds and broadcast scalar bounds to ``(n_params,)``."""
+        out = []
+        for name, raw in zip(("lower", "upper"), bounds, strict=True):
+            b = jnp.asarray(raw, dtype=jnp.float64)
+            if b.ndim > 1 or b.size not in (1, self.n_params):
+                raise ValueError(
+                    f"{name} bounds must be a scalar or have {self.n_params} "
+                    f"elements, got shape {b.shape}"
+                )
+            if bool(jnp.any(jnp.isnan(b))):
+                raise ValueError(f"{name} bounds must not contain NaN")
+            out.append(jnp.broadcast_to(b.reshape(-1), (self.n_params,)))
+        return out[0], out[1]
+
     def _p0_magnitude_scale(self) -> jnp.ndarray:
         """Scale factors from |p0| magnitudes, clamped away from zero.
 
@@ -167,14 +188,18 @@ class ParameterNormalizer:
         fallback for parameters with a one-sided/infinite bound.
         """
         abs_p0 = jnp.abs(self.p0)
-        eps = jnp.finfo(jnp.float64).eps * 10
         fallback = jnp.ones_like(abs_p0)
+        # Without a caller hint only underflow-level values count as zero, so
+        # physically small parameters (1e-18) still normalise. A hint was built
+        # by the caller for its own ~0 entries (|p0| < 10 eps), so honour that.
+        cutoff = jnp.finfo(jnp.float64).tiny
         if self.zero_p0_scales is not None:
+            cutoff = jnp.finfo(jnp.float64).eps * 10
             hint = jnp.broadcast_to(
                 jnp.asarray(self.zero_p0_scales, dtype=jnp.float64), abs_p0.shape
             )
             fallback = jnp.where(jnp.isfinite(hint) & (hint > 0), hint, fallback)
-        return jnp.where(abs_p0 < eps, fallback, abs_p0)
+        return jnp.where(abs_p0 < cutoff, fallback, abs_p0)
 
     def _compute_normalization_parameters(self):
         """Compute scaling factors and offsets based on strategy."""
@@ -183,9 +208,7 @@ class ParameterNormalizer:
             if self.original_bounds is None:
                 raise ValueError("bounds must be provided for bounds-based strategy")
 
-            lb, ub = self.original_bounds
-            lb = jnp.asarray(lb, dtype=jnp.float64)
-            ub = jnp.asarray(ub, dtype=jnp.float64)
+            lb, ub = self._broadcast_bounds(self.original_bounds)
             if bool(jnp.any(lb > ub)):
                 raise ValueError("lower bounds must not exceed upper bounds")
 
@@ -200,12 +223,10 @@ class ParameterNormalizer:
             # as the 'p0' strategy, instead of a bounds-relative transform.
             finite_range = jnp.isfinite(raw_scales)
 
-            # Handle zero range (constant parameter)
-            eps = jnp.finfo(jnp.float64).eps
+            # Zero range (lb == ub, a constant parameter) keeps unit scale; any
+            # positive range, however small, defines the scale.
             bounded_scales = jnp.where(
-                jnp.abs(raw_scales) < eps,
-                jnp.ones_like(raw_scales),
-                raw_scales,
+                raw_scales > 0, raw_scales, jnp.ones_like(raw_scales)
             )
 
             unbounded_scales = self._p0_magnitude_scale()
@@ -333,9 +354,7 @@ class ParameterNormalizer:
             ub = jnp.full(self.n_params, jnp.inf, dtype=jnp.float64)
             return lb, ub
 
-        lb, ub = self.original_bounds
-        lb = jnp.asarray(lb, dtype=jnp.float64)
-        ub = jnp.asarray(ub, dtype=jnp.float64)
+        lb, ub = self._broadcast_bounds(self.original_bounds)
 
         # Transform bounds using normalize()
         lb_normalized = self.normalize(lb)

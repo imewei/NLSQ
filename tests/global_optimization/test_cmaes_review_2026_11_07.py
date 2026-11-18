@@ -151,7 +151,11 @@ def test_cmaes_excludes_masked_data_with_correlated_sigma(refine, omit):
         method="cmaes",
         cmaes_config=config,
     )
-    assert result.success
+    if refine:
+        assert result.success
+    else:  # unrefined CMA-ES stopping at max_generations is not "success"
+        assert result.success is False
+        assert result.status == 0
     assert result.x[0] == pytest.approx(2, abs=0.05)
     assert len(result.ydata) == np.count_nonzero(mask & np.isfinite(y))
     if refine:

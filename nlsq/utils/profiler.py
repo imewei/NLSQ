@@ -8,6 +8,7 @@ optimization performance metrics.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -50,7 +51,10 @@ class ProfileMetrics:
     metadata: dict = field(default_factory=dict)
 
     def speedup_vs_scipy(self) -> float:
-        """Estimate speedup vs SciPy (rough heuristic)."""
+        """Return a rough heuristic estimate of speedup vs SciPy (not a measurement).
+
+        Derived only from ``backend`` and ``n_data_points``; no SciPy run is timed.
+        """
         if self.backend == "gpu":
             # GPU typically 100-300x faster for large problems
             return min(270, 100 * (self.n_data_points / 100000))
@@ -90,8 +94,10 @@ class ProfileMetrics:
             "backend": self.backend,
             "iterations_per_second": self.iterations_per_second(),
             "function_evals_per_second": self.function_evals_per_second(),
-            "speedup_vs_scipy": self.speedup_vs_scipy(),
-            **self.metadata,
+            # Heuristic, not measured: labelled so exports are not read as timings
+            "estimated_speedup_vs_scipy": self.speedup_vs_scipy(),
+            # separate namespace: user metadata must not overwrite measured fields
+            "metadata": dict(self.metadata),
         }
 
 
@@ -114,10 +120,41 @@ class PerformanceProfiler:
     def __init__(self):
         """Initialize performance profiler."""
         self.profiles: dict[str, list[ProfileMetrics]] = defaultdict(list)
-        self._current_profile: ProfileMetrics | None = None
-        # Active profiles, innermost last: (name, metrics, start_time). Nested
-        # profile() calls each keep their own start time.
-        self._context_stack: list[tuple[str, ProfileMetrics, float]] = []
+        self._profiles_lock = threading.Lock()
+        # Profiles started and not yet ended, any thread: id(metrics) -> entry.
+        self._active: dict[int, tuple[str, ProfileMetrics, float]] = {}
+        # Active-profile state is per thread: overlapping profile() blocks in
+        # different threads must not credit each other's updates.
+        self._tls = threading.local()
+
+    def _prune_stack(self) -> list[tuple[str, ProfileMetrics, float]]:
+        """This thread's stack minus profiles another thread already ended."""
+        stack = getattr(self._tls, "stack", None)
+        if stack is None:
+            stack = self._tls.stack = []
+        # identity filter: entries hold dataclasses, == on them is not identity
+        stack[:] = [e for e in stack if id(e[1]) in self._active]
+        return stack
+
+    @property
+    def _context_stack(self) -> list[tuple[str, ProfileMetrics, float]]:
+        """Active profiles of this thread, innermost last: (name, metrics, start).
+
+        Nested profile() calls each keep their own start time.
+        """
+        return self._prune_stack()
+
+    @property
+    def _current_profile(self) -> ProfileMetrics | None:
+        cur = getattr(self._tls, "current", None)
+        if cur is not None and id(cur) not in self._active:
+            stack = self._prune_stack()  # ended elsewhere: resume the enclosing one
+            cur = self._tls.current = stack[-1][1] if stack else None
+        return cur
+
+    @_current_profile.setter
+    def _current_profile(self, value: ProfileMetrics | None) -> None:
+        self._tls.current = value
 
     def start_profile(self, name: str = "default") -> ProfileMetrics:
         """
@@ -134,8 +171,11 @@ class PerformanceProfiler:
             Metrics object for this profile
         """
         metrics = ProfileMetrics()
+        entry = (name, metrics, time.perf_counter())
+        with self._profiles_lock:
+            self._active[id(metrics)] = entry
         self._current_profile = metrics
-        self._context_stack.append((name, metrics, time.perf_counter()))
+        self._context_stack.append(entry)
         return metrics
 
     def end_profile(self, metrics: ProfileMetrics | None = None):
@@ -151,11 +191,9 @@ class PerformanceProfiler:
             metrics = self._current_profile
 
         if metrics is not None:
-            entry = None
-            for i in range(len(self._context_stack) - 1, -1, -1):
-                if self._context_stack[i][1] is metrics:
-                    entry = self._context_stack.pop(i)
-                    break
+            # Looked up globally, so ending from another thread still records it
+            with self._profiles_lock:
+                entry = self._active.pop(id(metrics), None)
             if entry is not None:
                 metrics.total_time = time.perf_counter() - entry[2]
 
@@ -167,7 +205,8 @@ class PerformanceProfiler:
 
             # Store profile
             if entry is not None:
-                self.profiles[entry[0]].append(metrics)
+                with self._profiles_lock:
+                    self.profiles[entry[0]].append(metrics)
 
         # Resume the enclosing profile, if any
         self._current_profile = (
@@ -221,7 +260,8 @@ class PerformanceProfiler:
         """
         if self._current_profile is not None:
             for key, value in kwargs.items():
-                if hasattr(self._current_profile, key):
+                # dataclass fields only: hasattr is also true for methods
+                if key in ProfileMetrics.__dataclass_fields__:
                     setattr(self._current_profile, key, value)
                 else:
                     self._current_profile.metadata[key] = value
@@ -240,7 +280,8 @@ class PerformanceProfiler:
         metrics : list of ProfileMetrics
             All metrics for this profile
         """
-        return self.profiles.get(name, [])
+        with self._profiles_lock:
+            return list(self.profiles.get(name, []))
 
     def get_summary(self, name: str = "default") -> dict:
         """
@@ -390,10 +431,11 @@ class PerformanceProfiler:
         name : str, optional
             Name of profile to clear. If None, clears all.
         """
-        if name is None:
-            self.profiles.clear()
-        elif name in self.profiles:
-            del self.profiles[name]
+        with self._profiles_lock:
+            if name is None:
+                self.profiles.clear()
+            elif name in self.profiles:
+                del self.profiles[name]
 
     def export_to_dict(self) -> dict:
         """
@@ -404,10 +446,9 @@ class PerformanceProfiler:
         data : dict
             All profiling data
         """
-        return {
-            name: [m.to_dict() for m in metrics]
-            for name, metrics in self.profiles.items()
-        }
+        with self._profiles_lock:
+            snapshot = {name: list(ms) for name, ms in self.profiles.items()}
+        return {name: [m.to_dict() for m in ms] for name, ms in snapshot.items()}
 
 
 class ProfileContext:

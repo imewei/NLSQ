@@ -189,15 +189,15 @@ def load_from_clipboard(
     has_header = config.get("has_header", False)
     forced_delimiter = config.get("delimiter")
 
+    # Same cleaning as parse_table_text (BOM, '#' comments, blank lines) so a
+    # paste parses identically however it is loaded
+    lines = _clean_table_lines(text)
+
     # Auto-detect delimiter if not specified
     if forced_delimiter is not None:
         delimiter = forced_delimiter
     else:
-        delimiter = detect_delimiter(text)
-
-    # Parse the text
-    # strip only newlines: a trailing tab/comma is a real (empty) last cell
-    lines = text.strip("\r\n").split("\n")
+        delimiter = detect_delimiter("\n".join(lines))
 
     if has_header and len(lines) > 0:
         # Skip header row
@@ -301,6 +301,15 @@ def parse_numeric_rows(
     return rows
 
 
+def _clean_table_lines(text: str) -> list[str]:
+    """Lines of ``text`` without a leading BOM, ``#`` comments and blank lines.
+
+    A trailing tab/comma is kept: it is a real (empty) last cell.
+    """
+    lines = [ln.split("#")[0] for ln in text.lstrip("﻿").splitlines()]
+    return [ln for ln in lines if ln.strip()]
+
+
 def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
     """Parse delimited numeric text, sniffing an optional header row.
 
@@ -321,8 +330,7 @@ def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
     ValueError
         If a non-header line is not numeric.
     """
-    lines = [ln.split("#")[0] for ln in text.lstrip("﻿").splitlines()]
-    lines = [ln for ln in lines if ln.strip()]
+    lines = _clean_table_lines(text)
     if not lines:
         return [], None
     delimiter = detect_delimiter("\n".join(lines))

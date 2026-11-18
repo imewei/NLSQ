@@ -7,15 +7,15 @@ Visualization and dashboard tools for NLSQ performance profiling data.
 
 from __future__ import annotations
 
+import csv
+import html
 import json
+import re
 from pathlib import Path
 
 import numpy as np
 
 try:
-    import matplotlib
-
-    matplotlib.use("Agg")  # Use non-interactive backend for CI/headless environments
     import matplotlib.pyplot as plt
     from matplotlib.figure import Figure
 
@@ -24,6 +24,21 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 from nlsq.utils.profiler import PerformanceProfiler
+
+
+def _json_default(obj):
+    """Encode numpy/JAX scalars and arrays that json cannot serialize."""
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if hasattr(obj, "tolist"):
+        return obj.tolist()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def _safe_filename(name: str) -> str:
+    """Reduce a profile name to a single path component (no separators, no dots-only)."""
+    safe = re.sub(r"[^\w.-]", "_", name).strip(".")
+    return safe or "profile"
 
 
 class ProfilerVisualization:
@@ -355,7 +370,7 @@ class ProfilerVisualization:
             html_parts.extend(
                 [
                     "<div class='profile-section'>",
-                    f"<h2>Profile: {name}</h2>",
+                    f"<h2>Profile: {html.escape(name)}</h2>",
                     "<div class='summary'>",
                     f"<div class='metric'><div class='metric-label'>Total Runs</div><div class='metric-value'>{summary['n_runs']}</div></div>",
                     f"<div class='metric'><div class='metric-label'>Success Rate</div><div class='metric-value'>{summary['success_rate']:.1%}</div></div>",
@@ -379,8 +394,8 @@ class ProfilerVisualization:
                     f"<td>{i}</td>"
                     f"<td>{metrics['total_time']:.3f}</td>"
                     f"<td>{metrics['optimization_time']:.3f}</td>"
-                    f"<td>{metrics['n_iterations']}</td>"
-                    f"<td>{metrics['n_function_evals']}</td>"
+                    f"<td>{html.escape(str(metrics['n_iterations']))}</td>"
+                    f"<td>{html.escape(str(metrics['n_function_evals']))}</td>"
                     f"<td class='{success_class}'>{success_text}</td>"
                     f"</tr>",
                 )
@@ -409,7 +424,9 @@ class ProfilerVisualization:
         """
         data = self.profiler.export_to_dict()
         output_path = Path(output_path)
-        output_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(data, indent=2, default=_json_default), encoding="utf-8"
+        )
 
     def export_csv(self, name: str, output_path: str | Path) -> None:
         """
@@ -449,31 +466,36 @@ class ProfilerVisualization:
             "backend",
         ]
 
-        lines = [",".join(headers)]
+        # repr(float): shortest round-trip form, so costs below 1e-6 are not
+        # rounded to zero; the csv module quotes fields containing commas.
+        def f(v) -> str:
+            return repr(float(v))
 
-        for i, m in enumerate(metrics_list, 1):
-            row = [
-                str(i),
-                f"{m.total_time:.6f}",
-                f"{m.jit_compile_time:.6f}",
-                f"{m.optimization_time:.6f}",
-                f"{m.jacobian_time:.6f}",
-                str(m.n_iterations),
-                str(m.n_function_evals),
-                str(m.n_jacobian_evals),
-                str(m.n_data_points),
-                str(m.n_parameters),
-                f"{m.final_cost:.6f}",
-                f"{m.initial_cost:.6f}",
-                f"{m.cost_reduction:.6f}",
-                f"{m.final_gradient_norm:.6f}",
-                str(m.success),
-                m.method,
-                m.backend,
-            ]
-            lines.append(",".join(row))
-
-        output_path.write_text("\n".join(lines), encoding="utf-8")
+        with output_path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh, lineterminator="\n")
+            writer.writerow(headers)
+            for i, m in enumerate(metrics_list, 1):
+                writer.writerow(
+                    [
+                        i,
+                        f(m.total_time),
+                        f(m.jit_compile_time),
+                        f(m.optimization_time),
+                        f(m.jacobian_time),
+                        m.n_iterations,
+                        m.n_function_evals,
+                        m.n_jacobian_evals,
+                        m.n_data_points,
+                        m.n_parameters,
+                        f(m.final_cost),
+                        f(m.initial_cost),
+                        f(m.cost_reduction),
+                        f(m.final_gradient_norm),
+                        m.success,
+                        m.method,
+                        m.backend,
+                    ]
+                )
 
 
 class ProfilingDashboard:
@@ -634,6 +656,24 @@ class ProfilingDashboard:
             Directory to save dashboard files
         """
         output_dir = Path(output_dir)
+
+        # Resolve every plot filename before writing anything, so an unusable
+        # profile name cannot leave a half-written dashboard behind.
+        root = output_dir.resolve()
+        plot_paths: dict[str, Path] = {}
+        used: set[str] = set()
+        for name in self.tracked_profiles:
+            stem = base = _safe_filename(name)
+            n = 1
+            while stem in used:
+                n += 1
+                stem = f"{base}_{n}"
+            used.add(stem)
+            path = output_dir / f"{stem}_series.png"
+            if not path.resolve().is_relative_to(root):
+                raise ValueError(f"Profile name {name!r} escapes the output directory")
+            plot_paths[name] = path
+
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Save HTML report
@@ -653,17 +693,19 @@ class ProfilingDashboard:
             for name in self.tracked_profiles:
                 fig = self.viz.plot_timing_series(name)
                 if fig:
-                    fig.savefig(
-                        output_dir / f"{name}_series.png",
-                        dpi=150,
-                        bbox_inches="tight",
-                    )
-                    plt.close(fig)
+                    try:
+                        fig.savefig(plot_paths[name], dpi=150, bbox_inches="tight")
+                    finally:
+                        plt.close(fig)
 
             fig = self.plot_all_comparisons()
             if fig:
-                fig.savefig(output_dir / "comparison.png", dpi=150, bbox_inches="tight")
-                plt.close(fig)
+                try:
+                    fig.savefig(
+                        output_dir / "comparison.png", dpi=150, bbox_inches="tight"
+                    )
+                finally:
+                    plt.close(fig)
 
 
 __all__ = [

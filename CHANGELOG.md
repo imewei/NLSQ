@@ -7,6 +7,453 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Termination status (`least_squares`, `curve_fit`).** (a) New status `-4`: the gradient
+  (Jacobian or residuals) is non-finite. The fit stops at once with the last finite `x`,
+  `success=False` and a message; `curve_fit` raises `OptimizationError`. It takes precedence over a
+  simultaneous `ftol`/`xtol` termination and is checked before a callback can stop the fit. Before, a user-supplied `jac`
+  returning NaN cost about 100 residual evaluations and ended with the misleading status `-3`.
+  (b) When `gtol` is met on the same iteration as `ftol`/`xtol`, `status` is now `1`, as in SciPy
+  (it was `2`/`3`/`4`); `x`, `cost`, `nfev`, `njev` and `nit` are unchanged.
+- **`method='lm'`** now rejects what SciPy rejects: a non-`'linear'` loss and a `None`/0 tolerance raise
+  `ValueError`. Fewer residuals than parameters raises an error that is both `TypeError` and
+  `ValueError`.
+- **`verbose=1`/`2`** now print the termination report and the iteration table to stdout, as SciPy
+  does. They went through the logger and printed nothing at the default log level.
+- **Callbacks** (`least_squares`/`curve_fit`): raising `StopIteration` or returning `True` now stops the
+  fit with status `-2` (like `StopOptimization`). Other exceptions are still reported as a
+  `RuntimeWarning` and the fit continues. `info["gradient_norm"]` and `result.optimality` after a callback
+  stop describe the post-step state; they were the previous iterate's.
+- **`enable_stability=True`**: an Inf residual at `x0` is still clipped to +-1e10 and the non-finite
+  Jacobian entries zeroed, but the fit now raises `ValueError` when the start stays non-finite after
+  that (NaN residual) or when the clipped start has a zero gradient, which used to "converge" (gtol)
+  at an overflowed `x0` with `success=True`.
+- The unbounded TRF result returns `x` as a NumPy array and `active_mask` as an integer array, as the
+  bounded path and SciPy do (they were a JAX array and a float array).
+- `tr_solver='lsmr'`: the inner CG tolerance is now `min(gtol, 1e-2)`, or `1e-8` when `gtol` is
+  disabled, negative or NaN; a large or negative `gtol` (for example 2 or -2) made CG return a zero
+  step that was read as convergence. Results for `0 < gtol <= 1e-2` are bit-identical.
+- `tr_solver='lsmr'` is documented as a conjugate-gradient solver (not SciPy's LSMR), `tr_options`
+  as unused (a non-empty value with `'lsmr'` warns), and `f_scale=0` with `loss='linear'` is accepted
+  (it is unused).
+
+### Fixed
+- **Timings on Windows.** `curve_fit` `timeit` (`ctime`, `post_time`) and the chunk durations of `LargeDatasetFitter` use `time.perf_counter()`; with `time.time()` the ~15 ms Windows clock reported `0.0` for fast fits.
+- **Qt GUI, review round 1 (2026-11-16).** Library `RuntimeWarning`/`UserWarning`s and `nlsq.*` WARNING log records
+  raised during a fit (covariance not estimable, rank-deficient Jacobian, chunked route "not equivalent to
+  full-batch" and "ignores bounds") are now collected from the worker thread (per-thread `showwarning` and log
+  handler; the `catch_warnings` filter reset is process-wide while a fit runs) and shown in the Results status in
+  amber instead of "Fit completed successfully"; `n <= p` and non-finite `pcov` fits are flagged, and a zero
+  `nfev` (chunked) is no longer printed. Parameter intervals in the table, CSV and JSON come from
+  `CurveFitResult.confidence_intervals` (known absolute sigma, `n - p` dof, NaN when undefined) instead of a
+  `max(n - p, 1)` t-quantile; the confidence band comes from `CurveFitResult.confidence_band` on the 500-point
+  grid (no GUI-thread finite differences over every data point; residual interval interpolated), staying inside
+  the model domain and warning-free for an infinite `pcov`. A YAML-imported `auto_bounds` now reaches `fit()` and
+  the exported script. Crash recovery replaces x/y/sigma together (a stale sigma is dropped, invalid or skipped
+  data clears the old data) and bumps the input epoch. A stale fit's error/abort no longer pops a dialog.
+  `load_from_clipboard` shares the BOM/`#`-comment cleaning of `parse_table_text`. The theme follows the OS
+  light/dark scheme until the user chooses one (only a chosen theme is saved). Trade-off: `fit(workflow="auto")`
+  still picks the approximate chunked solver when the memory budget is exceeded; the GUI now discloses it rather
+  than rerouting. Round 2: the warning capture no longer wraps the fit in `catch_warnings` (which clobbered
+  process-global warnings state when the GUI thread's own `catch_warnings`, e.g. pyqtgraph's, overlapped the
+  fit); one permanent `showwarning` hook plus "always" filters for `OptimizeWarning` and `nlsq.*` route the
+  fit thread's warnings (multi-start pool-thread warnings are not collected). Twin log/warning notes collapse
+  to one, the underdetermined note only appears when the shown intervals are undefined, a sigma-only recovery
+  record is dropped, an unknown OS scheme follows the palette lightness, and the Results status uses
+  >= 4.5:1 text colours on the light theme. Crash recovery ignores a record with only `xdata` or only `ydata` (and its
+  sigma) instead of pairing it with the old y/x. Known limit: a fit-thread warning raised while the GUI
+  thread is inside a bare `catch_warnings()`/`ignore` block can still be dropped (log-twinned diagnostics survive).
+- **Global optimization, review round 1 (2026-11-16).** `MultiStartOrchestrator.fit` with `n_starts=0` no
+  longer crashes on array `bounds`, and it and `CMAESOptimizer.fit` accept `scipy.optimize.Bounds`. `return_eval`/
+  `full_output`/`timeit` format the selected multistart attempt instead of re-solving from the winner (which
+  exceeded `max_nfev` and re-ran stateful models). The winner is the best converged start (a `max_nfev` cut-off
+  ranks behind it); `n_starts_successful` counts converged starts and the new `n_starts_finite` the finite ones.
+  Sobol no longer spends a start on the all-zeros corner point; `GlobalOptimizationConfig(seed=...)` seeds the LHS
+  sampler. `TournamentSelector` weights batches by observation count (not equally), accepts `(x, y, sigma)`
+  batches, and `from_checkpoint` rejects arrays of the wrong length. CMA-ES without refinement reports
+  `success=False`/`status=0` when it stops on `max_generations` (or a BIPOP schedule with no converged run); a
+  cleanly converged BIPOP run no longer ends the whole restart schedule, and large-population runs now double on
+  every large restart (capped at 32x). `scale_samples_to_bounds` raises on non-finite bounds, and `dir()` of
+  `nlsq.global_optimization` lists the lazy symbols. A user `p0` outside the bounds is still clipped (as in
+  `curve_fit`), now documented.
+  Review round 2: `return_eval` evaluates on the rows actually fit (`nan_policy='omit'`) on the multistart route;
+  multistart `timeit` reports the elapsed time; `GlobalOptimizationConfig(seed>=2**63)` is rejected at
+  construction; new `CMAESConfig.max_total_evaluations` bounds a BIPOP schedule (default unlimited, which now
+  costs about 5x more evaluations than before because large populations grow; see the docs) and stops loudly
+  (`OptimizeWarning`, `convergence_reason='max_evaluations'`); BIPOP `success` follows the run that holds the
+  best point; unrefined CMA-ES that did not converge warns; an unconverged start with a lower loss than the
+  winner is recorded as `multistart_diagnostics['cheaper_unconverged_loss']`.
+  Review round 2 (Codex): the BIPOP evaluation budget is checked after every generation (a converging run no longer
+  skips it); the tournament keeps squared-error sums and observation counts across rounds (checkpoints gain
+  `loss_sums`/`obs_counts`; older tournament checkpoints are rejected with a clear error); multistart `timeit`
+  returns the winning attempt's own raw result, solver timings and `post_time`; `scale_samples_to_bounds` works
+  under `jax.jit` again (non-finite bounds are rejected only for concrete inputs).
+  Review round 3: `return_eval` with a user `data_mask` returns `f` over all rows again on the multistart and
+  CMA-ES routes (as plain `curve_fit`); the implicit `method='auto'` CMA-ES route caps BIPOP with a finite
+  `max_total_evaluations` (the worst case of the former fixed-2x schedule), explicit `method='cmaes'` stays
+  unlimited; `max_total_evaluations` is also honoured with `restart_strategy='none'`; the tournament skips zero-observation batches and rejects
+  misshaped batch sigma.
+  Review round 4: a tournament round that saw no observations neither eliminates nor is consumed (empty batches
+  do not count toward `batches_per_round`); a resumed single-run CMA-ES counts the checkpointed generations
+  against `max_total_evaluations` (BIPOP cannot be checkpointed); `return_eval` with both `nan_policy='omit'` and
+  a `data_mask` evaluates on the rows after omission and before the mask, as plain `curve_fit`.
+  Review round 5: the `max_total_evaluations` warning is emitted only when the budget stops the search before the
+  best run converged; a converged best run ends silently (the implicit `method='auto'` cap is how a converged
+  search normally stops), and `cmaes_diagnostics['budget_exhausted']` records that the budget ended it.
+  Review round 6: `curve_fit(..., timeit=True)` on the CMA-ES routes (`method='cmaes'`, `method='auto'` choosing CMA-ES)
+  returned `(post_time, ctime) == (0.0, 0.0)` and kept `fun`/`jac`; it now reports the measured search-plus-refinement
+  time and result-formatting time, drops `fun`/`jac` like the ordinary timeit path, and `all_times` is `{}` (the
+  refinement fit has no per-solver timings). The `method='auto'` chunked route had the same defect (`ctime` read an
+  `execution_time` nothing sets, `post_time` fixed at 0.0, `fun`/`jac` kept on the returned engine result); it now
+  times the chunked fit and the result formatting and trims the returned result the same way. The `curve_fit`
+  docstring now states what `ctime`/`post_time` mean per route, and the budget-exhausted warning of the implicit
+  `method='auto'` CMA-ES route names the automatic budget and points to `method='cmaes'` for an unlimited search.
+- **CLI, review round 1 (2026-11-16).** The `custom_model_template.py` docstring documents the keys the
+  registry reads (`model.path`/`function`, no `custom:`/`auto_p0`/`auto_bounds`). A CSV `#` comment preamble
+  before the header no longer becomes the header, and a one-data-row CSV loads as a row. `method:
+  hybrid_streaming` drops `ftol`/`xtol`/`gtol`/`max_nfev` with a warning (the engine has no equivalent) and
+  rejects a non-linear `loss`, so the shipped workflow template runs with it. An inf covariance (n < p,
+  singular Jacobian) adds an `uncertainty_warnings` entry to the JSON export (exit status stays 0). A
+  `RuntimeError` whose text merely contains "max" is no longer reported as `max_nfev` exhaustion. ASCII
+  `columns` must be integer indices and `ascii.dtype` may not be narrower than float64; a non-UTF-8 CSV
+  header and a complex HDF5 dataset give a specific `DataLoadError`; `--plot` reuses the resolved model
+  instead of executing a custom model file a second time. Multi-character CSV delimiters work with a
+  header row, and an inline `#` comment on the header row is stripped (quoted `#` kept). NPZ/HDF5 reject
+  x/y/sigma arrays stored with different shapes instead of flattening them into a wrong pairing. The plot's
+  confidence band uses `CurveFitResult.confidence_band` (normal quantile for `absolute_sigma=True` with
+  `sigma`, Student-t otherwise, robust derivatives near a domain edge) and is omitted with a warning when
+  undefined, including when the model raises outside its domain. `method: hybrid_streaming` now works with 2-D
+  surface data (the loader's (k, n) layout is adapted to the engine's points-first one). An empty or all-comment
+  CSV and a `#`-commented numpy header give a clear `DataLoadError`; numpy integer column indices are accepted.
+- **Root modules, round 3 (2026-11-16).** `fit(goal=...)` warns that the goal tolerances are not applied
+  with `strategy=` or `method="hybrid_streaming"` (it dropped them silently). The lazy `nlsq.<name>`
+  `AttributeError` keeps the original text, so an error raised while importing the submodule is no longer
+  hidden. Docs and docstrings state that the memory/large-dataset contexts are context-local.
+- **Review 2026-11-16, root r2 (Claude).** `compute_jac_scale` keeps an infinite Jacobian column
+  infinite (the max-scaled norm had turned it into NaN, poisoning later `x_scale="jac"` updates).
+  `least_squares(method=...)` is annotated `Literal["trf", "lm"]`. `CallbackChain` warns when a stop
+  request drops an earlier callback's error.
+- **Trust-region and device helpers (Codex review 2026-11-16).** (a) `solve_lsq_trust_region_jax` takes
+  the minimum-norm Gauss-Newton step when it lies inside the radius even for a rank-deficient Jacobian. The Gauss-Newton step over every positive singular value (minimum-norm when some are exactly zero) is taken whenever it fits in the radius, overflow-safe (`s=1e-160` works); otherwise the secular boundary solve runs as in SciPy. A non-finite secular iteration falls back to a max-scaled steepest-descent step (and ultimately the zero step) instead of returning NaN; values beyond about 1e+/-150 in this routine are a documented limit
+  (it was pushed to the boundary, an uphill step that made `LeastSquares` stall on e.g. residuals
+  `[x0 + 0.1, 1]`); full-rank results still match SciPy. (b) `compute_jac_scale` (`x_scale="jac"`) uses
+  max-scaled column norms, so Jacobians near 1e+/-200 no longer give scale 0/inf or 1. (c)
+  `CommonJIT.build_quadratic_1d` uses `jnp` throughout (it raised `TracerArrayConversionError` under
+  `jit` and copied to the host) and now returns JAX scalars. (d) see the Configuration bullet below. (e) `get_device_info()` and `check_gpu_availability()` no longer count
+  TPUs as GPUs; `get_device_info()` has a new `tpu_count` key.
+- **Root modules, review round 2 (2026-11-16).** `CallbackChain` now returns `True` when any chained
+  callback returns `True`, so the scipy stop protocol works through a chain (it was swallowed and the fit
+  ran on). `ProgressBar`/`IterationLogger` detect a reused instance when the previous fit stopped after one
+  iteration. `fit(goal=...)` no longer passes tolerances to `strategy=` or to `method="hybrid_streaming"`
+  below `size_threshold` (both raised `TypeError`). The 17 lazy diagnostics names are in `nlsq.__all__`.
+  `check_gpu_availability(warn=True)` warns when the backend check fails (not at `import nlsq`, which passes the new `warn_on_error=False`, so `python -W error -c "import nlsq"` stays clean). `nlsq.constants`: removed the
+  unused `STEP_ACCEPTANCE_THRESHOLD` and `TRUST_RADIUS_DECREASE_FACTOR` (they contradicted the solver) and
+  set `MEMORY_SAFETY_FACTOR` to the real default, 0.75.
+- **Diagnostics (review 2026-11-16).** (a) Correlation of rank-deficient models: the pseudo-inverse
+  dropped the null direction and reported `+1` for a trade-off pair such as `(a+b)*exp(-c*x)` (true
+  correlation `-1`); null directions are now restored in the `lambda -> 0` limit (both the Jacobian and FIM
+  paths), and a single all-zero Jacobian column no longer discards the whole correlation matrix.
+  (b) `GRAD-001` is scale-aware (gradient small against its initial value or the cost scale, and the cost
+  has not dropped by half), so healthy convergence to a non-zero residual floor or in small units is not
+  flagged; `GRAD-002` names the parameters of the scaled `|g*p|` ratio; `GRAD-004` message states the growth
+  factor over the initial norm; `record_gradient` validates the gradient shape before mutating state; the
+  gradient-monitor callback now forwards the user callback's stop request. (c) `ModelHealthReport.to_dict()`
+  is strict-JSON (non-finite floats become `None`, numpy plugin data become lists). (d)
+  `curve_fit(diagnostics_level=FULL, diagnostics_config=...)` honours the non-default level; registered
+  diagnostic plugins now run inside `curve_fit(compute_diagnostics=True)`; `run_plugins` keys results by
+  the registered name, drops (with a warning) issues that lack `severity`/`code`/`category`/`message`, and
+  `PluginRegistry.register` reads `name` outside the lock and rejects empty names. (e) Legacy
+  `DiagnosticsReport` no longer reports an unavailable analysis as HEALTHY; empty FIM is rejected with
+  "Empty FIM matrix"; the Sloppy Model summary section shows whenever a sloppy-model report is attached.
+  Round 2: a small but resolved null-space loading (above round-off, not a fixed `1e-10`) still counts as a
+  trade-off; `GRAD-001` compares the parameter-scaled gradient `|g*p|` with the cost when `params` are
+  recorded on every call (unit-invariant), otherwise it stays best effort; `ParameterSensitivityReport`
+  eigenvectors are mapped back to the original parameter space and the condition number/eigenvalue docs
+  say they refer to the column-equilibrated FIM; plugin issues are validated for every field that
+  aggregation, formatting and `to_dict()` read (invalid ones dropped with a warning); `to_dict()` converts
+  JAX arrays in plugin data.
+  Round 3: the null-space loading cutoff is a decomposition-precision bound (`n*eps*sigma_max/sigma_gap` of the
+  SVD actually used, so float32 inputs do not produce spurious +-1 and a `1e-8` loading is kept; a loading below
+  the resolution is treated as zero, a documented limit); `GRAD-001` uses the parameter-scaled history for
+  both the "dropped" and the cost test and falls back to unscaled norms when any parameter is zero;
+  back-mapped sensitivity directions are computed in log space (no overflow/underflow at `1e-160`/`1e-320`
+  column scales); plugin issues must carry a real severity/category name and a list/tuple container (an
+  invalid container marks the plugin unavailable with a warning).
+  Round 4: the diagnostics SVDs (identifiability Jacobian/FIM, sensitivity Jacobian/FIM) run on the host
+  (`np.linalg.svd`; since Round 5 always in float64) and take rank tolerances from the decomposition's dtype, so a
+  float64 Jacobian is no longer decomposed in float32 against a float64 cutoff when `jax_enable_x64` is off
+  (two identical columns were reported as rank 3); accepted plugin issues are rebuilt as canonical
+  `ModelHealthIssue` with real `IssueSeverity`/`IssueCategory` members, so `emit_warnings` sees them.
+  Round 5: float32/float16 Jacobians and FIMs are upcast to float64 before the diagnostics SVD, so the rank
+  tolerance no longer reaches `~0.1*s_max` for a million-row float32 Jacobian (a well-posed linear fit
+  was reported rank 1 / CRITICAL with `jax_enable_x64` off); a tall Jacobian is reduced by QR before the SVD
+  (same `s` and `V`, no `m x n` `U`). `_validate_fim` takes its positive-semidefinite tolerance from the FIM's own
+  storage precision (float32 eps for a float32 FIM) and computes the eigenvalues in float64, so rank-deficient
+  float32 (and float16, using float16 eps) FIMs are no longer rejected as indefinite; the tolerance is never tighter
+  than float64 eps (longdouble FIMs are eigensolved in float64).
+  `analyze_from_fim` (identifiability and sensitivity) uses a symmetric eigensolve with negative round-off clamped to
+  0, so an accepted slightly-negative eigenvalue no longer becomes a positive singular value (rank 1 FIM was
+  reported rank 2).
+  Float32 storage noise: rank/null-space tolerances take `eps` from the supplied matrix's storage dtype before the
+  float64 upcast (`max(eps_dtype, eps64)`) for FIMs only, which fixes rank flips and false +-1 correlations for
+  rank-deficient float32 FIMs. Jacobians are analyzed as stored (entries treated as exact, float64 cutoff for every
+  input dtype; rounding already present in a float32-computed Jacobian is not modeled, and a 1M-row float32 Jacobian
+  stays full rank); FIMs use the storage-precision cutoff because forming/storing the normal matrix rounds it.
+  Complex Jacobians/FIMs are rejected as invalid input (unavailable analysis with a clear message) instead of being
+  analyzed with a non-conjugated `V`.
+  Round 6: plugin issues whose `affected_parameters` are not integer indices (objects, strings, floats, bools) are
+  dropped with a warning; NumPy integers are normalized to `int`, so `to_dict()` stays strict-JSON serializable.
+- **Streaming exact path (review 2026-11-16).** (a) The TSQR covariance gate and its "ill-conditioned"
+  `UserWarning` use the Jacobi-scaled `sqrt(cond(H))` (what `pcov_from_normal` and the step solve see), not
+  the raw one: `A*exp(-kx)` with `A=1e6` was 2e5 raw against 2.4 scaled, took an extra full data pass and
+  warned falsely; the normal route no longer emits the raw-kappa warning. (b) `gtol` is MINPACK's scale-free
+  test (largest cosine between the residual and a free Jacobian column, SciPy `method="lm"`) instead of an
+  absolute bound on `J^T r`, which reported `success=True` at the start for small-amplitude data (amp 1e-9:
+  k=3.0000006 against 5); a residual of a few ulp at every observation (`|r_i| <= 4 eps max(|y_i|, |f_i|)`, or `1e3 eps` when
+  the fit stalls; the maximum is reduced in the same data pass, so it costs none and respects `max_nfev`)
+  still ends as `gtol` (exact fit); a norm test alone stopped `1e6 + 1e-6*exp(-5x)` at `p0` and let a
+  large observation hide a wrong small one. Limit: a component of at most ~4 ulp per observation
+  (`y = 1 + 8e-16*x`) is not resolved from a start where it is absent. `xtol`/`ftol` after a step no
+  longer stop while the remaining undamped Newton step exceeds 0.1 standard errors (`g^T H^-1 g / s2`; a step norm
+  swamped by one large parameter accepted `b=1.000999` for `where(x==0, a, b)`, `y=[1e16,1,1]`, and left a
+  dominant-offset fit `-0.5` sigma off at n=4e6). If no step lowers the cost any more the refused stop is
+  accepted: with an offset parameter near n=1e6 the remaining ~0.3 sigma is below the rounding of the cost,
+  so centre the data. A fit that stalls with the remaining step above 0.1 sigma on offset-dominated data (data range below 1e-6 of
+  their size, offset/noise above ~1e12) is no
+  longer relabelled `gtol`: it ends `ftol`/`xtol` with an `OptimizeWarning` naming the float64 rounding limit
+  (centre `y`); healthy near-exact fits (data that vary, noise within a few dozen ulp) end normally without that warning; the 4-ulp exact-fit shortcut at a 1e12 offset still leaves a bias of tens of sigma there, and the `ftol` stationarity certificate takes its
+  undamped step first (one more pass, repeated up to 6 times until the remaining step is below 1e-6 sigma;
+  skipped at `max_nfev`), so the default-tolerance `popt` is the iterate after it as in
+  MINPACK (was ~1e-6 off the optimum on noisy fits). The `1e-10*max(D)` damping floor is gone (it froze parameters whose `H_jj` is >1e10
+  below the largest); the step solves in `D`-scaled coordinates. `PassStats` gains `rel_resid`, `y_hi`, `y_lo` (the
+  exact path's kernel tracks them in the same pass). (c) A scalar-returning model (`lambda x, a: a`) is pointwise, as in
+  `curve_fit`. (d) A trial whose predicted decrease is not positive (or whose parameters overflow) costs no
+  data pass. `Exact(ftol/xtol/gtol)` are validated at construction. An explicit `chunk_size` whose workspace
+  exceeds `memory_limit_gb` warns. A non-finite or non-1-D `p0` raises `ValueError` (a model ignoring the
+  parameter returned NaN with `success=True`). `DefenseLayerTelemetry.record_warmup_start()` returns a
+  token and `record_lbfgs_line_search_failure(..., warmup=token)` deduplicates per warmup (concurrent
+  warmups undercounted failures); callers that omit it keep the old behaviour. The chunked and exact routes of
+  `curve_fit_large` use `get_memory_config().memory_limit_gb` (`set_memory_limits`, env) when no
+  `memory_limit_gb` is passed; it used to fall through to the 8 GB / psutil default.
+- **Streaming hybrid/chunked (review 2026-11-16).** (a) Chunked `pcov` is never fabricated: an
+  ill-conditioned accumulated information matrix, or no usable chunk covariance, now gives an all-inf
+  `pcov` plus an `OptimizeWarning` (the `np.cov`-of-running-estimates and `diag(0.01|p|+0.001)` proxies
+  are gone), and chunk acceptance and the combined gate share one 1e12 limit (was 1.5e15 vs 1e12).
+  (b) `LargeDatasetFitter.fit` treats a missing `check_finite` as `True` (a NaN used to drop its chunk with
+  `success=True`); sigma/finite validation looks only at rows kept by `data_mask`. (c) A non-converged
+  chunk retry is a failed chunk, not folded into the GLS combination; a chunk is no longer accumulated
+  twice if building its result raises; the model-validation cache also keys on the parameter count.
+  (d) Hybrid: a callback raising `StopIteration` stops the fit (status -2) like `StopOptimization`;
+  Gauss-Newton fault tolerance retries only numerical errors (a `TypeError` etc. now surfaces in the
+  result message instead of a silent status-0 fallback) and records the last error; the stall reset no
+  longer re-widens the radius after non-finite trials; the L-BFGS warmup value/gradient/line search and
+  the final `fun` residuals evaluate the model in `chunk_size` pieces (never the whole dataset);
+  `lbfgs_line_search="backtracking"` no longer scales the step by `lbfgs_initial_step_size` twice;
+  warmup checks the switch criteria after `warmup_iterations` steps (was +1); the Phase 2 checkpoint is
+  saved after the accept/reject update. `phases/gauss_newton.py` zeroes (not clamps) null-space singular
+  values.
+  (e) Round 2: a hybrid callback that returns `True` now stops the fit (status -2), as in TRF.
+  The Gauss-Newton trust-region step is the damped (Levenberg-Marquardt) step of norm `radius` when the
+  Newton step is too long, not the Newton step shrunk along its own direction (which crawled along flat
+  valleys). A cost-change stop now counts as convergence only when the scale-free relative gradient
+  `max_j |J_j.r| / (||J_j|| ||r||)` is <= 1e-6 (about 1e-9 at an optimum); otherwise Phase 2 keeps
+  iterating and, if it cannot get there, reports `success=False` with a "not first-order stationary"
+  message. Before, `p0=[8, 0.2, 3]` on `a*exp(-b*x)+c` returned `x=[-56.5, -0.0044, 58.0]` (SSR 32x the
+  optimum) with `success=True`; this fit (and any other that exits on cost change far from a stationary
+  point) now reports `success=False`. The hybrid golden values in
+  `test_normal_equations_characterization.py` were re-captured (slightly lower penalized rss).
+  (f) Round 2b: the damping uses the Euclidean norm the radius is measured in, i.e. it solves
+  `(H + lam I) p = g` with `||p|| = radius` (was Jacobi-scaled damping, a smaller model gain); the
+  stationarity check includes the group-variance penalty gradient (a regularized fit at its penalized
+  optimum no longer reports `success=False`); scalar-valued model outputs are broadcast per chunk in the
+  final residuals (was `ValueError`); `DefenseLayerTelemetry` keeps de-duplication state of warmups that
+  have not ended (`record_warmup_end`) instead of evicting by token age; `WarmupPhase.run` ends its token
+  too. The hybrid result carries a structured `convergence_reason`, and `curve_fit_large`'s Hybrid
+  strategy keys its max-iterations handling on it (it compared the exact message, so a longer
+  "not first-order stationary" message turned a warn-and-return into `RuntimeError`).
+  The Euclidean trust-region solve scales `H` and `g` by a power of two before symmetrising/`eigh` and
+  evaluates the predicted gain scaled, so a huge finite `J^T J` (1e308) no longer overflows into the
+  shrunk-Newton fallback; a non-finite eigensystem now warns instead of silently substituting that step.
+  Trust-region step clipping (`_solve_gauss_newton_step`, the CG solver, `_apply_trust_region`, and
+  `GaussNewtonPhase`) uses an overflow-safe norm: a finite Newton step above ~1e154 per component was
+  treated as non-finite and clipped to the zero step with zero predicted reduction.
+  The L-BFGS warmup (`WarmupPhase` and the optimizer's `_lbfgs_step`) uses an overflow-safe norm for the
+  gradient norm and the Layer-4 update clip (identical values whenever the plain norm is finite).
+  Performance: `_safe_norm` is `jax.jit`-compiled (was ~20x slower eagerly, ~600 calls per warmup), and the
+  warmup loss/gradient skips the `lax.scan` + `jax.checkpoint` chunking when the whole batch comfortably
+  fits the memory budget (`get_memory_config().memory_limit_gb`, default 8 GB, capped by available RAM,
+  times the safety factor; batch estimate <= half of it), keeping the chunked path for data that does not
+  fit. Phase 1 at 1e6 points, 30 L-BFGS iterations, CPU: 1.00 s chunked -> 0.79 s full batch (warm).
+  The standalone `WarmupPhase` (also used by `PhaseOrchestrator`) now builds its L-BFGS value, gradient and
+  line-search evaluations from the same `lbfgs_step_fns` helper as `AdaptiveHybridStreamingOptimizer`
+  (memory-aware `chunked_loss_fn`); before, only its initial loss was chunked and the first gradient ran the
+  model on the whole dataset.
+  The full-batch/chunked choice is re-made on every call from the current memory context (each variant is
+  compiled once and cached), so a tighter `memory_context` takes effect for shapes already compiled whole.
+  An L-BFGS step makes that decision once and uses it for the value/gradient and the line-search update
+  (it could differ between the two near the budget edge).
+  Hybrid multistart (`center_on_p0`) decides whether a dimension is boxed from its endpoints
+  (`isfinite(lb) & isfinite(ub)`), not from `ub - lb`, and builds the centered window at half scale, so a wide
+  finite box such as `[-1e308, 1e308]` is sampled over the box instead of `p0 +/- (|p0| + 0.1)`.
+- **Utils (review 2026-11-16).** (a) `save_iteration_data` builds columns from the union of all
+  history keys, so the `step` column (absent at iteration 0) is no longer dropped, and it logs a
+  warning when the 10 000-entry history was truncated. (b) `OptimizationDiagnostics` keeps exact
+  `initial_cost`/`total_iterations`/`min_cost`/`max_cost`/`initial_gradient_norm` counters outside the
+  bounded window, reports `history_truncated`, and appends a `warnings_issued` note; `plot_convergence`
+  closes its own figure when saving; `max_condition_number` ignores NaN entries. (c) The input
+  validator no longer raises `TypeError` on boolean `xdata`. (d) **Behaviour change (SciPy parity):**
+  all-identical `xdata` is now a validator warning instead of an error, so
+  `CurveFit(enable_stability=True)` accepts constant-x fits (e.g. a constant model) as SciPy does.
+  (e) `ProfilerVisualization.export_csv` writes full-precision values through the `csv` module (costs
+  below 1e-6 were rounded to `0.000000`; commas in `method` shifted columns); `export_json` encodes
+  numpy scalars; `generate_html_report` escapes profile names; `save_dashboard` sanitises profile
+  names into file names confined to `output_dir` and closes figures on failure. Importing
+  `profiler_visualization` no longer calls `matplotlib.use("Agg")` process-wide. (f)
+  `profile_transfers_runtime` returns `transfer_count`/`transfer_bytes` as `None` (the trace is not
+  parsed; it reported a fabricated 0) and blocks on the result inside the trace. (g)
+  `ProfileMetrics.to_dict()` exports the SciPy-speedup heuristic as `estimated_speedup_vs_scipy`
+  (it was never measured); `update_current` no longer fails on method names. (h) `safe_loads` rejects
+  legacy `__type__` payloads instead of silently returning dicts. (i) `enable_debug_mode` and
+  `set_global_level` only touch handlers NLSQ created; `NLSQLogger.performance` skips formatting when
+  disabled. (j) `error_messages` docstrings no longer claim `max_nfev` exhaustion raises
+  `OptimizationError` (it warns); `OptimizationError` tolerates `gtol=None`. (k) The validator rejects a 2-D `p0` whose length matches the
+  parameter count; `safe_dumps`/`safe_loads` round-trip complex scalars (as complex arrays already did);
+  `OptimizationDiagnostics.get_summary_statistics` no longer raises for history injected without
+  `record_iteration`; degenerate-range checks skip complex data. (l) Codex round: `ProfileMetrics.to_dict()` now nests user
+  metadata under a `metadata` key (it could overwrite measured fields; **export shape change**) and HTML
+  reports escape table values; `PerformanceProfiler` active-profile state is per thread; the logger's
+  iteration history is per thread, so concurrent fits no longer clear/save each other's iterations;
+  `safe_loads` checks the actual ndarray data count against the declared shape and cap before building
+  the array, and `safe_dumps` rejects dicts that look like the legacy `__type__` marker (they could not
+  be loaded back); the validator no longer rejects underdetermined fits for trf (warning; error only
+  with `method="lm"`, matching SciPy and `enable_stability=False`), rejects covariance-shaped `sigma`
+  that is not positive definite, and drops the unsupported `dogbox` method (also from the `max_nfev`
+  recommendation); `sample_in_bounds` no longer treats a wide finite box (`ub - lb` overflow) as unbounded.
+  (m) Round 2: diagnostics `min_cost`/`max_cost` keep Python `min`/`max` NaN semantics (all-NaN history
+  reports NaN, not `inf`/`-inf`); `end_profile` from another thread now records the profile; the
+  history-truncation warning fires only when iterations were actually dropped; the covariance-`sigma`
+  positive-definite check runs only in the `enable_stability` validation path; `validate_inputs`
+  forwards `method`. (n) Round 3: `enable_debug_mode` re-creates NLSQ's own console and debug-file
+  handlers even when the application attached a handler to the `nlsq` logger (it kept the app handler but
+  dropped NLSQ's); profiler stack pruning uses identity, not dataclass equality. (o) Round 4: `safe_loads` requires ndarray
+  `data` to match the declared shape level by level (empty-shape arrays can no longer carry uncounted
+  containers; ndim <= 64); `sample_in_bounds` evaluates each branch only where it applies and saturates
+  unrepresentable open intervals at `+-finfo.max`. (p) Round 5: complex markers in `safe_loads` accept only
+  plain numbers or float markers as parts, validated without recursion, so a marker payload cannot force
+  traversal of nested data before being rejected.
+- **Root modules (review 2026-11-16).** (a) An unclosed `ProgressBar` no longer segfaults the interpreter
+  at exit once JAX is loaded (tqdm's `__del__` ran during module teardown); the bar is now closed by a
+  `weakref.finalize` at `atexit`. (b) A `ProgressBar`/`IterationLogger` reused for a second fit restarts
+  its bar/header instead of showing net-zero progress or no header. (c) `CallbackChain` runs the remaining
+  callbacks when one raises (an `EarlyStopping` behind a failing logger still stops the fit); the first
+  non-stop error is re-raised afterwards. (d) `get_device_info()` reports a failed JAX backend in the new
+  `jax_error` key instead of raising `RuntimeError`. (e) `MethodLiteral` includes `"lm"`;
+  `CallbackFunction` has the real `(iteration, cost, params, info)` signature; the `CallbackBase`
+  docstring says iterations start at 1. (f) `NLSQ_FORCE_CPU=0` no longer skips the XLA memory defaults.
+- **`fit()` / `curve_fit_large()` routing.** `fit(..., strategy=Chunked())` (any `strategy=`) is now
+  honoured at every size (it raised at or above `size_threshold` and was dropped with a generic warning
+  below); `fit(method="hybrid_streaming", goal=...)` no longer raises `TypeError` on the goal
+  tolerances; `curve_fit_large(method="hybrid_streaming")` maps `chunk_size` and `multistart`/`n_starts`
+  to the `HybridStreamingConfig` instead of dropping them, and warns about `stability`, `rescale_data`,
+  `max_jacobian_elements_for_svd` and `auto_size_detection`, which it cannot honour.
+- **Configuration.** `memory_context()` and `large_dataset_context()` are now context-local
+  (`contextvars`): they never block each other or a setter on another thread, overlapping contexts on
+  several threads can no longer leave a temporary limit in place, and a setter on another thread is not
+  lost when a context exits. The override is seen by the creating thread/asyncio task only; a plain
+  `threading.Thread` started inside the block reads the process-wide value (run pool work through
+  `contextvars.copy_context().run` to propagate it). A setter called inside a context changes only that
+  context's value.
+  `configure_for_large_datasets()` keeps `safety_factor`, `gpu_memory_fraction` and the other
+  `MemoryConfig` fields it does not take. `NLSQ_CHUNK_SIZE_MB`, `NLSQ_OOM_STRATEGY`,
+  `NLSQ_DISABLE_PROGRESS_REPORTING`, `NLSQ_DISABLE_AUTO_SOLVER_SELECTION` and
+  `configure_for_large_datasets(enable_chunking=False / progress_reporting=False)` never had an effect;
+  they now warn and the docs say the fields are stored only.
+- **`timeit=True`** now fills `result.all_times` with the execution time of every `fun`/`jac`
+  evaluation, the evaluations at `x0` included (`nfev` and `njev` entries), on unbounded fits (it was
+  always `{}`); bounded fits return `{}` (their result had no `all_times`).
+- A failing iteration-history save (`NLSQ_SAVE_ITERATIONS`) of any exception type no longer replaces the
+  fit's own result or exception.
+- The `Jacobian issues detected` warning no longer claims the Jacobian was fixed (only non-finite
+  entries are zeroed), and the stability memory estimate now accounts for finite bounds.
+- **Sparsity detection** (`core/sparse_jacobian.py`): `detect_sparsity_at_p0(sample_size>100)` evaluates
+  all `sample_size` evenly spaced points (it silently used only the first 100, a domain truncation);
+  `detect_jacobian_sparsity` gains `n_samples` and logs any truncation. An integer `p0` no longer yields a
+  zero finite-difference step (reported 100% sparse). A `jax.Array` `(k, N)` `xdata` is chunked along the
+  points axis, and `SparseOptimizer.optimize_with_sparsity` accepts list/tuple `xdata`.
+- **Validation (raises)**: `SparseJacobianComputer`/`detect_*` reject a `threshold` outside `[0, 1)` or
+  NaN (was silent data loss), `compute_sparse_jacobian` rejects `chunk_size < 1` (was an all-zero matrix
+  or `ZeroDivisionError`), `MemoryBudget.compute` rejects `n_features < 1` and `dtype_bytes < 1`, and
+  `calculate_adaptive_tolerances` raises `TypeError` for a string `goal` (it was silently ignored).
+- **Cluster detection** (`core/workflow.py`): `detect_pbs` ignores blank/whitespace lines in
+  `PBS_NODEFILE`, warns when it substitutes `default_gpus_per_node` for undetected GPUs, and
+  `_detect_gpus_per_node` counts `jax.local_devices()` (not the global list under `jax.distributed`);
+  `create_distributed_config` keeps `n_starts >= 1`; only `gpu`/`cuda`/`rocm` devices count as GPUs
+  (a TPU no longer yields a GPU configuration).
+- **Memory budget** (`core/workflow.py`): `MemoryBudget.peak_gb` now includes the p-by-p allocations
+  chunking cannot remove (covariance and normal-matrix/SVD `V`; `bounded=True` adds the augmented
+  Jacobian blocks), exposed as `fixed_gb`; `MemoryBudgetSelector.select` warns when they alone exceed
+  the threshold (it does not raise), and `MemoryBudget.compute` rejects NaN, inf, bool and
+  non-integral counts and `dtype_bytes`.
+  The peak now counts the original Jacobian, the scaled Jacobian and the SVD `U` (it used 1.3
+  Jacobians), matching `MemoryManager.predict_memory_requirement`, so mid-size problems that used to
+  pick `standard` pick `chunked`. Chunk and streaming batch sizes subtract `fixed_gb` and use the
+  per-point buffers (`bytes_per_point`); below 1,000 rows they log a warning and use 1,000.
+- **Sparsity detection** (`core/sparse_jacobian.py`): flat list/tuple `xdata` is a 1-D array and a
+  list of equal-length sequences is coordinate form, at every entry point. Non-finite model values raise
+  `ValueError` instead of reading as structural zeros; a column lost to output cancellation is
+  detected from the autodiff derivative. `detect_jacobian_sparsity`
+  raises on `n_samples=0` or empty `xdata`; `compute_sparse_jacobian` applies `data_mask` to a callable
+  Jacobian's rows and requires its shape to be exactly `(points, n_params)`. Detection now classifies columns from a
+  forward-mode autodiff Jacobian (`jax.jacfwd`) and uses a single finite-difference step only for
+  models that are not JAX-traceable, which report a column dense when that step is lost to round-off
+  (an enlarged-step secant could hide a dense column).
+- **`fit()` result data** (`core/minpack.py`): with `nan_policy='omit'` or `data_mask`, the
+  `LDMemoryConfig` route and the chunked multi-start route stored the unmasked `xdata`/`ydata`/`sigma`, so
+  `aic`, `bic`, `r_squared` and `prediction_interval` were computed over rows the caller had dropped. They
+  now store the rows actually fit. The streaming multi-start route silently ignored `data_mask`,
+  `nan_policy='omit'` and a robust `loss`; it now raises `ValueError` like the hybrid workflow, and warns
+  on ignored `f_scale`/`max_nfev`/`x_scale`/`jac`.
+- **CMA-ES** (`core/minpack.py`): `fit(workflow='auto_global', method='cmaes')` now keeps the refinement's
+  `cost`, `fun`, `jac`, `nfev`, ... (one adapter shared with `curve_fit(method='cmaes')`);
+  `full_output=True` reports `ier` as the result's `status` (SciPy convention; it was always 1); the
+  memory auto-configuration counts points, not features, of a `(k, n)` `xdata`; `auto_bounds=True`
+  with a route that reports `cost=None` (CMA-ES without refinement) no longer raises `TypeError`, and
+  bound inference ignores `data_mask`-excluded rows.
+- **`curve_fit(method=...)` dispatch**: `method='cmaes'` without evosax runs a multi-start fit as
+  documented (it raised "`method` must be 'trf' or 'lm'"); `method='multi-start'` with `n_starts=0` is
+  the documented bypass to a single TRF fit (same error); a positional `method` (`curve_fit(f, x, y, p0,
+  None, False, True, bounds, 'cmaes')`) is routed instead of ignored. The `method='auto'` docstring now
+  describes the real behaviour (CMA-ES for multi-scale finite bounds, otherwise the memory-based strategy).
+- **Output flags** (`return_eval`, `full_output`, `timeit`): the chunked strategy of `method='auto'` now
+  gives `return_eval` precedence over `timeit`, honours `full_output`, and returns float timings; the
+  hybrid streaming `return_eval`/`full_output` tuples hold NumPy arrays like every other route.
+- **`compute_diagnostics`/`diagnostics_level`/`diagnostics_config`/`max_jacobian_elements_for_svd`**
+  now reach the multi-start, fallback and CMA-ES routes of `curve_fit` (they were dropped silently).
+- **`curve_fit` routing and result data, round 2** (`core/minpack.py`): an explicit `method='trf'`/`'lm'`
+  now reaches the inner fits of `multistart=True` and `fallback=True`; `'lm'` with finite bounds raises
+  the plain call's `ValueError` up front on both routes (the fallback no longer swaps to TRF), and
+  `'hybrid_streaming'` with either raises `ValueError` instead of running a different solver. The streaming
+  multi-start route warns when it ignores a caller's `ftol`/`xtol`. With `nan_policy='omit'`, the
+  `method='auto'` chunked route stores the rows it fit and the streaming route keeps `xdata`/`ydata`
+  aligned (`residuals` raised a broadcasting error). `auto_bounds=True` runs every attempt with the
+  caller's `full_output`/`return_eval`/`timeit` and returns the chosen attempt as is (the flag used to
+  trigger another solve that changed `popt` and repeated callbacks); a `return_eval` return whose cost
+  cannot be rebuilt keeps the original. A covariance `sigma` that is non-finite only on `data_mask`-excluded
+  rows is accepted with `nan_policy='omit'`. `CurveFit(enable_stability=True)` accepts SciPy `Bounds`, and
+  the `method='auto'` chunked `full_output` fills `infodict['fvec']` (evaluated in chunks).
+- **Memory strategy** (`core/minpack.py`): `fit(workflow='auto')`, `method='auto'`, `workflow='auto_global'` and
+  the `verbose>=2` budget log pass boundedness (any finite bound, incl. SciPy `Bounds`) to
+  `MemoryBudget.compute`/`MemoryBudgetSelector.select`, so a bounded fit that needs the bounded
+  trust-region layout is chunked/streamed like its memory estimate says.
+- **`curve_fit` output flags and `method='auto'`, round 3** (`core/minpack.py`): `auto_bounds` ranks the clipped and
+  relaxed fits by a cost rebuilt from `f(x)` for `return_eval` (scalar/1-D/2-D-covariance `sigma`,
+  `nan_policy='omit'`, `data_mask`, already-masked CMA-ES evals) so the flag no longer changes the selected fit;
+  when the cost cannot be rebuilt an `OptimizeWarning` says the comparison was skipped. The memory-selected chunked
+  `return_eval` tuple describes the rows actually fit. `method='auto'` is forwarded through the multistart and
+  fallback routes, so the memory selector still runs there.
+  `auto_bounds` with `return_eval` ranks attempts by the real status and cost of the result behind each
+  `(popt, pcov, f(x))` return (recorded out-of-band, no extra solve), so an unconverged relaxed refit is not picked.
+
 ## [0.8.0] - 2026-11-14
 
 ### Added

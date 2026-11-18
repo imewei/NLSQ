@@ -109,6 +109,8 @@ class OptimizationRecovery:
             },
         )
 
+        attempts = 0
+        last_error: Exception | None = None
         for retry in range(self.max_retries):
             for strategy in self.strategies:
                 try:
@@ -124,11 +126,24 @@ class OptimizationRecovery:
                         continue
 
                     # Retry optimization with modified state
+                    attempts += 1
                     result = optimization_func(**modified_state, **kwargs)
 
                     # Check if recovery succeeded
+                    start = next(
+                        (
+                            optimization_state[k]
+                            for k in ("params", "x", "p0")
+                            if optimization_state.get(k) is not None
+                        ),
+                        None,
+                    )
                     if self._check_recovery_success(
-                        result, optimization_state.get("bounds")
+                        result,
+                        optimization_state.get("bounds"),
+                        None
+                        if start is None
+                        else np.shape(np.atleast_1d(np.asarray(start))),
                     ):
                         if self.enable_diagnostics and self.diagnostics is not None:
                             self.diagnostics.record_event(
@@ -138,6 +153,7 @@ class OptimizationRecovery:
                         return True, result
 
                 except Exception as e:
+                    last_error = e
                     warnings.warn(f"Recovery strategy {strategy.__name__} failed: {e}")
                     continue
 
@@ -145,10 +161,13 @@ class OptimizationRecovery:
         if self.enable_diagnostics and self.diagnostics is not None:
             self.diagnostics.record_event(
                 "recovery_failed",
-                {"attempts": self.max_retries * len(self.strategies)},
+                {"attempts": attempts},
             )
 
-        return False, {"error": f"Recovery failed for {failure_type}"}
+        failure = {"error": f"Recovery failed for {failure_type}"}
+        if last_error is not None:
+            failure["last_error"] = f"{type(last_error).__name__}: {last_error}"
+        return False, failure
 
     def _perturb_parameters(self, failure_type: str, state: dict, retry: int) -> dict:
         """Perturb parameters to escape local minima.
@@ -165,12 +184,21 @@ class OptimizationRecovery:
         Returns
         -------
         modified_state : dict
-            State with perturbed parameters
+            State with perturbed parameters. The perturbed start is written to
+            every present start key as a float ``np.ndarray`` (a list start
+            comes back as an array, not in its original container); a scalar
+            or 0-d start is written back as a Python float.
         """
         modified_state = state.copy()
-        params = state.get("params", state.get("x"))
+        # Perturb the first existing non-None start key, in the order
+        # params > x > p0 (the same keys that are written back below).
+        params = next(
+            (state[k] for k in ("params", "x", "p0") if state.get(k) is not None),
+            None,
+        )
 
         if params is not None:
+            params = np.asarray(params, dtype=float)  # lists / JAX arrays
             # Increase perturbation with each retry
             noise_scale = 0.01 * (2**retry)
 
@@ -180,15 +208,29 @@ class OptimizationRecovery:
             key = jr.PRNGKey(42 + retry * 2)  # Different seed for noise perturbation
             noise = jr.normal(key, shape=params.shape) * noise_scale
 
-            # Scale noise by parameter magnitude
-            param_scale = np.abs(params) + 1e-10
-            scaled_noise = noise * param_scale
+            # Scale noise by parameter magnitude; the floor keeps a zero
+            # parameter from being "perturbed" by ~1e-12.
+            param_scale = np.maximum(np.abs(params), 1e-3)
+            perturbed = np.asarray(params + noise * param_scale, dtype=float)
 
-            modified_state["params"] = params + scaled_noise
+            # A perturbed start outside the bounds is rejected by the solver
+            # ("x0 is infeasible") and the retry is wasted.
+            bounds = state.get("bounds")
+            if bounds is not None and len(bounds) == 2:
+                lower, upper = (
+                    np.broadcast_to(np.asarray(b, dtype=float), np.shape(params))
+                    for b in bounds
+                )
+                perturbed = np.clip(perturbed, lower, upper)
 
-            # Also try different initial guess if available
-            if "p0" in state:
-                modified_state["p0"] = params + scaled_noise
+            # Write only keys the state already has: a retry callback taking just
+            # `x` would reject an unexpected `params`/`p0` keyword.
+            for k in ("params", "x", "p0"):
+                if k in state:
+                    # a scalar start stays a scalar (float); anything else array
+                    modified_state[k] = (
+                        float(perturbed) if params.ndim == 0 else perturbed
+                    )
 
         return modified_state
 
@@ -267,7 +309,9 @@ class OptimizationRecovery:
         """
         modified_state = state.copy()
 
-        if failure_type in ["numerical", "ill_conditioned"]:
+        # Everything below except the loss progression is retry-independent:
+        # re-proposing it on retry > 0 would repeat the identical solve.
+        if failure_type in ["numerical", "ill_conditioned"] and retry == 0:
             # Increase regularization for numerical issues
             current_reg = state.get("regularization", 0)
             new_reg = max(1e-8, current_reg) * (10 ** (retry + 1))
@@ -284,11 +328,13 @@ class OptimizationRecovery:
             current_loss = state.get("loss", "linear")
 
             try:
-                current_idx = loss_progression.index(current_loss)
-                if current_idx < len(loss_progression) - 1:
-                    modified_state["loss"] = loss_progression[current_idx + 1]
+                # One step further down the progression per retry.
+                next_idx = loss_progression.index(current_loss) + 1 + retry
+                if next_idx < len(loss_progression):
+                    modified_state["loss"] = loss_progression[next_idx]
             except ValueError:
-                modified_state["loss"] = "huber"
+                if retry == 0:
+                    modified_state["loss"] = "huber"
 
         return modified_state
 
@@ -343,50 +389,62 @@ class OptimizationRecovery:
         """
         modified_state = state.copy()
 
+        # Same precedence as the recovery callback in CurveFit.curve_fit.
+        current = next(
+            (state[k] for k in ("p0", "params", "x") if state.get(k) is not None),
+            None,
+        )
+        new_p0 = None
+
         # Generate new starting point
-        if "bounds" in state and state["bounds"] is not None:
-            bounds = state["bounds"]
-            if isinstance(bounds, tuple) and len(bounds) == 2:
+        bounds = state.get("bounds")
+        if bounds is not None:
+            # Any (lower, upper) pair: tuple, list or 2-row array.
+            if len(bounds) == 2 and current is not None and len(current) > 0:
                 lower, upper = bounds
-                n_params = len(state.get("p0", state.get("params", [])))
+                n_params = len(current)
 
-                if n_params > 0:
-                    # Use JAX-compatible random sampling for better coverage
-                    import jax.random as jr
-
-                    # Create deterministic key based on retry count
-                    key = jr.PRNGKey(42 + retry)
-                    # Generate uniform random sample
-                    sample = np.asarray(jr.uniform(key, shape=(n_params,)))
-
-                    # Scale to bounds; half-infinite dims sample around p0 instead
-                    # of producing inf.
-                    center = np.asarray(
-                        state.get("p0", state.get("params")), dtype=np.float64
-                    )
-                    new_p0 = sample_in_bounds(
-                        sample,
-                        np.broadcast_to(lower, (n_params,)),
-                        np.broadcast_to(upper, (n_params,)),
-                        center,
-                        np.maximum(np.abs(center), 1.0),
-                    )
-                    modified_state["p0"] = new_p0
-        else:
-            # Random initialization around current point
-            current = state.get("p0", state.get("params"))
-            if current is not None:
-                # Use JAX random for diversity
+                # Use JAX-compatible random sampling for better coverage
                 import jax.random as jr
 
-                key = jr.PRNGKey(42 + retry * 3)  # Different seed for unbounded init
-                scale = jnp.abs(current) + 1
-                new_p0 = current + jr.normal(key, shape=current.shape) * scale
+                # Create deterministic key based on retry count
+                key = jr.PRNGKey(42 + retry)
+                # Generate uniform random sample
+                sample = np.asarray(jr.uniform(key, shape=(n_params,)))
+
+                # Scale to bounds; half-infinite dims sample around p0 instead
+                # of producing inf.
+                center = np.asarray(current, dtype=np.float64)
+                new_p0 = sample_in_bounds(
+                    sample,
+                    np.broadcast_to(np.asarray(lower, dtype=float), (n_params,)),
+                    np.broadcast_to(np.asarray(upper, dtype=float), (n_params,)),
+                    center,
+                    np.maximum(np.abs(center), 1.0),
+                )
+        elif current is not None:
+            # Random initialization around current point
+            import jax.random as jr
+
+            key = jr.PRNGKey(42 + retry * 3)  # Different seed for unbounded init
+            current = jnp.asarray(current)
+            scale = jnp.abs(current) + 1
+            new_p0 = current + jr.normal(key, shape=current.shape) * scale
+
+        if new_p0 is not None:
+            written = False
+            for k in ("p0", "params", "x"):
+                if k in state:
+                    modified_state[k] = new_p0
+                    written = True
+            if not written:
                 modified_state["p0"] = new_p0
 
         return modified_state
 
-    def _check_recovery_success(self, result: dict, bounds=None) -> bool:
+    def _check_recovery_success(
+        self, result: dict, bounds=None, expected_shape=None
+    ) -> bool:
         """Check if recovery was successful.
 
         Parameters
@@ -395,7 +453,11 @@ class OptimizationRecovery:
             Optimization result (dict or object with attributes)
         bounds : tuple, optional
             Original ``(lower, upper)`` user bounds; a solution outside them is
-            rejected.
+            rejected. Each must be a scalar or have the parameter vector's
+            length (a length that would broadcast differently is rejected).
+        expected_shape : tuple, optional
+            Shape of the start vector (params > x > p0); a returned parameter
+            field must be 1-D, non-empty and of this shape.
 
         Returns
         -------
@@ -416,33 +478,41 @@ class OptimizationRecovery:
 
         # Validate parameters/cost whenever available. Even an explicit
         # success=True must not bypass this: a result like
-        # {"success": True, "x": [nan], "cost": nan} is not a valid
-        # recovery just because the flag says so.
-        params = _get_value(result, "x")
-        if params is None:
-            params = _get_value(result, "params")
-        if params is not None:
-            # Check for NaN/Inf
+        # {"success": True, "popt": [nan], "cost": nan} is not a valid
+        # recovery just because the flag says so. Every parameter field
+        # (popt/x/params) must be finite and inside the bounds; a supplied
+        # cost must be finite on its own, with or without a parameter field.
+        fields = [
+            v
+            for v in (_get_value(result, k) for k in ("popt", "x", "params"))
+            if v is not None
+        ]
+        for field in fields:
+            params = np.asarray(field, dtype=float)
+            if params.ndim != 1 or params.size == 0:
+                return False
+            if expected_shape is not None and params.shape != tuple(expected_shape):
+                return False
             if not np.all(np.isfinite(params)):
                 return False
-
-            if bounds is not None and not np.all(
-                (np.asarray(params) >= np.asarray(bounds[0]))
-                & (np.asarray(params) <= np.asarray(bounds[1]))
-            ):
-                return False
-
-            # Check cost if available
-            cost = _get_value(result, "cost")
-            if cost is not None:
-                if not np.isfinite(cost):
+            if bounds is not None:
+                lo, hi = (np.asarray(b, dtype=float) for b in bounds)
+                for b in (lo, hi):  # scalar or length-n only
+                    if b.ndim > 1 or (b.ndim == 1 and b.shape != params.shape):
+                        return False
+                if not np.all((params >= lo) & (params <= hi)):
                     return False
 
+        cost = _get_value(result, "cost")
+        if cost is not None and not np.isfinite(cost):
+            return False
+
+        if fields:
             return True
 
         # No parameters to validate against -- fall back to the explicit
         # success flag, if any was given.
         if success is not None:
-            return success
+            return bool(success)
 
         return False

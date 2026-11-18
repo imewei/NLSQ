@@ -69,6 +69,7 @@ class CMAESDiagnostics:
     # Convergence info
     convergence_reason: str = "not_converged"
     nlsq_refinement: bool = False
+    budget_exhausted: bool = False
 
     # Timing
     wall_time: float = 0.0
@@ -114,6 +115,7 @@ class CMAESDiagnostics:
             "restart_history": list(self.restart_history),
             "convergence_reason": self.convergence_reason,
             "nlsq_refinement": self.nlsq_refinement,
+            "budget_exhausted": self.budget_exhausted,
             "wall_time": self.wall_time,
             "seed": self.seed,
         }
@@ -141,6 +143,7 @@ class CMAESDiagnostics:
             restart_history=list(d.get("restart_history", [])),
             convergence_reason=d.get("convergence_reason", "not_converged"),
             nlsq_refinement=d.get("nlsq_refinement", False),
+            budget_exhausted=d.get("budget_exhausted", False),
             wall_time=d.get("wall_time", 0.0),
             seed=d.get("seed"),
         )

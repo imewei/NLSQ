@@ -113,17 +113,6 @@ def poor_initial_data(simple_model):
     return x, y, p0, true_params
 
 
-@pytest.fixture
-def diverging_scenario_data(simple_model):
-    """Generate data where warmup is likely to overshoot and increase loss."""
-    x = jnp.linspace(0, 5, 100)
-    true_params = jnp.array([10.0, 0.5])
-    y = simple_model(x, *true_params)
-    # Start near but with high learning rate tendency to overshoot
-    p0 = jnp.array([10.5, 0.45])
-    return x, y, p0, true_params
-
-
 # =============================================================================
 # Layer 1: Warm Start Detection Tests
 # =============================================================================

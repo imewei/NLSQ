@@ -262,6 +262,7 @@ def _fit_exact(
     """Exact streaming fit. ``route="default"`` (reached through ``Auto``) appends the
     ``strategy=Chunked()`` hint to a pointwise-contract ``ValueError`` and to
     ``ExactSolverError``; the explicit route raises them unchanged."""
+    from nlsq.config import get_memory_config
     from nlsq.streaming import exact_lm
     from nlsq.streaming.strategy import (
         build_large_strategy,
@@ -270,6 +271,8 @@ def _fit_exact(
     )
 
     reject_owned_kwargs(strategy, kwargs)
+    if memory_limit_gb is None:  # set_memory_limits / NLSQ_MEMORY_LIMIT_GB
+        memory_limit_gb = get_memory_config().memory_limit_gb
     try:
         check_exact_sources(xdata, ydata, sigma, strategy.n_points)
     except ValueError as err:
@@ -554,6 +557,8 @@ def _fit_chunked(
     _reject_output_flags(fit_kwargs)
 
     # Configure memory settings if provided
+    if memory_limit_gb is None:
+        memory_limit_gb = get_memory_config().memory_limit_gb  # set_memory_limits / env
     if memory_limit_gb is None:
         # Auto-detect available memory
         try:

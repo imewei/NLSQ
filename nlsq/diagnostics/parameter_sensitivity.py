@@ -25,7 +25,16 @@ import time
 
 import numpy as np
 
-from nlsq.diagnostics.identifiability import _equilibrate_columns, _fim_scale
+from nlsq.diagnostics.identifiability import (
+    _as_float64,
+    _column_log_scale,
+    _directions_to_original,
+    _equilibrate_columns,
+    _fim_scale,
+    _host_eigh,
+    _host_svd,
+    _storage_eps,
+)
 from nlsq.diagnostics.recommendations import get_recommendation
 from nlsq.diagnostics.types import (
     DiagnosticsConfig,
@@ -130,6 +139,11 @@ class ParameterSensitivityAnalyzer:
         4. Stiff/poorly-determined direction classification
         5. Effective dimensionality using participation ratio
         6. Issue detection based on thresholds
+
+        The Jacobian is analyzed as stored (entries treated as exact, solved in
+        float64), so rounding already present in a float32-computed Jacobian is
+        not modeled; ``analyze_from_fim`` instead uses the supplied FIM's storage
+        precision for its zero cutoff.
         """
         start_time = time.perf_counter()
 
@@ -230,6 +244,23 @@ class ParameterSensitivityAnalyzer:
             return ParameterSensitivityReport(
                 available=False,
                 error_message=f"Jacobian must be 2D, got {jacobian.ndim}D",
+                is_sloppy=False,
+                eigenvalues=np.array([]),
+                eigenvectors=None,
+                eigenvalue_range=0.0,
+                effective_dimensionality=0.0,
+                stiff_indices=[],
+                sloppy_indices=[],
+                issues=[],
+                health_status=HealthStatus.CRITICAL,
+                computation_time_ms=(time.perf_counter() - start_time) * 1000,
+            )
+
+        # Complex input would need Hermitian (conjugate) handling: not supported
+        if np.iscomplexobj(jacobian):
+            return ParameterSensitivityReport(
+                available=False,
+                error_message="Complex Jacobians are not supported (real input required)",
                 is_sloppy=False,
                 eigenvalues=np.array([]),
                 eigenvectors=None,
@@ -447,40 +478,21 @@ class ParameterSensitivityAnalyzer:
             Eigenvectors as columns, corresponding to sorted eigenvalues.
         """
         # Unit-invariant spectrum: D^-1/2 F D^-1/2 with D = diag(F).
+        storage_eps = _storage_eps(fim)
+        fim = _as_float64(fim)
         d = _fim_scale(fim)
         fim = fim / np.outer(d, d)
-        try:
-            # Try to use NLSQ's SVD fallback for robustness
-            from nlsq.stability.svd_fallback import compute_svd_with_fallback
+        # For a symmetric matrix U and V coincide (eigenvectors).
+        eigenvalues, eigenvectors = _host_eigh(fim)
 
-            # compute_svd_with_fallback returns (U, s, V) where V is already transposed
-            # For symmetric matrix, U and V are the same (eigenvectors)
-            _, singular_values, V = compute_svd_with_fallback(fim)
-            eigenvalues = np.asarray(singular_values)
-            eigenvectors = np.asarray(V)
-
-            # Sort in descending order (should already be sorted by SVD)
-            sort_idx = np.argsort(eigenvalues)[::-1]
-            eigenvalues = eigenvalues[sort_idx]
-            eigenvectors = eigenvectors[:, sort_idx]
-
-        except ImportError:
-            # Fallback to numpy SVD if module not available
-            _, singular_values, Vt = np.linalg.svd(fim)
-            eigenvalues = singular_values
-            eigenvectors = Vt.T  # Columns are eigenvectors
-
-            # Sort in descending order (should already be sorted by SVD)
-            sort_idx = np.argsort(eigenvalues)[::-1]
-            eigenvalues = eigenvalues[sort_idx]
-            eigenvectors = eigenvectors[:, sort_idx]
+        # Directions were found in equilibrated coordinates; report them in the
+        # original parameter space.
+        eigenvectors = _directions_to_original(eigenvectors, np.log(d))
 
         # Ensure eigenvalues are non-negative (numerical precision may give tiny negatives)
         eigenvalues = np.maximum(eigenvalues, 0.0)
         # Round-off noise on a formed FIM is ~ n * eps * max_eig.
-        eigenvalues[
-            eigenvalues <= eigenvalues[:1] * fim.shape[0] * np.finfo(float).eps
-        ] = 0.0
+        eigenvalues[eigenvalues <= eigenvalues[:1] * fim.shape[0] * storage_eps] = 0.0
 
         return eigenvalues, eigenvectors
 
@@ -508,21 +520,12 @@ class ParameterSensitivityAnalyzer:
             Eigenvectors as columns, corresponding to sorted eigenvalues.
         """
         # Column-equilibrate: the spectrum must not depend on parameter/data units.
+        column_scale = _column_log_scale(jacobian)
         jacobian = _equilibrate_columns(jacobian)
-        try:
-            from nlsq.stability.svd_fallback import compute_svd_with_fallback
-
-            # compute_svd_with_fallback returns V already (not transposed)
-            # With fewer observations than parameters the thin SVD drops the
-            # right nullspace; request full V and pad s with the n - m zeros.
-            wide = jacobian.shape[0] < jacobian.shape[1]
-            _, s, eigenvectors = compute_svd_with_fallback(jacobian, full_matrices=wide)
-            s = np.asarray(s)
-            eigenvectors = np.asarray(eigenvectors)
-        except ImportError:
-            wide = jacobian.shape[0] < jacobian.shape[1]
-            _, s, vt = np.linalg.svd(jacobian, full_matrices=wide)
-            eigenvectors = vt.T
+        # With fewer observations than parameters the thin SVD drops the right
+        # nullspace; request full V and pad s with the n - m zeros.
+        wide = jacobian.shape[0] < jacobian.shape[1]
+        s, eigenvectors = _host_svd(jacobian, full_matrices=wide)
         if wide:
             s = np.concatenate([s, np.zeros(jacobian.shape[1] - s.size, s.dtype)])
 
@@ -537,7 +540,7 @@ class ParameterSensitivityAnalyzer:
         # Sort in descending order (should already be sorted by SVD)
         sort_idx = np.argsort(eigenvalues)[::-1]
         eigenvalues = eigenvalues[sort_idx]
-        eigenvectors = eigenvectors[:, sort_idx]
+        eigenvectors = _directions_to_original(eigenvectors[:, sort_idx], column_scale)
 
         # Ensure eigenvalues are non-negative (numerical precision may give tiny negatives)
         eigenvalues = np.maximum(eigenvalues, 0.0)
@@ -545,7 +548,9 @@ class ParameterSensitivityAnalyzer:
         # otherwise gives finite ~1e-33 eigenvalues and round-off-driven thresholds.
         # (No max(m, n) factor: that would zero the 15 orders of range the
         # analytic-SVD test resolves.)
-        tol = np.finfo(float).eps ** 2
+        # The Jacobian is analyzed as stored (entries treated as exact, solved in
+        # float64); only a supplied FIM gets the storage-precision cutoff.
+        tol = np.finfo(s.dtype).eps ** 2
         eigenvalues[eigenvalues <= eigenvalues[:1] * tol] = 0.0
 
         return eigenvalues, eigenvectors

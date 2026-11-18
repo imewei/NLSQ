@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from scipy.sparse import coo_matrix, csr_matrix
@@ -23,10 +24,75 @@ logger = get_logger(__name__)
 
 
 def _is_points_last_2d(xdata: object, n_data: int) -> bool:
-    """True for a 2-D ndarray laid out (n_features, n_points)."""
+    """True for a 2-D NumPy/JAX array laid out (n_features, n_points)."""
     return (
-        isinstance(xdata, np.ndarray) and xdata.ndim == 2 and xdata.shape[-1] == n_data
+        isinstance(xdata, np.ndarray | jax.Array)
+        and xdata.ndim == 2
+        and xdata.shape[-1] == n_data
     )
+
+
+def _normalize_xdata(xdata: Any) -> Any:
+    """Normalize a list/tuple ``xdata``; other types pass through unchanged.
+
+    A flat sequence of scalars becomes a 1-D array. A sequence of equal-length
+    sequences/arrays (coordinate form, e.g. ``[X, Y]``) becomes a list of
+    ndarray coordinates, so every coordinate supports advanced indexing.
+    """
+    if not isinstance(xdata, list | tuple):
+        return xdata
+    if len(xdata) == 0:
+        return np.asarray(xdata, dtype=float)
+    if all(np.ndim(e) == 0 for e in xdata):
+        return np.asarray(xdata)
+    if any(np.ndim(e) == 0 for e in xdata):
+        raise ValueError("xdata mixes scalars and sequences; cannot interpret it")
+    coords = [np.asarray(e) for e in xdata]
+    if len({len(c) for c in coords}) != 1:
+        raise ValueError(
+            "xdata coordinate arrays must have equal length, got "
+            f"{[len(c) for c in coords]}"
+        )
+    return coords
+
+
+def _autodiff_jacobian(
+    func: Callable, xdata: Any, x0: np.ndarray, n_data: int
+) -> np.ndarray | None:
+    """Forward-mode Jacobian at ``x0`` as ``(n_data, n_params)``, or None.
+
+    None when the model is not JAX-traceable (numpy-only, data-dependent
+    branching) or returns an unexpected shape.
+    """
+    try:
+        J = np.asarray(
+            jax.jacfwd(lambda p: jnp.asarray(func(xdata, *p)))(jnp.asarray(x0))
+        )
+    except Exception:  # untraceable model
+        return None
+    return J if J.shape == (n_data, len(x0)) else None
+
+
+def _check_threshold(threshold: float) -> float:
+    """Return ``threshold`` if it is a finite number in ``[0, 1)``, else raise."""
+    try:
+        ok = 0.0 <= float(threshold) < 1.0  # NaN compares False
+    except (TypeError, ValueError):
+        ok = False
+    if not ok:
+        raise ValueError(
+            f"sparsity threshold must be a finite number in [0, 1), got {threshold!r}"
+        )
+    return float(threshold)
+
+
+def _check_positive_int(name: str, value: object, minimum: int = 1) -> int:
+    """Return ``value`` as an int if it is an integer >= ``minimum``, else raise."""
+    if isinstance(value, bool) or not isinstance(value, int | np.integer):
+        raise TypeError(f"{name} must be an integer, got {type(value).__name__}")
+    if value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}, got {value}")
+    return int(value)
 
 
 class SparseJacobianComputer:
@@ -49,7 +115,7 @@ class SparseJacobianComputer:
             the model or of individual parameters). All-zero columns stay
             all-zero. Default is 0.01.
         """
-        self.sparsity_threshold = sparsity_threshold
+        self.sparsity_threshold = _check_threshold(sparsity_threshold)
         self._sparsity_pattern: np.ndarray | None = None
         self._sparse_indices: tuple | None = None
 
@@ -82,12 +148,16 @@ class SparseJacobianComputer:
         sparsity : float
             Fraction of zero elements
         """
+        # Integer p0 would make `.at[i].add(1e-8 * ...)` truncate to a zero step.
+        x0 = np.asarray(x0, dtype=np.float64)
         n_params = len(x0)
+        n_samples = _check_positive_int("n_samples", n_samples, minimum=0)
+        xdata_sample = _normalize_xdata(xdata_sample)
         xdata_arr = np.asarray(xdata_sample)
 
         # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)
         xdata_sliced: list | np.ndarray  # Can be list or ndarray
-        if isinstance(xdata_sample, list | tuple):
+        if isinstance(xdata_sample, list):
             # Get number of data points from first coordinate array
             n_data_points = len(xdata_sample[0])
             n_data = min(n_samples, n_data_points)
@@ -108,6 +178,11 @@ class SparseJacobianComputer:
         # Use finite differences to detect sparsity
         eps = FINITE_DIFF_REL_STEP
         f0 = np.asarray(func(xdata_sliced, *x0))
+        if not np.all(np.isfinite(f0)):
+            raise ValueError(
+                "model output at x0 is not finite (NaN/inf); sparsity cannot be "
+                "detected for an invalid model at the initial guess"
+            )
 
         # Validate that function output matches the subsampled xdata size.
         # Closure-based model functions may ignore xdata and always return
@@ -119,22 +194,38 @@ class SparseJacobianComputer:
                 f"closure-captured data instead of xdata.",
             )
 
-        for i in range(n_params):
-            # OPT-6: Use JAX functional update instead of copy + mutate
+        # Exact derivative first: a finite-difference estimate (especially an
+        # enlarged-step secant) can vanish where the derivative does not.
+        J_ad = _autodiff_jacobian(func, xdata_sliced, x0, n_data) if n_data else None
+        f0_scale = np.max(np.abs(f0), initial=0.0)
+        for i in range(n_params if n_data > 0 else 0):
+            if J_ad is not None and np.all(np.isfinite(J_ad[:, i])):
+                jv_abs = np.abs(J_ad[:, i])
+                pattern[:, i] = jv_abs > self.sparsity_threshold * jv_abs.max()
+                continue
+            # Untraceable model: one-sided finite difference. If the difference is
+            # at the round-off level of f (e.g. 1e8 + a), it is not evidence of a
+            # zero derivative, and an enlarged-step secant can vanish where the
+            # derivative does not, so the column is reported dense. shortcut: use
+            # jnp in the model to classify such a column exactly.
             step = eps * max(1.0, abs(float(x0[i])))
             x_perturb = jnp.asarray(x0).at[i].add(step)
-            f_perturb = func(xdata_sliced, *x_perturb)
-
-            # Compute finite difference
-            jac_col = (f_perturb - f0) / step
-
-            # Mark non-zero elements. The column scale is floored at the
-            # finite-difference round-off level so noise in a truly zero
-            # column is not promoted to structure.
-            jac_abs = np.abs(np.asarray(jac_col))
-            noise = 100 * np.finfo(float).eps * np.max(np.abs(f0), initial=0.0) / step
-            ref = max(float(jac_abs.max(initial=0.0)), float(noise))
-            pattern[:, i] = jac_abs > self.sparsity_threshold * ref
+            f_perturb = np.asarray(func(xdata_sliced, *x_perturb))
+            if not np.all(np.isfinite(f_perturb)):
+                raise ValueError(
+                    f"model output is not finite (NaN/inf) after perturbing "
+                    f"parameter {i} by {step:g}; the derivative cannot be "
+                    "classified as zero or non-zero"
+                )
+            jac_abs = np.abs((f_perturb - f0) / step)
+            if jac_abs.max(initial=0.0) > 100 * np.finfo(float).eps * f0_scale / step:
+                pattern[:, i] = jac_abs > self.sparsity_threshold * jac_abs.max()
+            else:
+                logger.debug(
+                    f"Jacobian column {i} unresolved by finite differences and the "
+                    "model is not JAX-traceable; treating it as dense"
+                )
+                pattern[:, i] = True
 
         # Calculate sparsity (handle empty pattern)
         if pattern.size > 0:
@@ -179,6 +270,8 @@ class SparseJacobianComputer:
         J_sparse : csr_matrix
             Sparse Jacobian matrix
         """
+        chunk_size = _check_positive_int("chunk_size", chunk_size)
+        xdata = _normalize_xdata(xdata)
         n_data = len(ydata)
         n_params = len(x)
         n_chunks = (n_data + chunk_size - 1) // chunk_size
@@ -204,7 +297,7 @@ class SparseJacobianComputer:
             # whole container unchanged (or empty once start exceeds its
             # length), pairing unsliced/empty coordinates with sliced
             # y_chunk/mask_chunk.
-            if isinstance(xdata, list | tuple):
+            if isinstance(xdata, list):
                 x_chunk = [coord[start:end] for coord in xdata]
             elif _is_points_last_2d(xdata, n_data):
                 # (k, N) ndarray: slice the points axis, not the features.
@@ -245,6 +338,17 @@ class SparseJacobianComputer:
             # <= the global one, so this keeps a superset that the final
             # global filter below trims. Non-finite entries are always kept.
             J_chunk = np.asarray(J_chunk)
+            expected = (len(mask_chunk), n_params)
+            if J_chunk.shape != expected:
+                raise ValueError(
+                    f"Jacobian callback returned shape {J_chunk.shape}, expected "
+                    f"{expected} (points in chunk, parameters)"
+                )
+            # Masked points do not contribute (idempotent for mask-aware callbacks
+            # and consistent with the finite-difference branch).
+            J_chunk = np.where(
+                np.asarray(mask_chunk, dtype=bool)[:, None], J_chunk, 0.0
+            )
             finite = np.isfinite(J_chunk)
             J_abs = np.where(finite, np.abs(J_chunk), 0.0)
             chunk_max = J_abs.max(axis=0, initial=0.0)
@@ -309,6 +413,7 @@ class SparseJacobianComputer:
         J : np.ndarray
             Dense Jacobian matrix for chunk
         """
+        x = np.asarray(x, dtype=np.float64)  # integer x would zero the step
         n_data = len(ydata)
         n_params = len(x)
         J = np.zeros((n_data, n_params))
@@ -547,12 +652,21 @@ class SparseOptimizer:
             sample_indices = np.random.default_rng(0).choice(
                 n_data, sample_size, replace=False
             )
+            logger.info(
+                f"Sparsity detection samples {sample_size} of {n_data} points "
+                "(seeded random subset)",
+            )
+            xdata = _normalize_xdata(xdata)
+            if isinstance(xdata, list):
+                xdata_sample: Any = [c[sample_indices] for c in xdata]
+            elif _is_points_last_2d(xdata, n_data):
+                xdata_sample = xdata[:, sample_indices]
+            else:
+                xdata_sample = xdata[sample_indices]
             _pattern, sparsity = self.sparse_computer.detect_sparsity_pattern(
                 func,
                 x0,
-                xdata[:, sample_indices]
-                if _is_points_last_2d(xdata, n_data)
-                else xdata[sample_indices],
+                xdata_sample,
                 sample_size,
             )
 
@@ -612,6 +726,7 @@ def detect_jacobian_sparsity(
     x0: np.ndarray,
     xdata_sample: np.ndarray | list,
     threshold: float = 0.01,
+    n_samples: int = 100,
 ) -> tuple[float, dict]:
     """Detect and analyze Jacobian sparsity for a given problem.
 
@@ -628,6 +743,10 @@ def detect_jacobian_sparsity(
     threshold : float
         Relative per-column threshold for zero elements (see
         `SparseJacobianComputer`)
+    n_samples : int, default 100
+        Number of leading points of ``xdata_sample`` that are evaluated. When
+        ``xdata_sample`` holds more points, the rest are ignored and the
+        truncation is logged.
 
     Returns
     -------
@@ -637,8 +756,9 @@ def detect_jacobian_sparsity(
         Additional sparsity information
     """
     # Get number of data points, handling multi-dimensional xdata
+    xdata_sample = _normalize_xdata(xdata_sample)
     xdata_arr = np.asarray(xdata_sample)
-    if isinstance(xdata_sample, list | tuple):
+    if isinstance(xdata_sample, list):
         n_data_points = len(xdata_sample[0])
     elif xdata_arr.ndim == 2 and xdata_arr.shape[0] < xdata_arr.shape[1]:
         # 2D array with shape (k, N) - N is number of data points
@@ -646,12 +766,20 @@ def detect_jacobian_sparsity(
     else:
         n_data_points = len(xdata_arr)
 
+    n_samples = _check_positive_int("n_samples", n_samples)
+    if n_data_points == 0:
+        raise ValueError("xdata_sample is empty; no points to detect sparsity on")
     computer = SparseJacobianComputer(threshold)
+    if n_samples < n_data_points:
+        logger.info(
+            f"Jacobian sparsity detection evaluates the first {n_samples} of "
+            f"{n_data_points} supplied points",
+        )
     pattern, sparsity = computer.detect_sparsity_pattern(
         func,
         x0,
         xdata_sample,
-        min(100, n_data_points),
+        min(n_samples, n_data_points),
     )
 
     # Analyze pattern
@@ -684,7 +812,7 @@ def detect_sparsity_at_p0(
     """Detect sparsity at p0 initialization for automatic sparse solver selection.
 
     This function computes the Jacobian at the initial parameter guess p0 and
-    calculates the sparsity ratio. The result is cached to avoid recomputation.
+    calculates the sparsity ratio. The result is not cached.
 
     Parameters
     ----------
@@ -717,7 +845,7 @@ def detect_sparsity_at_p0(
     - Samples up to `sample_size` data points for efficiency
     - Uses finite differences to compute Jacobian at p0
     - Considers elements with \\|J[i,j]\\| <= threshold * max_i \\|J[i,j]\\| as zero
-    - Caches result to avoid repeated computation
+    - Samples are evenly spaced over the whole data range (logged at DEBUG)
 
     For auto-selection to activate sparse solver, both conditions must be met:
     - sparsity_ratio > 0.5 (more than 50% zeros)
@@ -736,11 +864,15 @@ def detect_sparsity_at_p0(
     >>> print(f"Sparsity: {sparsity_ratio:.1%}, Is sparse: {is_sparse}")
     Sparsity: 50.0%, Is sparse: False
     """
+    sample_size = _check_positive_int("sample_size", sample_size)
+    _check_threshold(threshold)
+
     # Sample data for efficient detection
     # Handle multi-dimensional xdata (e.g., [X, Y] for 2D fitting)
+    xdata = _normalize_xdata(xdata)
     xdata_arr = np.asarray(xdata)
 
-    if isinstance(xdata, list | tuple):
+    if isinstance(xdata, list):
         # xdata is a list of coordinate arrays (e.g., [X, Y] for 2D problems)
         # Get the number of data points from the first coordinate array
         n_data_points = len(xdata[0])
@@ -791,14 +923,15 @@ def detect_sparsity_at_p0(
         p0,
         xdata_sample,
         threshold=threshold,
+        n_samples=actual_sample_size,
     )
 
     # Determine if sparse based on sparsity threshold
     is_sparse = sparsity_ratio > 0.5
 
     logger.debug(
-        f"Sparsity detection at p0: {sparsity_ratio:.1%} "
-        f"({'sparse' if is_sparse else 'dense'})",
+        f"Sparsity detection at p0 on {actual_sample_size} of {n_data_points} "
+        f"points: {sparsity_ratio:.1%} ({'sparse' if is_sparse else 'dense'})",
     )
 
     return sparsity_ratio, is_sparse

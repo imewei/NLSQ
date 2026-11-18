@@ -78,20 +78,31 @@ class DefenseLayerTelemetry:
         self.lbfgs_line_search_failures: int = 0
         self.total_lbfgs_iterations: int = 0
         self.lbfgs_line_search_failed_steps: int = 0
-        # Steps already counted as failed, for the current warmup call only: the
-        # exception path and the deferred loss-increase check can both report a
-        # step, in either order.
-        self._failed_steps: set[int] = set()
-        self._failed_steps_call: int = 0
+        # Steps already counted as failed, per warmup token: the exception path and the
+        # deferred loss-increase check can both report a step, in either order.
+        self._failed_steps: dict[int, set[int]] = {}
+        # Tokens of warmups that started and have not called record_warmup_end.
+        self._live_warmups: set[int] = set()
 
         # Detailed event log (last N events)
         self._max_events: int = 1000
         self._event_log: deque[dict] = deque(maxlen=self._max_events)
 
-    def record_warmup_start(self) -> None:
-        """Record start of a warmup phase."""
+    def record_warmup_start(self) -> int:
+        """Record start of a warmup phase; return its token.
+
+        Pass the token as ``warmup=`` to :meth:`record_lbfgs_line_search_failure` so
+        concurrent warmups are told apart.
+        """
         with self._lock:
             self.total_warmup_calls += 1
+            self._live_warmups.add(self.total_warmup_calls)
+            return self.total_warmup_calls
+
+    def record_warmup_end(self, token: int | None) -> None:
+        """Mark a warmup finished so its de-duplication state may be evicted."""
+        with self._lock:
+            self._live_warmups.discard(token)
 
     def record_lbfgs_iteration(self) -> None:
         """Record one L-BFGS step (denominator of the per-iteration rates)."""
@@ -200,6 +211,7 @@ class DefenseLayerTelemetry:
         self,
         iteration: int,
         reason: str = "",
+        warmup: int | None = None,
     ) -> None:
         """Record L-BFGS line search failure event.
 
@@ -211,14 +223,23 @@ class DefenseLayerTelemetry:
             Iteration number when line search failed
         reason : str, optional
             Reason for line search failure
+        warmup : int, optional
+            Token returned by :meth:`record_warmup_start` for the reporting warmup; a
+            step is counted once per ``(warmup, iteration)``. Default: the most recent
+            warmup, which is only right when warmups do not overlap.
         """
         with self._lock:
             self.lbfgs_line_search_failures += 1
-            if self._failed_steps_call != self.total_warmup_calls:
-                self._failed_steps_call = self.total_warmup_calls
-                self._failed_steps.clear()
-            if iteration not in self._failed_steps:
-                self._failed_steps.add(iteration)
+            token = self.total_warmup_calls if warmup is None else warmup
+            seen = self._failed_steps.setdefault(token, set())
+            for old in [
+                t
+                for t in self._failed_steps
+                if t < token - 64 and t not in self._live_warmups
+            ]:
+                del self._failed_steps[old]  # bounded: finished, long-past warmups
+            if iteration not in seen:
+                seen.add(iteration)
                 self.lbfgs_line_search_failed_steps += 1
             self._log_event_locked(
                 "lbfgs_line_search_failure",

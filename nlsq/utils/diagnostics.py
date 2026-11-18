@@ -300,8 +300,8 @@ class OptimizationDiagnostics:
         verbosity : int
             Verbosity level:
             - 0: Minimal diagnostics (no condition number computation)
-            - 1: Normal (cheap 1-norm condition estimate, O(nm))
-            - 2: Detailed (full SVD condition number, O(mn²))
+            - 1: Normal (2-norm condition number via full SVD, O(mn²))
+            - 2: Detailed (same condition number, computed from singular values)
         """
         self.iteration_data: deque[dict[str, Any]] = deque(maxlen=10_000)
         self.convergence_monitor = ConvergenceMonitor()
@@ -315,6 +315,7 @@ class OptimizationDiagnostics:
         # Performance metrics
         self.function_eval_count = 0
         self.jacobian_eval_count = 0
+        self._reset_totals()
 
         # Memory tracking
         self.peak_memory: float = 0.0
@@ -327,6 +328,27 @@ class OptimizationDiagnostics:
         self.loss: str | None = None
         self.initial_params: np.ndarray | None = None
         self.problem_name: str | None = None
+
+    def _reset_totals(self) -> None:
+        """Exact whole-run statistics kept outside the bounded ``iteration_data``."""
+        self._n_recorded = 0
+        self._first_cost: float | None = None
+        self._min_cost = float("nan")
+        self._max_cost = float("nan")
+        self._first_grad_norm: float | None = None
+
+    def _track_totals(self, data: dict[str, Any]) -> None:
+        cost = data["cost"]
+        if self._n_recorded == 0:
+            self._first_cost = self._min_cost = self._max_cost = cost
+        else:
+            # Incremental form of Python's min()/max() over the cost list (seeded
+            # with the first cost, `<`/`>` comparisons): identical NaN behaviour.
+            self._min_cost = min(self._min_cost, cost)
+            self._max_cost = max(self._max_cost, cost)
+        self._n_recorded += 1
+        if self._first_grad_norm is None and "gradient_norm" in data:
+            self._first_grad_norm = data["gradient_norm"]
 
     def start_optimization(
         self,
@@ -366,6 +388,7 @@ class OptimizationDiagnostics:
         self.numerical_issues = deque(maxlen=1_000)
         self.function_eval_count = 0
         self.jacobian_eval_count = 0
+        self._reset_totals()
 
         # Store problem metadata (new API)
         self.n_params = n_params
@@ -477,6 +500,7 @@ class OptimizationDiagnostics:
             data["method_info"] = method_info
 
         self.iteration_data.append(data)
+        self._track_totals(data)
         self.function_eval_count += 1
 
         # Update convergence monitor
@@ -573,24 +597,39 @@ class OptimizationDiagnostics:
             return {}
 
         costs = [d["cost"] for d in self.iteration_data]
+        # Whole-run values come from exact counters: iteration_data is a bounded
+        # window, so after >10k iterations its first entry is not iteration 0.
+        # History injected without record_iteration() has no counters: fall back
+        # to the retained window.
+        total = max(self._n_recorded, len(self.iteration_data))
+        truncated = total > len(self.iteration_data)
+        tracked = self._n_recorded > 0 and self._first_cost is not None
+        first_cost: float = self._first_cost if tracked else costs[0]  # type: ignore[assignment]
+        if truncated and "history truncated" not in " ".join(self.warnings_issued):
+            self.warnings_issued.append(
+                f"history truncated: only the last {len(self.iteration_data)} of "
+                f"{total} iterations are retained (initial/min/max/total are exact)"
+            )
 
         stats = {
-            "total_iterations": len(self.iteration_data),
+            "total_iterations": total,
             "function_evaluations": self.function_eval_count,
             "jacobian_evaluations": self.jacobian_eval_count,
-            "initial_cost": costs[0],
+            "initial_cost": first_cost,
             "final_cost": costs[-1],
-            "cost_reduction": costs[0] - costs[-1],
-            "relative_cost_reduction": (costs[0] - costs[-1]) / (abs(costs[0]) + 1e-10),
-            "min_cost": min(costs),
-            "max_cost": max(costs),
+            "cost_reduction": first_cost - costs[-1],
+            "relative_cost_reduction": (first_cost - costs[-1])
+            / (abs(first_cost) + 1e-10),
+            "min_cost": self._min_cost if tracked else min(costs),
+            "max_cost": self._max_cost if tracked else max(costs),
+            "history_truncated": truncated,
         }
 
         # Timing
         if self.start_time and self.iteration_data:
             total_time = self.iteration_data[-1]["elapsed_time"]
             stats["total_time_seconds"] = total_time
-            stats["time_per_iteration"] = total_time / len(self.iteration_data)
+            stats["time_per_iteration"] = total_time / total
 
         # Memory
         stats["peak_memory_mb"] = self.peak_memory
@@ -606,7 +645,11 @@ class OptimizationDiagnostics:
             grad_norms = [
                 d["gradient_norm"] for d in self.iteration_data if "gradient_norm" in d
             ]
-            stats["initial_gradient_norm"] = grad_norms[0]
+            stats["initial_gradient_norm"] = (
+                self._first_grad_norm
+                if self._first_grad_norm is not None
+                else grad_norms[0]
+            )
             stats["final_gradient_norm"] = grad_norms[-1]
             stats["min_gradient_norm"] = min(grad_norms)
 
@@ -617,7 +660,9 @@ class OptimizationDiagnostics:
                 for d in self.iteration_data
                 if "jacobian_condition" in d
             ]
-            stats["max_condition_number"] = max(cond_numbers)
+            # max() is order-dependent with NaN entries: rank only non-NaN values
+            non_nan = [c for c in cond_numbers if not np.isnan(c)]
+            stats["max_condition_number"] = max(non_nan) if non_nan else np.nan
             stats["mean_condition_number"] = np.mean(cond_numbers)
 
         # Problems detected
@@ -731,7 +776,7 @@ class OptimizationDiagnostics:
         if not self.iteration_data:
             return
 
-        _fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
         iterations = [d["iteration"] for d in self.iteration_data]
 
         # Cost history
@@ -768,13 +813,16 @@ class OptimizationDiagnostics:
         axes[1, 1].set_title("Memory Usage")
         axes[1, 1].grid(True)
 
-        plt.suptitle(
+        fig.suptitle(
             f"Optimization Convergence: {getattr(self, 'problem_name', 'Unknown')}",
         )
-        plt.tight_layout()
+        fig.tight_layout()
 
         if save_path:
-            plt.savefig(save_path)
+            try:
+                fig.savefig(save_path)
+            finally:
+                plt.close(fig)
         else:
             plt.show()
 

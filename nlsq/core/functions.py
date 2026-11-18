@@ -28,8 +28,8 @@ All functions work seamlessly with NLSQ's auto p0 estimation.
 
 See Also
 --------
-nlsq.parameter_estimation : Automatic parameter estimation
-nlsq.minpack.curve_fit : Main curve fitting function
+nlsq.precision.parameter_estimation : Automatic parameter estimation
+nlsq.core.minpack.curve_fit : Main curve fitting function
 """
 
 import warnings
@@ -628,7 +628,7 @@ def sigmoid(x: ArrayLike, L: float, x0: float, k: float, b: float) -> ArrayRetur
     x : array_like
         Independent variable
     L : float
-        Maximum value (saturation level)
+        Amplitude of the step (upper asymptote is ``L + b``)
     x0 : float
         Midpoint (inflection point, x value at half-maximum)
     k : float
@@ -799,6 +799,8 @@ def estimate_p0_power_law(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList
         A = np.vstack([log_x, np.ones(len(log_x))]).T
         b, log_a = np.linalg.lstsq(A, log_y, rcond=None)[0]
         a = np.exp(log_a)
+        if not (np.isfinite(a) and np.isfinite(b)):  # exp overflow on steep data
+            return [1.0, 1.0]
 
         return [float(a), float(b)]
     except (np.linalg.LinAlgError, ValueError):

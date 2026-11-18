@@ -171,7 +171,12 @@ class TournamentSelector:
 
         # Tournament state
         self.survival_mask = np.ones(self.n_candidates, dtype=bool)
+        # cumulative_losses = loss_sums / obs_counts: the full-data mean (weighted)
+        # squared residual over everything a candidate has been scored on, so rounds
+        # and batches count by observations, not equally.
         self.cumulative_losses = np.zeros(self.n_candidates)
+        self.loss_sums = np.zeros(self.n_candidates)
+        self.obs_counts = np.zeros(self.n_candidates)
         self.evaluation_counts = np.zeros(self.n_candidates, dtype=int)
         self.current_round = 0
         self.round_history: list[dict[str, Any]] = []
@@ -198,7 +203,10 @@ class TournamentSelector:
         Parameters
         ----------
         data_batch_iterator : Iterator
-            Iterator yielding (x_batch, y_batch) tuples of data.
+            Iterator yielding ``(x_batch, y_batch)`` or ``(x_batch, y_batch,
+            sigma_batch)`` tuples. With sigma the ranking loss is the weighted
+            ``mean(((y - f) / sigma)**2)``; without it, the plain mean square.
+            Batches are weighted by their number of observations.
         model : Callable
             Model function with signature ``model(x, *params) -> predictions``.
         top_m : int, default=1
@@ -288,28 +296,36 @@ class TournamentSelector:
             f"on {self.config.batches_per_round} batches",
         )
 
-        # Reset losses for this round
+        # Reset losses for this round (sums of per-observation squares, so batches
+        # of unequal size are weighted by observation count)
         round_losses = np.zeros(self.n_candidates)
+        round_obs = np.zeros(self.n_candidates)
         round_loss_counts = np.zeros(self.n_candidates, dtype=int)
         batches_this_round = 0
 
-        # Evaluate on batches
-        for batch_idx in range(self.config.batches_per_round):
+        # Evaluate on batches. Empty batches are skipped without counting toward
+        # batches_per_round: a round that saw no observations must neither eliminate
+        # (all losses tie) nor be consumed.
+        while batches_this_round < self.config.batches_per_round:
             try:
-                x_batch, y_batch = next(data_batch_iterator)
+                batch = next(data_batch_iterator)
             except StopIteration:
-                if batch_idx == 0:
-                    raise  # No batches at all
+                if batches_this_round == 0:
+                    raise  # No observations at all: the round is not consumed
                 break  # Use partial evaluation
 
-            batch_losses = self._evaluate_candidates_on_batch(x_batch, y_batch, model)
+            n_obs = int(np.size(batch[1]))
+            if n_obs == 0:  # inf * 0 would turn every failed candidate into NaN
+                continue
+            batch_losses = self._evaluate_candidates_on_batch(*batch, model)
 
             # Accumulate losses for survivors. A failed batch carries loss=inf,
             # which is accumulated (not skipped) so a candidate that fails on
             # hard batches cannot out-score one that is finite on all of them.
             for i in range(self.n_candidates):
                 if self.survival_mask[i]:
-                    round_losses[i] += batch_losses[i]
+                    round_losses[i] += batch_losses[i] * n_obs
+                    round_obs[i] += n_obs
                     round_loss_counts[i] += 1
 
             self.total_batches_evaluated += 1
@@ -320,12 +336,12 @@ class TournamentSelector:
         with np.errstate(divide="ignore", invalid="ignore"):
             avg_round_losses = np.where(
                 round_loss_counts > 0,
-                round_losses / np.maximum(round_loss_counts, 1),
+                round_losses / np.maximum(round_obs, 1),
                 np.inf,
             )
 
         # Update cumulative losses
-        self.cumulative_losses += avg_round_losses
+        self._accumulate(round_losses, round_obs)
         self.evaluation_counts += round_loss_counts
 
         # Perform elimination. Capped so this round can never drop the
@@ -366,25 +382,47 @@ class TournamentSelector:
         model: Callable,
     ) -> None:
         """Evaluate all candidates on initial batches (no elimination rounds case)."""
-        for batch_idx in range(self.config.batches_per_round):
+        sums = np.zeros(self.n_candidates)
+        n_obs_total = 0
+        n_batches = 0
+        while n_batches < self.config.batches_per_round:
             try:
-                x_batch, y_batch = next(data_batch_iterator)
+                batch = next(data_batch_iterator)
             except StopIteration:
                 break
 
-            batch_losses = self._evaluate_candidates_on_batch(x_batch, y_batch, model)
+            n_obs = int(np.size(batch[1]))
+            if n_obs == 0:  # empty batches do not count toward batches_per_round
+                continue
+            n_batches += 1
+            batch_losses = self._evaluate_candidates_on_batch(*batch, model)
 
             # Failed batches carry loss=inf and are accumulated, not skipped.
-            self.cumulative_losses += batch_losses
+            sums += batch_losses * n_obs
+            n_obs_total += n_obs
             self.evaluation_counts += 1
 
             self.total_batches_evaluated += 1
+
+        self._accumulate(sums, np.full(self.n_candidates, float(n_obs_total)))
+
+    def _accumulate(self, sums: np.ndarray, obs: np.ndarray) -> None:
+        """Add squared-residual sums and observation counts, refresh the ratio."""
+        self.loss_sums += sums
+        self.obs_counts += obs
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = np.where(
+                self.obs_counts > 0,
+                self.loss_sums / np.maximum(self.obs_counts, 1),
+                0.0,
+            )
+        self.cumulative_losses = np.where(self.survival_mask, ratio, np.inf)
 
     def _evaluate_candidates_on_batch(
         self,
         x_batch: np.ndarray,
         y_batch: np.ndarray,
-        model: Callable,
+        *rest: Any,
     ) -> np.ndarray:
         """Evaluate all surviving candidates on a single batch.
 
@@ -394,16 +432,27 @@ class TournamentSelector:
             Independent variable batch.
         y_batch : np.ndarray
             Dependent variable batch.
-        model : Callable
-            Model function.
+        *rest
+            ``(model,)`` or ``(sigma_batch, model)``. With ``sigma_batch`` the
+            loss is the weighted ``mean(((y - f) / sigma)**2)``, matching the
+            objective of the final fit.
 
         Returns
         -------
         np.ndarray
             Loss values for each candidate (inf for eliminated or failed).
         """
+        *sigma_opt, model = rest
+        sigma_jax = jnp.asarray(sigma_opt[0]) if sigma_opt else None
         x_jax = jnp.asarray(x_batch)
         y_jax = jnp.asarray(y_batch)
+        # As curve_fit: scalar or one sigma per observation. A column or a
+        # covariance matrix would silently broadcast against the residuals.
+        if sigma_jax is not None and sigma_jax.ndim and sigma_jax.shape != y_jax.shape:
+            raise ValueError(
+                f"batch sigma must be a scalar or have the shape of y {y_jax.shape}, "
+                f"got {sigma_jax.shape}"
+            )
 
         losses = np.full(self.n_candidates, np.inf)
 
@@ -415,6 +464,8 @@ class TournamentSelector:
                 params = self.candidates[i]
                 predictions = model(x_jax, *params)
                 residuals = y_jax - predictions
+                if sigma_jax is not None:
+                    residuals = residuals / sigma_jax
 
                 # Compute mean squared error
                 loss = float(jnp.mean(residuals**2))
@@ -550,6 +601,8 @@ class TournamentSelector:
             "survival_mask": self.survival_mask.copy(),
             "cumulative_losses": self.cumulative_losses.copy(),
             "evaluation_counts": self.evaluation_counts.copy(),
+            "loss_sums": self.loss_sums.copy(),
+            "obs_counts": self.obs_counts.copy(),
             "current_round": self.current_round,
             "round_history": self.round_history.copy(),
             "total_batches_evaluated": self.total_batches_evaluated,
@@ -587,11 +640,31 @@ class TournamentSelector:
         """
         candidates = checkpoint["candidates"]
         selector = cls(candidates=candidates, config=config)
+        if "loss_sums" not in checkpoint or "obs_counts" not in checkpoint:
+            raise ValueError(
+                "tournament checkpoint is from an older version (it lacks "
+                "'loss_sums'/'obs_counts', so its per-round mean losses cannot be "
+                "combined by observation count); rerun the tournament"
+            )
+        for key in (
+            "survival_mask",
+            "cumulative_losses",
+            "evaluation_counts",
+            "loss_sums",
+            "obs_counts",
+        ):
+            if np.shape(checkpoint[key]) != (selector.n_candidates,):
+                raise ValueError(
+                    f"checkpoint {key!r} has shape {np.shape(checkpoint[key])}, "
+                    f"expected ({selector.n_candidates},)"
+                )
 
         # Restore state
         selector.survival_mask = checkpoint["survival_mask"].copy()
         selector.cumulative_losses = checkpoint["cumulative_losses"].copy()
         selector.evaluation_counts = checkpoint["evaluation_counts"].copy()
+        selector.loss_sums = np.asarray(checkpoint["loss_sums"], dtype=float).copy()
+        selector.obs_counts = np.asarray(checkpoint["obs_counts"], dtype=float).copy()
         selector.current_round = checkpoint["current_round"]
         selector.round_history = checkpoint["round_history"].copy()
         selector.total_batches_evaluated = checkpoint["total_batches_evaluated"]

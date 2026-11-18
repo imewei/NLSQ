@@ -49,9 +49,8 @@ class PrepareContext:
     enable_stability: bool = False
     # Layout of multi-dimensional x for the x/y length check only: True is
     # (n_features, n_points) (standard path); hybrid streaming passes False for
-    # (n_points, n_features). NaN omission (nan_policy="omit") stays
-    # feature-major either way, so multi-dimensional hybrid x with
-    # nan_policy="omit" is unsupported, exactly as before this field existed.
+    # (n_points, n_features). NaN omission (nan_policy="omit") and padding honour
+    # this layout (row mask on axis 0 when False, column mask on the last axis when True).
     x_points_axis_last: bool = True
     validator: InputValidator = field(
         default_factory=lambda: InputValidator(fast_mode=True)
@@ -141,13 +140,15 @@ def pad_fit_data(
     ydata: np.ndarray,
     xdims: int,
     len_diff: int,
+    points_axis_last: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Pad fit data to match the fixed input data length.
 
     This function pads the input data arrays with small values to match the
     fixed input data length to avoid JAX retracing the JITted functions.
-    The padding is added along the second dimension of the `xdata` array
-    if it's multidimensional data otherwise along the first dimension. The
+    The padding is added along the points axis of the `xdata` array if it's
+    multidimensional data (the last axis, or the first when
+    ``points_axis_last`` is False) otherwise along the first dimension. The
     small values are chosen to be `EPS`, a global constant defined as a
     very small positive value which avoids numerical issues.
 
@@ -161,6 +162,9 @@ def pad_fit_data(
         The number of dimensions in the `xdata` array.
     len_diff : int
         The difference in length between the data arrays and the fixed input data length.
+    points_axis_last : bool
+        Layout of multi-dimensional `xdata`: ``(n_features, n_points)`` when True,
+        ``(n_points, n_features)`` when False.
 
     Returns
     -------
@@ -168,12 +172,10 @@ def pad_fit_data(
         The padded `xdata` and `ydata` arrays.
     """
 
-    if xdims > 1:
-        xpad = EPS * np.ones([xdata.shape[0], len_diff])
-        xdata = np.concatenate([xdata, xpad], axis=1)
-    else:
-        xpad = EPS * np.ones([len_diff])
-        xdata = np.concatenate([xdata, xpad])
+    axis = -1 if xdims > 1 and points_axis_last else 0
+    pad_shape = list(xdata.shape)
+    pad_shape[axis] = len_diff
+    xdata = np.concatenate([xdata, EPS * np.ones(pad_shape)], axis=axis)
     ypad = EPS * np.ones([len_diff])
     ydata = np.concatenate([ydata, ypad])
     return xdata, ydata
@@ -271,6 +273,10 @@ def _determine_parameter_count(
     # If p0 is explicitly provided (not None or 'auto'), use it
     if p0 is not None and not _is_auto_p0(p0):
         p0 = np.atleast_1d(p0)
+        if p0.ndim > 1:
+            raise ValueError(
+                f"`p0` must have at most 1 dimension, got shape {p0.shape}"
+            )
         n = p0.size
         return n, p0
 
@@ -444,6 +450,39 @@ def _select_optimization_method(
     return method
 
 
+def _used_rows(
+    data_mask: np.ndarray | None, omit_mask: np.ndarray | None
+) -> np.ndarray | None:
+    """Rows that enter the fit: ``data_mask`` AND the rows ``nan_policy='omit'`` keeps."""
+    keep = None if data_mask is None else np.asarray(data_mask, dtype=bool)
+    if omit_mask is not None and (keep is None or keep.shape == omit_mask.shape):
+        keep = omit_mask if keep is None else keep & omit_mask
+    return keep
+
+
+def _neutralize_unused_sigma(
+    sigma: np.ndarray | None, keep: np.ndarray | None
+) -> np.ndarray | None:
+    """Sigma aligned with x/y, with the rows outside ``keep`` set to a neutral unit.
+
+    The full validator needs sigma the same length as ydata, so rows dropped by
+    ``nan_policy='omit'`` or excluded by ``data_mask`` are neutralised, not removed.
+    """
+    if sigma is None or keep is None:
+        return sigma
+    sigma_arr = np.asarray(sigma, dtype=float)
+    drop = ~keep
+    if sigma_arr.ndim == 1 and sigma_arr.shape == drop.shape:
+        return np.where(drop, 1.0, sigma_arr)
+    if sigma_arr.ndim == 2 and sigma_arr.shape == drop.shape * 2:
+        out = sigma_arr.copy()
+        out[drop, :] = 0.0
+        out[:, drop] = 0.0
+        out[drop, drop] = 1.0
+        return out
+    return sigma
+
+
 def _validate_and_sanitize_inputs(
     f: Callable,
     xdata: np.ndarray,
@@ -455,8 +494,12 @@ def _validate_and_sanitize_inputs(
     *,
     ctx: PrepareContext,
     data_mask: np.ndarray | None = None,
+    omit_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Validate and sanitize curve fit inputs if stability is enabled.
+
+    ``omit_mask`` (``nan_policy='omit'``) marks the rows that survive omission; sigma
+    is validated on those rows only, like ``data_mask``.
 
     Parameters
     ----------
@@ -508,11 +551,15 @@ def _validate_and_sanitize_inputs(
     # Masked-out rows may legitimately hold bad sigma values (the residual/Jacobian
     # wrappers zero them after weighting), so validate only the rows that are used.
     sigma_chk, ydata_chk = sigma, ydata
-    if data_mask is not None and sigma is not None:
-        mask_arr = np.asarray(data_mask, dtype=bool)
+    keep = _used_rows(data_mask, omit_mask)
+    if sigma is not None and keep is not None:
         sigma_arr = np.asarray(sigma)
-        if sigma_arr.ndim == 1 and sigma_arr.shape == mask_arr.shape == np.shape(ydata):
-            sigma_chk, ydata_chk = sigma_arr[mask_arr], np.asarray(ydata)[mask_arr]
+        y_arr = np.asarray(ydata)
+        if keep.shape == y_arr.shape:
+            if sigma_arr.ndim == 1 and sigma_arr.shape == keep.shape:
+                sigma_chk, ydata_chk = sigma_arr[keep], y_arr[keep]
+            elif sigma_arr.ndim == 2 and sigma_arr.shape == keep.shape * 2:
+                sigma_chk, ydata_chk = sigma_arr[np.ix_(keep, keep)], y_arr[keep]
     sigma_errors, _ = security_validator._validate_sigma(
         sigma_chk, ydata_chk, check_finite, strict=False
     )
@@ -520,6 +567,8 @@ def _validate_and_sanitize_inputs(
         error_msg = f"Input validation failed: {'; '.join(sigma_errors)}"
         ctx.logger.error("Input validation failed", error=error_msg)
         raise ValueError(error_msg)
+
+    sigma_val = _neutralize_unused_sigma(sigma, keep)
 
     if ctx.enable_stability:
         try:
@@ -530,7 +579,7 @@ def _validate_and_sanitize_inputs(
                     ydata,
                     p0,
                     bounds=bounds,
-                    sigma=sigma,
+                    sigma=sigma_val,
                     check_finite=check_finite,
                 )
             )
@@ -762,6 +811,17 @@ def _preprocess_input_data(
         "propagate",
     )
 
+    omit_pre = None
+    if nan_policy == "omit":
+        # Rows nan_policy='omit' will drop, known before sigma is validated
+        try:
+            x_pre = np.asarray(xdata, float)
+            y_pre = np.asarray(ydata, float)
+            if _finite_points(x_pre, ctx.x_points_axis_last).shape == y_pre.shape:
+                omit_pre = _omit_valid_mask(x_pre, y_pre, sigma, ctx.x_points_axis_last)
+        except (TypeError, ValueError):
+            omit_pre = None  # malformed input: the checks below report it
+
     # Step 6: Validate and sanitize inputs (if stability enabled).
     # Forward bounds + check_finite so bounds-consistency and finiteness
     # checks are actually exercised (previously they were silently dropped).
@@ -775,6 +835,7 @@ def _preprocess_input_data(
         sigma=sigma,
         ctx=ctx,
         data_mask=data_mask,
+        omit_mask=omit_pre,
     )
 
     # Step 7: Convert to arrays and validate finiteness
@@ -795,9 +856,24 @@ def _preprocess_input_data(
             sigma,
             xdims,
             ctx.x_points_axis_last,
+            data_mask,
         )
 
     return xdata, ydata, m, xdims, sigma, omit_mask
+
+
+def _omit_valid_mask(
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    sigma: np.ndarray | None,
+    points_axis_last: bool,
+) -> np.ndarray:
+    """Rows kept by ``nan_policy='omit'``: finite x, y and (1-D) sigma entries."""
+    valid_mask = np.isfinite(ydata) & _finite_points(xdata, points_axis_last)
+    sigma_arr = np.asarray(sigma) if sigma is not None else None
+    if sigma_arr is not None and sigma_arr.ndim == 1:
+        valid_mask = valid_mask & np.isfinite(sigma_arr)
+    return valid_mask
 
 
 def _omit_nonfinite_rows(
@@ -806,6 +882,7 @@ def _omit_nonfinite_rows(
     sigma: np.ndarray | None,
     xdims: int,
     points_axis_last: bool = True,
+    data_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
     """Drop rows with non-finite x/y (or a non-finite 1D sigma entry).
 
@@ -822,6 +899,9 @@ def _omit_nonfinite_rows(
     points_axis_last : bool
         For multi-dimensional ``xdata``: points on the last axis ``(k, m)``
         (standard path) or the first axis ``(m, k)`` (hybrid streaming).
+    data_mask : np.ndarray | None
+        Caller mask over the original length; non-finite covariance entries on
+        rows it excludes are not an error.
 
     Returns
     -------
@@ -830,13 +910,9 @@ def _omit_nonfinite_rows(
         filter — so a caller-supplied data_mask can be filtered the same
         way to stay aligned.
     """
-    y_valid = np.isfinite(ydata)
-    valid_mask = y_valid & _finite_points(xdata, points_axis_last)
-
+    valid_mask = _omit_valid_mask(xdata, ydata, sigma, points_axis_last)
     sigma_arr = np.asarray(sigma) if sigma is not None else None
     sigma_1d = sigma_arr is not None and sigma_arr.ndim == 1
-    if sigma_1d:
-        valid_mask = valid_mask & np.isfinite(sigma_arr)  # type: ignore[arg-type]  # sigma_arr is not None whenever sigma_1d is True
 
     if not np.any(valid_mask):
         msg = "nan_policy='omit' removed all data points (every row contained NaN/Inf)."
@@ -851,7 +927,16 @@ def _omit_nonfinite_rows(
         sigma = sigma_arr[valid_mask]  # type: ignore[index]  # sigma_arr is not None whenever sigma_1d is True
     elif sigma_arr is not None and sigma_arr.ndim == 2:
         sigma = sigma_arr[np.ix_(valid_mask, valid_mask)]
-        if not np.all(np.isfinite(sigma)):
+        if data_mask is not None and np.shape(data_mask) != valid_mask.shape:
+            data_mask = None  # a wrong-length mask is reported by the caller
+        used = _used_rows(data_mask, valid_mask)  # data_mask AND omit-retained
+        used_in_sigma = used[valid_mask] if used is not None else None
+        block = (
+            sigma
+            if used_in_sigma is None
+            else sigma[np.ix_(used_in_sigma, used_in_sigma)]
+        )
+        if not np.all(np.isfinite(block)):
             raise ValueError(
                 "Sigma covariance matrix contains non-finite values in "
                 "valid data rows/columns after NaN filtering",
@@ -898,15 +983,18 @@ def _apply_padding_if_needed(
     """
     if ctx.flength is not None and should_pad:
         if len_diff > 0:
-            xdata, ydata = pad_fit_data(xdata, ydata, xdims, len_diff)
-        elif len_diff < 0 and not ctx.use_dynamic_sizing:
+            xdata, ydata = pad_fit_data(
+                xdata, ydata, xdims, len_diff, ctx.x_points_axis_last
+            )
+    elif ctx.flength is not None and len_diff < 0:
+        if ctx.use_dynamic_sizing:
+            len_diff = 0
+        else:
             ctx.logger.debug(
                 "Data size exceeds fixed length, JIT retracing may occur",
                 data_size=m,
                 flength=ctx.flength,
             )
-    elif ctx.use_dynamic_sizing and ctx.flength is not None and len_diff < 0:
-        len_diff = 0
 
     return xdata, ydata, len_diff
 
@@ -931,8 +1019,8 @@ def prepare_problem(
 
     ``kwargs`` is the caller's dict and is mutated in place: nothing is
     consumed, but method auto-selection (``method=None`` with
-    ``ctx.enable_stability``) adds ``ftol``/``xtol``/``gtol``/``max_nfev``/
-    ``x_scale`` defaults the caller did not set. ``nan_policy`` is passed
+    ``ctx.enable_stability``) adds an ``x_scale`` default the caller did not set
+    (``ftol``/``xtol``/``gtol``/``max_nfev`` are left alone). ``nan_policy`` is passed
     explicitly; the caller reads it from its own ``kwargs``.
 
     Returns

@@ -25,8 +25,8 @@ NLSQ provides two main approaches for global optimization:
 Installation
 ------------
 
-Multi-start optimization works out of the box. For CMA-ES, install the
-optional ``evosax`` dependency:
+Multi-start optimization and CMA-ES both work out of the box: ``evosax`` is a
+core dependency of NLSQ.
 
 .. code-block:: bash
 
@@ -82,11 +82,27 @@ Three presets are available for common use cases:
    # Fast preset: no restarts, 50 generations
    optimizer = CMAESOptimizer.from_preset("cmaes-fast")
 
-   # Standard preset: BIPOP with 9 restarts, 100 generations
+   # Standard preset: BIPOP with up to 9 restarts, 100 generations
    optimizer = CMAESOptimizer.from_preset("cmaes")
 
-   # Global preset: BIPOP with 9 restarts, 200 generations, 2x population
+   # Global preset: BIPOP with up to 9 restarts, 200 generations, 2x population
    optimizer = CMAESOptimizer.from_preset("cmaes-global")
+
+.. note::
+
+   BIPOP always runs its whole restart schedule unless ``max_total_evaluations``
+   is set: a run that converges ends that run only. The large population
+   doubles on every large restart (up to 32x the base size), so a full 9-restart
+   schedule costs roughly 5x more fitness evaluations than a fixed 2x large
+   population (measured: 2 parameters, 200 points, default config, 30,864
+   evaluations / 17.6 s on CPU; the ``cmaes-global`` preset about 95,000).
+   Each evaluation runs the model over all the data. Set
+   ``max_total_evaluations`` (or lower ``max_restarts``) to bound the cost; when
+   the budget stops the schedule before the best run converged, an
+   ``OptimizeWarning`` is emitted and ``convergence_reason`` is
+   ``'max_evaluations'``; if the best run had converged the schedule ends
+   silently with that run's reason. Either way
+   ``cmaes_diagnostics["budget_exhausted"]`` is ``True``.
 
 Custom Configuration
 ^^^^^^^^^^^^^^^^^^^^
@@ -105,6 +121,7 @@ For fine-grained control, create a custom ``CMAESConfig``:
        tol_x=1e-10,  # Parameter tolerance
        restart_strategy="bipop",  # 'none' or 'bipop'
        max_restarts=5,  # Max BIPOP restarts
+       max_total_evaluations=20_000,  # Optional BIPOP evaluation budget (None = unlimited)
        refine_with_nlsq=True,  # Refine with Trust Region
        seed=42,  # For reproducibility
    )
@@ -257,8 +274,21 @@ Use ``method="auto"`` to let NLSQ choose based on the problem:
 
 The ``MethodSelector`` class handles the logic:
 
-- If scale ratio > 1000x and evosax available: CMA-ES
-- Otherwise: multi-start optimization
+- If scale ratio > 1000x, bounds are finite and evosax is available: CMA-ES
+- Otherwise: the memory-based strategy selection of ``method="auto"`` (standard,
+  chunked or streaming TRF). Use ``method="multi-start"`` for multi-start.
+- ``method="cmaes"`` without evosax falls back to multi-start.
+- The implicit route (``method="auto"`` with no ``cmaes_config``) caps the BIPOP
+  schedule with a finite ``max_total_evaluations``: the worst case of the former
+  fixed-2x-population schedule, ``(large_runs * 2 + small_runs) * base_popsize *
+  max_generations`` (9,000 for 2 parameters with the default configuration), so
+  it costs no more than before the large populations began to grow. An explicit
+  ``method="cmaes"`` or a ``cmaes_config`` you pass is not capped (``None`` =
+  unlimited, see the note under the presets). On this route the cap is how a
+  converged search normally stops, so a converged best run ends silently
+  (``cmaes_diagnostics["budget_exhausted"]`` is ``True``, the convergence reason
+  is the best run's). An ``OptimizeWarning`` is emitted only when the budget
+  stops the search before the best run converged.
 
 Diagnostics
 ^^^^^^^^^^^
@@ -292,8 +322,13 @@ BIPOP Restart Strategy
 
 BIPOP (Bi-Population) alternates between large and small population runs:
 
-- **Large population**: More exploration, broader search
-- **Small population**: More exploitation, faster convergence
+- **Large population**: More exploration, broader search. The k-th large run
+  uses ``2**(k+1)`` times the base population (capped at 32x).
+- **Small population**: More exploitation, faster convergence (uniform between
+  half and the full base population).
+
+The schedule runs all ``max_restarts`` restarts (a converged run only ends
+that run); bound its cost with ``CMAESConfig.max_total_evaluations``.
 
 The ``BIPOPRestarter`` class manages this:
 

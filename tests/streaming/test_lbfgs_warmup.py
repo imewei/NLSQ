@@ -50,17 +50,6 @@ def exponential_decay_model():
 
 
 @pytest.fixture
-def rosenbrock_model():
-    """Rosenbrock-like model for testing (challenging for optimizers)."""
-
-    def model(x, a, b):
-        # Simple exponential for NLSQ fitting that has Rosenbrock-like landscape
-        return (1 - a) ** 2 + 100 * (b - a**2) ** 2 + jnp.zeros_like(x)
-
-    return model
-
-
-@pytest.fixture
 def quadratic_data(simple_quadratic_model):
     """Generate data for quadratic model fitting."""
     x = jnp.linspace(-2, 2, 100)

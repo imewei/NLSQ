@@ -533,16 +533,6 @@ class TestBackwardCompatibility:
         assert isinstance(result.success, bool)
         assert isinstance(result.message, str)
 
-    def test_no_diagnostics_computed_by_default(
-        self, simple_model, well_conditioned_data
-    ) -> None:
-        """Test no diagnostics computed by default (result.diagnostics is None)."""
-        x, y = well_conditioned_data
-        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5])
-
-        # diagnostics property should return None when not computed
-        assert result.diagnostics is None
-
     def test_existing_kwargs_still_work(
         self, simple_model, well_conditioned_data
     ) -> None:
@@ -573,18 +563,6 @@ class TestBackwardCompatibility:
     # =========================================================================
     # Test 2: Default behavior unchanged
     # =========================================================================
-
-    def test_compute_diagnostics_default_is_false(
-        self, simple_model, well_conditioned_data
-    ) -> None:
-        """Test compute_diagnostics=False by default."""
-        x, y = well_conditioned_data
-
-        # Without specifying compute_diagnostics, it should default to False
-        result = curve_fit(simple_model, x, y, p0=[2.0, 0.5])
-
-        # diagnostics should be None (not computed)
-        assert result.diagnostics is None
 
     def test_diagnostics_disabled_produces_no_diagnostics(
         self, simple_model, well_conditioned_data

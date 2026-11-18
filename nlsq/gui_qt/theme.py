@@ -169,6 +169,20 @@ LIGHT_THEME = ThemeConfig(
 )
 
 
+def _theme_for_scheme(scheme: Qt.ColorScheme, app: QApplication) -> ThemeConfig:
+    """Theme for an OS color scheme.
+
+    When the platform reports none (``Unknown``) the theme follows the lightness
+    of the window palette the user actually sees, so plots and widgets agree.
+    """
+    if scheme == Qt.ColorScheme.Light:
+        return LIGHT_THEME
+    if scheme == Qt.ColorScheme.Dark:
+        return DARK_THEME
+    lightness = app.palette().window().color().lightness()
+    return DARK_THEME if lightness < 128 else LIGHT_THEME
+
+
 class ThemeManager(QObject):
     """Manages application theme switching.
 
@@ -187,12 +201,28 @@ class ThemeManager(QObject):
         """
         super().__init__()
         self._app = app
-        self._current_theme = DARK_THEME
+        # Follow the OS light/dark scheme until the user picks one (Ctrl+T,
+        # the toggle, --theme or a saved choice); no scheme is forced here.
+        self._explicit = False
+        self._current_theme = _theme_for_scheme(app.styleHints().colorScheme(), app)
+        app.styleHints().colorSchemeChanged.connect(self._on_system_scheme_changed)
 
     @property
     def current_theme(self) -> ThemeConfig:
         """Get the current theme configuration."""
         return self._current_theme
+
+    @property
+    def explicit(self) -> bool:
+        """True once the user (or --theme / saved settings) chose a theme."""
+        return self._explicit
+
+    def _on_system_scheme_changed(self, scheme: Qt.ColorScheme) -> None:
+        """Follow an OS light/dark switch unless a theme was chosen explicitly."""
+        theme = _theme_for_scheme(scheme, self._app)
+        if not self._explicit and theme is not self._current_theme:
+            self._current_theme = theme
+            self.theme_changed.emit(theme)
 
     def set_theme(self, name: str) -> None:
         """Set the application theme.
@@ -200,6 +230,7 @@ class ThemeManager(QObject):
         Args:
             name: Theme name ("light" or "dark")
         """
+        self._explicit = True
         if name == "light":
             self._current_theme = LIGHT_THEME
             self._app.styleHints().setColorScheme(Qt.ColorScheme.Light)

@@ -3,8 +3,7 @@
 This module provides the OptimizeWarning class, which is used when non-critical
 issues are encountered during optimization.
 
-This is the canonical location for OptimizeWarning. For backward compatibility,
-the class is also re-exported from nlsq.core._optimize (deprecated).
+This is the canonical location for OptimizeWarning.
 """
 
 import warnings
@@ -30,11 +29,11 @@ class OptimizeWarning(UserWarning):
         >>> # Now OptimizeWarning will raise an exception instead of warning
 
     See Also:
-        nlsq.error_messages.OptimizationError : Exception for critical failures
+        nlsq.utils.error_messages : Exceptions for critical failures
     """
 
 
-def _check_unknown_options(unknown_options):
+def _check_unknown_options(unknown_options, stacklevel: int = 2):
     """Warn if unknown solver options are provided.
 
     Parameters
@@ -42,6 +41,9 @@ def _check_unknown_options(unknown_options):
     unknown_options : dict
         Dictionary of options that were not recognized by the solver.
         If non-empty, a warning is issued listing the unknown option names.
+    stacklevel : int, optional
+        ``warnings.warn`` stack level; the default attributes the warning to
+        the caller of this function.
 
     Warns
     -----
@@ -50,7 +52,6 @@ def _check_unknown_options(unknown_options):
     """
     if unknown_options:
         msg = ", ".join(map(str, unknown_options.keys()))
-        # Stack level 4: this is called from _minimize_*, which is
-        # called from another function in SciPy. Level 4 is the first
-        # level in user code.
-        warnings.warn(f"Unknown solver options: {msg}", OptimizeWarning, 4)
+        warnings.warn(
+            f"Unknown solver options: {msg}", OptimizeWarning, stacklevel=stacklevel
+        )

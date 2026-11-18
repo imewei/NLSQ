@@ -10,13 +10,14 @@ optimization divergence in iterative least-squares solvers.
 Historical note (v0.3.1-v0.3.4):
   Randomized SVD was available but caused 3-25x worse fitting errors in
   iterative least-squares applications due to accumulated approximation error
-  across trust-region iterations. See tests/test_svd_regression.py for evidence.
+  across trust-region iterations. See tests/stability/test_svd_regression.py for evidence.
 """
 
 import warnings
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.scipy.linalg import svd as jax_svd
 
 
@@ -94,7 +95,8 @@ def compute_svd_with_fallback(
     s : jnp.ndarray
         Singular values (sorted in descending order)
     V : jnp.ndarray
-        Right singular vectors (note: V is transposed back, NOT Vt)
+        Right singular vectors (note: V is the conjugate transpose of Vh, NOT Vt;
+        for real input this is the plain transpose)
     """
 
     def _finite_or_raise(U, s, V, tier: str):
@@ -116,11 +118,18 @@ def compute_svd_with_fallback(
     try:
         # First attempt: Direct GPU computation
         U, s, Vt = jax_svd(J_h, full_matrices=full_matrices)
-        return _finite_or_raise(U, s, Vt.T, "GPU")
+        return _finite_or_raise(U, s, jnp.conj(Vt).T, "GPU")
     except Exception as gpu_error:
         # Check if it's a GPU-specific error (cuSolver or CUDA FFI), or a
         # non-finite result caught by _finite_or_raise above.
         if is_gpu_error(gpu_error) or isinstance(gpu_error, FloatingPointError):
+            # Non-finite input can never succeed in any tier; fail once instead
+            # of running every tier with misleading "GPU SVD failed" warnings.
+            # (Checked only on failure: no host sync on the success path.)
+            if not bool(jnp.all(jnp.isfinite(J_h))):
+                raise np.linalg.LinAlgError(
+                    "SVD input contains non-finite values"
+                ) from gpu_error
             warnings.warn(
                 f"GPU SVD failed ({gpu_error}), attempting CPU fallback",
                 RuntimeWarning,
@@ -133,15 +142,13 @@ def compute_svd_with_fallback(
                     # Move data to CPU
                     J_h_cpu = jax.device_put(J_h, cpu_device)
                     U, s, Vt = jax_svd(J_h_cpu, full_matrices=full_matrices)
-                    return _finite_or_raise(U, s, Vt.T, "CPU")
+                    return _finite_or_raise(U, s, jnp.conj(Vt).T, "CPU")
             except Exception as cpu_error:
                 # Third attempt: Use numpy as last resort
                 warnings.warn(
                     f"CPU JAX SVD also failed ({cpu_error}), using NumPy SVD",
                     RuntimeWarning,
                 )
-                import numpy as np
-
                 # Convert to numpy, compute, convert back
                 J_h_np = np.array(J_h)
                 U_np, s_np, Vt_np = np.linalg.svd(J_h_np, full_matrices=full_matrices)
@@ -149,7 +156,7 @@ def compute_svd_with_fallback(
                 # Convert back to JAX arrays
                 U = jnp.array(U_np)
                 s = jnp.array(s_np)
-                V = jnp.array(Vt_np.T)
+                V = jnp.array(np.conj(Vt_np).T)
 
                 # No further fallback tier exists -- fail loudly rather than
                 # silently returning a NaN-poisoned factorization.

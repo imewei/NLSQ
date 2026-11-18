@@ -71,8 +71,17 @@ def _eig_retained(H):
     """Count kept by ``pcov_from_normal``: eigenvalues of the power-of-two scaled ``H``
     above ``p * eps * lambda_max``."""
     s = np.ldexp(1.0, int(np.frexp(np.max(np.abs(H)))[1]) - 1)
-    w = np.linalg.eigh((H / s + (H / s).T) / 2)[0]
-    return int(np.sum(w > H.shape[0] * np.finfo(np.float64).eps * w[-1]))
+    Hs = H / s
+
+    def eig(d):
+        Hn = (Hs / d[:, None]) / d[None, :]
+        w = np.linalg.eigh((Hn + Hn.T) / 2)[0]
+        return w > H.shape[0] * np.finfo(np.float64).eps * w[-1]
+
+    # Jacobi-equilibrated unless the diagonal is within 1e8 or that is rank-deficient too
+    d = np.sqrt(np.diag(Hs))
+    keep = eig(np.ones_like(d) if d.max() <= 1e4 * d.min() else d)
+    return int(keep.sum() if keep.all() else eig(np.ones_like(d)).sum())
 
 
 def _route_retained(res, model, x, y, sigma, chunk):
@@ -182,14 +191,15 @@ def test_correlated_parameters():
 
 def test_column_scales_1e_minus6_to_1e6():
     # J = U diag(s) V^T diag(c), c in 1e-6..1e6: kappa(J) ~ 1e12, kept by the SVD cutoff
-    # (eps * n * s0 at n = 300 is 7e-14 relative)
+    # (eps * n * s0 at n = 300 is 7e-14 relative). The conditioning is parameter units only
+    # (Jacobi-scaled kappa ~ 1), which the TSQR gate no longer counts: normal route.
     n = 300
     B = _basis(n, np.geomspace(2.0, 1.0, P)) * np.geomspace(1e-6, 1e6, P)
     x = np.arange(n, dtype=float)
     theta = np.array([1e6, -2.0, 0.5, 3e-6])
     y = B @ theta + 1e-2 * np.random.default_rng(1).standard_normal(n)
-    route, _, _ = _check(_linear(B), x, y, np.zeros(P), chunk=128)
-    assert route == "tsqr"
+    route, _, kappa = _check(_linear(B), x, y, np.zeros(P), chunk=128)
+    assert kappa > 1e9 and route == "normal"
 
 
 @pytest.mark.parametrize("absolute_sigma", [False, True])

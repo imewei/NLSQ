@@ -212,8 +212,8 @@ def test_custom_jvp_models_are_not_cached():
     _, s_victim, _ = lm._cached_stats(victim, BLOCK, 1, False)
     owner_state[0] = 5.0  # before either kernel compiles
     ones, mask = jnp.ones(x.size), jnp.ones(x.size, bool)
-    *_, h_victim = s_victim(jnp.ones(1), ones, ones, mask)
-    *_, h_owner = s_owner(jnp.ones(1), ones, ones, mask)
+    h_victim = s_victim(jnp.ones(1), ones, ones, mask)[2]  # (F, g, H, rel)
+    h_owner = s_owner(jnp.ones(1), ones, ones, mask)[2]
     np.testing.assert_allclose(h_victim[0, 0], 4.0 * x.size)  # (2*1)^2 per row
     np.testing.assert_allclose(h_owner[0, 0], 25.0 * x.size)
 

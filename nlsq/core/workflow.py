@@ -49,6 +49,13 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
+from nlsq.core.device_policy import _GPU_BACKENDS
+from nlsq.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
     from nlsq.streaming.large_dataset import LDMemoryConfig
@@ -118,12 +125,23 @@ _CHUNKED_SAFETY_MARGIN = 0.9
 
 DEFAULT_SAFETY_FACTOR = 0.75
 
+_MIN_ROWS = 1_000  # FR-007 lower bound for chunk / streaming batch sizes
+
 
 def _check_safety_factor(safety_factor: float) -> float:
     """Return ``safety_factor`` if it is in (0, 1]; NaN is rejected too."""
     if not 0.0 < safety_factor <= 1.0:
         raise ValueError("safety_factor must be in (0, 1]")
     return safety_factor
+
+
+def _check_count(name: str, value: Any) -> int:
+    """Return ``value`` as an int if it is a positive finite integer, else raise."""
+    if isinstance(value, bool) or not isinstance(value, int | float | np.number):
+        raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+    if not math.isfinite(value) or value != int(value) or value < 1:
+        raise ValueError(f"{name} must be positive (a finite integer), got {value!r}")
+    return int(value)
 
 
 def _resolve_safety_factor(
@@ -152,9 +170,21 @@ class MemoryBudget:
     data_gb : float
         Memory required for data arrays (x_data, y_data).
     jacobian_gb : float
-        Memory required for full Jacobian matrix.
+        Memory of one full Jacobian matrix (informational; ``peak_gb`` counts
+        several Jacobian-sized buffers, see ``bytes_per_point``).
     peak_gb : float
-        Estimated peak memory = data_gb + 1.3 × jacobian_gb + solver overhead.
+        Estimated peak memory = ``n_points * bytes_per_point`` (data, original
+        and scaled Jacobian, SVD ``U`` and residual workspace, as in
+        ``MemoryManager.predict_memory_requirement``) + parameter vectors +
+        ``fixed_gb`` + 0.1 GB solver overhead.
+    fixed_gb : float, default 0.0
+        Parameter-square allocations that no chunking or streaming strategy
+        removes (covariance and normal-matrix/SVD ``V`` blocks, plus the
+        augmented-Jacobian blocks of the bounded layout). Included in ``peak_gb``.
+    bytes_per_point : float, default 0.0
+        Memory that scales with each data point: data, original and scaled
+        Jacobian, SVD ``U`` and residual workspace. ``0.0`` (a hand-built
+        budget) makes the chunk-size helpers fall back to a Jacobian-row estimate.
 
     Examples
     --------
@@ -169,6 +199,8 @@ class MemoryBudget:
     data_gb: float
     jacobian_gb: float
     peak_gb: float
+    fixed_gb: float = 0.0
+    bytes_per_point: float = 0.0
 
     @property
     def chunked_threshold_gb(self) -> float:
@@ -226,6 +258,7 @@ class MemoryBudget:
         safety_factor: float | None = None,
         memory_limit_gb: float | None = None,
         use_gpu: bool = False,
+        bounded: bool = False,
     ) -> "MemoryBudget":
         """Compute memory budget for a given dataset size.
 
@@ -248,6 +281,9 @@ class MemoryBudget:
             else auto-detect.
         use_gpu : bool, default=False
             If True, use GPU memory instead of CPU memory.
+        bounded : bool, default=False
+            Estimate the bounded trust-region layout, which also holds an
+            augmented Jacobian and its ``U`` with a ``p x p`` block each.
 
         Returns
         -------
@@ -257,7 +293,11 @@ class MemoryBudget:
         Raises
         ------
         ValueError
-            If n_points <= 0, n_params <= 0, or safety_factor not in (0, 1].
+            If n_points, n_params, n_features or dtype_bytes is not a positive
+            finite integer (NaN, inf and non-integral floats are rejected), or
+            safety_factor is not in (0, 1].
+        TypeError
+            If one of those counts is not a real number (or is a bool).
 
         Examples
         --------
@@ -273,10 +313,10 @@ class MemoryBudget:
             memory_limit_gb = config.memory_limit_gb
 
         # Validation
-        if n_points <= 0:
-            raise ValueError("n_points must be positive")
-        if n_params <= 0:
-            raise ValueError("n_params must be positive")
+        n_points = _check_count("n_points", n_points)
+        n_params = _check_count("n_params", n_params)
+        n_features = _check_count("n_features", n_features)
+        dtype_bytes = _check_count("dtype_bytes", dtype_bytes)
         safety_factor = _resolve_safety_factor(safety_factor, config.safety_factor)
         if memory_limit_gb is not None and not (
             math.isfinite(memory_limit_gb) and memory_limit_gb > 0
@@ -300,10 +340,31 @@ class MemoryBudget:
         jacobian_bytes = n_points * n_params * dtype_bytes
         jacobian_gb = jacobian_bytes / (1024**3)
 
-        # Peak estimate: data + 1.3*jacobian (SVD working memory) + solver overhead
-        # 1.3 factor accounts for SVD U, S, V matrices
+        # Solver buffers, mirroring MemoryManager.predict_memory_requirement
+        # (read off trf_jit.py): the unbounded step holds J, J_h = J * d and the
+        # thin-SVD U (m x k); the bounded step holds J, J_h, J_augmented and
+        # U (both (m + n) x n). Plus 3 residual-sized work vectors per point.
+        k = min(n_points, n_params)
+        if bounded:
+            jac_like_per_point = 4 * n_params
+            fixed_elems = 4 * n_params * n_params  # cov, V, J_aug and U p x p rows
+        else:
+            jac_like_per_point = 2 * n_params + k
+            fixed_elems = n_params * (n_params + k)  # covariance p x p, V p x k
+        bytes_per_point = float(
+            dtype_bytes * (jac_like_per_point + (n_features + 1) + 3)
+        )
+        # Chunking and streaming cannot remove the p x p terms.
+        fixed_gb = fixed_elems * dtype_bytes / (1024**3)
+
+        # Peak: per-point buffers + parameter vectors (params, step, scales...)
+        # + fixed p x p blocks + fixed solver overhead.
         solver_overhead_gb = 0.1  # Fixed solver overhead (workspace, etc.)
-        peak_gb = data_gb + 1.3 * jacobian_gb + solver_overhead_gb
+        peak_gb = (
+            (n_points * bytes_per_point + 6 * n_params * dtype_bytes) / (1024**3)
+            + fixed_gb
+            + solver_overhead_gb
+        )
 
         # Compute threshold
         threshold_gb = available_gb * safety_factor
@@ -314,6 +375,8 @@ class MemoryBudget:
             data_gb=data_gb,
             jacobian_gb=jacobian_gb,
             peak_gb=peak_gb,
+            fixed_gb=fixed_gb,
+            bytes_per_point=bytes_per_point,
         )
 
     @staticmethod
@@ -420,6 +483,7 @@ class MemoryBudgetSelector:
         use_gpu: bool = False,
         verbose: bool = False,
         budget: "MemoryBudget | None" = None,
+        bounded: bool = False,
     ) -> tuple[str, "HybridStreamingConfig | LDMemoryConfig | None"]:
         """Select optimal optimizer strategy based on memory budget.
 
@@ -449,6 +513,9 @@ class MemoryBudgetSelector:
             it here so the logged numbers and the actual decision can't
             disagree (memory detection is a live psutil/GPU read and isn't
             guaranteed identical across two calls).
+        bounded : bool, default=False
+            Use the bounded trust-region memory layout (see
+            `MemoryBudget.compute`). Ignored when ``budget`` is given.
 
         Returns
         -------
@@ -474,6 +541,19 @@ class MemoryBudgetSelector:
                 safety_factor=self._safety_factor,
                 memory_limit_gb=memory_limit_gb,
                 use_gpu=use_gpu,
+                bounded=bounded,
+            )
+
+        # Chunking and streaming shrink the data and Jacobian terms only. If the
+        # p x p terms alone exceed the budget, no strategy fits: warn and let the
+        # tree below pick the lowest-footprint one rather than raising.
+        if budget.fixed_gb > budget.threshold_gb:
+            logger.warning(
+                f"[NLSQ] Parameter-dependent allocations alone ({budget.fixed_gb:.2f} GB "
+                f"for {n_params} parameters: covariance and solver p x p blocks) exceed "
+                f"the memory threshold ({budget.threshold_gb:.2f} GB); no standard, "
+                "chunked or streaming strategy can fit. Reduce the parameter count "
+                "or raise the memory limit.",
             )
 
         # Log memory budget details if verbose
@@ -615,8 +695,34 @@ class MemoryBudgetSelector:
             ),
         )
 
+    @staticmethod
+    def _rows_within(
+        budget: MemoryBudget, n_params: int, fraction: float, what: str
+    ) -> int:
+        """Rows that fit in ``fraction`` of the threshold left after fixed blocks."""
+        if budget.bytes_per_point > 0:
+            bytes_per_point = budget.bytes_per_point
+        else:  # hand-built budget: data (x, y) + one Jacobian row, float64
+            bytes_per_point = (2 * 8) + (n_params * 8)
+        remaining_gb = budget.threshold_gb - budget.fixed_gb
+        computed = int(max(remaining_gb, 0.0) * fraction * (1024**3) / bytes_per_point)
+        if computed < _MIN_ROWS:
+            logger.warning(
+                f"[NLSQ] Memory left after the fixed p x p allocations "
+                f"({max(remaining_gb, 0.0):.3f} GB of {budget.threshold_gb:.3f} GB) "
+                f"holds only {computed} rows; using the minimum {what} of "
+                f"{_MIN_ROWS}, which may exceed the memory limit.",
+            )
+        # Clamp to bounds (FR-007: 1K-1M range)
+        return max(_MIN_ROWS, min(computed, 1_000_000))
+
     def _compute_chunk_size(self, budget: MemoryBudget, n_params: int) -> int:
         """Compute optimal chunk size based on memory budget.
+
+        Uses ~75% of the threshold left after the fixed p x p allocations
+        (``budget.fixed_gb``) and the per-point buffers (``budget.bytes_per_point``:
+        data, J, scaled J, SVD U, workspace). If that holds fewer than 1,000
+        rows, a warning is logged and the minimum of 1,000 is used.
 
         Parameters
         ----------
@@ -630,25 +736,13 @@ class MemoryBudgetSelector:
         int
             Optimal chunk size in data points.
         """
-        # Target: use ~75% of threshold for chunk processing
-        target_memory_gb = budget.threshold_gb * 0.75
-
-        # Memory per point: data + jacobian row
-        # data: (1 + 1) * 8 bytes = 16 bytes (x, y)
-        # jacobian: n_params * 8 bytes
-        bytes_per_point = (2 * 8) + (n_params * 8)
-        gb_per_point = bytes_per_point / (1024**3)
-
-        if gb_per_point > 0:
-            computed_chunk = int(target_memory_gb / gb_per_point)
-        else:
-            computed_chunk = 100_000  # Default
-
-        # Clamp to bounds (FR-007: 1K-1M range)
-        return max(1_000, min(computed_chunk, 1_000_000))
+        return self._rows_within(budget, n_params, 0.75, "chunk size")
 
     def _compute_streaming_batch_size(self, budget: MemoryBudget, n_params: int) -> int:
         """Compute optimal streaming batch size based on memory budget.
+
+        Same accounting as `_compute_chunk_size` but targets ~50% of the
+        remaining threshold (streaming needs smaller batches than chunked).
 
         Parameters
         ----------
@@ -662,23 +756,7 @@ class MemoryBudgetSelector:
         int
             Optimal batch size in data points.
         """
-        # Streaming needs smaller batches than chunked
-        # Target: use ~50% of threshold for batch processing
-        target_memory_gb = budget.threshold_gb * 0.5
-
-        # Memory per point in streaming: lighter than chunked
-        # data: (1 + 1) * 8 bytes = 16 bytes
-        # gradient accumulation: n_params * 8 bytes
-        bytes_per_point = (2 * 8) + (n_params * 8)
-        gb_per_point = bytes_per_point / (1024**3)
-
-        if gb_per_point > 0:
-            computed_batch = int(target_memory_gb / gb_per_point)
-        else:
-            computed_batch = 50_000  # Default
-
-        # Clamp to bounds
-        return max(1_000, min(computed_batch, 1_000_000))
+        return self._rows_within(budget, n_params, 0.5, "batch size")
 
 
 # Dataset size thresholds and their corresponding tolerances
@@ -778,6 +856,11 @@ def calculate_adaptive_tolerances(
 
     # Apply goal-based tier shifting
     if goal is not None:
+        if not isinstance(goal, OptimizationGoal):
+            raise TypeError(
+                f"goal must be an OptimizationGoal or None, got {goal!r}; "
+                "use OptimizationGoal[name.upper()] to convert a string"
+            )
         # Normalize GLOBAL to ROBUST
         goal = OptimizationGoal.normalize(goal)
 
@@ -1002,9 +1085,10 @@ class ClusterDetector:
                 return None
 
             with open(nodefile) as f:
-                lines = f.read().strip().split("\n")
+                # Per-line strip handles CRLF/trailing blanks; blank lines are not nodes.
+                lines = [ln.strip() for ln in f.read().splitlines() if ln.strip()]
 
-            if not lines or not lines[0]:
+            if not lines:
                 return None
 
             # Get unique nodes (PBS lists each slot, often duplicates)
@@ -1016,6 +1100,11 @@ class ClusterDetector:
             if gpus_per_node == 0:
                 # Fallback to default
                 gpus_per_node = self._default_gpus_per_node
+                logger.warning(
+                    "No GPUs detected on this node; assuming "
+                    f"default_gpus_per_node={gpus_per_node} for PBS job "
+                    "(pass ClusterDetector(default_gpus_per_node=0) for CPU-only)",
+                )
 
             # Get PBS job ID
             job_id = os.environ.get("PBS_JOBID")
@@ -1079,9 +1168,11 @@ class ClusterDetector:
         try:
             import jax
 
-            devices = jax.devices()
+            # Local devices: jax.devices() is global once jax.distributed is
+            # initialized, and detect_pbs multiplies this count by node_count.
+            devices = jax.local_devices()
             gpu_count = sum(
-                1 for d in devices if getattr(d, "platform", "cpu") != "cpu"
+                1 for d in devices if getattr(d, "platform", "cpu") in _GPU_BACKENDS
             )
             return gpu_count
         except Exception:
@@ -1238,7 +1329,7 @@ def create_distributed_config(cluster_info: ClusterInfo) -> dict[str, Any]:
         1_000_000,  # Max 1M points per chunk
         max(
             100_000,  # Min 100K points per chunk
-            int(gpu_memory_per_node_gb * 1e9 / (8 * 100)),  # ~100 bytes per point
+            int(gpu_memory_per_node_gb * 1e9 / (8 * 100)),  # 800 bytes per point
         ),
     )
 
@@ -1249,7 +1340,7 @@ def create_distributed_config(cluster_info: ClusterInfo) -> dict[str, Any]:
         "tier": "STREAMING_CHECKPOINT",
         "goal": "ROBUST",
         "enable_multistart": True,
-        "n_starts": min(cluster_info.total_gpus, 20),  # Scale with GPUs
+        "n_starts": max(1, min(cluster_info.total_gpus, 20)),  # Scale with GPUs
         "chunk_size": chunk_size,
         "enable_checkpoints": enable_checkpoints,
         "checkpoint_frequency": 50,  # Checkpoint every 50 iterations

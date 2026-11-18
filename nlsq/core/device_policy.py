@@ -14,6 +14,7 @@ Two limits: ``HOST_SVD_MAX_ELEMENTS`` (30_000) for the per-iteration TRF full SV
 from __future__ import annotations
 
 import functools
+import math
 
 import jax
 
@@ -49,7 +50,7 @@ def use_host_for_small_svd(
     limit = HOST_SVD_MAX_ELEMENTS if max_elements is None else max_elements
     return (
         backend in _GPU_BACKENDS
-        and shape[0] * shape[1] <= limit
+        and math.prod(shape) <= limit
         and _cpu_platform_available()
     )
 
@@ -69,6 +70,6 @@ def use_host_svd_for(J: object, max_elements: int | None = None) -> bool:
         and not isinstance(J, jax.core.Tracer)
         and len(J.devices()) == 1
         and use_host_for_small_svd(
-            J.shape, jax.default_backend(), max_elements=max_elements
+            J.shape, next(iter(J.devices())).platform, max_elements=max_elements
         )
     )

@@ -7,10 +7,6 @@ import numpy as np
 from numpy.linalg import norm
 from scipy.linalg import LinAlgError, cho_factor, cho_solve
 
-from nlsq.utils.logging import get_logger
-
-logger = get_logger(__name__)
-
 EPS = np.finfo(float).eps
 # Functions related to a trust-region problem.
 
@@ -528,12 +524,13 @@ def reflective_transformation(y, lb, ub):
     return x, g
 
 
-# Functions to display algorithm's progress.
+# Functions to display algorithm's progress. As in scipy, `verbose` output goes
+# to stdout (a logger would hide it at the default log level).
 
 
 def print_header_nonlinear():
     """Print column headers for nonlinear optimization progress display."""
-    logger.info(
+    print(
         "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
             "Total nfev",
@@ -558,14 +555,14 @@ def print_iteration_nonlinear(
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
-    logger.info(
+    print(
         f"{iteration:^15}{nfev:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}",
     )
 
 
 def print_header_linear():
     """Print column headers for linear optimization progress display."""
-    logger.info(
+    print(
         "{:^15}{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
             "Cost",
@@ -582,7 +579,7 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimalit
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
 
-    logger.info(
+    print(
         f"{iteration:^15}{cost:^15.4e}{cost_reduction}{step_norm}{optimality:^15.2e}",
     )
 

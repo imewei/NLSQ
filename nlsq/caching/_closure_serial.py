@@ -29,6 +29,13 @@ def closure_serial(func: Callable) -> int:
     never reassigns it to a different object, so a genuinely new object
     always misses the lookup and gets a fresh, higher serial even if its
     id() happens to match a dead one's.
+
+    Raises
+    ------
+    TypeError
+        If ``func`` cannot be weakly referenced (a callable class with
+        ``__slots__`` and no ``__weakref__`` slot, or a NumPy ufunc). Callers
+        must catch it and skip identity-keyed caching for such objects.
     """
     key = id(func)
 

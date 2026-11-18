@@ -37,6 +37,9 @@ class PassStats(NamedTuple):
     sigma_nonzero: bool = (
         True  # all finite sigma != 0 (True when unchecked or unweighted)
     )
+    rel_resid: float = np.inf  # max_i |y_i-f_i| / max(|y_i|,|f_i|); inf unless tracked
+    y_hi: float = np.nan  # max_i y_i over real rows; nan unless tracked
+    y_lo: float = np.nan  # min_i y_i over real rows; nan unless tracked
 
 
 # Contraction choice for J^T r and J^T J of a masked (n, p) Jacobian, by backend.
@@ -93,13 +96,35 @@ def _rows(w: jax.Array) -> jax.Array:
     return w[:, None] if w.ndim else w
 
 
+def _max_rel(y: jax.Array, f: jax.Array, mask: jax.Array) -> jax.Array:
+    """``max_i |y_i - f_i| / max(|y_i|, |f_i|)`` over the real rows (0 if both are 0)."""
+    d = jnp.maximum(jnp.abs(y), jnp.abs(f))
+    # d == 0 (both 0) is 0; a NaN or inf anywhere in a real row gives NaN, which max keeps
+    rel = jnp.where(d == 0, 0.0, jnp.abs(y - f) / jnp.where(d == 0, 1.0, d))
+    return jnp.max(jnp.where(mask, rel, 0.0), initial=0.0)
+
+
+def _y_extent(y: jax.Array, mask: jax.Array) -> tuple[jax.Array, jax.Array]:
+    """``(max_i y_i, max_i -y_i)`` over the real rows (a max-reduction gives both ends)."""
+    return (
+        jnp.max(jnp.where(mask, y, -jnp.inf), initial=-jnp.inf),
+        jnp.max(jnp.where(mask, -y, -jnp.inf), initial=-jnp.inf),
+    )
+
+
 def make_chunk_stats(
     model: Callable[..., Any],
     weighted: bool = False,
     *,
     jacobian: Callable[[Any, Any], Any] | None = None,
-) -> Callable[..., tuple[jax.Array, jax.Array, jax.Array]]:
+    track_rel: bool = False,
+) -> Callable[..., tuple[jax.Array, ...]]:
     """Jitted ``(theta, x, y, mask) -> (F, g, H)`` for one chunk; ``r = y - model``.
+
+    ``track_rel=True`` appends the chunk's ``max_i |y_i - f_i| / max(|y_i|, |f_i|)`` over
+    real rows (0 where both are 0; NaN if any is non-finite), the relative residual an
+    exact fit is judged by, and the two ends ``max y`` and ``max -y`` of the data range (how
+    far the data vary against its offset); :func:`run_pass` reduces all with a maximum.
 
     With ``weighted=True`` the signature is ``(theta, x, y, sigma, mask)`` and residuals
     and Jacobian rows are divided by ``|sigma|`` (the objective depends on ``sigma^2``
@@ -125,9 +150,13 @@ def make_chunk_stats(
                 return model(x, *q)
 
             w = jnp.abs(s)
-            r = jnp.where(mask, (y - f(theta)) / w, 0.0)
+            fv = f(theta)
+            r = jnp.where(mask, (y - fv) / w, 0.0)
             J = jnp.where(mask[:, None], jac(f, theta, x) / _rows(w), 0.0)
-            return 0.5 * jnp.sum(r * r), *_gradient_and_gauss_newton_hessian(J, r)
+            out = 0.5 * jnp.sum(r * r), *_gradient_and_gauss_newton_hessian(J, r)
+            return (
+                (*out, _max_rel(y, fv, mask), *_y_extent(y, mask)) if track_rel else out
+            )
 
         return jax.jit(wstats)
 
@@ -137,9 +166,11 @@ def make_chunk_stats(
         def f(q: jax.Array) -> jax.Array:
             return model(x, *q)
 
-        r = jnp.where(mask, y - f(theta), 0.0)
+        fv = f(theta)
+        r = jnp.where(mask, y - fv, 0.0)
         J = jnp.where(mask[:, None], jac(f, theta, x), 0.0)
-        return 0.5 * jnp.sum(r * r), *_gradient_and_gauss_newton_hessian(J, r)
+        out = 0.5 * jnp.sum(r * r), *_gradient_and_gauss_newton_hessian(J, r)
+        return (*out, _max_rel(y, fv, mask), *_y_extent(y, mask)) if track_rel else out
 
     return jax.jit(stats)
 
@@ -398,7 +429,8 @@ def run_pass(
 ) -> PassStats:
     """One full pass over ``source = (x, y, sigma)`` or a :class:`FactorySource`.
 
-    Returns the summed statistics on the host.
+    Returns the summed statistics on the host. A kernel built with ``track_rel`` has three
+    more outputs, reduced with a maximum into ``PassStats.rel_resid``, ``y_hi``, ``y_lo``.
 
     ``stats`` must be the weighted kernel when ``sigma`` is not None. The finite and
     sigma checks and the point count are reduced on device alongside the statistics, so
@@ -416,7 +448,12 @@ def run_pass(
     for xc, yc, sc, mask in blocks:
         out = stats(th, xc, yc, mask) if sc is None else stats(th, xc, yc, sc, mask)
         acc = (
-            out if acc is None else tuple(a + b for a, b in zip(acc, out, strict=True))
+            out
+            if acc is None
+            else (
+                *(a + b for a, b in zip(acc[:3], out[:3], strict=True)),
+                *(jnp.maximum(a, b) for a, b in zip(acc[3:], out[3:], strict=True)),
+            )
         )
         count = count + jnp.sum(mask)
         if check_finite:
@@ -426,7 +463,9 @@ def run_pass(
             s_fin, s_nz = s_fin & f_ok, s_nz & nz_ok
     if acc is None:
         raise ValueError("x and y must be non-empty")
-    c, g, H, ok, n_seen, sf, sp = jax.device_get((*acc, finite, count, s_fin, s_nz))
+    c, g, H, ok, n_seen, sf, sp, *rel = jax.device_get(
+        (*acc[:3], finite, count, s_fin, s_nz, *acc[3:])
+    )
     return PassStats(
         float(c),
         np.asarray(g),
@@ -435,6 +474,9 @@ def run_pass(
         bool(ok),
         bool(sf),
         bool(sp),
+        float(rel[0]) if rel else np.inf,
+        float(rel[1]) if rel else np.nan,
+        -float(rel[2]) if rel else np.nan,
     )
 
 

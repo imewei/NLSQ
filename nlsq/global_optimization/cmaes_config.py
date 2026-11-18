@@ -109,6 +109,18 @@ class CMAESConfig:
         Restart strategy. Default: 'bipop'.
     max_restarts : int
         Maximum restart attempts for BIPOP. Default: 9.
+    max_total_evaluations : int | None
+        Optional budget of fitness evaluations (``popsize`` per generation)
+        for the whole search (all BIPOP runs, or the single run). It is checked after each
+        generation, so it can be exceeded by less than one generation. When it
+        stops the search before the best run converged, an ``OptimizeWarning``
+        is emitted and the diagnostics' ``convergence_reason`` is
+        ``'max_evaluations'``; if the best run had converged the search ends
+        silently with that run's reason. ``budget_exhausted`` in the diagnostics
+        is ``True`` either way. Default: None (unlimited). Without a
+        budget the large population doubles on every large restart (up to
+        32x), so a full 9-restart schedule costs roughly 5x more evaluations
+        than a fixed 2x large population.
     population_batch_size : int | None
         Batch size for population evaluation. If None, evaluates all candidates
         in parallel. Set to smaller values (e.g., 4) to reduce memory usage.
@@ -157,6 +169,7 @@ class CMAESConfig:
     # Restart strategy (BIPOP enabled by default per spec)
     restart_strategy: Literal["none", "bipop"] = "bipop"
     max_restarts: int = 9
+    max_total_evaluations: int | None = None
 
     # Memory management
     population_batch_size: int | None = None
@@ -192,6 +205,7 @@ class CMAESConfig:
             "popsize",
             "max_generations",
             "max_restarts",
+            "max_total_evaluations",
             "population_batch_size",
             "data_chunk_size",
             "checkpoint_interval",
@@ -237,6 +251,11 @@ class CMAESConfig:
 
         if self.max_restarts < 0:
             raise ValueError(f"max_restarts must be >= 0, got {self.max_restarts}")
+
+        if self.max_total_evaluations is not None and self.max_total_evaluations < 1:
+            raise ValueError(
+                f"max_total_evaluations must be >= 1, got {self.max_total_evaluations}"
+            )
 
         if self.checkpoint_interval < 1:
             raise ValueError(

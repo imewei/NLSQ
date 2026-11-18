@@ -7,19 +7,28 @@ with shape-relaxed keys, comprehensive statistics tracking, and optimized memory
 Key Features
 ------------
 - Shape-relaxed cache keys: (func_hash, dtype, rank) instead of full shapes
-- Comprehensive statistics: hits, misses, compile_time_ms, hit_rate
+- Statistics: hits, misses, wrapper creations, hit_rate. The "compilation"
+  counters and ``compile_time_ms`` count and time ``jax.jit(...)`` *wrapper
+  construction*, which is lazy and takes well under a millisecond. Tracing and
+  XLA compilation happen on the wrapper's first call and are not measured.
 - LRU eviction with configurable maxsize
-- Optional two-tier caching (memory + disk)
-- Weak references to avoid memory leaks
+- Strong references: an entry keeps its function, and anything the function
+  closes over, alive until LRU eviction or ``clear_cache()``
 - Thread-safe operations via per-instance threading.Lock
-- Async disk writes (deferred to Phase 2)
+
+Scope
+-----
+Only ``cached_jit`` / ``get_or_compile`` callers use this cache. curve_fit's own
+compilation goes through ``jax.jit`` and ``least_squares``' wrapper cache, so
+``cache_config`` has no effect on it, and ``result["cache_stats"]`` reflects
+this cache only. ``disk_cache_enabled`` is accepted but not implemented.
 
 Design Goals
 ------------
-1. 80%+ cache hit rate on typical batch fitting workflows
-2. 2-5x reduction in cold-start compile time through better cache reuse
-3. Backward compatibility with existing cache APIs (gradual migration)
-4. Zero breaking changes to curve_fit API
+1. Reuse one jit wrapper across calls whose arguments share dtype and rank
+   (JAX still re-traces per concrete shape inside the wrapper)
+2. Backward compatibility with existing cache APIs (gradual migration)
+3. Zero breaking changes to curve_fit API
 """
 
 import hashlib
@@ -27,6 +36,7 @@ import inspect
 import logging
 import threading
 import time
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
@@ -46,10 +56,11 @@ class UnifiedCache:
 
     This cache provides:
     - Shape-relaxed keys: cache based on (func_hash, dtype, rank) not exact shapes
-    - Comprehensive stats: hits, misses, compile_time_ms, hit_rate, cache_size
+    - Stats: hits, misses, hit_rate, cache_size, and wrapper-creation counts and
+      time (``compilations`` / ``compile_time_ms`` do not include XLA compile time)
     - LRU eviction when maxsize exceeded
-    - Optional disk caching (two-tier architecture)
-    - Weak references to functions to prevent memory leaks
+    - Strong references to cached functions (and their closures) until LRU
+      eviction or ``clear()``
     - Thread-safe operations via per-instance lock
 
     Attributes
@@ -59,7 +70,7 @@ class UnifiedCache:
     enable_stats : bool
         Whether to track cache statistics
     disk_cache_enabled : bool
-        Whether to enable disk caching (default: False for Phase 1)
+        Not implemented; ``True`` emits a warning and has no effect.
 
     Examples
     --------
@@ -86,20 +97,27 @@ class UnifiedCache:
         maxsize : int, default=128
             Maximum number of compiled functions to cache (LRU eviction)
         enable_stats : bool, default=True
-            Track cache statistics (hits, misses, compile_time_ms)
+            Track cache statistics (hits, misses, wrapper-creation time)
         disk_cache_enabled : bool, default=False
-            Enable disk caching tier (Phase 2 feature)
+            Not implemented. ``True`` emits a ``UserWarning`` and is ignored.
         """
         if maxsize < 1:
             raise ValueError(f"maxsize must be >= 1, got {maxsize}")
         self.maxsize = maxsize
         self.enable_stats = enable_stats
+        if disk_cache_enabled:
+            warnings.warn(
+                "UnifiedCache disk caching is not implemented; "
+                "disk_cache_enabled=True has no effect.",
+                UserWarning,
+                stacklevel=2,
+            )
         self.disk_cache_enabled = disk_cache_enabled
 
         # LRU cache: OrderedDict preserves insertion order for efficient eviction
         self._cache: OrderedDict[str, Callable] = OrderedDict()
 
-        # Compilation time tracking per cache key (ms)
+        # jax.jit wrapper-construction time per cache key (ms); not XLA compile time
         self._compile_times: dict[str, float] = {}
 
         # Statistics tracking
@@ -165,7 +183,7 @@ class UnifiedCache:
             combined = f"{module}.{name}:{signature}\n{source}\n{tag}"
             return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
-        except (OSError, TypeError):
+        except (OSError, TypeError, ValueError):
             # Fallback for built-in functions, lambdas, or C functions
             try:
                 if hasattr(func, "__code__"):
@@ -226,7 +244,7 @@ class UnifiedCache:
         (func_hash, static_argnums, donate_argnums, dtype_rank_signatures)
 
         This enables cache hits across different array sizes with same dtype/rank,
-        reducing compilation overhead by 2-5x.
+        sharing one jit wrapper across array sizes.
 
         Parameters
         ----------
@@ -264,7 +282,7 @@ class UnifiedCache:
         for i, arg in enumerate(args):
             if i in static_argnums:
                 # Static args included in key by value
-                key_parts.append(f"arg{i}_static:{arg}")
+                key_parts.append(f"arg{i}_static:{type(arg).__name__}:{arg!r}")
             else:
                 # Non-static args: use dtype + rank only (not full shape)
                 sig = self._get_array_signature(arg)
@@ -287,7 +305,10 @@ class UnifiedCache:
         static_argnums: tuple[int, ...] = (),
         donate_argnums: tuple[int, ...] = (),
     ) -> Callable:
-        """Get cached compiled function or compile if not cached.
+        """Get the cached ``jax.jit`` wrapper for ``func`` or build and cache it.
+
+        Statistics count wrapper constructions; the XLA compilation itself
+        happens lazily on the returned function's first call.
 
         Thread-safe: the lock is held for dict operations only and released
         during expensive JIT compilation to avoid serializing parallel
@@ -332,8 +353,9 @@ class UnifiedCache:
                 self._stats["compilations"] += 1
             generation = self._generation
 
-        # Compile outside lock (expensive, don't serialize)
-        logger.debug(f"Cache miss for key {cache_key[:8]}..., compiling")
+        # Build the jit wrapper outside the lock. This is lazy: tracing and XLA
+        # compilation happen on the wrapper's first call, not here.
+        logger.debug(f"Cache miss for key {cache_key[:8]}..., building jit wrapper")
         start_time = time.time()
         jit_target = func
         if not inspect.isfunction(func):
@@ -387,11 +409,15 @@ class UnifiedCache:
             Cache statistics including:
             - hits : int - Number of cache hits
             - misses : int - Number of cache misses
-            - compilations : int - Number of JIT compilations performed
+            - compilations : int - Number of ``jax.jit`` wrappers built (not XLA
+              compilations)
             - evictions : int - Number of LRU evictions
             - cache_size : int - Current cache size
             - hit_rate : float - Cache hit rate (hits / total_requests)
-            - compile_time_ms : float - Total compilation time in milliseconds
+            - compile_time_ms : float - Total wrapper-construction time in
+              milliseconds for the entries still cached. This excludes tracing
+              and XLA compilation (kept under this key for compatibility).
+            - jit_wrap_time_ms : float - Same value as ``compile_time_ms``
         """
         if not self.enable_stats:
             return {"enabled": False}
@@ -407,6 +433,7 @@ class UnifiedCache:
                 "hit_rate": hit_rate,
                 "total_requests": total_requests,
                 "compile_time_ms": total_compile_time_ms,
+                "jit_wrap_time_ms": total_compile_time_ms,
             }
 
     def clear(self):
@@ -464,7 +491,11 @@ def get_global_cache() -> UnifiedCache:
 
 
 def clear_cache():
-    """Clear the global unified cache and curve_fit's model-wrapper cache."""
+    """Clear the global unified cache and curve_fit's model-wrapper cache.
+
+    The ``MemoryManager`` array pool is not cleared; use
+    ``get_memory_manager().clear_pool()`` for that.
+    """
     global _global_unified_cache  # noqa: PLW0602
     if _global_unified_cache is not None:
         _global_unified_cache.clear()

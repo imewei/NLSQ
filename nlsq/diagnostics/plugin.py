@@ -54,7 +54,12 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import numpy as np
 
-from nlsq.diagnostics.types import PluginResult
+from nlsq.diagnostics.types import (
+    IssueCategory,
+    IssueSeverity,
+    ModelHealthIssue,
+    PluginResult,
+)
 
 
 @runtime_checkable
@@ -198,8 +203,12 @@ class PluginRegistry:
         -------
         >>> PluginRegistry.register(MyPlugin())
         """
+        # Read the name before taking the (non-reentrant) lock: a `name`
+        # property that touches the registry would otherwise deadlock.
+        name = plugin.name
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"Plugin name must be a non-empty str, got {name!r}")
         with cls._lock:
-            name = plugin.name
             if name in cls._plugins:
                 raise ValueError(
                     f"Plugin '{name}' is already registered. "
@@ -277,6 +286,12 @@ class PluginRegistry:
             return list(cls._plugins.values())
 
     @classmethod
+    def _items(cls) -> list[tuple[str, DiagnosticPlugin]]:
+        """Snapshot of (registered name, plugin) pairs."""
+        with cls._lock:
+            return list(cls._plugins.items())
+
+    @classmethod
     def clear(cls) -> None:
         """Unregister all plugins.
 
@@ -289,6 +304,46 @@ class PluginRegistry:
         """
         with cls._lock:
             cls._plugins.clear()
+
+
+def _normalize_issue(issue: Any) -> ModelHealthIssue | None:
+    """Rebuild a duck-typed issue as a canonical :class:`ModelHealthIssue`.
+
+    Aggregation, warnings and serialization read every field and compare the
+    severity/category *enums*, so an accepted issue must carry real enum members
+    and usable types. Returns ``None`` if any field is missing or invalid.
+    """
+    try:
+        affected = issue.affected_parameters
+        if affected is not None:
+            if not isinstance(affected, (tuple, list)):
+                return None
+            # Parameter indices: Python/NumPy integers only (bool is not an index).
+            if not all(
+                isinstance(i, (int, np.integer)) and not isinstance(i, (bool, np.bool_))
+                for i in affected
+            ):
+                return None
+            affected = tuple(int(i) for i in affected)
+        if not isinstance(issue.details, dict):
+            return None
+        return ModelHealthIssue(
+            category=IssueCategory[issue.category.name],
+            severity=IssueSeverity[issue.severity.name],
+            code=_require_str(issue.code),
+            message=_require_str(issue.message),
+            affected_parameters=affected,
+            details=issue.details,
+            recommendation=_require_str(issue.recommendation),
+        )
+    except (AttributeError, TypeError, KeyError, ValueError):
+        return None
+
+
+def _require_str(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("expected str")
+    return value
 
 
 def run_plugins(
@@ -336,18 +391,14 @@ def run_plugins(
     ...     else:
     ...         print(f"{name}: FAILED - {result.error_message}")
     """
-    plugins = PluginRegistry.all()
     results: dict[str, PluginResult] = {}
 
-    for index, plugin in enumerate(plugins):
-        # Fallback key in case reading `.name` itself raises -- exception
-        # isolation must cover *any* plugin misbehavior, not just analyze().
-        plugin_name = f"<unnamed plugin #{index}>"
+    # Key by the registered name, not a re-read ``plugin.name`` that a plugin
+    # could change (and so overwrite another plugin's result).
+    for plugin_name, plugin in PluginRegistry._items():
         start_time = time.perf_counter()
 
         try:
-            plugin_name = plugin.name
-
             result = plugin.analyze(
                 jacobian=jacobian,
                 parameters=parameters,
@@ -385,12 +436,47 @@ def run_plugins(
             # `plugin_name` the plugin itself claims in its return value --
             # otherwise a plugin can misreport its identity and corrupt
             # report/serialization attribution under a different key.
+            # Later aggregation reads severity/code/category/message of every
+            # issue: drop (and warn about) malformed ones instead of letting
+            # one bad plugin crash the whole health report.
+            if not isinstance(result.issues, (list, tuple)):
+                warnings.warn(
+                    f"Diagnostic plugin '{plugin_name}' returned issues of type "
+                    f"{type(result.issues).__name__}, expected a list or tuple; "
+                    "marking the plugin unavailable",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                results[plugin_name] = PluginResult(
+                    plugin_name=plugin_name,
+                    available=False,
+                    error_message=(
+                        f"issues must be a list or tuple, got "
+                        f"{type(result.issues).__name__}"
+                    ),
+                    data={},
+                    issues=[],
+                    computation_time_ms=elapsed_ms,
+                )
+                continue
+            issues = []
+            for issue in result.issues:
+                normalized = _normalize_issue(issue)
+                if normalized is not None:
+                    issues.append(normalized)
+                else:
+                    warnings.warn(
+                        f"Diagnostic plugin '{plugin_name}' returned an invalid "
+                        f"issue {issue!r}; ignoring it",
+                        UserWarning,
+                        stacklevel=2,
+                    )
             results[plugin_name] = PluginResult(
                 plugin_name=plugin_name,
                 available=result.available,
                 error_message=result.error_message,
                 data=result.data,
-                issues=result.issues,
+                issues=issues,
                 computation_time_ms=elapsed_ms,
             )
 

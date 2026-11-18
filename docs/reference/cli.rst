@@ -102,7 +102,8 @@ Execute parallel batch fitting from multiple YAML workflow files.
    Options:
      -s, --summary FILE      Path for aggregate summary file
      -w, --workers N         Maximum parallel workers (default: auto-detect)
-     --continue-on-error     Continue processing on individual failures (default: true)
+     --continue-on-error, --no-continue-on-error
+                             Continue processing on individual failures (default: true)
 
 **Examples:**
 
@@ -137,17 +138,39 @@ JAX backend, GPU info, and available builtin models.
 
 .. code-block:: text
 
-   NLSQ Information
-   ================
-   Version: 0.8.0
-   Python: 3.12.0
-   JAX: 0.8.2
-   Device: cuda:0 (NVIDIA RTX 4090)
-   Memory: 24.0 GB available
+   ============================================================
+   NLSQ System Information
+   ============================================================
+
+   NLSQ Version: 0.8.0
+
+   Python Version: 3.12.0 (main, ...)
+
+   JAX Configuration:
+   ----------------------------------------
+     JAX Version: 0.12.0.1
+     Backend: CPU
+     Devices: 1
+       [0] CPU
+
+   System Memory:
+   ----------------------------------------
+     Total: 62.5 GB
+     Available: 50.8 GB
+     Used: 11.7 GB (18.7%)
 
    Builtin Models:
-   - linear, exponential_decay, exponential_growth
-   - gaussian, sigmoid, power_law, polynomial
+   ----------------------------------------
+     exponential_decay(a, b, c)
+     exponential_growth(a, b, c)
+     gaussian(amp, mu, sigma)
+     linear(a, b)
+     lorentzian(amp, x0, gamma)
+     polynomial(degree)
+     power_law(a, b)
+     sigmoid(L, x0, k, b)
+
+   ============================================================
 
 nlsq config
 ~~~~~~~~~~~

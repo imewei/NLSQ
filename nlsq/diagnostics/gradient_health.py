@@ -136,8 +136,11 @@ class GradientMonitor:
         "_cost_history",
         "_gradient_norm_history",
         "_has_numerical_issues",
+        "_imbalance_argmax",
+        "_imbalance_argmin",
         "_initial_cost",
         "_initial_gradient_norm",
+        "_initial_scaled_norm",
         "_last_gradient_norm",
         "_last_params",
         "_max_imbalance_ratio",
@@ -145,6 +148,8 @@ class GradientMonitor:
         "_param_count",
         "_param_m2",
         "_param_means",
+        "_scale_available",
+        "_scaled_norm_history",
         "config",
         "iteration_count",
     )
@@ -170,12 +175,21 @@ class GradientMonitor:
         self._param_means: np.ndarray = np.array([])
         self._param_m2: np.ndarray = np.array([])  # Sum of squared differences
         self._param_count: int = 0
+        # ||g * p|| per iteration: a dimensionless gradient (needs params every call).
+        self._scaled_norm_history: deque[float] = deque(
+            maxlen=config.gradient_window_size
+        )
+        self._scale_available: bool = True
+        self._initial_scaled_norm: float = 0.0
 
         # Tracking variables
         self._last_gradient_norm: float = 0.0
         self._has_numerical_issues: bool = False
         self._n_params: int = 0
         self._max_imbalance_ratio: float = 1.0
+        # Parameters (min, max of |g*p|) at the iteration that set the ratio.
+        self._imbalance_argmin: int | None = None
+        self._imbalance_argmax: int | None = None
         self._initial_gradient_norm: float = 0.0
         self._initial_cost: float = 0.0
         self._last_params: np.ndarray | None = None
@@ -229,6 +243,11 @@ class GradientMonitor:
             # Replace non-finite values with safe large values (avoid overflow in Welford's)
             gradient = np.nan_to_num(gradient, nan=0.0, posinf=1e100, neginf=-1e100)
 
+        if self._n_params and gradient.shape != (self._n_params,):
+            raise ValueError(
+                f"gradient shape {gradient.shape} does not match the "
+                f"{self._n_params} parameters recorded so far"
+            )
         self.iteration_count += 1
         n_params = len(gradient)
 
@@ -260,9 +279,20 @@ class GradientMonitor:
                 f"{gradient.shape}"
             )
         if params is not None:
-            imbalance_basis = abs_gradient * np.abs(np.asarray(params, dtype=float))
+            abs_params = np.abs(np.asarray(params, dtype=float))
+            imbalance_basis = abs_gradient * abs_params
+            if np.all(np.isfinite(abs_params)) and np.all(abs_params > 0):
+                scaled_norm = float(np.linalg.norm(imbalance_basis))
+                if not self._scaled_norm_history and self._initial_scaled_norm == 0.0:
+                    self._initial_scaled_norm = scaled_norm
+                self._scaled_norm_history.append(scaled_norm)
+            else:
+                # A zero/non-finite parameter makes g*p blind to that component:
+                # the scaled history is no longer reliable.
+                self._scale_available = False
         else:
             imbalance_basis = abs_gradient
+            self._scale_available = False
         self._param_count += 1
         delta = abs_gradient - self._param_means
         self._param_means += delta / self._param_count
@@ -288,13 +318,17 @@ class GradientMonitor:
             and np.isfinite(min_grad)
         ):
             imbalance = max_grad / min_grad
-            if np.isfinite(imbalance):
-                self._max_imbalance_ratio = max(self._max_imbalance_ratio, imbalance)
+            if np.isfinite(imbalance) and imbalance > self._max_imbalance_ratio:
+                self._max_imbalance_ratio = imbalance
+                self._imbalance_argmin = int(
+                    np.argmin(np.where(positive, imbalance_basis, np.inf))
+                )
+                self._imbalance_argmax = int(np.argmax(imbalance_basis))
 
     def create_callback(
         self,
-        user_callback: Callable[..., None] | None = None,
-    ) -> Callable[..., None]:
+        user_callback: Callable[..., Any] | None = None,
+    ) -> Callable[..., Any]:
         """Create a callback function for integration with curve_fit/TRF.
 
         This method creates a callback compatible with NLSQ's optimization
@@ -341,7 +375,7 @@ class GradientMonitor:
             params: np.ndarray,
             info: dict[str, Any] | None = None,
             **kwargs: Any,
-        ) -> None:
+        ) -> Any:
             """Callback function for gradient monitoring.
 
             Parameters
@@ -396,7 +430,9 @@ class GradientMonitor:
 
             # Call user callback if provided
             if user_callback is not None:
-                call_user_callback(user_callback, iteration, cost, params, info)
+                # Forward the result: True/StopOptimization requests an early stop.
+                return call_user_callback(user_callback, iteration, cost, params, info)
+            return None
 
         return gradient_monitor_callback
 
@@ -515,6 +551,9 @@ class GradientMonitor:
         self.iteration_count = 0
         self._gradient_norm_history.clear()
         self._cost_history.clear()
+        self._scaled_norm_history.clear()
+        self._scale_available = True
+        self._initial_scaled_norm = 0.0
         self._param_means = np.array([])
         self._param_m2 = np.array([])
         self._param_count = 0
@@ -522,6 +561,8 @@ class GradientMonitor:
         self._has_numerical_issues = False
         self._n_params = 0
         self._max_imbalance_ratio = 1.0
+        self._imbalance_argmin = None
+        self._imbalance_argmax = None
         self._initial_gradient_norm = 0.0
         self._initial_cost = 0.0
         self._last_params = None
@@ -559,37 +600,32 @@ class GradientMonitor:
         avg_recent_norm = np.mean(recent_norms)
         avg_recent_cost = np.mean(recent_costs)
 
-        # Gradient is vanishing if:
-        # 1. Average norm is below threshold
-        # 2. Cost is still significant (not effectively zero)
-        # 3. Initial gradient was not already vanishing (we had signal to start)
+        # Everything is relative so the verdict does not depend on the units of
+        # y or (when record_gradient got params every call) the parameters: the
+        # gradient is "small" against its own initial value, or (flat from the
+        # start) against the cost scale; and the cost has not improved much,
+        # otherwise a small gradient is just convergence to a residual floor.
         threshold = self.config.vanishing_threshold
-
-        if self._initial_gradient_norm > 0:
-            # Use relative threshold based on initial gradient
-            relative_threshold = self._initial_gradient_norm * threshold
+        initial_cost = self._initial_cost
+        if not avg_recent_cost > 0:
+            return False
+        # g and cost have different units unless g is scaled by the parameters
+        # (|g*p| has the units of cost). When params were recorded on every call
+        # (all nonzero) both tests use the scaled history; otherwise the
+        # unscaled norms are used and the cost comparison is unit-dependent
+        # (best effort -- it cannot be made invariant without a parameter scale).
+        k = len(recent_costs)
+        if self._scale_available and len(self._scaled_norm_history) >= k:
+            recent_g = float(np.mean(list(self._scaled_norm_history)[-k:]))
+            initial_g = self._initial_scaled_norm
         else:
-            relative_threshold = threshold
+            recent_g = float(avg_recent_norm)
+            initial_g = self._initial_gradient_norm
+        gradient_dropped = initial_g > 0 and recent_g < initial_g * threshold
+        gradient_small_vs_cost = recent_g < threshold * avg_recent_cost
+        cost_stalled = not initial_cost > 0 or avg_recent_cost > 0.5 * initial_cost
 
-        # Cost is significant if it's above a small epsilon
-        cost_significant = avg_recent_cost > 1e-10
-
-        # Check if gradient has dropped significantly from initial (catches
-        # decay from a normal-sized start).
-        gradient_dropped = (
-            self._initial_gradient_norm > 0 and avg_recent_norm < relative_threshold
-        )
-
-        # Also check the absolute threshold directly. If the gradient is
-        # already small at iteration 1 (stuck in a flat region from the
-        # start), relative_threshold becomes even smaller than the
-        # already-tiny gradient and gradient_dropped never fires -- this
-        # catches that case independent of what the initial norm was.
-        gradient_absolutely_small = avg_recent_norm < threshold
-
-        return bool(
-            (gradient_dropped or gradient_absolutely_small) and cost_significant
-        )
+        return bool((gradient_dropped or gradient_small_vs_cost) and cost_stalled)
 
     def _detect_exploding_gradients(self, norm_history: list[float]) -> bool:
         """Detect if gradients are exploding to very large magnitudes.
@@ -813,13 +849,15 @@ class GradientMonitor:
             severity=IssueSeverity.CRITICAL,
             code="GRAD-004",
             message=(
-                f"Exploding gradients detected: gradient norm ({max_recent_norm:.2e}) "
-                f"exceeds threshold ({self.config.exploding_threshold:.2e}), "
+                f"Exploding gradients detected: gradient norm grew to "
+                f"{max_recent_norm:.2e}, more than {self.config.exploding_threshold:.2e}x "
+                f"its initial value ({self._initial_gradient_norm:.2e}), "
                 "indicating a near-singular Jacobian or numerical instability."
             ),
             affected_parameters=None,
             details={
                 "max_recent_gradient_norm": max_recent_norm,
+                "initial_gradient_norm": self._initial_gradient_norm,
                 "threshold": self.config.exploding_threshold,
             },
             recommendation=get_recommendation("GRAD-004"),
@@ -855,9 +893,8 @@ class GradientMonitor:
             Issue describing gradient imbalance.
         """
         # Identify which parameters have extreme gradients
-        if len(self._param_means) > 0:
-            min_idx = int(np.argmin(self._param_means))
-            max_idx = int(np.argmax(self._param_means))
+        if self._imbalance_argmin is not None and self._imbalance_argmax is not None:
+            min_idx, max_idx = self._imbalance_argmin, self._imbalance_argmax
             affected = (min_idx, max_idx) if min_idx != max_idx else (min_idx,)
         else:
             affected = None

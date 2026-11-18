@@ -225,17 +225,6 @@ class TestParameterSensitivityAnalyzer:
         V = np.linalg.qr(np.random.randn(p, p))[0]
         return U @ np.diag(s) @ V.T
 
-    @pytest.fixture
-    def moderate_spread_jacobian(self) -> np.ndarray:
-        """Create a Jacobian with moderate sensitivity spread."""
-        np.random.seed(42)
-        n, p = 100, 4
-        U = np.linalg.qr(np.random.randn(n, p))[0]
-        # Singular values spanning moderate range
-        s = np.array([1e3, 10.0, 0.1, 0.01])
-        V = np.linalg.qr(np.random.randn(p, p))[0]
-        return U @ np.diag(s) @ V.T
-
     # Test basic analysis
     def test_analyze_returns_report(
         self,
@@ -269,18 +258,21 @@ class TestParameterSensitivityAnalyzer:
         n_params = well_conditioned_jacobian.shape[1]
         assert report.eigenvectors.shape == (n_params, n_params)
 
-    def test_analyze_eigenvectors_orthonormal(
+    def test_analyze_eigenvectors_unit_norm_in_original_space(
         self,
         analyzer: ParameterSensitivityAnalyzer,
         well_conditioned_jacobian: np.ndarray,
     ) -> None:
-        """Test eigenvectors are orthonormal."""
+        """Directions are unit vectors in the original parameter space.
+
+        They are the equilibrated eigenvectors mapped back through the column
+        scaling, so they are no longer mutually orthogonal in general.
+        """
         report = analyzer.analyze(well_conditioned_jacobian)
         assert report.eigenvectors is not None
-        # V.T @ V should be identity
-        product = report.eigenvectors.T @ report.eigenvectors
-        np.testing.assert_array_almost_equal(
-            product, np.eye(well_conditioned_jacobian.shape[1])
+        np.testing.assert_allclose(
+            np.linalg.norm(report.eigenvectors, axis=0),
+            np.ones(well_conditioned_jacobian.shape[1]),
         )
 
     # Test sensitivity spread detection

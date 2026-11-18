@@ -33,9 +33,11 @@
 #   export:
 #     results_file: "results.json"
 #
-# `nlsq fit` currently always runs a single local nlsq.curve_fit() call —
-# there is no global/multi-start/CMA-ES/streaming/checkpointing workflow
-# selector wired up in the CLI yet, so this template does not document one.
+# `nlsq fit` always runs a single in-memory nlsq.curve_fit() call; the solver
+# is chosen with `fitting.method` (trf, lm, auto, multi-start, cmaes,
+# hybrid_streaming). There are no YAML sections for the settings of those
+# solvers (multi-start/CMA-ES options, streaming strategy and chunking,
+# checkpointing) and curve_fit_large() is not reachable from the CLI.
 # `--workers`/`--summary` for batch mode are CLI flags on `nlsq batch`, not
 # YAML keys (a per-file `batch:` section in the YAML is never read).
 #
@@ -154,7 +156,9 @@ model:
 # FITTING
 # ==============================================================================
 # Core fitting algorithm configuration. Every key here maps 1:1 to a
-# nlsq.curve_fit() keyword argument.
+# nlsq.curve_fit() keyword argument, except under `method: hybrid_streaming`:
+# that engine has no ftol/xtol/gtol/max_nfev (they are ignored with a warning)
+# and minimises the plain least-squares cost, so only `loss: linear` is accepted.
 
 fitting:
   # Initial parameter guess: a list, or "auto"/omit to use the model's

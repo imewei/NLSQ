@@ -12,6 +12,7 @@ import inspect
 import threading
 import time
 import warnings
+import weakref
 from collections.abc import Callable
 from typing import Any
 
@@ -119,7 +120,7 @@ class CallbackBase:
         Parameters
         ----------
         iteration : int
-            Current iteration number (0-indexed)
+            Current iteration number (1-indexed: the first call receives 1)
         cost : float
             Current cost/objective function value
         params : np.ndarray
@@ -171,6 +172,8 @@ class ProgressBar(CallbackBase):
         self.tqdm_kwargs = tqdm_kwargs
         self._pbar = None
         self._last_nfev = 0
+        self._last_iter = 0
+        self._finalizer: weakref.finalize | None = None
 
         # Try to import tqdm
         try:
@@ -197,6 +200,13 @@ class ProgressBar(CallbackBase):
         if self.tqdm is None:
             return
 
+        nfev = info.get("nfev", iteration + 1)
+        # A counter that did not advance means a new fit reuses this callback.
+        if self._pbar is not None and (
+            nfev < self._last_nfev or iteration <= self._last_iter
+        ):
+            self.close()
+
         # Initialize progress bar on first call
         if self._pbar is None:
             self._pbar = self.tqdm(
@@ -204,9 +214,13 @@ class ProgressBar(CallbackBase):
                 desc=self.desc,
                 **self.tqdm_kwargs,
             )
+            # An open tqdm bar finalised during interpreter teardown segfaults
+            # once JAX is loaded (tqdm's __del__ -> format_meter); close it at
+            # atexit, which runs before module teardown.
+            self._finalizer = weakref.finalize(self, self._pbar.close)
+        self._last_iter = iteration
 
         # Update progress
-        nfev = info.get("nfev", iteration + 1)
         delta_nfev = nfev - self._last_nfev
         self._last_nfev = nfev
 
@@ -229,7 +243,11 @@ class ProgressBar(CallbackBase):
         if self._pbar is not None:
             self._pbar.close()
             self._pbar = None
+        if self._finalizer is not None:
+            self._finalizer.detach()
+            self._finalizer = None
         self._last_nfev = 0
+        self._last_iter = 0
 
     def __del__(self):
         """Ensure progress bar is closed on deletion."""
@@ -270,6 +288,7 @@ class IterationLogger(CallbackBase):
         self._file = file  # Use provided file object if given
         self._file_provided = file is not None  # Track if file was provided externally
         self._start_time = None
+        self._last_iter = 0
         self._lock = threading.RLock()
 
     def __deepcopy__(self, memo: dict) -> "IterationLogger":
@@ -301,10 +320,13 @@ class IterationLogger(CallbackBase):
             self._log(iteration, cost, params, info)
 
     def _log(self, iteration, cost, params, info) -> None:
-        if self._start_time is None:
+        # An iteration counter that did not advance means a new fit reuses this logger.
+        if self._start_time is None or iteration <= self._last_iter:
             self._start_time = time.time()
-            self._open_file()
+            if self._file is None:
+                self._open_file()
             self._write_header()
+        self._last_iter = iteration
 
         # Compute elapsed time
         elapsed = time.time() - self._start_time if self._start_time else 0
@@ -367,6 +389,7 @@ class IterationLogger(CallbackBase):
                 self._file.close()
                 self._file = None
         self._start_time = None
+        self._last_iter = 0
 
     def __del__(self):
         """Ensure file is closed on deletion."""
@@ -452,8 +475,10 @@ class EarlyStopping(CallbackBase):
 class CallbackChain(CallbackBase):
     """Chain multiple callbacks together.
 
-    Calls each callback in sequence. If any callback raises StopOptimization,
-    propagates it to stop the optimization.
+    Calls each callback in sequence. The optimization stops when any callback
+    raises ``StopOptimization`` or ``StopIteration`` (propagated at once) or returns
+    ``True`` (the remaining callbacks still run). Any other exception is deferred:
+    the remaining callbacks run, then it is re-raised or warned about.
 
     Parameters
     ----------
@@ -479,10 +504,41 @@ class CallbackChain(CallbackBase):
         cost: float,
         params: np.ndarray,
         info: dict[str, Any],
-    ) -> None:
-        """Call all callbacks in sequence."""
+    ) -> bool | None:
+        """Call all callbacks in sequence; return True if any asked to stop."""
+        # One failing callback must not starve the others (e.g. EarlyStopping
+        # behind a broken logger). StopOptimization/StopIteration propagate at
+        # once; a ``True`` return (the scipy stop protocol) is OR-combined and
+        # returned; any other error is re-raised after the remaining callbacks
+        # have run, or reported as a warning when a callback asked to stop.
+        first_error: Exception | None = None
+        stop = False
         for callback in self.callbacks:
-            call_user_callback(callback, iteration, cost, params, info)
+            try:
+                result = call_user_callback(callback, iteration, cost, params, info)
+            except (StopOptimization, StopIteration):
+                if first_error is not None:
+                    warnings.warn(
+                        f"Callback raised exception: {first_error}. Stopping as "
+                        "requested.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                raise
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                continue
+            stop = stop or (isinstance(result, (bool, np.bool_)) and bool(result))
+        if first_error is not None:
+            if not stop:
+                raise first_error
+            warnings.warn(
+                f"Callback raised exception: {first_error}. Stopping as requested.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        return True if stop else None
 
     def close(self):
         """Close all callbacks that have a close method."""

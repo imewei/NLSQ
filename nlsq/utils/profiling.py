@@ -248,8 +248,9 @@ def profile_transfers_runtime(
     """Profile actual host-device transfers using JAX profiler.
 
     This function provides runtime measurement of host-device transfers
-    using JAX's built-in profiler. Unlike static analysis, this captures
-    actual transfer events during execution.
+    using JAX's built-in profiler. The trace is written to ``trace_dir`` for
+    inspection (e.g. TensorBoard); the trace files are not parsed, so
+    ``transfer_count`` and ``transfer_bytes`` are always ``None`` (not measured).
 
     Parameters
     ----------
@@ -327,17 +328,20 @@ def profile_transfers_runtime(
         with jax.profiler.trace(str(trace_path)):
             started = True
             result = func(*args, **kwargs)
+            # Async dispatch: wait so the device work lands inside the trace window
+            jax.block_until_ready(result)
             finished = True
 
-        # Analyze trace for transfer events
-        # Note: Detailed trace analysis would require parsing the trace files
-        # For now, we return basic profiling information
+        # The trace files are not parsed, so transfer counts are NOT measured.
         transfer_stats = {
-            "transfer_count": 0,  # Would be extracted from trace
-            "transfer_bytes": 0,  # Would be extracted from trace
+            "transfer_count": None,
+            "transfer_bytes": None,
             "profiler_available": True,
             "trace_dir": str(trace_path),
-            "message": "Profiling complete. Analyze trace in TensorBoard.",
+            "message": (
+                "Trace captured; transfer counts are not extracted "
+                "(None). Analyze the trace in TensorBoard."
+            ),
         }
 
         return result, transfer_stats

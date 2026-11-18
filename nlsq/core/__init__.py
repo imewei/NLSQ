@@ -5,7 +5,7 @@ This subpackage contains the core optimization algorithms:
 - minpack: SciPy-compatible curve_fit API
 - least_squares: LeastSquares class for optimization orchestration
 - trf: Trust Region Reflective algorithm
-- _optimize: OptimizeResult and OptimizeWarning
+- nlsq.result (separate package): OptimizeResult and OptimizeWarning
 - sparse_jacobian: Sparse Jacobian computation
 - functions: Model function utilities
 - loss_functions: Loss function implementations

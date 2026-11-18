@@ -285,6 +285,12 @@ class ChunkBufferPool:
         return self._x_feature_shape
 
 
+# One conditioning limit for both the per-chunk precision (correlation-scaled)
+# and the accumulated information (Jacobi-scaled); the GLS covariance is not
+# trusted beyond it (NumericalStabilityGuard's 1e12).
+_MAX_SCALED_COND = 1e12
+
+
 class _ChunkNotConverged(RuntimeError):
     """A chunk's inner fit returned ``success=False`` (counts as a failed chunk)."""
 
@@ -882,7 +888,7 @@ class ProgressReporter:
         """
         self.total_chunks = total_chunks
         self.logger = logger or get_logger(__name__)
-        self.start_time = time.time()
+        self.start_time = time.perf_counter()
         self.completed_chunks = 0
 
     def update(self, chunk_idx: int, chunk_result: dict | None = None):
@@ -896,7 +902,7 @@ class ProgressReporter:
             Results from chunk processing
         """
         self.completed_chunks = chunk_idx + 1
-        elapsed = time.time() - self.start_time
+        elapsed = time.perf_counter() - self.start_time
 
         if self.completed_chunks > 0:
             avg_time_per_chunk = elapsed / self.completed_chunks
@@ -1308,7 +1314,9 @@ class LargeDatasetFitter:
         # Model validation caching
         # Cache validated functions by (id(func), id(func.__code__)) to avoid
         # redundant validation across chunks. Provides 1-5% performance gain.
-        self._validated_functions: dict[int, bool] = {}
+        self._validated_functions: dict[
+            int, int | None
+        ] = {}  # key -> len(p0) validated
 
         # FR-006: Buffer pool for chunk reuse (initialized lazily)
         self._buffer_pool: ChunkBufferPool | None = None
@@ -1498,15 +1506,25 @@ class LargeDatasetFitter:
         # identical bytecode/consts but capture different free variables
         # (in __closure__, not co_consts), so a code-only key would let the
         # second closure silently skip validation on a false cache hit --
-        # exactly the bug class nlsq.caching.smart_cache/compilation_cache
-        # already guard against (see their _closure_serial usage). Plain
-        # id(f) is unsafe too: CPython can reuse a GC'd object's address.
-        # closure_serial's WeakKeyDictionary gives each live function object
-        # a stable, never-reused key and works uniformly for plain
-        # functions, functools.partial, and callable class instances alike
-        # (no __code__ required), so no separate "uncacheable" branch needed.
-        func_key = closure_serial(f)
-        if func_key in self._validated_functions:
+        # exactly the bug class unified_cache guards against (see its
+        # closure_serial usage). Plain id(f) is unsafe too: CPython can
+        # reuse a GC'd object's address.
+        # closure_serial keys each live object by identity through a weakref
+        # registry, so it covers plain functions, functools.partial and
+        # callable class instances (no __code__ required). Callables that
+        # cannot be weakly referenced (``__slots__`` without ``__weakref__``,
+        # ufuncs) raise TypeError: validate them every time, uncached.
+        try:
+            func_key: int | None = closure_serial(f)
+        except TypeError:
+            func_key = None
+        # The check also depends on the parameter count, so a different p0 re-validates.
+        n_p0 = None if p0 is None else len(p0)
+        if (
+            func_key is not None
+            and func_key in self._validated_functions
+            and self._validated_functions[func_key] == n_p0
+        ):
             self.logger.debug("Model validation skipped (cached)")
             return
 
@@ -1598,7 +1616,8 @@ class LargeDatasetFitter:
             )
 
             # Cache successful validation
-            self._validated_functions[func_key] = True
+            if func_key is not None:
+                self._validated_functions[func_key] = n_p0
 
         except (ValueError, TypeError) as e:
             # Re-raise validation errors with context (rate-limited logging)
@@ -1651,7 +1670,7 @@ class LargeDatasetFitter:
         """
         from nlsq.global_optimization import MultiStartOrchestrator
 
-        exploration_start_time = time.time()
+        exploration_start_time = time.perf_counter()
 
         # Create orchestrator with our config
         orchestrator = MultiStartOrchestrator(
@@ -1674,7 +1693,7 @@ class LargeDatasetFitter:
             **kwargs,
         )
 
-        exploration_time = time.time() - exploration_start_time
+        exploration_time = time.perf_counter() - exploration_start_time
 
         # Extract diagnostics from result
         diagnostics = result.get("multistart_diagnostics", {})
@@ -1849,7 +1868,7 @@ class LargeDatasetFitter:
     ) -> OptimizeResult:
         """Internal implementation of fitting algorithm."""
 
-        fit_start_time = time.time()
+        fit_start_time = time.perf_counter()
         if getattr(xdata, "ndim", 1) > 1:
             # scipy layout (k, M) -> points-first (M, k); see _scipy_x.
             xdata = np.asarray(xdata).T
@@ -1951,7 +1970,9 @@ class LargeDatasetFitter:
         )
 
         # Add multi-start diagnostics and timing to result
-        multistart_diagnostics["total_fit_time_seconds"] = time.time() - fit_start_time
+        multistart_diagnostics["total_fit_time_seconds"] = (
+            time.perf_counter() - fit_start_time
+        )
         result["multistart_diagnostics"] = multistart_diagnostics
 
         return self._annotate_equivalence(result, stats.n_chunks)
@@ -2164,7 +2185,7 @@ class LargeDatasetFitter:
         if d is None:
             return None
         w = np.linalg.eigvalsh(pcov / np.outer(d, d))
-        if w[0] <= n_params * np.finfo(float).eps * w[-1]:
+        if w[0] <= w[-1] / _MAX_SCALED_COND:
             return None
         prec = np.linalg.inv(pcov)
         prec = 0.5 * (prec + prec.T)
@@ -2440,7 +2461,7 @@ class LargeDatasetFitter:
         y_valid = y_chunk[:valid_length]
         # Only retry if we have current parameter estimates
         if current_params is None:
-            chunk_duration = time.time() - chunk_start_time
+            chunk_duration = time.perf_counter() - chunk_start_time
             chunk_times.append(chunk_duration)
             chunk_result = self._create_chunk_result(
                 chunk_idx=chunk_idx,
@@ -2462,7 +2483,7 @@ class LargeDatasetFitter:
                 + 0.01
                 * np.random.default_rng(chunk_idx).standard_normal(len(current_params))
             )
-            popt_chunk, pcov_chunk = self.curve_fit.curve_fit(
+            retry_res = self.curve_fit.curve_fit(
                 f,
                 _scipy_x(x_valid),
                 y_valid,
@@ -2472,8 +2493,15 @@ class LargeDatasetFitter:
                 solver=solver,
                 **kwargs,
             )
+            if not getattr(retry_res, "success", True):
+                # Same rule as the main path: a max_nfev stop is not success,
+                # so its popt must not be folded into the GLS accumulator.
+                raise _ChunkNotConverged(
+                    f"retry did not converge: {getattr(retry_res, 'message', '')}"
+                )
+            popt_chunk, pcov_chunk = retry_res
 
-            chunk_duration = time.time() - chunk_start_time
+            chunk_duration = time.perf_counter() - chunk_start_time
             chunk_times.append(chunk_duration)
 
             chunk_result = self._create_chunk_result(
@@ -2501,7 +2529,7 @@ class LargeDatasetFitter:
         except Exception as retry_e:
             # Retry also failed
             self.logger.warning(f"Retry for chunk {chunk_idx} also failed: {retry_e}")
-            chunk_duration = time.time() - chunk_start_time
+            chunk_duration = time.perf_counter() - chunk_start_time
             chunk_times.append(chunk_duration)
 
             chunk_result = self._create_chunk_result(
@@ -2612,7 +2640,12 @@ class LargeDatasetFitter:
         # with a warning), but an explicit nan_policy="raise" must still raise.
         if (
             kwargs.get("nan_policy") != "omit"
-            and (kwargs.get("check_finite") or kwargs.get("nan_policy") == "raise")
+            # curve_fit's own default is check_finite=True, so a missing key is
+            # not an opt-out (only an explicit False is).
+            and (
+                kwargs.get("check_finite") is not False
+                or kwargs.get("nan_policy") == "raise"
+            )
             and not (np.isfinite(xdata).all() and np.isfinite(ydata).all())
         ):
             raise ValueError("x and y must be finite (found NaN or inf)")
@@ -2716,7 +2749,7 @@ class LargeDatasetFitter:
                 if singular_values[-1] > 0
                 else np.inf
             )
-            if condition_number <= 1e12:
+            if condition_number <= _MAX_SCALED_COND:
                 try:
                     with np.errstate(over="ignore", invalid="ignore"):
                         pcov = (np.linalg.inv(scaled) * inv_d[:, None]) * inv_d[None, :]
@@ -2732,26 +2765,30 @@ class LargeDatasetFitter:
                             if np.isinf(scale)
                             else pcov * scale
                         )
-            self.logger.warning(
-                f"Accumulated information matrix is ill-conditioned or "
-                f"singular (condition number: {condition_number:.2e}); "
-                "falling back to parameter-history covariance proxy instead "
-                "of the precision-weighted GLS covariance.",
+            self._warn_pcov_not_estimated(
+                f"the accumulated information matrix is ill-conditioned or "
+                f"singular (scaled condition number {condition_number:.2e} > "
+                f"{_MAX_SCALED_COND:.0e})"
             )
-
-        if len(param_history) > 1:
-            # Use last 10 parameter estimates for covariance estimation
-            param_variations = np.array(param_history[-min(10, len(param_history)) :])
-            # np.cov collapses to a 0-d scalar for a single parameter (1 "variable"
-            # row after .T) -- atleast_2d keeps it a proper (1, 1) matrix so callers
-            # doing pcov[0, 0] or np.diag(pcov) don't break.
-            pcov = np.atleast_2d(np.cov(param_variations.T))
         else:
-            # Fallback: identity matrix scaled by parameter magnitudes
-            # This provides a reasonable uncertainty estimate when we have no history
-            pcov = np.diag(np.abs(current_params) * 0.01 + 0.001)
+            self._warn_pcov_not_estimated(
+                "no chunk contributed a usable covariance to the "
+                "precision-weighted combination"
+            )
+        # Not-estimated convention (all-inf), never a proxy built from how far
+        # the running estimates moved or from |p|: those are not estimator
+        # covariances and would look like confident uncertainties.
+        return np.full((len(current_params), len(current_params)), np.inf)
 
-        return pcov
+    @staticmethod
+    def _warn_pcov_not_estimated(reason: str) -> None:
+        warnings.warn(
+            f"Chunked fit covariance was not estimated ({reason}); pcov is "
+            "reported as inf. Use the exact full-data solver (Auto, the "
+            "curve_fit_large default) for a reliable covariance.",
+            OptimizeWarning,
+            skip_file_prefixes=_NLSQ_DIR,
+        )
 
     def _finalize_chunked_results(
         self,
@@ -2819,8 +2856,7 @@ class LargeDatasetFitter:
             if self._accum_information is None:
                 msg += (
                     " No chunk contributed, so the result is the LAST chunk's fit "
-                    "alone and pcov is a parameter-history proxy, not an estimator "
-                    "covariance."
+                    "alone and pcov is reported as inf (not estimated)."
                 )
             warnings.warn(msg, OptimizeWarning, skip_file_prefixes=_NLSQ_DIR)
 
@@ -2961,7 +2997,17 @@ class LargeDatasetFitter:
                     f"sigma length ({len(full_sigma)}) does not match "
                     f"xdata length ({len(xdata)})",
                 )
-            self._require_valid_sigma(kwargs, full_sigma, xdata, ydata)
+            # Validate only the retained rows: masked-out observations are never
+            # fitted, so a zero sigma / NaN there must not reject the fit.
+            if full_mask is None:
+                self._require_valid_sigma(kwargs, full_sigma, xdata, ydata)
+            else:
+                self._require_valid_sigma(
+                    kwargs,
+                    full_sigma[full_mask],
+                    np.asarray(xdata)[full_mask],
+                    np.asarray(ydata)[full_mask],
+                )
 
         # Contiguous chunking biases fits on ordered/monotonic x (each chunk
         # covers only a narrow x-window, so per-chunk local optima can land
@@ -2973,7 +3019,10 @@ class LargeDatasetFitter:
         n_points = len(xdata)
         xdata = np.asarray(xdata)
         ydata = np.asarray(ydata)
-        self._require_finite(kwargs, xdata, ydata)
+        if full_mask is None:
+            self._require_finite(kwargs, xdata, ydata)
+        else:
+            self._require_finite(kwargs, xdata[full_mask], ydata[full_mask])
         shuffle_idx = np.random.default_rng(0).permutation(n_points)
         self.logger.debug(
             f"Shuffled {n_points} points before chunking (seed=0) to avoid "
@@ -3028,7 +3077,7 @@ class LargeDatasetFitter:
                 buffer_pool=buffer_pool,
                 indices=shuffle_idx,
             ):
-                chunk_start_time = time.time()
+                chunk_start_time = time.perf_counter()
                 chunk_kwargs = kwargs
                 sigma_valid = None
                 # Tripwire: sigma below is gathered by chunk_bounds, so the
@@ -3112,6 +3161,24 @@ class LargeDatasetFitter:
                             f, x_valid, y_valid, popt_chunk, sigma_valid
                         )
 
+                    # Build the chunk result BEFORE accumulating: anything raising
+                    # after the accumulator update would send the chunk to the
+                    # retry path and fold it in a second time.
+                    chunk_duration = time.perf_counter() - chunk_start_time
+                    chunk_times.append(chunk_duration)
+
+                    # Create successful chunk result. n_points/data_stats
+                    # must reflect the real (valid_length) points, not the
+                    # zero-padded DataChunker bucket.
+                    chunk_result = self._create_chunk_result(
+                        chunk_idx=chunk_idx,
+                        x_chunk=x_valid,
+                        y_chunk=y_valid,
+                        chunk_duration=chunk_duration,
+                        success=True,
+                        popt_chunk=popt_chunk,
+                    )
+
                     # Accumulate this chunk's information into the full-dataset
                     # precision-weighted estimate and check convergence.
                     (
@@ -3135,27 +3202,12 @@ class LargeDatasetFitter:
                     if should_stop:
                         break
 
-                    chunk_duration = time.time() - chunk_start_time
-                    chunk_times.append(chunk_duration)
-
-                    # Create successful chunk result. n_points/data_stats
-                    # must reflect the real (valid_length) points, not the
-                    # zero-padded DataChunker bucket.
-                    chunk_result = self._create_chunk_result(
-                        chunk_idx=chunk_idx,
-                        x_chunk=x_valid,
-                        y_chunk=y_valid,
-                        chunk_duration=chunk_duration,
-                        success=True,
-                        popt_chunk=popt_chunk,
-                    )
-
                 except Exception as e:
                     self.logger.warning(f"Chunk {chunk_idx} failed: {e}")
                     if isinstance(e, _ChunkNotConverged):
                         # The inner fit ran to its own stop; a retry from a
                         # perturbed start would just double the cost.
-                        chunk_duration = time.time() - chunk_start_time
+                        chunk_duration = time.perf_counter() - chunk_start_time
                         chunk_times.append(chunk_duration)
                         chunk_result = self._create_chunk_result(
                             chunk_idx=chunk_idx,

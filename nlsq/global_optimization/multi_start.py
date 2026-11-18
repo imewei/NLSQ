@@ -87,6 +87,53 @@ __all__ = ["MultiStartOrchestrator"]
 _worker_logger = logging.getLogger("nlsq.multi_start")
 
 
+def _unwrap_timeit(out: Any) -> Any:
+    """``timeit`` tuple -> CurveFitResult that remembers the tuple (``_timeit_out``).
+
+    Attempts of a ``timeit=True`` multistart run with timeit on, so the winner can be
+    returned with its own solver timing instead of re-solving.
+    """
+    if not isinstance(out, tuple):
+        return out
+    result = CurveFitResult(out[2])
+    result["pcov"] = out[1]
+    result._timeit_out = out  # type: ignore[attr-defined]
+    return result
+
+
+def _format_tuple_mode(
+    result: Any,
+    f: Callable,
+    xdata: np.ndarray,
+    modes: dict[str, Any],
+    wall: float,
+    data_mask: Any = None,
+) -> Any:
+    """The selected attempt in the caller's ``timeit``/``return_eval``/``full_output``
+    form, without re-solving (a re-solve would exceed max_nfev and re-run stateful
+    models/callbacks)."""
+    if modes.keys() == {"timeit"}:
+        return result._timeit_out  # the winner's own tuple, with its solver timing
+    from nlsq.core.minpack import _apply_output_flags
+
+    return _apply_output_flags(
+        result, f, xdata, {**modes, "data_mask": data_mask}, ctime=wall
+    )
+
+
+def _is_converged(result: Any) -> bool:
+    return result is not None and bool(getattr(result, "success", True))
+
+
+def _start_rank(entry: tuple[Any, float, Any]) -> tuple[bool, bool, float]:
+    """Sort key for ``(params, loss, result)``: finite, then converged, then cost.
+
+    A start cut off by ``max_nfev`` with a lower cost must not beat a converged one.
+    """
+    _params, loss, result = entry
+    return (not np.isfinite(loss), not _is_converged(result), loss)
+
+
 def _fit_single_start(
     f: Callable,
     xdata: np.ndarray,
@@ -132,13 +179,15 @@ def _fit_single_start(
 
     try:
         cf = CurveFit(**(curve_fit_kwargs or {}))
-        result: CurveFitResult = cf.curve_fit(  # type: ignore[assignment]
-            f,
-            xdata,
-            ydata,
-            p0=p0,
-            bounds=bounds,
-            **kwargs,
+        result: CurveFitResult = _unwrap_timeit(
+            cf.curve_fit(
+                f,
+                xdata,
+                ydata,
+                p0=p0,
+                bounds=bounds,
+                **kwargs,
+            )
         )
         if hasattr(result, "cost"):
             loss = 2 * result.cost  # cost is half sum of squares
@@ -483,9 +532,9 @@ class MultiStartOrchestrator:
 
         # Generate samples in [0, 1]^n
         if sampler_name == "lhs":
-            # Base key is fixed (PRNGKey(0)) and not user-configurable: GlobalOptimizationConfig
-            # has no seed field; a per-call counter is folded in below, so repeated
-            # fit() calls differ but a fresh orchestrator reproduces the same sequence.
+            # Base key is PRNGKey(config.seed or 0); a per-call counter is folded in
+            # below, so repeated fit() calls differ but a fresh orchestrator with
+            # the same seed reproduces the same sequence.
             # LHS accepts rng_key. If the caller didn't supply one, advance
             # a per-orchestrator counter so successive fit() calls don't
             # silently reuse the exact same starting points.
@@ -493,10 +542,16 @@ class MultiStartOrchestrator:
                 with self._rng_lock:
                     call_count = self._rng_call_count
                     self._rng_call_count += 1
-                rng_key = jax.random.fold_in(jax.random.PRNGKey(0), call_count)
+                rng_key = jax.random.fold_in(
+                    jax.random.PRNGKey(self.config.seed or 0), call_count
+                )
             samples_raw = sampler(n_starts, n_params, rng_key=rng_key)
+        elif sampler_name == "sobol":
+            # Deterministic. The sequence's first point is all zeros, i.e. the lower
+            # bound corner: skip it rather than spend a start on it.
+            samples_raw = sampler(n_starts, n_params, skip=1)
         else:
-            # Sobol and Halton are deterministic
+            # Halton is deterministic (and already 1-indexed)
             samples_raw = sampler(n_starts, n_params)
 
         # Scale to bounds
@@ -564,7 +619,8 @@ class MultiStartOrchestrator:
         Returns
         -------
         results : list[tuple[np.ndarray, float, CurveFitResult | None]]
-            List of (params, loss, result) tuples sorted by loss (ascending).
+            List of (params, loss, result) tuples, finite and converged starts
+            first, then by loss (ascending).
         diagnostics : dict[str, Any]
             Parallel diagnostics with keys ``parallel``, ``n_workers``,
             ``wall_time_sec``.
@@ -676,13 +732,13 @@ class MultiStartOrchestrator:
         }
 
         # Re-log only the winner's deferred warnings (stable sort: first min wins).
-        best_i = min(range(n_starts), key=lambda i: results[i][1])
+        best_i = min(range(n_starts), key=lambda i: _start_rank(results[i]))
         for record in start_logs[best_i]:
             record._nlsq_replay = True  # type: ignore[attr-defined]
             logging.getLogger(record.name).handle(record)
 
-        # Sort by loss (ascending)
-        results.sort(key=lambda x: x[1])
+        # Converged starts first, then by loss (ascending)
+        results.sort(key=_start_rank)
 
         # The per-start OptimizeWarning suppression above is scoped to
         # "expected, internal" non-convergence noise from the N-1 losing
@@ -711,6 +767,29 @@ class MultiStartOrchestrator:
 
         return results, parallel_diagnostics
 
+    def _note_cheaper_unconverged(
+        self,
+        evaluation_results: list[tuple[Any, float, Any]],
+        best_loss: float,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        """Record unconverged starts that beat the winner's loss.
+
+        A start cut off by ``max_nfev`` can sit in a better basin than the
+        converged winner it ranks behind.
+        """
+        cheaper = [
+            loss
+            for _, loss, res in evaluation_results
+            if loss < best_loss and not _is_converged(res)
+        ]
+        if cheaper:
+            diagnostics["cheaper_unconverged_loss"] = min(cheaper)
+            self.logger.info(
+                f"{len(cheaper)} unconverged start(s) reached a lower loss "
+                f"({min(cheaper):.6g}) than the converged winner ({best_loss:.6g})",
+            )
+
     def fit(
         self,
         f: Callable,
@@ -727,10 +806,11 @@ class MultiStartOrchestrator:
         1. Infers bounds if not provided
         2. Estimates p0 if not provided and center_on_p0=True
         3. Generates LHS starting points; a user-supplied ``p0`` (clipped to the
-           bounds) takes the first of the ``n_starts`` slots, so the result is never
+           bounds, as ``curve_fit`` does, never rejected) takes the first of the ``n_starts`` slots, so the result is never
            worse than a single start from ``p0``
         4. Evaluates all starting points
-        5. Returns the result with the minimum loss
+        5. Returns the converged result with the minimum loss (a start cut off by
+           ``max_nfev`` ranks behind every converged start)
 
         Parameters
         ----------
@@ -742,7 +822,7 @@ class MultiStartOrchestrator:
             Dependent variable data.
         p0 : np.ndarray, optional
             Initial parameter guess. Used for centering if center_on_p0=True.
-        bounds : tuple, optional
+        bounds : tuple or scipy.optimize.Bounds, optional
             Tuple of (lower_bounds, upper_bounds) for parameters. If None,
             bounds are inferred from data.
         kwargs : dict
@@ -762,6 +842,11 @@ class MultiStartOrchestrator:
         """
         xdata = np.asarray(xdata)
         ydata = np.asarray(ydata)
+        from nlsq.core.minpack import _bounds_as_tuple
+
+        bounds = _bounds_as_tuple(
+            bounds
+        )  # scipy.optimize.Bounds -> (lb, ub); None kept
 
         # timeit/return_eval/full_output make curve_fit return a plain tuple, which
         # carries neither cost nor diagnostics. Run the search with CurveFitResult
@@ -795,7 +880,7 @@ class MultiStartOrchestrator:
                 xdata,
                 ydata,
                 p0=p0,
-                bounds=bounds or (-np.inf, np.inf),
+                bounds=bounds if bounds is not None else (-np.inf, np.inf),
                 **kwargs,
                 **tuple_modes,
             )
@@ -805,6 +890,10 @@ class MultiStartOrchestrator:
             # Add diagnostics to result
             result["multistart_diagnostics"] = diagnostics
             return result
+
+        # timeit alone: attempts record solver timing (kept for the winner). With
+        # return_eval/full_output curve_fit ignores timeit, so attempts run plain.
+        kwargs["timeit"] = tuple_modes.keys() == {"timeit"}
 
         # Rows with NaN/Inf (dropped later by nan_policy='omit') must not reach the
         # p0 / bounds heuristics, which would return NaN for them.
@@ -922,30 +1011,31 @@ class MultiStartOrchestrator:
         # Merge parallel diagnostics
         diagnostics.update(parallel_diag)
 
-        # Count successful evaluations
-        n_successful = sum(
-            1 for _, loss, _ in evaluation_results if loss < float("inf")
-        )
+        # n_starts_finite: finite loss (eligible to win); n_starts_successful: also
+        # converged (result.success), so a max_nfev cut-off is not counted.
+        n_finite = sum(1 for _, loss, _ in evaluation_results if loss < float("inf"))
         diagnostics["n_starts_evaluated"] = len(evaluation_results)
-        diagnostics["n_starts_successful"] = n_successful
+        diagnostics["n_starts_finite"] = n_finite
+        diagnostics["n_starts_successful"] = sum(
+            1
+            for _, loss, res in evaluation_results
+            if loss < float("inf") and _is_converged(res)
+        )
 
         # Select best result
-        if n_successful == 0:
+        if n_finite == 0:
             self.logger.warning(
                 "All starting points failed, falling back to single-start",
             )
             # Fall back to single-start with original p0
-            result = self.curve_fit.curve_fit(  # type: ignore[assignment]
-                f,
-                xdata,
-                ydata,
-                p0=p0,
-                bounds=fit_bounds,
-                **kwargs,
+            result = _unwrap_timeit(
+                self.curve_fit.curve_fit(
+                    f, xdata, ydata, p0=p0, bounds=fit_bounds, **kwargs
+                )
             )
             diagnostics["fallback_to_single_start"] = True
         else:
-            # Get best result (first in sorted list with finite loss)
+            # Best result: first in the list (converged and finite ranks first)
             best_params, best_loss, best_result = evaluation_results[0]
 
             self.logger.info(
@@ -957,6 +1047,7 @@ class MultiStartOrchestrator:
             )
 
             diagnostics["best_loss"] = best_loss
+            self._note_cheaper_unconverged(evaluation_results, best_loss, diagnostics)
             diagnostics["all_losses"] = [
                 loss for _, loss, _ in evaluation_results if loss < float("inf")
             ]
@@ -965,13 +1056,10 @@ class MultiStartOrchestrator:
                 result = best_result
             else:
                 # Shouldn't happen, but fallback
-                result = self.curve_fit.curve_fit(  # type: ignore[assignment]
-                    f,
-                    xdata,
-                    ydata,
-                    p0=best_params,
-                    bounds=fit_bounds,
-                    **kwargs,
+                result = _unwrap_timeit(
+                    self.curve_fit.curve_fit(
+                        f, xdata, ydata, p0=best_params, bounds=fit_bounds, **kwargs
+                    )
                 )
 
         # Add diagnostics to result
@@ -982,15 +1070,14 @@ class MultiStartOrchestrator:
             result.multistart_diagnostics = diagnostics  # type: ignore[attr-defined]
 
         if tuple_modes:
-            # Refit once from the winner (already converged) in the requested mode.
-            return self.curve_fit.curve_fit(  # type: ignore[return-value]
+            return _format_tuple_mode(
+                result,
                 f,
-                xdata,
-                ydata,
-                p0=np.asarray(result.popt),
-                bounds=fit_bounds,
-                **kwargs,
-                **tuple_modes,
+                # return_eval: rows after nan omission, before the user data_mask
+                x_fin if kwargs.get("nan_policy") == "omit" else xdata,
+                tuple_modes,
+                diagnostics.get("wall_time_sec", 0.0),
+                kwargs.get("data_mask"),
             )
 
         return result

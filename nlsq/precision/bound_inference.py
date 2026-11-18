@@ -82,9 +82,12 @@ class BoundsInference:
         enforce_positivity: bool = True,
     ):
         """Initialize bounds inference."""
-        self.xdata = np.asarray(xdata)
-        self.ydata = np.asarray(ydata)
-        self.p0 = np.asarray(p0)
+        # float64 so integer / float16 data cannot wrap or overflow in ranges
+        self.xdata = np.asarray(xdata, dtype=np.float64)
+        self.ydata = np.asarray(ydata, dtype=np.float64)
+        self.p0 = np.atleast_1d(np.asarray(p0, dtype=np.float64))
+        if not np.isfinite(self.p0).all():
+            raise ValueError("p0 must be finite to infer bounds")
         if not (np.isfinite(safety_factor) and safety_factor >= 1):
             raise ValueError(
                 f"safety_factor must be finite and >= 1, got {safety_factor!r}"
@@ -343,7 +346,7 @@ def infer_bounds_for_multistart(
     infer_bounds : Standard bound inference with smaller safety_factor
     merge_bounds : Merge user-provided and inferred bounds
     """
-    p0 = np.asarray(p0)
+    p0 = np.atleast_1d(np.asarray(p0, dtype=np.float64))
 
     # Infer bounds with larger safety factor for exploration
     inferred_bounds = infer_bounds(
@@ -373,10 +376,17 @@ def infer_bounds_for_multistart(
     # (e.g. user lb=100 vs inferred ub=20): widen the filled-in side instead.
     lo_m, hi_m = np.asarray(merged_bounds[0]), np.asarray(merged_bounds[1])
     span = np.maximum(np.abs(np.where(np.isfinite(lo_m), lo_m, hi_m)), 1.0)
-    span = np.where(np.isfinite(span), span, 1.0) * safety_factor
+    with np.errstate(over="ignore"):
+        span = np.where(np.isfinite(span), span, 1.0) * safety_factor
+        up_cand = lo_m + span
+        lo_cand = hi_m - span
+    # An overflowing candidate falls back to the largest representable endpoint.
+    fmax = np.finfo(np.float64).max
+    up_cand = np.where(np.isfinite(up_cand), up_cand, fmax)
+    lo_cand = np.where(np.isfinite(lo_cand), lo_cand, -fmax)
     bad = lower >= upper
-    upper = np.where(bad & np.isfinite(lo_m) & ~np.isfinite(hi_m), lo_m + span, upper)
-    lower = np.where(bad & ~np.isfinite(lo_m) & np.isfinite(hi_m), hi_m - span, lower)
+    upper = np.where(bad & np.isfinite(lo_m) & ~np.isfinite(hi_m), up_cand, upper)
+    lower = np.where(bad & ~np.isfinite(lo_m) & np.isfinite(hi_m), lo_cand, lower)
 
     # Final check: if bounds are still not finite, use fallback
     # Vectorized fallback for lower bounds
@@ -406,6 +416,15 @@ def infer_bounds_for_multistart(
         )
         # Apply fallback only where upper is not finite
         upper = np.where(np.isfinite(upper), upper, fallback_upper)
+
+    # LHS needs a finite, ordered box; a user bound no fallback can bracket
+    # (crossed, or beyond the float range) must fail loudly, not sample garbage.
+    invalid = ~(np.isfinite(lower) & np.isfinite(upper) & (lower < upper))
+    if invalid.any():
+        raise ValueError(
+            "Cannot form a finite multistart interval with lower < upper for "
+            f"parameter(s) {np.flatnonzero(invalid).tolist()}; check bounds"
+        )
 
     return lower, upper
 
@@ -449,6 +468,7 @@ def merge_bounds(
     - If user provides -np.inf for lower bound, use inferred lower bound
     - If user provides np.inf for upper bound, use inferred upper bound
     - Scalar user bounds are broadcast to all parameters
+    - NaN, ``+inf`` lower or ``-inf`` upper user bounds raise ``ValueError``
     """
     lower_inferred, upper_inferred = inferred_bounds
 
@@ -457,15 +477,26 @@ def merge_bounds(
 
     lower_user, upper_user = user_bounds
 
+    # Only -inf (lower) / +inf (upper) mean "unbounded"; anything else
+    # non-finite is a malformed constraint, not a request for inferred bounds.
+    lower_user_arr = np.atleast_1d(np.asarray(lower_user, dtype=np.float64))
+    upper_user_arr = np.atleast_1d(np.asarray(upper_user, dtype=np.float64))
+    if (
+        np.isnan(lower_user_arr).any()
+        or np.isnan(upper_user_arr).any()
+        or np.isposinf(lower_user_arr).any()
+        or np.isneginf(upper_user_arr).any()
+    ):
+        raise ValueError(
+            "user bounds must not contain NaN, +inf lower or -inf upper values"
+        )
+
     # Check if user bounds are effectively infinite (all -inf, all +inf)
-    lower_user_arr = np.atleast_1d(lower_user)
-    upper_user_arr = np.atleast_1d(upper_user)
     if np.all(np.isneginf(lower_user_arr)) and np.all(np.isposinf(upper_user_arr)):
         return lower_inferred, upper_inferred
 
-    # Convert to arrays
-    lower_user = np.atleast_1d(lower_user)
-    upper_user = np.atleast_1d(upper_user)
+    lower_user = lower_user_arr
+    upper_user = upper_user_arr
 
     # Broadcast scalar bounds to all parameters
     n_params = len(lower_inferred)
@@ -507,6 +538,7 @@ def analyze_bounds_quality(
         Dictionary with quality metrics:
         - is_feasible: bool, whether p0 is within bounds
         - bound_ratios: ndarray, upper/lower ratios for each parameter
+          (lower < 0: bound width divided by |p0|)
         - avg_bound_ratio: float, geometric mean of bound ratios
         - tight_parameters: list, indices of tightly constrained parameters
         - loose_parameters: list, indices of loosely constrained parameters
@@ -528,7 +560,7 @@ def analyze_bounds_quality(
     # Compute bound ratios vectorized
     # Case 1: lower > 0 -> ratio = upper / lower
     # Case 2: lower == 0 and upper > 0 -> ratio = inf
-    # Case 3: lower < 0 -> ratio = (upper - lower) / max(|lower|, |upper|)
+    # Case 3: lower < 0 -> ratio = (upper - lower) / |p0| (width vs. parameter scale)
 
     # Vectorized computation of bound ratios
     abs_lower = np.abs(lower)
@@ -545,8 +577,10 @@ def analyze_bounds_quality(
     ratio_positive_lower = upper / safe_lower
 
     # Case 2: lower == 0 and upper > 0 -> inf
-    # Case 3: lower < 0 -> (upper - lower) / max(|lower|, |upper|)
-    ratio_negative_lower = (upper - lower) / safe_max_abs
+    # Case 3: lower < 0 -> (upper - lower) / |p0|; the old max(|lower|, |upper|)
+    # divisor capped the ratio at 2, labelling every straddling interval tight
+    p0_scale = np.where(np.abs(p0) > 0, np.abs(p0), safe_max_abs)
+    ratio_negative_lower = (upper - lower) / p0_scale
 
     # Select the appropriate ratio based on lower bound value
     bound_ratios = np.where(

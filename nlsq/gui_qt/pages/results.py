@@ -26,8 +26,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from scipy import stats
 
+from nlsq.gui_qt.adapters.fit_adapter import (
+    confidence_band,
+    parameter_confidence_intervals,
+)
 from nlsq.gui_qt.plots import decimation_note
 from nlsq.gui_qt.plots.fit_plot import FitPlotWidget
 from nlsq.gui_qt.plots.histogram_plot import HistogramPlotWidget
@@ -76,6 +79,45 @@ def _information_criteria(
     return float(2 * k + base), float(k * np.log(n) + base)
 
 
+# Status text colours per theme. The light amber/green/red are >= 4.5:1 on every
+# light-theme surface (the stock #FF9800 is ~2.2:1 on white).
+_STATUS_COLORS = {
+    "dark": {
+        "ok": "#4CAF50",
+        "warn": "#FF9800",
+        "bad": "#f44336",
+        "muted": "gray",
+    },
+    "light": {
+        "ok": "#2E7D32",
+        "warn": "#A65300",
+        "bad": "#C62828",
+        "muted": "#616161",
+    },
+}
+
+
+def _degeneracy_note(
+    popt: Any, pcov: Any, ydata: Any, intervals: np.ndarray | None
+) -> str | None:
+    """Why a "successful" fit is statistically meaningless, or None.
+
+    ``intervals`` are the parameter intervals actually shown: with a known
+    absolute sigma ``n <= p`` still gives finite ones, so only undefined
+    (non-finite) intervals are called undefined.
+    """
+    n_data = len(ydata) if ydata is not None else 0
+    undefined = intervals is None or not np.all(np.isfinite(intervals))
+    if popt is not None and 0 < n_data <= len(popt) and undefined:
+        return (
+            f"underdetermined fit ({n_data} data points, {len(popt)} parameters): "
+            "uncertainties and confidence intervals are undefined"
+        )
+    if pcov is not None and not np.all(np.isfinite(pcov)):
+        return "covariance could not be estimated: uncertainties are not finite"
+    return None
+
+
 class ResultsPage(QWidget):
     """Page for viewing fit results.
 
@@ -97,7 +139,11 @@ class ResultsPage(QWidget):
         self._app_state = app_state
         self._has_results = False
         self._last_result = None
+        self._theme_name = "dark"
+        self._status_role = "muted"
         self._last_statistics: dict[str, float] = {}  # finite R^2 / RMSE for export
+        self._theme_name = "dark"
+        self._status_role = "muted"
         self._setup_ui()
         self._connect_signals()
 
@@ -195,7 +241,7 @@ class ResultsPage(QWidget):
         # Status row
         status_row = QHBoxLayout()
         self._status_label = QLabel("No fit results available")
-        self._status_label.setStyleSheet("color: gray;")
+        self._set_status("No fit results available", "muted")
         status_row.addWidget(self._status_label)
         status_row.addStretch()
         layout.addLayout(status_row)
@@ -218,11 +264,20 @@ class ResultsPage(QWidget):
         Args:
             theme: Theme configuration
         """
+        self._theme_name = theme.name
+        self._set_status(self._status_label.text(), self._status_role)
         self._param_results.set_theme(theme)
         self._fit_statistics.set_theme(theme)
         self._fit_plot.set_theme(theme)
         self._residuals_plot.set_theme(theme)
         self._histogram_plot.set_theme(theme)
+
+    def _set_status(self, text: str, role: str) -> None:
+        """Show ``text`` in the status colour of ``role`` for the current theme."""
+        self._status_role = role
+        self._status_label.setText(text)
+        color = _STATUS_COLORS.get(self._theme_name, _STATUS_COLORS["dark"])[role]
+        self._status_label.setStyleSheet(f"color: {color};")
 
     def update_results(self, result: Any) -> None:
         """Update the display with new fit results.
@@ -248,8 +303,7 @@ class ResultsPage(QWidget):
             self._residuals_plot.clear()
             self._histogram_plot.clear()
             self._export_btn.setEnabled(False)
-            self._status_label.setText(f"Could not display fit results: {e}")
-            self._status_label.setStyleSheet("color: #f44336;")
+            self._set_status(f"Could not display fit results: {e}", "bad")
 
     def _model_values(self, xdata: np.ndarray, popt: Any) -> np.ndarray | None:
         """Model evaluated at the data, or None if it cannot be evaluated."""
@@ -293,21 +347,19 @@ class ResultsPage(QWidget):
 
         # Update parameter results (never keep the previous fit's table)
         self._param_results.clear()
+        shown = None  # the intervals displayed, for the degeneracy note
         if popt is not None and param_names:
             values = list(popt)
             uncertainties = list(perr) if perr is not None else []
 
-            # Compute confidence intervals using t-distribution (correct for small n)
+            # Intervals come from the result (known-sigma / dof rules; NaN when
+            # undefined), the same numbers the CSV/JSON exports write.
             ci = None
             if perr is not None:
                 n_data = len(state.ydata) if state.ydata is not None else 0
-                n_params = len(values)
-                dof = max(n_data - n_params, 1)
-                t_val = stats.t.ppf(0.975, dof)
-                ci = [
-                    (v - t_val * e, v + t_val * e)
-                    for v, e in zip(values, uncertainties, strict=False)
-                ]
+                shown = parameter_confidence_intervals(result, n_data)
+                if shown is not None:
+                    ci = [(float(lo), float(hi)) for lo, hi in shown]
 
             self._param_results.set_results(
                 names=param_names,
@@ -330,12 +382,18 @@ class ResultsPage(QWidget):
         # Update status
         converged = getattr(result, "success", True)
         n_iter = getattr(result, "nfev", 0)
+        # chunked fits report no function-evaluation count: do not show "0"
+        evaluations = f" ({n_iter} evaluations)" if n_iter else ""
         if converged:
-            status_text = f"Fit completed successfully ({n_iter} evaluations)"
-            status_color = "#4CAF50"
+            status_text = f"Fit completed successfully{evaluations}"
+            status_color = "ok"
         else:
-            status_text = f"Fit completed with warnings ({n_iter} evaluations)"
-            status_color = "#FF9800"
+            status_text = f"Fit completed with warnings{evaluations}"
+            status_color = "warn"
+
+        if degenerate := _degeneracy_note(popt, pcov, ydata, shown):
+            status_text += f" — {degenerate}"
+            status_color = "warn"
 
         if n_nonfinite_residuals:
             # The residuals/histogram plots silently drop non-finite points
@@ -345,7 +403,7 @@ class ResultsPage(QWidget):
             status_text += (
                 f" — {n_nonfinite_residuals} non-finite residual(s) excluded from plots"
             )
-            status_color = "#FF9800"
+            status_color = "warn"
 
         if xdata is not None and (
             note := decimation_note(
@@ -360,13 +418,13 @@ class ResultsPage(QWidget):
 
         if model_failed:
             status_text += " — model could not be evaluated; statistics unavailable"
-            status_color = "#FF9800"
+            status_color = "warn"
 
         # Notes recorded by the fit adapter (settings that could not be honoured)
         notes = getattr(result, "gui_notes", None)
         if notes:
             status_text += " — " + "; ".join(notes)
-            status_color = "#FF9800"
+            status_color = "warn"
 
         if state.sigma is not None:
             status_text += (
@@ -377,8 +435,7 @@ class ResultsPage(QWidget):
                 "reduced chi-square)"
             )
 
-        self._status_label.setText(status_text)
-        self._status_label.setStyleSheet(f"color: {status_color};")
+        self._set_status(status_text, status_color)
 
         self._export_btn.setEnabled(True)
 
@@ -629,46 +686,28 @@ class ResultsPage(QWidget):
         # Compute residuals
         residuals = ydata - y_fit
 
-        # Compute confidence bands if covariance available
-        pcov = getattr(result, "pcov", None)
+        # Confidence band from the result (the library's domain-aware delta
+        # method), evaluated on the dense grid only: a band at every data point
+        # of a 500K-point fit would block the GUI thread for seconds.
         conf_lower = None
         conf_upper = None
-
-        if pcov is not None and state.model_func is not None:
-            try:
-                # Use delta method for confidence bands
-                conf_lower, conf_upper = self._compute_confidence_bands(
-                    x_dense,
-                    popt,
-                    pcov,
-                    state.model_func,
-                    n_data=n_points(xdata),
-                )
-            except Exception as e:
-                # Log error but don't crash UI
-                logger.error(f"Failed to compute confidence bands: {e}", exc_info=True)
-                conf_lower = None
-                conf_upper = None
+        band = confidence_band(result, x_dense)
+        if band is not None:
+            conf_lower, conf_upper = band
 
         # Update fit plot
         self._fit_plot.set_data(xdata, ydata)
         self._fit_plot.set_fit(x_dense, y_dense, conf_lower, conf_upper)
 
-        # Compute confidence interval for residuals (at data points)
+        # Residual interval at the data points: the band half-width is smooth,
+        # so interpolate it from the dense grid instead of re-evaluating there.
+        # Display-only limit: a feature narrower than the 500-point grid spacing
+        # is smoothed out (the dense curve has the same resolution).
         conf_interval_resid = None
-        if pcov is not None and state.model_func is not None:
-            try:
-                # Calculate CI at original data points
-                c_low, c_high = self._compute_confidence_bands(
-                    xdata,
-                    popt,
-                    pcov,
-                    state.model_func,
-                )
-                conf_interval_resid = (c_high - c_low) / 2
-            except Exception:
-                # Logging handled in _compute_confidence_bands, just ignore here
-                pass
+        if band is not None:
+            conf_interval_resid = np.interp(
+                xdata, x_dense, (conf_upper - conf_lower) / 2
+            )
 
         # Update residuals plot
         self._residuals_plot.set_residuals(
@@ -683,64 +722,6 @@ class ResultsPage(QWidget):
 
         return int(np.count_nonzero(~np.isfinite(residuals)))
 
-    def _compute_confidence_bands(
-        self,
-        x: np.ndarray,
-        popt: np.ndarray,
-        pcov: np.ndarray,
-        model_func: Any,
-        n_data: int | None = None,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Compute confidence bands using the delta method.
-
-        Args:
-            x: X values for band computation
-            popt: Fitted parameters
-            pcov: Covariance matrix
-            model_func: Model function
-            n_data: Actual number of data points for DOF calculation.
-                If None, falls back to len(x).
-
-        Returns:
-            Tuple of (lower_band, upper_band)
-        """
-        # Compute numerical gradient of model w.r.t. parameters
-        # Step scaled to |p| so p + h != p for large parameters (an absolute
-        # 1e-8 step gives J = 0 once |p| >~ 1e8).
-        eps = float(np.sqrt(np.finfo(float).eps))
-        # Ensure popt is a mutable numpy array (handle JAX arrays)
-        popt = np.array(popt, dtype=float)
-        n_params = len(popt)
-        n_points = len(x)
-
-        # Jacobian: df/dp at each x point
-        J = np.zeros((n_points, n_params))
-
-        y_base = np.asarray(model_func(x, *popt), dtype=float)
-
-        for i in range(n_params):
-            h = eps * max(1.0, abs(popt[i]))
-            popt_plus = popt.copy()
-            popt_plus[i] += h
-            popt_minus = popt.copy()
-            popt_minus[i] -= h
-            y_plus = np.asarray(model_func(x, *popt_plus), dtype=float)
-            y_minus = np.asarray(model_func(x, *popt_minus), dtype=float)
-            J[:, i] = (y_plus - y_minus) / (2.0 * h)
-
-        # Variance at each point: diag(J @ pcov @ J.T)
-        # More efficient: sum((J @ pcov) * J, axis=1)
-        var = np.sum((J @ pcov) * J, axis=1)
-        std = np.sqrt(np.maximum(var, 0))
-
-        # 95% confidence using t-distribution (consistent with parameter CIs)
-        dof = max((n_data if n_data is not None else n_points) - n_params, 1)
-        t_val = stats.t.ppf(0.975, dof)
-        conf_lower = y_base - t_val * std
-        conf_upper = y_base + t_val * std
-
-        return conf_lower, conf_upper
-
     def clear(self) -> None:
         """Clear all results."""
         self._has_results = False
@@ -749,8 +730,7 @@ class ResultsPage(QWidget):
         self._fit_plot.clear()
         self._residuals_plot.clear()
         self._histogram_plot.clear()
-        self._status_label.setText("No fit results available")
-        self._status_label.setStyleSheet("color: gray;")
+        self._set_status("No fit results available", "muted")
 
     def has_results(self) -> bool:
         """Check if results are available.

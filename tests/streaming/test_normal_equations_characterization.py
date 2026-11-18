@@ -135,9 +135,18 @@ def run_phases_accumulate_chunk():
 # ``hybrid_pen_*`` / ``hybrid_ragged_*`` entries were re-captured on 2026-11-04
 # when the group-variance penalty moved from normalized to physical parameters
 # (an intentional correctness fix, not a refactor drift).
+# Re-captured again on 2026-11-16 for two intended Phase 2 changes: (1) an over-long
+# Gauss-Newton step is now the damped Euclidean trust-region step ((H + lam I) p = g,
+# ||p|| = radius), not a shrunk Newton step; (2) a cost-change stop only counts as
+# converged when the (penalty-inclusive) relative gradient is <= 1e-6, so Phase 2 may
+# take extra iterations. Switching both off reproduces the old values. Max relative
+# change vs the 2026-11-04 values: x 4.2e-09, rss 4.7e-09, pcov 1.5e-08.
 GOLDEN = {
     "exact_lm": {
-        "x": [2.0011127994390256, 1.3003529583685232],
+        "x": [
+            2.0011127994390256,
+            1.3003529392333386,
+        ],  # was ...9583685232 before the ftol step
         "cost": 25.051368401882545,
         "pcov": [
             [3.256465004542377e-06, 2.116502423163314e-06],
@@ -161,19 +170,19 @@ GOLDEN = {
         ],
     },
     "hybrid_pen_scan": {
-        "x": [1.9860233185007954, 1.3095526853503199],
-        "rss": 50.928023778944485,
+        "x": [1.9860233164887882, 1.3095526797849806],
+        "rss": 50.92802353857101,
         "pcov": [
-            [3.333467855747359e-06, 2.1984236130354847e-06],
-            [2.1984236130354847e-06, 2.9002396563823016e-06],
+            [3.333467825879986e-06, 2.198423586240522e-06],
+            [2.198423586240522e-06, 2.9002396116461354e-06],
         ],
     },
     "hybrid_pen_loop": {
-        "x": [1.9860233185007954, 1.3095526853503199],
-        "rss": 50.928023778944485,
+        "x": [1.9860233164887882, 1.3095526797849806],
+        "rss": 50.92802353857101,
         "pcov": [
-            [3.333467855747359e-06, 2.1984236130354847e-06],
-            [2.1984236130354847e-06, 2.9002396563823016e-06],
+            [3.333467825879986e-06, 2.198423586240522e-06],
+            [2.198423586240522e-06, 2.9002396116461354e-06],
         ],
     },
     "hybrid_chunk": {
@@ -194,19 +203,19 @@ GOLDEN = {
     },
     # chunk_size=6000 -> chunks of 6000, 6000, 6000, 2000 (ragged tail), penalty on.
     "hybrid_ragged_scan": {
-        "x": [1.9860233185007954, 1.3095526853503199],
-        "rss": 50.92802377894448,
+        "x": [1.9860233164887882, 1.3095526797849806],
+        "rss": 50.92802353857101,
         "pcov": [
-            [3.3334678557473604e-06, 2.1984236130354864e-06],
-            [2.1984236130354864e-06, 2.9002396563823033e-06],
+            [3.333467825879986e-06, 2.198423586240522e-06],
+            [2.198423586240522e-06, 2.9002396116461354e-06],
         ],
     },
     "hybrid_ragged_loop": {
-        "x": [1.9860233185007954, 1.3095526853503199],
-        "rss": 50.92802377894448,
+        "x": [1.9860233164887882, 1.3095526797849806],
+        "rss": 50.92802353857101,
         "pcov": [
-            [3.3334678557473604e-06, 2.1984236130354864e-06],
-            [2.1984236130354864e-06, 2.9002396563823033e-06],
+            [3.333467825879986e-06, 2.198423586240522e-06],
+            [2.198423586240522e-06, 2.9002396116461354e-06],
         ],
     },
     # GaussNewtonPhase._gauss_newton_iteration from p0_norm + [0.3, -0.2], radius 1.0.

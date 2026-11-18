@@ -76,12 +76,12 @@ class TestBIPOPRestarterPopulationSizing:
         pop2 = restarter.get_next_popsize()
         restarter.register_restart()
 
-        # Third: large again
+        # Third: large again, doubled (IPOP-style growth)
         pop3 = restarter.get_next_popsize()
 
         assert pop1 == 16  # Large
         assert 4 <= pop2 <= 8  # Small (base/2 to base)
-        assert pop3 == 16  # Large again
+        assert pop3 == 32  # Large again, 2x the previous large run
 
     def test_small_population_bounds(self) -> None:
         """Test that small population respects minimum size."""

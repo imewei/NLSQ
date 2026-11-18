@@ -45,13 +45,16 @@ def test_unchanged_proposals_are_not_retried():
         return {"success": False, "cost": np.inf}
 
     rec = OptimizationRecovery(max_retries=1)
+    x0 = np.ones(2)
     ok, _ = rec.recover_from_failure(
-        "optimization_error", {"method": "trf", "x": np.ones(2), "bounds": B}, opt
+        "optimization_error", {"method": "trf", "x": x0, "bounds": B}, opt
     )
     assert not ok
     # _reformulate_problem proposes nothing and a bounded trf has no switch
-    # target, so those strategies must not burn a solver call each.
-    assert all(c != {"method": "trf", "x": c["x"], "bounds": B} for c in calls)
+    # target, so those strategies must not burn a solver call each: every
+    # solver call must carry a changed start point.
+    assert calls
+    assert all(not np.array_equal(c["x"], x0) for c in calls)
 
 
 def test_bounded_fit_with_recovery_emits_no_strategy_failed_warnings():

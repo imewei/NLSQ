@@ -11,7 +11,10 @@ The stability parameter in curve_fit() controls numerical stability behavior:
 
 - ``stability=False`` (default): No stability checks. Maximum performance.
 - ``stability='check'``: Check for issues and warn, but don't modify data.
-- ``stability='auto'``: Automatically detect and fix numerical issues.
+- ``stability='auto'``: Detect numerical issues and log them. ``curve_fit``
+  never modifies ``xdata``/``ydata``/``p0`` in this mode (see item 3 below);
+  like ``'check'``, it only enables the Jacobian check, algorithm selection
+  and ``x_scale`` selection.
 
 Key Design Decisions (v0.3.0)
 =============================
@@ -45,11 +48,15 @@ MAX_JACOBIAN_ELEMENTS_FOR_SVD : int = 10_000_000
     - For large datasets (10M points x 3 params = 30M), SVD is skipped
 
 CONDITION_THRESHOLD : float = 1e12
-    Threshold for detecting ill-conditioned matrices. Condition numbers
-    above this trigger regularization warnings or automatic fixes.
+    Default of ``NumericalStabilityGuard.condition_threshold`` (an instance
+    attribute, not a module constant). Condition numbers above it trigger
+    warnings and, in ``check_and_fix_jacobian``, a diagonal shift.
 
 REGULARIZATION_FACTOR : float = 1e-10
-    Default Tikhonov regularization factor for ill-conditioned problems.
+    Default of ``NumericalStabilityGuard.regularization_factor`` (instance
+    attribute). ``check_and_fix_jacobian`` adds ``factor * max_sv`` to the
+    diagonal of the (rectangular) Jacobian itself; this is a diagonal
+    perturbation, not a Tikhonov term ``J^T J + lambda I``.
 
 See Also
 --------
@@ -60,6 +67,7 @@ check_problem_stability : Pre-flight stability check for optimization
 
 from __future__ import annotations
 
+import math
 import warnings
 from collections.abc import Callable
 
@@ -122,40 +130,170 @@ def solve_with_cholesky_fallback(
     approximately 3x faster than eigenvalue decomposition. The JAX-compatible
     fallback pattern uses NaN detection instead of Python try/except.
 
+    Non-finite ``A`` or ``b`` give a NaN solution with ``used_cholesky=False``.
+
+    Extreme magnitudes (entries above ``sqrt(finfo.max)``) are handled by
+    Jacobi equilibration for the Cholesky attempt and by one uniform scale plus
+    a two-band split of ``b`` in the eigenvalue fallback. Each band gets its own
+    power-of-two scale so that neither ``V^T b`` nor the eigen-coefficients
+    ``(V^T b)/lambda`` overflow; ordinary magnitudes are bit-identical to the
+    unscaled computation. Remaining dynamic-range limits:
+
+    1. A result component outside the dtype's range overflows to ``inf`` or
+       flushes to zero/subnormal (the answer itself is unrepresentable).
+    2. In the fallback, ``A`` entries smaller than ``max|A| * tiny`` flush to
+       zero when ``A`` is scaled down (their eigenvalues are below the
+       regularization floor ``eps * max|lambda|`` anyway).
+    3. Two magnitude bands only: when an amplification-driven scale (large
+       ``1/min|lambda|``) is applied to a band, a component of that same band
+       smaller than ``scale * tiny`` flushes to zero; components in different
+       bands do not interact.
+    4. The bands are summed, so an answer that is finite only through
+       cancellation between two overflowing bands is not resolved.
+
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> A = jnp.array([[4.0, 2.0], [2.0, 3.0]])  # Positive definite
     >>> b = jnp.array([1.0, 2.0])
     >>> x, used_cholesky = solve_with_cholesky_fallback(A, b)
-    >>> used_cholesky
+    >>> bool(used_cholesky)
     True
     """
-    # Ensure symmetry
-    A = 0.5 * (A + A.T)
+    # Entries near the dtype's maximum break both A + A.T (overflow) and LAPACK's
+    # Cholesky even when the true factor is finite. Under jit XLA also reassociates
+    # 0.5*A + 0.5*A.T into 0.5*(A + A.T), so scaling must come BEFORE symmetrizing.
+    # Two scalings, each active only above sqrt(finfo.max) (else exactly x1, so
+    # ordinary matrices are bit-identical to the unscaled computation):
+    #  * Cholesky attempt: Jacobi equilibration D_i = 1/sqrt(A_ii) when every
+    #    diagonal entry is finite and positive, keeping independently scaled
+    #    rows/RHS entries from underflowing.
+    #  * eigenvalue fallback: one uniform scale s (eigenvectors unchanged), with
+    #    the regularization clamp evaluated in the ORIGINAL units.
+    finite_input = jnp.all(jnp.isfinite(A)) & jnp.all(jnp.isfinite(b))
+    peak = jnp.max(jnp.abs(A))
+    extreme = finite_input & (peak > jnp.sqrt(jnp.finfo(A.dtype).max))
+    one = jnp.ones((), A.dtype)
+
+    diag = jnp.diagonal(A)
+    all_positive = jnp.all(jnp.isfinite(diag) & (diag > 0))
+    root = jnp.sqrt(jnp.where(diag > 0, diag, 1.0))  # sqrt first: no overflow
+    d_vec = jnp.where(extreme & all_positive, 1.0 / root, one)
+    A_c = (A * d_vec[:, None]) * d_vec[None, :]
+    A_c = 0.5 * (A_c + A_c.T)  # ensure symmetry
 
     # Try Cholesky decomposition
-    L = jnp.linalg.cholesky(A)
-    x_chol = jax.scipy.linalg.cho_solve((L, True), b)
+    L = jnp.linalg.cholesky(A_c)
+    x_chol = jax.scipy.linalg.cho_solve((L, True), b * d_vec) * d_vec
 
-    # Check if Cholesky succeeded (no NaNs)
-    cholesky_valid = jnp.all(jnp.isfinite(x_chol))
+    # Cholesky succeeded only with a finite factor with a positive diagonal AND
+    # a finite solution (an infinite factor can yield a finite wrong solution).
+    cholesky_valid = (
+        jnp.all(jnp.isfinite(L))
+        & jnp.all(jnp.diagonal(L) > 0)
+        & jnp.all(jnp.isfinite(x_chol))
+    )
 
     # Eigenvalue fallback
     def eigenvalue_solve():
-        eigvals, eigvecs = jnp.linalg.eigh(A)
+        s = jnp.where(extreme, peak, one)
+        A_u = A / s
+        A_u = 0.5 * (A_u + A_u.T)
+        eigvals, eigvecs = jnp.linalg.eigh(A_u)  # eigenvalues are lambda / s
         # Regularize small/negative eigenvalues. Use an absolute floor of 1
-        # in addition to the relative scale: for an all-zero (or near-zero)
-        # matrix, jnp.max(jnp.abs(eigvals)) is 0, which would make eps 0 and
+        # (in original units) in addition to the relative scale: for an all-zero
+        # (or near-zero) matrix, max|lambda| is 0, which would make eps 0 and
         # divide-by-zero below, returning NaN instead of a damped solution.
-        eps = jnp.finfo(A.dtype).eps * jnp.maximum(jnp.max(jnp.abs(eigvals)), 1.0)
-        eigvals_safe = jnp.maximum(eigvals, eps)
-        return eigvecs @ (eigvecs.T @ b / eigvals_safe)
+        # Genuinely negative eigenvalues keep their sign, so an indefinite
+        # nonsingular A is still solved exactly instead of returning a
+        # ~1/eps-sized (or wrong) vector. In scaled units eps*max(max|lambda|, 1)
+        # is finfo.eps * max(max|lambda_u|, 1/s) (s = 1 unless extreme).
+        eps = jnp.finfo(A.dtype).eps * jnp.maximum(jnp.max(jnp.abs(eigvals)), 1.0 / s)
+        # Within n*eps*max (rank-style tolerance, as rounding noise of a
+        # rank-deficient Gram matrix exceeds a bare eps) the HEAD clamp
+        # max(lambda, eps) applies; only larger |lambda| keep their sign.
+        tol = A.shape[0] * eps
+        eigvals_safe = jnp.where(
+            jnp.abs(eigvals) <= tol, jnp.maximum(eigvals, eps), eigvals
+        )
+        # The solve is linear in b, so b is split into two magnitude bands that
+        # are projected separately and summed in original units: components above
+        # thr = max/(2 n2) go in one band, the rest in the other, so a small
+        # component is never flushed by a scale chosen for a huge one. Each band
+        # is scaled by its own power of two c <= 1 chosen (in exponent
+        # arithmetic) so that neither V^T b nor the eigen-coefficients
+        # (V^T b)/lambda can exceed finfo.max/2:
+        #   n2 * max|b_band| * c / min(min|lambda_safe|, 1) <= finfo.max/2.
+        # c is undone after V @ y (y alone can exceed the dtype maximum when x
+        # does not). b / s is never formed (it would underflow representable
+        # components); s divides only after the eigenvalue division. When the
+        # bound already holds (ordinary magnitudes) c = 1 and the result is
+        # bit-identical to the unscaled formula.
+        n2 = 2.0 ** math.ceil(math.log2(max(b.size, 1)))
+        finfo = jnp.finfo(A.dtype)
+        thr = finfo.max / (2.0 * n2)
+        high = jnp.abs(b) > thr
+        lam_floor = jnp.minimum(jnp.min(jnp.abs(eigvals_safe)), 1.0)
+
+        def project(b_band):
+            peak_b = jnp.max(jnp.abs(b_band))
+            # log2 of the largest admissible c; +inf for an all-zero band
+            headroom = (
+                math.log2(float(finfo.max) / 2.0)
+                - math.log2(n2)
+                - jnp.log2(peak_b)
+                + jnp.log2(lam_floor)
+            )
+            k = jnp.clip(jnp.floor(headroom), finfo.minexp, 0).astype(jnp.int32)
+            scale = jnp.ldexp(one, k)
+            y = (eigvecs.T @ (b_band * scale) / eigvals_safe) / s
+            return (eigvecs @ y) / scale
+
+        return project(jnp.where(high, 0.0, b)) + project(jnp.where(high, b, 0.0))
 
     # Use lax.cond for JIT-compatible conditional
     x = lax.cond(cholesky_valid, lambda: x_chol, eigenvalue_solve)
 
-    return x, cholesky_valid
+    # Invalid (non-finite) input must not be turned into a plausible solution.
+    x = jnp.where(finite_input, x, jnp.nan)
+    return x, cholesky_valid & finite_input
+
+
+def _zero_mad_outliers(deviation: np.ndarray, eps: float) -> np.ndarray:
+    """Outlier mask when the MAD is zero (at least half the points equal the median).
+
+    Ties and counts are ordinary data, so only a point far beyond the *other*
+    off-median points is flagged: the cutoff is the regular 5-sigma rule
+    (5 * 1.4826 * scale) with the scale taken as the median of the other
+    nonzero deviations, so a candidate cannot inflate its own cutoff. A lone
+    off-median point has no other spread to compare with and is flagged: at
+    tiny n, ``[0, 0, 0, -1, 0]`` is indistinguishable from ``[0, 0, 0, 100]``.
+    """
+    mask = np.zeros(deviation.shape, dtype=bool)
+    nz = np.sort(deviation[deviation > 0])
+    k = nz.size
+    if k == 0 or nz[-1] < eps:
+        return mask
+    if k == 1:
+        return deviation > 0
+
+    # Median of the nonzero deviations with element i left out, for every i
+    # (vectorised over sorted positions; m = k - 1 elements remain).
+    pos = np.arange(k)
+    m = k - 1
+
+    def left_out(j: int) -> np.ndarray:  # j-th smallest of the remaining m
+        return np.where(pos > j, nz[j], nz[min(j + 1, k - 1)])
+
+    if m % 2:
+        med = left_out(m // 2)
+    else:
+        med = 0.5 * (left_out(m // 2 - 1) + left_out(m // 2))
+    cutoff_per_pos = 5 * 1.4826 * med
+    # Each deviation value takes its own cutoff (ties share a value, and
+    # removing either of two equal values leaves the same multiset).
+    idx = np.searchsorted(nz, deviation, side="left")
+    return (deviation > 0) & (deviation > cutoff_per_pos[np.clip(idx, 0, k - 1)])
 
 
 class NumericalStabilityGuard:
@@ -230,13 +368,18 @@ class NumericalStabilityGuard:
         @jit
         def _safe_exp_jit(x):
             """JIT-compiled safe exponential."""
-            x_clipped = jnp.clip(x, self.min_exp_arg, self.max_exp_arg)
-            return jnp.exp(x_clipped)
+            # Limits come from the input dtype: exp(100) overflows float32.
+            x = jnp.asarray(x, dtype=jnp.result_type(x, float))
+            limit = min(
+                float(self.max_exp_arg), float(np.log(jnp.finfo(x.dtype).max)) - 1
+            )
+            return jnp.exp(jnp.clip(x, max(float(self.min_exp_arg), -limit), limit))
 
         @jit
         def _safe_log_jit(x):
             """JIT-compiled safe logarithm."""
-            x_safe = jnp.maximum(x, self.min_float)
+            x = jnp.asarray(x, dtype=jnp.result_type(x, float))
+            x_safe = jnp.maximum(x, max(self.min_float, float(jnp.finfo(x.dtype).tiny)))
             return jnp.log(x_safe)
 
         @jit
@@ -281,13 +424,23 @@ class NumericalStabilityGuard:
             """JIT-compiled gradient checking."""
             is_finite_mask = jnp.isfinite(gradient)
             gradient_clean = jnp.where(is_finite_mask, gradient, 0.0)
-            grad_norm = jnp.linalg.norm(gradient_clean)
+            # The direct L2 norm overflows to inf for large finite entries, and
+            # max_grad_norm / inf = 0 would zero the gradient. Use the direct
+            # formula whenever it is finite (bit-for-bit as before), and a
+            # max-scaled norm only when it overflows.
+            direct_norm = jnp.linalg.norm(gradient_clean)
+            g_max = jnp.max(jnp.abs(gradient_clean))
+            unit = gradient_clean / jnp.where(g_max > 0, g_max, 1.0)
+            unit_norm = jnp.linalg.norm(unit)  # in [1, sqrt(n)] when g_max > 0
+            direct_ok = jnp.isfinite(direct_norm)
+            grad_norm = jnp.where(direct_ok, direct_norm, unit_norm * g_max)
             needs_clipping = grad_norm > max_grad_norm
-            gradient_fixed = jnp.where(
-                needs_clipping,
-                gradient_clean * (max_grad_norm / grad_norm),
-                gradient_clean,
+            clipped = jnp.where(
+                direct_ok,
+                gradient_clean * (max_grad_norm / direct_norm),
+                unit * (max_grad_norm / unit_norm),
             )
+            gradient_fixed = jnp.where(needs_clipping, clipped, gradient_clean)
             has_invalid = jnp.any(~is_finite_mask)
             return gradient_fixed, has_invalid, needs_clipping, grad_norm
 
@@ -327,6 +480,10 @@ class NumericalStabilityGuard:
         issues : dict
             Dictionary with 'has_nan', 'has_inf', 'condition_number', etc.
         """
+        if J.ndim != 2:
+            raise ValueError(
+                f"Jacobian must be a 2-D (m, n) array, got shape {tuple(J.shape)}"
+            )
         m, n = J.shape
         n_elements = m * n
 
@@ -476,10 +633,10 @@ class NumericalStabilityGuard:
         # Check for near-zero singular values (use cached value)
         # Relative to max_sv: an absolute cutoff would regularise a perfectly
         # conditioned small-scale Jacobian (e.g. 1e-16 * [1, x]).
-        if min_sv_cached is not None and min_sv_cached < self.eps * 10 * max_sv:
+        if min_sv_cached is not None and min_sv_cached < eps * 10 * max_sv:
             # Efficient diagonal regularization
             J = J.at[diag_indices, diag_indices].add(
-                jnp.asarray(self.eps * 10 * max_sv, J.dtype)
+                jnp.asarray(eps * 10 * max_sv, J.dtype)
             )
             regularized = True
 
@@ -610,7 +767,9 @@ class NumericalStabilityGuard:
         # float base: integer ** negative int raises TypeError
         base = jnp.asarray(base)
         result = jnp.power(base.astype(jnp.result_type(base, 1.0)), exponent)
-        return jnp.clip(result, -self.max_float, self.max_float)
+        # float32 saturates at its own max, not float64's (which clips nothing)
+        limit = min(self.max_float, float(jnp.finfo(result.dtype).max))
+        return jnp.clip(result, -limit, limit)
 
     def check_gradient(self, gradient: jnp.ndarray) -> jnp.ndarray:
         """Check and fix gradient values.
@@ -662,7 +821,7 @@ class NumericalStabilityGuard:
         n = H.shape[0]
 
         # Ensure symmetry
-        H = 0.5 * (H + H.T)
+        H = 0.5 * H + 0.5 * H.T  # halves first: no overflow of the sum
 
         try:
             # Check minimum eigenvalue
@@ -712,12 +871,15 @@ class NumericalStabilityGuard:
         # Robust standard deviation estimate
         robust_std = 1.4826 * mad
 
-        # Guard: if MAD is zero (constant residuals), no outliers possible
+        deviation = jnp.abs(residuals - median_res)
         if robust_std < jnp.finfo(residuals.dtype).eps:
-            return residuals, False
-
-        # Detect outliers (more than 5 robust std from median)
-        outlier_mask = jnp.abs(residuals - median_res) > 5 * robust_std
+            outlier_mask = _zero_mad_outliers(
+                np.asarray(deviation, dtype=float),
+                float(jnp.finfo(residuals.dtype).eps),
+            )
+        else:
+            # Detect outliers (more than 5 robust std from median)
+            outlier_mask = deviation > 5 * robust_std
         has_outliers = jnp.any(outlier_mask)
 
         if has_outliers:
@@ -741,6 +903,9 @@ class NumericalStabilityGuard:
         norm_value : float
             Norm of x with overflow protection
         """
+        x = jnp.asarray(x)
+        if not jnp.issubdtype(x.dtype, jnp.floating):
+            x = x.astype(jnp.result_type(x, float))
         # Scale if needed to prevent overflow
         max_val = jnp.max(jnp.abs(x))
 
@@ -748,13 +913,23 @@ class NumericalStabilityGuard:
         if not bool(jnp.isfinite(max_val)):
             return float(jnp.linalg.norm(x, ord=ord))
 
-        # Use JIT-compiled safe norm when scaling is needed (2-5x faster)
-        if max_val > 1e100 or (max_val < 1e-100 and max_val > 0):
-            if ord == 2:
-                return float(self._safe_norm_jit(x, max_val))
-            # Non-L2 norms: scale manually without JIT (rare path)
-            x_scaled = x / max_val
-            return float(jnp.linalg.norm(x_scaled, ord=ord) * max_val)
+        # ord=0 counts nonzeros: it is not homogeneous, so scaling would corrupt it.
+        if ord == 0:
+            return float(jnp.linalg.norm(x, ord=0))
+
+        # Scale thresholds follow the dtype: squaring 1e30 already overflows float32.
+        finfo = jnp.finfo(x.dtype)
+        hi = min(1e100, 0.1 * float(np.sqrt(finfo.max)))
+        lo = max(1e-100, 10 * float(np.sqrt(finfo.tiny)))
+        if max_val > hi or (max_val < lo and max_val > 0):
+            # JIT path is the vector L2 norm only (for a matrix it would give the
+            # Frobenius norm, not the spectral norm that ord=2 means).
+            if ord == 2 and x.ndim == 1:
+                result = float(self._safe_norm_jit(x, max_val))
+                if np.isfinite(result):
+                    return result
+            # Multiply in Python floats: the norm itself may exceed the dtype's max.
+            return float(jnp.linalg.norm(x / max_val, ord=ord)) * float(max_val)
         return float(jnp.linalg.norm(x, ord=ord))
 
     def detect_numerical_issues(self, x: jnp.ndarray) -> dict:

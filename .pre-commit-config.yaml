@@ -73,7 +73,7 @@ repos:
     rev: v2.4.2
     hooks:
       - id: codespell
-        args: ['--skip=*.ipynb,*.html', '--ignore-words-list=nd,coo,assertIn,deques']
+        args: ['--skip=*.ipynb,*.html', '--ignore-words-list=nd,coo,assertIn,deques,fo,truncat,strat']
         exclude: ^graphify-out/
 
   - repo: https://github.com/adamchainz/blacken-docs

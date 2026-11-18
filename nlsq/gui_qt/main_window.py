@@ -493,7 +493,11 @@ class MainWindow(QMainWindow):
         self._settings.setValue("geometry", self.saveGeometry())
         self._settings.setValue("windowState", self.saveState())
         self._settings.setValue("currentPage", self._nav_list.currentRow())
-        self._settings.setValue("theme", self._theme_manager.current_theme.name)
+        # only a chosen theme is saved: otherwise keep following the system
+        if self._theme_manager.explicit:
+            self._settings.setValue("theme", self._theme_manager.current_theme.name)
+        else:
+            self._settings.remove("theme")
 
     def _restore_state(self) -> None:
         """Restore window state from settings."""
@@ -512,10 +516,12 @@ class MainWindow(QMainWindow):
             self._nav_list.setCurrentRow(page_idx)
 
         # Restore theme
-        theme = self._settings.value("theme", "dark")
-        if theme == "light":
-            self._theme_toggle.setChecked(False)
-            self._theme_manager.set_theme("light")
+        theme = self._settings.value("theme")
+        if theme in ("light", "dark"):
+            self._theme_toggle.setChecked(theme == "dark")
+            self._theme_manager.set_theme(theme)
+        else:  # nothing saved: the manager already follows the system scheme
+            self._on_theme_changed(self._theme_manager.current_theme)
 
     def _check_recovery(self) -> None:
         """Check for and offer session recovery."""

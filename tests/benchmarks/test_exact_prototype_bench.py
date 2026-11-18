@@ -14,7 +14,8 @@ def test_bench_impls_agree_on_cost():
     assert (proto["impl"], mod["impl"]) == ("prototype", "module")
     assert np.isfinite(proto["cost"]) and np.isfinite(mod["cost"])
     assert mod["cost"] == pytest.approx(proto["cost"], rel=1e-9)
-    assert mod["nfev"] == proto["nfev"]
+    # the module takes the undamped polish steps after the ftol certificate (each a pass)
+    assert proto["nfev"] <= mod["nfev"] <= proto["nfev"] + 6
 
 
 def test_bench_prints_which_impl_ran(capsys):

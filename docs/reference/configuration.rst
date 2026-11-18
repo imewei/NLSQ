@@ -175,6 +175,17 @@ Large-dataset settings
    with large_dataset_context(LargeDatasetConfig(enable_automatic_solver_selection=False)):
        ...
 
+.. note::
+
+   ``memory_context`` and ``large_dataset_context`` are *context-local*
+   (``contextvars``): the override is seen by the thread or asyncio task that
+   entered the block, other threads keep the process-wide value, and contexts
+   never block each other. A plain ``threading.Thread`` started inside the block
+   does not inherit the override; run pool work through
+   ``contextvars.copy_context().run`` to propagate it. ``set_memory_limits`` and
+   ``configure_for_large_datasets`` called *inside* a context change only that
+   context's value, which is discarded when the block exits.
+
 Jacobian AD mode
 ~~~~~~~~~~~~~~~~~~
 

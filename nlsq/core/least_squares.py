@@ -61,9 +61,9 @@ from nlsq.core._option_checks import (
     validate_tr_solver,
 )
 from nlsq.core.loss_functions import LossFunctionsJIT
-from nlsq.core.trf import TrustRegionReflective
+from nlsq.core.trf import TrustRegionReflective, _timed_call
 from nlsq.stability.guard import NumericalStabilityGuard
-from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction, MethodLiteral
+from nlsq.types import ArrayLike, BoundsTuple, CallbackFunction
 from nlsq.utils.diagnostics import OptimizationDiagnostics
 from nlsq.utils.logging import get_logger
 
@@ -151,8 +151,9 @@ def jacobian_mode_selector(
 
 
 TERMINATION_MESSAGES = {
+    -4: "The gradient (Jacobian or residuals) contains non-finite values.",
     -3: "Inner optimization loop exceeded maximum iterations.",
-    -2: "Stopped because `callback` function raised `StopOptimization`.",
+    -2: "Stopped by `callback` (raised `StopOptimization`/`StopIteration` or returned True).",
     -1: "Improper input parameters status returned from `leastsq`",
     0: "The maximum number of function evaluations is exceeded.",
     1: "`gtol` termination condition is satisfied.",
@@ -160,6 +161,11 @@ TERMINATION_MESSAGES = {
     3: "`xtol` termination condition is satisfied.",
     4: "Both `ftol` and `xtol` termination conditions are satisfied.",
 }
+
+
+class _ImproperInputError(TypeError, ValueError):
+    """method='lm' with fewer residuals than parameters (``TypeError`` for
+    leastsq/curve_fit compatibility, ``ValueError`` as scipy's least_squares)."""
 
 
 def prepare_bounds(bounds, n) -> tuple[np.ndarray, np.ndarray]:
@@ -228,6 +234,12 @@ def check_tolerance(
     xtol = validate_tolerance("xtol", xtol)
     gtol = validate_tolerance("gtol", gtol)
 
+    if method == "lm" and min(ftol, xtol, gtol) < EPS:
+        # scipy: method='lm' needs every tolerance enabled (None/0 is rejected)
+        raise ValueError(
+            "All tolerances must be higher than machine epsilon "
+            f"({EPS:.2e}) for method 'lm'."
+        )
     require_usable_tolerances(ftol, xtol, gtol)
 
     return ftol, xtol, gtol
@@ -934,6 +946,8 @@ class LeastSquares:
         # and rejected with bounds, matching scipy's own restriction.
         if method not in ("trf", "lm"):
             raise ValueError("`method` must be 'trf' or 'lm'")
+        if method == "lm" and loss != "linear":
+            raise ValueError("method='lm' supports only 'linear' loss function.")
 
         # Validate jac parameter
         if jac is not None and not callable(jac):
@@ -950,7 +964,8 @@ class LeastSquares:
             raise ValueError("`bounds` must contain 2 elements.")
 
         validate_tr_solver(tr_solver)
-        validate_f_scale(f_scale)
+        if loss != "linear":  # f_scale is unused by the linear loss (as in scipy)
+            validate_f_scale(f_scale)
 
         # Validate x0
         if np.iscomplexobj(x0):
@@ -1088,6 +1103,7 @@ class LeastSquares:
         ydata: jnp.ndarray | None,
         data_mask: jnp.ndarray | None,
         transform: jnp.ndarray | None,
+        initial_times: list[float] | None = None,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Evaluate initial residuals and Jacobian, with stability checks.
 
@@ -1107,6 +1123,9 @@ class LeastSquares:
             Data mask
         transform : jnp.ndarray | None
             Transform matrix
+        initial_times : list, optional
+            If given, filled with the seconds taken by the residual and the
+            Jacobian evaluation at ``x0`` (``timeit``).
 
         Returns
         -------
@@ -1120,8 +1139,13 @@ class LeastSquares:
         ValueError
             If residuals are not 1-D or not finite
         """
-        f0 = rfunc(x0, xdata, ydata, data_mask, transform)
-        J0 = jac_func(x0, xdata, ydata, data_mask, transform)
+        if initial_times is None:
+            f0 = rfunc(x0, xdata, ydata, data_mask, transform)
+            J0 = jac_func(x0, xdata, ydata, data_mask, transform)
+        else:  # timeit: record the x0 evaluations (residual, then Jacobian)
+            f0, t_f = _timed_call(rfunc, x0, xdata, ydata, data_mask, transform)
+            J0, t_j = _timed_call(jac_func, x0, xdata, ydata, data_mask, transform)
+            initial_times[:] = [t_f, t_j]
 
         if f0.ndim != 1:
             raise ValueError(
@@ -1129,14 +1153,21 @@ class LeastSquares:
             )
 
         if not np.all(np.isfinite(f0)):
-            if self.enable_stability:
-                self.logger.warning("Non-finite residuals detected, attempting to fix")
-                f0 = jnp.clip(f0, -1e10, 1e10)
-                if not np.all(np.isfinite(f0)):
-                    raise ValueError("Residuals are not finite after stabilization")
-            else:
+            if not self.enable_stability:
                 raise ValueError("Residuals are not finite in the initial point.")
-
+            self.logger.warning("Non-finite residuals detected, attempting to fix")
+            f0 = jnp.clip(f0, -1e10, 1e10)  # +-Inf -> +-1e10, NaN stays NaN
+            # Same Jacobian repair as _check_and_fix_initial_jacobian (Inf/NaN -> 0)
+            g0 = jnp.where(jnp.isfinite(J0), J0, 0.0).T @ f0
+            if not (np.all(np.isfinite(f0)) and np.all(np.isfinite(g0))):
+                raise ValueError("Residuals are not finite after stabilization")
+            if not np.any(np.asarray(g0) != 0):
+                # Clipping can also hide an overflowed start: every Jacobian row
+                # is zeroed, so gtol would "converge" at x0 with success=True.
+                raise ValueError(
+                    "Residuals are not finite in the initial point (clipping "
+                    "them leaves a zero gradient, so no step can be taken)."
+                )
         return f0, J0
 
     def _check_and_fix_initial_jacobian(
@@ -1180,7 +1211,7 @@ class LeastSquares:
                 )
                 if has_problem:
                     self.logger.warning(
-                        "Jacobian issues detected and fixed",
+                        "Jacobian issues detected",
                         issues=issues,
                     )
                 elif issues.get("svd_skipped"):
@@ -1264,6 +1295,7 @@ class LeastSquares:
         n: int,
         method: str,
         tr_solver: str | None,
+        bounded: bool = False,
     ) -> str | None:
         """Check memory requirements and adjust solver if needed.
 
@@ -1277,6 +1309,9 @@ class LeastSquares:
             Optimization method
         tr_solver : str | None
             Current trust region solver
+        bounded : bool
+            Whether finite bounds are active (the bounded SVD layout holds
+            more memory).
 
         Returns
         -------
@@ -1288,6 +1323,7 @@ class LeastSquares:
                 m,
                 n,
                 method,
+                bounded=bounded,
             )
             is_available, msg = self.memory_manager.check_memory_availability(
                 memory_required,
@@ -1460,8 +1496,9 @@ class LeastSquares:
         )
 
         if verbose >= 1:
-            self.logger.info(result.message)
-            self.logger.info(
+            # stdout, as scipy: a logger call is invisible at the default level
+            print(result.message)
+            print(
                 f"Function evaluations {result.nfev}, initial cost {initial_cost:.4e}, final cost "
                 f"{result.cost:.4e}, first-order optimality {result.optimality:.2e}.",
             )
@@ -1474,7 +1511,7 @@ class LeastSquares:
         x0: ArrayLike,
         jac: Callable | None = None,
         bounds: BoundsTuple | tuple[float, float] = (-np.inf, np.inf),
-        method: MethodLiteral = "trf",
+        method: Literal["trf", "lm"] = "trf",
         ftol: float = DEFAULT_FTOL,
         xtol: float = DEFAULT_XTOL,
         gtol: float = DEFAULT_GTOL,
@@ -1516,10 +1553,23 @@ class LeastSquares:
 
         bounds : 2-tuple, optional
             Parameter bounds as (lower, upper).
-        method : str, optional
-            Optimization algorithm ('trf').
+        method : {'trf', 'lm'}, optional
+            Optimization algorithm. ``'lm'`` is an alias for the unbounded
+            trust-region solver and, as in scipy, requires ``loss='linear'``,
+            no bounds, positive tolerances and at least as many residuals as
+            parameters.
         ftol, xtol, gtol : float, optional
             Convergence tolerances for function, parameters, and gradient.
+            When ``gtol`` is met on the same iteration as ``ftol``/``xtol``,
+            ``status`` is 1 (as in scipy).
+        tr_solver : {None, 'exact', 'lsmr'}, optional
+            Trust-region subproblem solver. ``'exact'`` (default) uses an SVD.
+            ``'lsmr'`` is a matrix-free *conjugate-gradient* solver, not
+            scipy's LSMR, so it can take different steps than scipy's.
+        tr_options : dict, optional
+            Accepted for scipy compatibility but not used by either solver
+            (scipy also ignores it for ``'exact'``); a non-empty value with
+            ``tr_solver='lsmr'`` emits a ``UserWarning``.
         x_scale : str or array_like, optional
             Parameter scaling ('jac' for automatic).
         loss : str or callable, optional
@@ -1529,7 +1579,8 @@ class LeastSquares:
         max_nfev : int, optional
             Maximum function evaluations.
         verbose : int, optional
-            Verbosity level (0, 1, or 2).
+            Verbosity level: 0 silent (default), 1 prints the termination
+            report to stdout, 2 additionally prints one row per iteration.
         jacobian_mode : {'auto', 'fwd', 'rev'}, optional
             Jacobian automatic differentiation mode. If None, uses configuration
             from environment variable, config file, or auto-default. Default is None.
@@ -1543,11 +1594,20 @@ class LeastSquares:
         transform : array_like, optional
             Transformation matrix for weighted fitting.
         timeit : bool, optional
-            Enable detailed timing analysis.
+            Record the execution time of each residual and Jacobian evaluation,
+            including those at ``x0``, in ``result.all_times`` (``ftimes`` and
+            ``jtimes``; unbounded fits only, bounded fits return ``{}``).
+            Adds a device sync per evaluation.
         callback : callable or None, optional
             Callback function called after each optimization iteration with signature
             ``callback(iteration, cost, params, info)``. Useful for monitoring
             optimization progress, logging, or implementing custom stopping criteria.
+            ``info["gradient_norm"]`` and ``info["gradient"]`` describe the
+            post-step state. Raising ``StopOptimization`` or ``StopIteration``,
+            or returning ``True``, stops the fit with ``status=-2``; unlike
+            scipy, that status reports ``success=True`` (best-so-far result,
+            so ``curve_fit`` does not raise). Any other exception is reported
+            as a ``RuntimeWarning`` and the fit continues.
             If None (default), no callback is invoked.
         args : tuple, optional
             Additional arguments for objective function.
@@ -1568,6 +1628,14 @@ class LeastSquares:
             kwargs = {}
         if tr_options is None:
             tr_options = {}
+        elif tr_options and tr_solver in ("lsmr", "cg"):
+            warn(
+                "tr_options are not used: NLSQ's tr_solver='lsmr' is a "
+                "conjugate-gradient trust-region solver, not scipy's LSMR, and "
+                "takes no options (tr_solver='exact' ignores them as in scipy).",
+                UserWarning,
+                stacklevel=2,
+            )
         if "options" in timeout_kwargs:
             raise TypeError("'options' is not a supported keyword argument")
         if timeout_kwargs:
@@ -1737,6 +1805,7 @@ class LeastSquares:
         )
 
         # Step 5: Evaluate initial residuals and Jacobian
+        initial_times: list[float] | None = [] if timeit else None
         f0, J0 = self._evaluate_initial_residuals_and_jacobian(
             rfunc,
             jac_func,
@@ -1745,6 +1814,7 @@ class LeastSquares:
             ydata,
             data_mask,
             transform,
+            initial_times=initial_times,
         )
 
         m = f0.size
@@ -1753,7 +1823,9 @@ class LeastSquares:
             # f0 is padded to flength; count only the real (unmasked) points.
             m_eff = m if data_mask is None else int(jnp.sum(data_mask))
             if m_eff < n:
-                raise TypeError(
+                # TypeError (leastsq / curve_fit) and ValueError (scipy's
+                # least_squares) are both caught by their respective callers.
+                raise _ImproperInputError(
                     f"Improper input: func input vector length N={n} must not "
                     f"exceed func output vector length M={m_eff}"
                 )
@@ -1834,7 +1906,13 @@ class LeastSquares:
             tr_solver = "exact"
 
         # Step 9: Check memory and adjust solver if needed
-        tr_solver = self._check_memory_and_adjust_solver(m, n, method, tr_solver)
+        tr_solver = self._check_memory_and_adjust_solver(
+            m,
+            n,
+            method,
+            tr_solver,
+            bounded=bool(np.any(np.isfinite(lb)) or np.any(np.isfinite(ub))),
+        )
         # The memory check can silently swap "sparse" for "lsmr" above; keep the
         # sparsity diagnostic honest about which solver actually ran.
         sparse_solver_selected = sparse_solver_selected and tr_solver == "sparse"
@@ -1871,7 +1949,10 @@ class LeastSquares:
             n,
             m,
             initial_cost,
-            timeout_kwargs,
+            # x0 evaluation times join the timeit profile (consumed by trf())
+            {**timeout_kwargs, "initial_times": tuple(initial_times)}
+            if initial_times
+            else timeout_kwargs,
             callback,
         )
 

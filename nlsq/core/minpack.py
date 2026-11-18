@@ -46,6 +46,8 @@ See Also:
 
 from __future__ import annotations
 
+import contextvars
+import dataclasses
 import logging
 import time
 import warnings
@@ -462,11 +464,13 @@ def fit(  # noqa: C901
             # Compute memory budget for logging
             from nlsq.core.workflow import MemoryBudget
 
+            bounded = _is_bounded(bounds, n_params)
             budget = MemoryBudget.compute(
                 n_points=n_points,
                 n_params=n_params,
                 n_features=n_features,
                 memory_limit_gb=memory_limit_gb,
+                bounded=bounded,
             )
             _logger.info(
                 f"workflow='auto' memory budget: "
@@ -482,6 +486,7 @@ def fit(  # noqa: C901
                 memory_limit_gb=memory_limit_gb,
                 goal=goal_enum,
                 budget=budget,
+                bounded=bounded,
             )
 
             # Log strategy selection with reasoning. The chunked/standard
@@ -661,28 +666,10 @@ def _fit_with_config(
         # The hybrid engine minimizes plain least squares; only callback,
         # verbose and gtol are read from kwargs. Fail loudly instead of
         # silently returning a non-robust fit.
-        if kwargs.get("loss", "linear") != "linear":
-            raise ValueError(
-                "The hybrid streaming workflow does not support robust loss "
-                f"(loss={kwargs['loss']!r}); it minimizes plain least squares. "
-                "Use a standard workflow (e.g. fit(..., workflow='auto', "
-                "loss=...) or curve_fit(..., loss=...)) for robust loss."
-            )
-        if kwargs.get("data_mask") is not None or kwargs.get("nan_policy") == "omit":
-            raise ValueError(
-                "The hybrid streaming workflow does not support data_mask or "
-                "nan_policy='omit'; filter the data before calling fit()."
-            )
-        ignored = sorted(
-            user_kwargs & {"f_scale", "max_nfev", "ftol", "xtol", "x_scale", "jac"}
+        _reject_options_ignored_by_hybrid(
+            kwargs,
+            user_kwargs & {"f_scale", "max_nfev", "ftol", "xtol", "x_scale", "jac"},
         )
-        if ignored:
-            warnings.warn(
-                f"The hybrid streaming workflow ignores {ignored}; configure "
-                "HybridStreamingConfig instead.",
-                OptimizeWarning,
-                stacklevel=3,
-            )
 
         # Prepare p0
         if p0 is None or _is_auto_p0(p0):
@@ -727,6 +714,7 @@ def _fit_with_config(
             "pcov",
             np.full((len(p0_arr), len(p0_arr)), np.inf),
         )
+        _store_sigma(result, sigma, absolute_sigma)
         return result
 
     if isinstance(config, LDMemoryConfig):
@@ -756,12 +744,14 @@ def _fit_with_config(
         )
 
         # Ensure we have a CurveFitResult
+        x_fit, y_fit, s_fit = _rows_actually_fit(xdata, ydata, sigma, kwargs)
         if not isinstance(result, CurveFitResult):
             # Convert from dict or OptimizeResult
             result = CurveFitResult(result)
             result["model"] = f
-            result["xdata"] = xdata
-            result["ydata"] = ydata
+            result["xdata"] = x_fit
+            result["ydata"] = y_fit
+        _store_sigma(result, s_fit, absolute_sigma)
 
         return result
 
@@ -952,11 +942,13 @@ def _fit_with_auto_global(
     n_features = _infer_n_features(xdata)
 
     # Compute memory budget for logging
+    # bounds are finite on every parameter here (validated above)
     budget = MemoryBudget.compute(
         n_points=n_points,
         n_params=n_params,
         n_features=n_features,
         memory_limit_gb=memory_limit_gb,
+        bounded=True,
     )
     _logger.info(
         f"workflow='auto_global' memory budget: "
@@ -972,6 +964,7 @@ def _fit_with_auto_global(
         memory_limit_gb=memory_limit_gb,
         goal=goal,
         budget=budget,
+        bounded=True,
     )
 
     # Log strategy selection with reasoning. The chunked/standard boundary
@@ -1023,6 +1016,7 @@ def _fit_with_auto_global(
         )
 
     # Apply adaptive tolerances if goal is specified
+    user_kwargs = frozenset(kwargs)  # before goal-derived tolerances are injected
     if goal is not None:
         adaptive_tols = calculate_adaptive_tolerances(n_points, goal)
         for tol_key in ["gtol", "ftol", "xtol"]:
@@ -1063,6 +1057,7 @@ def _fit_with_auto_global(
         memory_config=memory_config,
         n_starts=n_starts,
         workflow_name=_workflow_name,
+        user_kwargs=user_kwargs,
         **kwargs,
     )
 
@@ -1336,22 +1331,15 @@ def _fit_global_cmaes(
         **extra_kwargs,
     )
 
-    # Convert to CurveFitResult
-    result = CurveFitResult(
-        {
-            "x": result_dict["popt"],
-            "popt": result_dict["popt"],
-            "pcov": result_dict["pcov"],
-            **_cmaes_termination_fields(result_dict),
-            "model": f,
-            "xdata": xdata,
-            "ydata": ydata,
-        },
+    return _cmaes_curve_fit_result(
+        result_dict,
+        f,
+        xdata,
+        ydata,
+        sigma,
+        absolute_sigma,
+        result_dict["pcov"],
     )
-    if "cmaes_diagnostics" in result_dict:
-        result["cmaes_diagnostics"] = result_dict["cmaes_diagnostics"]
-
-    return result
 
 
 def _fit_global_multistart(
@@ -1367,6 +1355,7 @@ def _fit_global_multistart(
     n_starts: int,
     memory_config: LDMemoryConfig | HybridStreamingConfig | None = None,
     workflow_name: str = "auto_global",
+    user_kwargs: frozenset[str] = frozenset(),
     **kwargs: Any,
 ) -> CurveFitResult:
     """Run multi-start optimization with memory-aware strategy.
@@ -1386,6 +1375,10 @@ def _fit_global_multistart(
         The caller's actual `workflow=` value ('hpc' or 'auto_global') --
         used only for accurate warning/error text below, since this
         function is reached from both entry points.
+    user_kwargs : frozenset[str]
+        Option names the caller passed, before goal-derived tolerances were
+        injected into ``kwargs`` (so an ignored ``ftol``/``xtol`` is only
+        reported when the caller set it).
     """
     if kwargs.pop("_hpc_checkpoint_dir", None) is not None:
         warnings.warn(
@@ -1473,10 +1466,12 @@ def _fit_global_multistart(
                 f"failed: {result.get('message', 'unknown error')}",
             )
         if not isinstance(result, CurveFitResult):
+            x_fit, y_fit, _ = _rows_actually_fit(xdata, ydata, None, kwargs)
             result = CurveFitResult(result)
             result["model"] = f
-            result["xdata"] = xdata
-            result["ydata"] = ydata
+            result["xdata"] = x_fit
+            result["ydata"] = y_fit
+        _store_sigma(result, sigma, absolute_sigma)  # sigma is None on this path
         return result
     # Streaming with multi-start (FR-004)
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
@@ -1486,6 +1481,11 @@ def _fit_global_multistart(
     )
 
     _check_finite_for_streaming(xdata, ydata, check_finite)
+    _reject_options_ignored_by_hybrid(
+        kwargs,
+        (set(kwargs) & {"f_scale", "max_nfev", "x_scale", "jac"})
+        | (set(user_kwargs) & {"ftol", "xtol"}),
+    )
 
     # Prepare p0
     if p0 is None or _is_auto_p0(p0):
@@ -1534,6 +1534,7 @@ def _fit_global_multistart(
         "pcov",
         np.full((len(p0_arr), len(p0_arr)), np.inf),
     )
+    _store_sigma(result, sigma, absolute_sigma)
     return result
 
 
@@ -1565,10 +1566,23 @@ def _extract_p0_from_args(
     return kwargs.get("p0")
 
 
+def _is_bounded(bounds: Any, n_params: int) -> bool:
+    """Whether any parameter has a finite lower or upper bound.
+
+    Selects the bounded trust-region memory layout (extra p x p blocks) for the
+    memory budget; accepts ``None``, scalar/broadcast bounds and SciPy ``Bounds``.
+    """
+    if bounds is None:
+        return False
+    lb, ub = prepare_bounds(_bounds_as_tuple(bounds), n_params)
+    return bool(np.any(np.isfinite(lb)) or np.any(np.isfinite(ub)))
+
+
 def _log_memory_budget_diagnostics(
     xdata: ArrayLike,
     ydata: ArrayLike,
     p0: NDArray[np.floating[Any]] | None,
+    bounds: Any = None,
 ) -> None:
     """Log memory budget diagnostics when verbose >= 2.
 
@@ -1593,13 +1607,16 @@ def _log_memory_budget_diagnostics(
     else:
         n_params = 3  # Default estimate
 
-    n_points = len(np.asarray(xdata))
+    n_points = len(np.asarray(ydata))  # points, not features of a (k, n) xdata
 
     # Compute memory budget once and reuse it for selection so the logged
     # numbers can't disagree with the actual decision (memory detection is
     # a live psutil/GPU read, not guaranteed identical across two calls).
     try:
-        budget = MemoryBudget.compute(n_points=n_points, n_params=n_params)
+        bounded = _is_bounded(bounds, n_params)
+        budget = MemoryBudget.compute(
+            n_points=n_points, n_params=n_params, bounded=bounded
+        )
 
         # Get strategy recommendation
         selector = MemoryBudgetSelector()
@@ -1608,6 +1625,7 @@ def _log_memory_budget_diagnostics(
             n_params=n_params,
             verbose=False,  # Already logging here
             budget=budget,
+            bounded=bounded,
         )
 
         logger.info(
@@ -1725,7 +1743,12 @@ def _apply_auto_bounds(
             "not support; use method='trf', or set auto_bounds=False."
         )
 
-    # nan_policy='omit' drops non-finite rows later; inference must not see them.
+    # data_mask-excluded and (nan_policy='omit') non-finite rows are dropped
+    # from the fit later; inference must not see them.
+    if kwargs.get("data_mask") is not None:
+        from nlsq.global_optimization.cmaes_optimizer import _apply_data_mask
+
+        xdata, ydata, _ = _apply_data_mask(xdata, ydata, None, kwargs["data_mask"])
     xdata, ydata = finite_rows(xdata, ydata)
 
     if p0 is None or _is_auto_p0(p0):
@@ -1785,6 +1808,111 @@ def _drop_internal_routing_kwargs(kwargs: dict[str, Any]) -> None:
 
 _OUTPUT_FLAGS = ("full_output", "return_eval", "timeit")
 
+# A ``return_eval`` return is ``(popt, pcov, f(x))`` and carries no status or
+# cost. While a list is installed here, the routes append the result object
+# behind each such return, so auto_bounds can rank attempts by their real
+# convergence status and cost without another solve.
+_ATTEMPT_RECORD: contextvars.ContextVar[list[Any] | None] = contextvars.ContextVar(
+    "_ATTEMPT_RECORD", default=None
+)
+
+
+def _record_attempt(result: Any) -> None:
+    rec = _ATTEMPT_RECORD.get()
+    if rec is not None:
+        rec.append(result)
+
+
+def _eval_attempt_cost(
+    result: Any,
+    kwargs: dict[str, Any],
+    xdata: Any,
+    ydata: Any,
+    loss: Any,
+    f_scale: Any,
+) -> float:
+    """Loss-aware cost of a ``return_eval`` return, rebuilt from ``f(x)``.
+
+    The evaluation is over the rows left after ``nan_policy='omit'`` (the main
+    path evaluates masked rows too; CMA-ES returns the masked rows already
+    dropped). ``sigma`` may be a scalar, per-point values or a covariance
+    matrix (whitened over the retained block).
+    """
+    from nlsq.stability.fallback import _robust_cost
+
+    sigma = kwargs.get("sigma")
+    opts = {"data_mask": kwargs.get("data_mask")}
+    x, y = np.asarray(xdata, dtype=float), np.asarray(ydata, dtype=float)
+    if kwargs.get("nan_policy") == "omit":
+        x, y, sigma = _preprocess_nonfinite_for_cmaes(
+            x, y, sigma, "omit", False, opts, allow_rowwise=True
+        )
+    mask = None if opts["data_mask"] is None else np.asarray(opts["data_mask"], bool)
+    feval = np.asarray(result[2], dtype=float)
+    if feval.shape == y.shape:
+        res = feval - y
+        keep = np.ones(len(y), bool) if mask is None else mask
+    elif mask is not None and feval.shape == (int(mask.sum()),):
+        res, keep = feval - y[mask], np.ones(int(mask.sum()), bool)
+        sigma = None if sigma is None else _mask_sigma(sigma, mask)
+        mask = None
+    else:
+        return np.inf
+    if mask is not None and sigma is not None:
+        sigma = _mask_sigma(sigma, mask)
+    res = res[keep] if mask is not None else res
+    if sigma is not None:
+        sig = np.asarray(sigma, dtype=float)
+        if sig.ndim == 2:
+            import scipy.linalg as sla
+
+            res = sla.solve_triangular(np.linalg.cholesky(sig), res, lower=True)
+        else:
+            res = res / sig
+    return _robust_cost(res, loss, f_scale)
+
+
+def _mask_sigma(sigma: Any, mask: np.ndarray) -> np.ndarray:
+    """Retained entries of a per-point sigma or the retained covariance block."""
+    sig = np.asarray(sigma, dtype=float)
+    if sig.ndim == 0:
+        return sig
+    return sig[np.ix_(mask, mask)] if sig.ndim == 2 else sig[mask]
+
+
+def _auto_bounds_cost(
+    result: Any,
+    flags: dict[str, Any],
+    kwargs: dict[str, Any],
+    xdata: Any,
+    ydata: Any,
+) -> float:
+    """Loss-aware cost of an attempt's return, ``inf`` when it cannot be derived.
+
+    Result objects carry ``cost``; ``full_output`` carries the residual vector
+    and ``timeit`` the raw result. ``return_eval`` carries neither, so its cost
+    is rebuilt from ``f(x)`` (see ``_eval_attempt_cost``).
+    """
+    from nlsq.stability.fallback import _attempt_cost, _tuple_kind
+
+    loss = kwargs.get("loss", "linear")
+    f_scale = kwargs.get("f_scale") or 1.0
+    try:
+        if _tuple_kind(result, flags) != "eval":
+            cost = _attempt_cost(result, loss, loss, flags, f_scale)
+        else:
+            cost = _eval_attempt_cost(result, kwargs, xdata, ydata, loss, f_scale)
+    except (
+        AttributeError,
+        TypeError,
+        ValueError,
+        KeyError,
+        IndexError,
+        np.linalg.LinAlgError,
+    ):
+        return np.inf
+    return cost if np.isfinite(cost) else np.inf
+
 
 def _curve_fit_with_auto_bounds(
     run: Callable[..., Any],
@@ -1800,12 +1928,17 @@ def _curve_fit_with_auto_bounds(
     ``run(**kwargs)`` is a bound ``curve_fit`` (``auto_bounds`` off). If a fitted
     parameter sits on a bound that was *inferred* (not set by the caller), refit
     once with that side relaxed to the caller's bound, starting from the result;
-    the refit is kept (with an OptimizeWarning) only if its cost is lower.
-    The guard works on every route (multistart, fallback, CMA-ES, ...): the
-    inner fits run without the SciPy-style output flags, and when the caller
-    asked for one the final fit is re-run once at the final bounds and
-    ``p0=popt`` so the requested tuple is returned.
+    the refit is kept (with an OptimizeWarning) only if it converges at least
+    as well and its loss-aware cost is lower.
+    The guard works on every route (multistart, fallback, CMA-ES, ...). Every
+    attempt runs with the caller's output flags (``full_output``,
+    ``return_eval``, ``timeit``), so the chosen attempt's return is handed back
+    verbatim: the flag never changes the fit and callbacks run once per
+    attempt. A ``return_eval``-only return carries no status or cost; it is
+    ranked by its rebuilt cost where possible, otherwise the original is kept.
     """
+    from nlsq.stability.fallback import _fit_succeeded, _fitted_params
+
     user_lb, user_ub = _apply_auto_bounds(
         f,
         xdata,
@@ -1816,13 +1949,24 @@ def _curve_fit_with_auto_bounds(
         kwargs.get("method") or method,
     )
     flags = {k: kwargs[k] for k in _OUTPUT_FLAGS if kwargs.get(k)}
-    plain = {**kwargs, **dict.fromkeys(flags, False)}
-    result = run(**plain)
-    final: dict[str, Any] = {}
+    records: dict[int, Any] = {}
 
-    popt = getattr(result, "popt", None)
+    def attempt(**kw):
+        # Capture the result object behind a return_eval tuple (id-keyed).
+        token = _ATTEMPT_RECORD.set([])
+        try:
+            out = run(**kw)
+            rec = _ATTEMPT_RECORD.get()
+        finally:
+            _ATTEMPT_RECORD.reset(token)
+        if flags.get("return_eval") and rec:
+            records[id(out)] = rec[-1]
+        return out
+
+    result = attempt(**kwargs)
+
+    popt = _fitted_params(result, flags)
     if popt is not None:
-        popt = np.asarray(popt, dtype=float)
         lb, ub = (np.asarray(b, dtype=float) for b in kwargs["bounds"])
         at_lb = np.isinf(user_lb) & np.isfinite(lb)
         at_lb &= popt - lb <= 1e-6 * np.maximum(1.0, np.abs(lb))
@@ -1834,31 +1978,53 @@ def _curve_fit_with_auto_bounds(
                 "p0": popt,
             }
             try:
-                refit = run(**{**plain, **relaxed})
+                refit = attempt(**{**kwargs, **relaxed})
             except Exception:  # keep the original result if the relaxed fit fails
                 refit = None
-            refit_popt = getattr(refit, "popt", None)
-            if (
-                refit_popt is not None
-                and np.all(np.isfinite(refit_popt))
-                and refit["cost"] < result["cost"]
-            ):
-                import warnings
+            refit_popt = None if refit is None else _fitted_params(refit, flags)
+            if refit_popt is not None and np.all(np.isfinite(refit_popt)):
 
-                idx = np.flatnonzero(at_lb | at_ub).tolist()
-                warnings.warn(
-                    f"auto_bounds: parameter(s) {idx} ended on an inferred bound, "
-                    "which is only a heuristic; refit without it. Pass explicit "
-                    "bounds to override.",
-                    OptimizeWarning,
-                    stacklevel=3,
-                )
-                result, final = refit, relaxed
-                popt = np.asarray(refit_popt, dtype=float)
-    if flags and popt is not None:
-        return run(**{**kwargs, **final, "p0": popt})
-    if flags:
-        return run(**kwargs)
+                def rank(r):
+                    # Prefer the recorded result object (real status and cost).
+                    rec = records.get(id(r))
+                    r, fl = (r, flags) if rec is None else (rec, {})
+                    return (
+                        not _fit_succeeded(r, fl),
+                        _auto_bounds_cost(r, fl, kwargs, xdata, ydata),
+                    )
+
+                rank_refit, rank_result = rank(refit), rank(result)
+                if (
+                    rank_refit[0] == rank_result[0]
+                    and rank_refit[1] == rank_result[1] == np.inf
+                ):
+                    import warnings
+
+                    why = (
+                        "the cost of the return_eval output could not be rebuilt"
+                        if flags.get("return_eval")
+                        else "neither fit reports a cost"
+                    )
+                    warnings.warn(
+                        f"auto_bounds: parameter(s) ended on an inferred bound but "
+                        f"{why}, so the relaxed refit cannot be compared; keeping "
+                        "the fit clipped to the inferred bound. Pass explicit "
+                        "bounds to override.",
+                        OptimizeWarning,
+                        stacklevel=3,
+                    )
+                elif rank_refit < rank_result:
+                    import warnings
+
+                    idx = np.flatnonzero(at_lb | at_ub).tolist()
+                    warnings.warn(
+                        f"auto_bounds: parameter(s) {idx} ended on an inferred "
+                        "bound, which is only a heuristic; refit without it. "
+                        "Pass explicit bounds to override.",
+                        OptimizeWarning,
+                        stacklevel=3,
+                    )
+                    result = refit
     return result
 
 
@@ -2016,6 +2182,66 @@ def _apply_stability_checks(
     return xdata, ydata, args
 
 
+def _reject_options_ignored_by_hybrid(
+    kwargs: dict[str, Any], ignored: set[str] | frozenset[str] = frozenset()
+) -> None:
+    """Fail loudly on options the hybrid streaming engine cannot honour.
+
+    It minimizes plain least squares over every row, so a robust loss,
+    ``data_mask`` and ``nan_policy='omit'`` would otherwise be silently dropped;
+    ``ignored`` option names (tolerances etc.) only warn.
+    """
+    if kwargs.get("loss", "linear") != "linear":
+        raise ValueError(
+            "The hybrid streaming workflow does not support robust loss "
+            f"(loss={kwargs['loss']!r}); it minimizes plain least squares. "
+            "Use a standard workflow (e.g. fit(..., workflow='auto', "
+            "loss=...) or curve_fit(..., loss=...)) for robust loss."
+        )
+    if kwargs.get("data_mask") is not None or kwargs.get("nan_policy") == "omit":
+        raise ValueError(
+            "The hybrid streaming workflow does not support data_mask or "
+            "nan_policy='omit'; filter the data before calling fit()."
+        )
+    if ignored:
+        warnings.warn(
+            f"The hybrid streaming workflow ignores {sorted(ignored)}; configure "
+            "HybridStreamingConfig instead.",
+            OptimizeWarning,
+            stacklevel=4,
+        )
+
+
+def _rows_actually_fit(
+    xdata: Any, ydata: Any, sigma: Any, kwargs: dict[str, Any]
+) -> tuple[Any, Any, Any]:
+    """x/y/sigma restricted to the rows a chunked fit used.
+
+    The chunk engines apply ``nan_policy='omit'`` and ``data_mask`` internally
+    and return only the parameters, so the stored data must be filtered the
+    same way or every statistic is computed over rows the caller dropped.
+    """
+    from nlsq.global_optimization.cmaes_optimizer import _apply_data_mask
+
+    opts = {"data_mask": kwargs.get("data_mask")}
+    if kwargs.get("nan_policy") == "omit":
+        xdata, ydata, sigma = _preprocess_nonfinite_for_cmaes(
+            xdata, ydata, sigma, "omit", False, opts, allow_rowwise=True
+        )
+    return _apply_data_mask(xdata, ydata, sigma, opts["data_mask"])
+
+
+def _store_sigma(result: Any, sigma: Any, absolute_sigma: bool) -> None:
+    """Keep the fit's weighting on the result.
+
+    ``CurveFitResult`` weights aic/bic and the prediction-interval noise term by
+    these two keys, so every construction site must set them (``sigma`` must
+    already be aligned with the stored, possibly masked, ``ydata``).
+    """
+    result["sigma"] = sigma
+    result["absolute_sigma"] = absolute_sigma
+
+
 def _cmaes_termination_fields(result: dict[str, Any]) -> dict[str, Any]:
     """Preserve optimizer/refinement termination when adapting a CMA-ES result."""
     refinement = result.get("nlsq_result") or {}
@@ -2028,6 +2254,79 @@ def _cmaes_termination_fields(result: dict[str, Any]) -> dict[str, Any]:
             "message", refinement.get("message", "CMA-ES optimization completed")
         ),
     }
+
+
+def _residuals_in_chunks(
+    f: ModelFunction,
+    xdata: Any,
+    ydata: Any,
+    popt: Any,
+    chunk: int = 1 << 20,
+) -> np.ndarray:
+    """``f(x, *popt) - y`` evaluated ``chunk`` points at a time.
+
+    ``xdata`` is ``(n,)`` or scipy-layout ``(k, n)``.
+    """
+    y = np.asarray(ydata, dtype=float)
+    x = np.asarray(xdata)
+    out = np.empty(len(y))
+    for lo in range(0, len(y), chunk):
+        xc = x[..., lo : lo + chunk]
+        out[lo : lo + chunk] = (
+            np.asarray(f(jnp.asarray(xc), *popt)) - y[lo : lo + chunk]
+        )
+    return out
+
+
+def _cmaes_curve_fit_result(
+    result_dict: dict[str, Any],
+    f: ModelFunction,
+    xdata: Any,
+    ydata: Any,
+    sigma: Any,
+    absolute_sigma: bool,
+    pcov: Any,
+) -> CurveFitResult:
+    """Adapt a ``CMAESOptimizer.fit`` dict to a ``CurveFitResult``.
+
+    The NLSQ refinement (when run) carries the real cost/jacobian/evaluation
+    counts; without refinement CMA-ES provides none of them. Shared by the
+    ``curve_fit(method='cmaes')`` and ``fit(workflow='auto_global')`` routes so
+    both expose the same fields.
+    """
+    refined = result_dict.get("nlsq_result")
+
+    def _ref(name: str, default: Any = None) -> Any:
+        try:
+            return refined[name] if refined is not None else default
+        except (KeyError, TypeError, IndexError):
+            return getattr(refined, name, default)
+
+    result = CurveFitResult(
+        x=result_dict["popt"],
+        # historical key of the workflow route; consumers index it
+        popt=result_dict["popt"],
+        pcov=pcov,
+        cost=_ref("cost"),
+        fun=_ref("fun"),
+        jac=_ref("jac"),
+        grad=_ref("grad"),
+        optimality=_ref("optimality"),
+        active_mask=_ref("active_mask"),
+        nfev=_ref("nfev", 0),
+        njev=_ref("njev", 0),
+        nit=_ref("nit", 0),
+        **_cmaes_termination_fields(result_dict),
+        xdata=np.asarray(xdata),
+        ydata=np.asarray(ydata),
+        model=f,
+    )
+    _store_sigma(result, sigma, absolute_sigma)
+    if "cmaes_diagnostics" in result_dict:
+        result["cmaes_diagnostics"] = result_dict["cmaes_diagnostics"]
+    if _ref("_diagnostics_report") is not None:
+        result["_diagnostics_report"] = _ref("_diagnostics_report")
+    return result
 
 
 _CURVE_FIT_METHODS = (
@@ -2160,7 +2459,13 @@ def _preprocess_nonfinite_for_cmaes(
     if allow_rowwise and x.ndim > 2:
         x = x.reshape((-1, len(y)) if points_axis_last else (len(y), -1))
     x, y, sigma, _, omit_mask = _omit_nonfinite_rows(
-        x, y, sigma, x.ndim, points_axis_last
+        x,
+        y,
+        sigma,
+        x.ndim,
+        points_axis_last,
+        # non-finite covariance entries on rows the caller masks out are fine
+        data_mask=kwargs.get("data_mask"),
     )
     if ambiguous and not omit_mask.all():
         raise ValueError("Cannot omit nonfinite data: sample axis is ambiguous")
@@ -2172,6 +2477,16 @@ def _preprocess_nonfinite_for_cmaes(
             raise ValueError("Data mask doesn't match data lengths.")
         kwargs["data_mask"] = mask[omit_mask]
     return x, y, sigma
+
+
+def _auto_bipop_budget(config: CMAESConfig, n_params: int) -> int:
+    """Worst-case evaluations of a fixed-2x-large BIPOP schedule for ``config``."""
+    from nlsq.global_optimization.bounds_transform import compute_default_popsize
+
+    base = config.popsize or compute_default_popsize(n_params)
+    runs = 1 + (config.max_restarts if config.restart_strategy == "bipop" else 0)
+    large = (runs + 1) // 2
+    return (large * 2 * base + (runs - large) * base) * config.max_generations
 
 
 def _run_cmaes_optimization(
@@ -2248,9 +2563,23 @@ def _run_cmaes_optimization(
 
     # Use provided config or default
     config = cmaes_config if cmaes_config is not None else CMAESConfig()
+    budget_label = None
+    if cmaes_config is None and method == "auto":
+        # The implicit route must not cost more than the fixed-2x BIPOP schedule it
+        # replaced (explicit method='cmaes' stays unlimited, a documented opt-in).
+        from dataclasses import replace as _replace
+
+        config = _replace(
+            config,
+            max_total_evaluations=_auto_bipop_budget(config, len(lower)),
+        )
+        budget_label = (
+            f"automatic budget max_total_evaluations={config.max_total_evaluations} "
+            "for method='auto'; pass method='cmaes' for an unlimited search"
+        )
 
     # Check if memory-based chunking is needed for large datasets
-    n_data = len(np.asarray(xdata))
+    n_data = len(np.asarray(ydata))  # points, not features of a (k, n) xdata
     n_params = len(lower)
 
     # Only auto-configure if chunk sizes not already set
@@ -2292,7 +2621,7 @@ def _run_cmaes_optimization(
             )
 
     # Create optimizer
-    optimizer = CMAESOptimizer(config=config)
+    optimizer = CMAESOptimizer(config=config, budget_label=budget_label)
 
     # Extract sigma and absolute_sigma from kwargs if provided
     sigma = kwargs.get("sigma")
@@ -2305,9 +2634,10 @@ def _run_cmaes_optimization(
         kwargs.get("check_finite", True),
         kwargs,
     )
-    xdata, ydata, sigma = _apply_data_mask(
-        xdata, ydata, sigma, kwargs.pop("data_mask", None)
-    )
+    # return_eval: rows after nan omission, before the user data_mask (as plain)
+    xdata_in = xdata
+    data_mask = kwargs.pop("data_mask", None)
+    xdata, ydata, sigma = _apply_data_mask(xdata, ydata, sigma, data_mask)
     # Forward remaining optimizer kwargs (ftol, xtol, gtol, max_nfev, ...) to
     # the NLSQ refinement step -- mirrors _fit_global_cmaes, whose **kwargs
     # flow through to the same CMAESOptimizer.fit() call. Without this, this
@@ -2337,6 +2667,7 @@ def _run_cmaes_optimization(
         extra_kwargs["compute_covariance"] = False
 
     # Run CMA-ES optimization
+    t_search = time.perf_counter()
     result_dict = optimizer.fit(
         f,
         xdata,
@@ -2348,47 +2679,18 @@ def _run_cmaes_optimization(
         **extra_kwargs,
     )
 
-    # Convert dict result to CurveFitResult-like structure
     # CMAESOptimizer returns {"popt": ..., "pcov": ..., ...}
-    popt = result_dict["popt"]
-    # None when the refinement skipped it (compute_covariance=False); the
+    # pcov is None when the refinement skipped it (compute_covariance=False); the
     # unrefined fallbacks return an inf placeholder, which is dropped here.
     pcov = result_dict["pcov"] if compute_covariance else None
     if not compute_covariance and result_dict["pcov"] is not None:
         # refinement already logged it when it returned None; log only the dropped placeholder
         _logger.debug("covariance skipped", reason="compute_covariance=False")
 
-    # Create a CurveFitResult-compatible object
-    # We need to construct a result that behaves like CurveFitResult
-    from nlsq.result import CurveFitResult
-
-    # Build a minimal result dict with required fields
-    # The NLSQ refinement (when run) carries the real cost/jacobian/evaluation
-    # counts; without refinement CMA-ES provides none of them.
-    refined = result_dict.get("nlsq_result")
-
-    def _ref(name: str, default: Any = None) -> Any:
-        try:
-            return refined[name] if refined is not None else default
-        except (KeyError, TypeError, IndexError):
-            return getattr(refined, name, default)
-
-    result = CurveFitResult(
-        x=popt,
-        pcov=pcov,
-        cost=_ref("cost"),
-        fun=_ref("fun"),
-        jac=_ref("jac"),
-        grad=_ref("grad"),
-        optimality=_ref("optimality"),
-        active_mask=_ref("active_mask"),
-        nfev=_ref("nfev", 0),
-        njev=_ref("njev", 0),
-        nit=_ref("nit", 0),
-        **_cmaes_termination_fields(result_dict),
-        xdata=np.asarray(xdata),
-        ydata=np.asarray(ydata),
-        model=f,
+    t_post = time.perf_counter()
+    ctime = t_post - t_search  # search plus NLSQ refinement
+    result = _cmaes_curve_fit_result(
+        result_dict, f, xdata, ydata, sigma, absolute_sigma, pcov
     )
 
     # Add multi-start diagnostics placeholder
@@ -2398,7 +2700,14 @@ def _run_cmaes_optimization(
         "method": "cmaes",
     }
 
-    return _apply_output_flags(result, f, xdata, kwargs)
+    return _apply_output_flags(
+        result,
+        f,
+        xdata_in,
+        {**kwargs, "data_mask": data_mask},
+        ctime=ctime,
+        post_time=time.perf_counter() - t_post,
+    )
 
 
 def _apply_output_flags(
@@ -2406,27 +2715,99 @@ def _apply_output_flags(
     f: ModelFunction,
     xdata: ArrayLike,
     kwargs: dict[str, Any],
+    ctime: float = 0.0,
+    post_time: float = 0.0,
 ) -> Any:
     """Format a CurveFitResult as the SciPy-style tuple the caller asked for.
 
     Same shapes as ``CurveFit.curve_fit``: ``return_eval`` -> (popt, pcov, f(x));
     ``full_output`` -> (popt, pcov, infodict, mesg, ier); ``timeit`` ->
-    (popt, pcov, result, post_time, ctime) (no separate timings: both 0.0).
-    Unlike TRF, ``infodict`` here holds only ``nfev`` and ``fvec=None``.
-    Otherwise the result is returned unchanged.
+    (popt, pcov, result, post_time, ctime) as given by the caller (the timings of
+    its own phases; ``result`` loses ``fun``/``jac`` like the ordinary timeit path,
+    and ``all_times`` is ``{}`` when the route has no per-solver timings).
+    ``infodict`` holds ``nfev`` and ``fvec`` (the refinement residuals, or None
+    when no refinement ran); ``ier`` is the result's ``status`` (5 on failure),
+    as in ``scipy.optimize.curve_fit``. Otherwise the result is returned unchanged.
     """
     popt, pcov = result.popt, result.pcov
     if kwargs.get("return_eval"):
-        return popt, pcov, np.asarray(f(jnp.asarray(xdata), *popt))
+        _record_attempt(result)
+        # As CurveFit.curve_fit: nan_policy='omit' returns f over the retained rows,
+        # a user data_mask returns f over all of the caller's rows.
+        x_fit = result.get("xdata")
+        use_full = kwargs.get("data_mask") is not None or x_fit is None
+        return (
+            popt,
+            pcov,
+            np.asarray(f(jnp.asarray(xdata if use_full else x_fit), *popt)),
+        )
     if kwargs.get("full_output"):
-        info = {"nfev": result.get("nfev"), "fvec": None}
+        fun = result.get("fun")
+        info = {
+            "nfev": result.get("nfev"),
+            "fvec": np.asarray(fun) if fun is not None else None,
+        }
         status = result.get("status")
         status = 1 if status is None else int(status)
-        ier = 1 if result.get("success", False) and status > 0 else 5
+        # SciPy ier convention: the solver's status when converged, 5 otherwise.
+        ier = status if result.get("success", False) and status > 0 else 5
         return popt, pcov, info, result.get("message", ""), ier
     if kwargs.get("timeit"):
-        return popt, pcov, result, 0.0, 0.0
+        result.pop("jac", None)
+        result.pop("fun", None)
+        result.setdefault("all_times", {})
+        return popt, pcov, result, float(post_time), float(ctime)
     return result
+
+
+_DEFAULT_MAX_JACOBIAN_ELEMENTS = 10_000_000
+
+
+def _route_options(
+    compute_diagnostics: bool,
+    diagnostics_level: DiagnosticLevel,
+    diagnostics_config: DiagnosticsConfig | None,
+    max_jacobian_elements_for_svd: int,
+) -> dict[str, Any]:
+    """Wrapper options that only the standard route consumes itself.
+
+    The CMA-ES refinement and fallback attempts call ``curve_fit`` again, so
+    these keywords reach them through kwargs (non-default values only).
+    """
+    opts: dict[str, Any] = {}
+    if compute_diagnostics:
+        opts.update(
+            compute_diagnostics=True,
+            diagnostics_level=diagnostics_level,
+            diagnostics_config=diagnostics_config,
+        )
+    if max_jacobian_elements_for_svd != _DEFAULT_MAX_JACOBIAN_ELEMENTS:
+        opts["max_jacobian_elements_for_svd"] = max_jacobian_elements_for_svd
+    return opts
+
+
+def _local_method_opts(
+    method: str | None, route: str, bounds: Any = None
+) -> dict[str, Any]:
+    """The explicit local solver for a multistart/fallback attempt.
+
+    ``'trf'``/``'lm'``/``'auto'`` go to every inner fit (``'auto'`` keeps the
+    memory-based strategy selection in each). ``'lm'`` with finite bounds is
+    rejected up front, as in a plain call (the fallback route would otherwise
+    swallow the error and silently retry with TRF). ``'hybrid_streaming'``
+    cannot be driven by those orchestrators; running a different solver
+    instead would be a silent substitution.
+    """
+    if method == "lm" and bounds is not None:
+        bounds = _bounds_as_tuple(bounds)
+        if any(np.any(np.isfinite(np.asarray(b, dtype=float))) for b in bounds):
+            raise ValueError("Method 'lm' doesn't work when there are bounds.")
+    if method == "hybrid_streaming":
+        raise ValueError(
+            f"method='hybrid_streaming' cannot be combined with the {route} "
+            "route; use method='trf' or drop the option."
+        )
+    return {"method": method} if method in ("trf", "lm", "auto") else {}
 
 
 def _run_multistart_optimization(
@@ -2461,7 +2842,9 @@ def _run_multistart_optimization(
     scale_factor : float
         Scale factor for exploration region.
     kwargs : dict
-        Additional keyword arguments.
+        Additional keyword arguments for each start's ``curve_fit``.
+        ``max_jacobian_elements_for_svd`` (if present) configures each start's
+        ``CurveFit`` instead.
 
     Returns
     -------
@@ -2471,6 +2854,13 @@ def _run_multistart_optimization(
     from nlsq.global_optimization import (
         GlobalOptimizationConfig,
         MultiStartOrchestrator,
+    )
+
+    # ``max_jacobian_elements_for_svd`` configures each start's CurveFit; it
+    # is not a ``curve_fit`` keyword.
+    kwargs = dict(kwargs)
+    svd_limit = kwargs.pop(
+        "max_jacobian_elements_for_svd", _DEFAULT_MAX_JACOBIAN_ELEMENTS
     )
 
     # Extract bounds from kwargs
@@ -2485,7 +2875,10 @@ def _run_multistart_optimization(
     )
 
     # Create orchestrator
-    orchestrator = MultiStartOrchestrator(config=multistart_config)
+    orchestrator = MultiStartOrchestrator(
+        config=multistart_config,
+        curve_fit_instance=CurveFit(max_jacobian_elements_for_svd=svd_limit),
+    )
 
     # Run multi-start optimization
     result = orchestrator.fit(
@@ -2596,9 +2989,11 @@ def _prepare_optimizer_options(
     compute_diagnostics : bool
         Whether to compute diagnostics.
     diagnostics_level : DiagnosticLevel
-        Level of diagnostics to compute.
+        Level of diagnostics to compute. A non-default level overrides
+        ``diagnostics_config.level``.
     diagnostics_config : DiagnosticsConfig or None
-        Diagnostics configuration.
+        Diagnostics configuration. Registered diagnostic plugins run
+        automatically and appear in ``result.diagnostics.plugin_results``.
 
     Returns
     -------
@@ -2654,7 +3049,7 @@ def curve_fit(
     bounds_safety_factor: float = 10.0,
     stability: Literal["auto", "check", False] = False,
     rescale_data: bool = True,
-    max_jacobian_elements_for_svd: int = 10_000_000,
+    max_jacobian_elements_for_svd: int = _DEFAULT_MAX_JACOBIAN_ELEMENTS,
     fallback: bool = False,
     max_fallback_attempts: int = 10,
     fallback_verbose: bool = False,
@@ -2666,7 +3061,7 @@ def curve_fit(
     center_on_p0: bool = True,
     scale_factor: float = 1.0,
     # CMA-ES global optimization parameters
-    method: Literal["auto", "cmaes", "multi-start", "trf", "hybrid_streaming"]
+    method: Literal["auto", "cmaes", "multi-start", "trf", "lm", "hybrid_streaming"]
     | None = None,
     cmaes_config: CMAESConfig | None = None,
     # Diagnostics parameters (User Story 1)
@@ -2808,8 +3203,11 @@ def curve_fit(
         Optimization method to use:
 
         - 'auto': Automatically select based on parameter scale ratio.
-          Uses CMA-ES for multi-scale problems (>1000x scale difference)
-          when evosax is installed, otherwise multi-start.
+          Uses CMA-ES for multi-scale problems (>1000x scale difference,
+          finite ``bounds``) when evosax is installed; otherwise the
+          memory-based strategy selection (standard TRF, chunked or
+          streaming, by the size of the problem) applies. Request
+          ``method='multi-start'`` explicitly for a multi-start fit.
         - 'cmaes': Use CMA-ES (Covariance Matrix Adaptation Evolution Strategy)
           for gradient-free global optimization. Requires bounds.
           Best for multi-scale parameters spanning many orders of magnitude.
@@ -2867,6 +3265,13 @@ def curve_fit(
 
     Fallback metadata is not available when ``full_output``, ``return_eval``
     or ``timeit`` is set: those return the plain tuple.
+
+    With ``timeit=True`` the tuple is ``(popt, pcov, result, post_time, ctime)``.
+    On the default path ``ctime`` is the host-to-device conversion time and
+    ``post_time`` the covariance time. On the CMA-ES route and the
+    ``method='auto'`` chunked route ``ctime`` is the whole search/fit time and
+    ``post_time`` the result-formatting time; those routes have no per-solver
+    timings, so ``result['all_times']`` is ``{}``.
 
     When multistart=True or global_search=True, the returned object contains:
 
@@ -3011,6 +3416,9 @@ def curve_fit(
     for _name, _value in zip(_positional_names, args, strict=False):
         kwargs.setdefault(_name, _value)
     args = ()
+    # A positional ``method`` was bound into kwargs above; the routing below
+    # reads the named parameter.
+    method = method or kwargs.pop("method", None)
 
     # scipy.optimize.Bounds -> (lb, ub) once, so every route (TRF, CMA-ES,
     # multistart, streaming) sees the tuple form.
@@ -3075,7 +3483,7 @@ def curve_fit(
     # Verbose memory budget diagnostics (verbose >= 2)
     verbose = kwargs.get("verbose", 1)
     if verbose >= 2:
-        _log_memory_budget_diagnostics(xdata, ydata, p0)
+        _log_memory_budget_diagnostics(xdata, ydata, p0, kwargs.get("bounds"))
 
     # Handle numerical stability checks and fixes
     if stability:
@@ -3092,6 +3500,13 @@ def curve_fit(
         # Re-extract p0 in case it was updated
         p0 = _extract_p0_from_args(args, kwargs)
 
+    route_opts = _route_options(
+        compute_diagnostics,
+        diagnostics_level,
+        diagnostics_config,
+        max_jacobian_elements_for_svd,
+    )
+
     # Handle CMA-ES global optimization
     if method in ("cmaes", "auto"):
         bounds = kwargs.get("bounds")
@@ -3104,13 +3519,14 @@ def curve_fit(
                 bounds,
                 method,
                 cmaes_config,
-                kwargs,
+                {**kwargs, **route_opts},
                 compute_covariance,
             )
             if result is not None:
                 return result
-        # If bounds is None and method='cmaes', we could warn, but for 'auto'
-        # we just fall through to standard path
+        # method='auto' without bounds, or when the selector declines CMA-ES,
+        # continues on the memory-based auto path below; method='cmaes' becomes
+        # a multi-start fit (evosax not installed).
 
     # Multistart, fallback and the standard path all end in CurveFit.curve_fit,
     # which owns the keyword; CMA-ES above took it as an explicit argument.
@@ -3122,7 +3538,7 @@ def curve_fit(
     # method="multi-start" alone fell through to standard TRF, which rejects
     # it with an unrelated "method must be 'trf' or 'lm'" error.
     if (
-        (multistart or method == "multi-start")
+        (multistart or method in ("multi-start", "cmaes"))
         and n_starts is not None
         and n_starts > 0
     ):
@@ -3135,7 +3551,11 @@ def curve_fit(
             sampler,
             center_on_p0,
             scale_factor,
-            kwargs,
+            {
+                **kwargs,
+                **route_opts,
+                **_local_method_opts(method, "multistart", kwargs.get("bounds")),
+            },
         )
 
     # Use fallback orchestrator if requested
@@ -3145,7 +3565,11 @@ def curve_fit(
             xdata,
             ydata,
             args,
-            kwargs,
+            {
+                **kwargs,
+                **route_opts,
+                **_local_method_opts(method, "fallback", kwargs.get("bounds")),
+            },
             max_fallback_attempts,
             fallback_verbose,
             multistart,
@@ -3169,8 +3593,9 @@ def curve_fit(
         max_jacobian_elements_for_svd=max_jacobian_elements_for_svd,
     )
 
-    # Pass method through to CurveFit if specified (e.g., hybrid_streaming)
-    if method is not None:
+    # Pass method through to CurveFit if specified (e.g., hybrid_streaming).
+    # 'cmaes'/'multi-start' are routed above (n_starts=0 bypasses to plain TRF).
+    if method is not None and method not in ("cmaes", "multi-start"):
         kwargs["method"] = method
     result = jcf.curve_fit(f, xdata, ydata, *args, **kwargs)
 
@@ -3268,6 +3693,35 @@ def _covariance_svd(jac) -> tuple[jnp.ndarray, jnp.ndarray]:
     return _covariance_svd_jit(jac)
 
 
+def _resolve_diagnostics_config(
+    level: DiagnosticLevel, config: DiagnosticsConfig | None
+) -> DiagnosticsConfig:
+    """Combine ``diagnostics_level`` and ``diagnostics_config``.
+
+    A non-default ``level`` overrides ``config.level`` (the default BASIC cannot
+    be told apart from "not given", so the config's level wins then).
+    """
+    if config is None:
+        return DiagnosticsConfig(level=level, verbose=False, emit_warnings=True)
+    level = DiagnosticsConfig(level=level).level  # normalizes str levels
+    if level in (DiagnosticLevel.BASIC, config.level):
+        return config
+    return dataclasses.replace(config, level=level)
+
+
+def _run_diagnostic_plugins(logger: Any, jacobian, popt, residuals, **context: Any):
+    """Run registered diagnostic plugins; never let them discard the fit's report."""
+    try:
+        from nlsq.diagnostics.plugin import PluginRegistry, run_plugins
+
+        if not PluginRegistry.all():
+            return None
+        return run_plugins(jacobian, np.asarray(popt), np.asarray(residuals), **context)
+    except Exception as e:
+        logger.warning("Diagnostic plugins failed", error=str(e))
+        return None
+
+
 class CurveFit:
     """Main class for nonlinear least squares curve fitting with JAX acceleration.
 
@@ -3340,10 +3794,16 @@ class CurveFit:
             Supported keys: ``'maxsize'`` (int, default 128) — maximum
             number of compiled functions to cache;
             ``'enable_stats'`` (bool, default True) — track cache
-            statistics (hits, misses, compile_time_ms);
-            ``'disk_cache_enabled'`` (bool, default False) — enable
-            disk caching tier (Phase 2 feature).
+            statistics (hits, misses, wrapper-creation time);
+            ``'disk_cache_enabled'`` (bool, default False) — not
+            implemented; True warns and is ignored.
             If None, uses global cache with default settings.
+            This cache is only used by ``cached_jit`` / ``get_or_compile``
+            callers; curve_fit's own compilation does not go through it, so
+            ``cache_config`` does not change fitting or compile behaviour, and
+            ``result["cache_stats"]`` reports this cache only (its
+            ``compile_time_ms`` / ``total_compilations`` count ``jax.jit``
+            wrapper construction, not XLA compilation).
 
         max_jacobian_elements_for_svd : int, default 10_000_000
             Maximum Jacobian size (m x n elements) for SVD computation during
@@ -3857,26 +4317,15 @@ class CurveFit:
         result["xdata"] = xdata
         result["ydata"] = ydata
         result["pcov"] = result_dict.get("pcov", np.full((n, n), np.inf))
+        _store_sigma(result, sigma, absolute_sigma)
 
-        if return_eval:
-            return result.x, result["pcov"], np.asarray(f(xdata, *result.x))
-        if full_output:
-            fun = result.get("fun")
-            infodict = {
-                "nfev": result.get("nfev"),
-                "fvec": np.asarray(fun) if fun is not None else None,
-            }
-            status = result.get("status")
-            status = 1 if status is None else int(status)
-            ier = status if result.get("success", False) and status > 0 else 5
-            return (
-                result.x,
-                result["pcov"],
-                infodict,
-                result.get("message", ""),
-                ier,
-            )
-        return result
+        # timeit is warned about and ignored above (the engine has no timings).
+        return _apply_output_flags(
+            result,
+            f,
+            xdata,
+            {"return_eval": return_eval, "full_output": full_output},
+        )
 
     def _curve_fit_auto_memory(
         self,
@@ -3945,7 +4394,8 @@ class CurveFit:
         compute_diagnostics : bool, default=False
             Compute fit diagnostics
         diagnostics_level : DiagnosticLevel
-            Level of diagnostics to compute
+            Level of diagnostics to compute. A non-default level overrides
+            ``diagnostics_config.level``.
         diagnostics_config : DiagnosticsConfig, optional
             Configuration for diagnostics
         compute_covariance : bool, default=True
@@ -3987,6 +4437,7 @@ class CurveFit:
             n_params=n_params,
             memory_limit_gb=memory_limit_gb,
             verbose=(verbose >= 2),
+            bounded=_is_bounded(bounds, n_params),
         )
 
         if verbose >= 1:
@@ -4028,9 +4479,12 @@ class CurveFit:
                 **kwargs,
             )
             if isinstance(result, CurveFitResult):
-                # Report the caller's model and x, not the points-first adapters.
+                # Report the caller's model and x (scipy layout), not the
+                # points-first adapters. Transpose the x the hybrid fit
+                # actually used: nan_policy='omit' may have dropped rows.
                 result["model"] = f
-                result["xdata"] = xdata
+                x_used = np.asarray(result["xdata"])
+                result["xdata"] = x_used.T if x_used.ndim > 1 else x_used
             return result
 
         if strategy == "chunked":
@@ -4059,7 +4513,6 @@ class CurveFit:
                 "method='auto' (chunked strategy)",
                 jac=jac is not None,
                 solver=solver != "auto",
-                full_output=full_output,
             )
 
             # Delegate to LargeDatasetFitter
@@ -4072,6 +4525,7 @@ class CurveFit:
             )
 
             # Run fit
+            t_fit = time.perf_counter()
             result = large_strategy.fit(
                 f,
                 np.asarray(xdata, float),
@@ -4098,22 +4552,44 @@ class CurveFit:
                 )
 
             # Convert OptimizeResult to CurveFitResult format
-            popt = result.x
+            t_post = time.perf_counter()
+            ctime = t_post - t_fit
             pcov = result.get("pcov", np.full((n_params, n_params), np.inf))
-
-            if timeit:
-                ctime = result.get("execution_time", 0)
-                return popt, pcov, result, 0, ctime
-            if return_eval:
-                feval = f(np.asarray(xdata, float), *popt)
-                return popt, pcov, np.array(feval)
-            # Return CurveFitResult for consistency
             curve_fit_result = CurveFitResult(result)
+            # The chunk engine applied nan_policy itself; store the rows it fit.
+            x_fit, y_fit, _ = _rows_actually_fit(xdata, ydata, None, kwargs)
             curve_fit_result["model"] = f
-            curve_fit_result["xdata"] = xdata
-            curve_fit_result["ydata"] = ydata
+            curve_fit_result["xdata"] = x_fit
+            curve_fit_result["ydata"] = y_fit
             curve_fit_result["pcov"] = pcov
-            return curve_fit_result
+            _store_sigma(curve_fit_result, sigma, absolute_sigma)  # sigma is None here
+            if full_output and not return_eval:
+                # infodict['fvec'] as on the standard path (unweighted here:
+                # sigma is rejected above); evaluated chunk-wise, but the
+                # vector itself is O(n) like the standard path's.
+                curve_fit_result["fun"] = _residuals_in_chunks(
+                    f, x_fit, y_fit, curve_fit_result.popt
+                )
+            out = _apply_output_flags(
+                curve_fit_result,
+                f,
+                np.asarray(x_fit, float),
+                {
+                    "return_eval": return_eval,
+                    "full_output": full_output,
+                    "timeit": timeit,
+                },
+                ctime=ctime,
+                post_time=time.perf_counter() - t_post,
+            )
+            if timeit and not (return_eval or full_output):
+                # The timeit tuple carries the engine's own result object, trimmed
+                # like the ordinary timeit path (no per-solver timings: all_times {}).
+                result.pop("jac", None)
+                result.pop("fun", None)
+                result.setdefault("all_times", {})
+                out = (out[0], out[1], result, out[3], out[4])
+            return out
 
         # Standard curve_fit path (strategy == "standard")
         # Call curve_fit with method=None to use default TRF
@@ -4223,19 +4699,22 @@ class CurveFit:
             )
 
         # Convert to JAX arrays (no .block_until_ready() - one-time setup)
-        st = time.time()
+        st = time.perf_counter()
         jnp_xdata = jnp.asarray(xdata)
         jnp_ydata = jnp.asarray(ydata)
-        ctime = time.time() - st
+        ctime = time.perf_counter() - st
 
         jnp_data_mask = jnp.array(data_mask, dtype=bool)
 
         # Check memory requirements if stability is enabled
         if self.enable_stability:
+            # Scalar/broadcast bounds expand to per-parameter arrays first.
+            _blb, _bub = prepare_bounds(bounds, n)
             memory_required = self.memory_manager.predict_memory_requirement(
                 m,
                 n,
                 method,
+                bounded=bool(np.any(np.isfinite(_blb)) or np.any(np.isfinite(_bub))),
             )
             is_available, msg = self.memory_manager.check_memory_availability(
                 memory_required,
@@ -4667,6 +5146,10 @@ class CurveFit:
         >>> plt.show()
         """
 
+        # scipy.optimize.Bounds -> (lb, ub): the stability-time algorithm
+        # selection unpacks the tuple form (the wrapper normalizes too).
+        bounds = _bounds_as_tuple(bounds)
+
         # Prepare and validate all inputs
         prepared = prepare_problem(
             f,
@@ -4714,14 +5197,8 @@ class CurveFit:
         _gradient_monitor = None
         _resolved_diag_config = None
         if compute_diagnostics:
-            _resolved_diag_config = (
-                diagnostics_config
-                if diagnostics_config is not None
-                else DiagnosticsConfig(
-                    level=diagnostics_level,
-                    verbose=False,
-                    emit_warnings=True,
-                )
+            _resolved_diag_config = _resolve_diagnostics_config(
+                diagnostics_level, diagnostics_config
             )
             from nlsq.diagnostics.gradient_health import GradientMonitor
 
@@ -4762,7 +5239,7 @@ class CurveFit:
             optimality=getattr(res, "optimality", None),
         )
 
-        st = time.time()
+        st = time.perf_counter()
         # Degrees-of-freedom/SVD-threshold must reflect the EFFECTIVE point
         # count, prepared.n_effective (unmasked rows), not the raw m.
         ysize = prepared.n_effective
@@ -4776,7 +5253,7 @@ class CurveFit:
 
         return_full = full_output
 
-        post_time = time.time() - st
+        post_time = time.perf_counter() - st
 
         # Log curve fit completion
         total_time = self.logger.timers.get("curve_fit", 0)
@@ -4788,6 +5265,7 @@ class CurveFit:
         )
 
         if return_eval:
+            _record_attempt(res)
             feval = f(jnp_xdata, *popt)
             feval = np.array(feval)
             if none_mask:
@@ -4822,9 +5300,7 @@ class CurveFit:
         result["xdata"] = xdata
         result["ydata"] = ydata
         result["pcov"] = _pcov
-        # kept so prediction_interval can weight the noise term like the fit did
-        result["sigma"] = sigma
-        result["absolute_sigma"] = absolute_sigma
+        _store_sigma(result, sigma, absolute_sigma)
 
         # Compute diagnostics if requested
         if compute_diagnostics:
@@ -4841,12 +5317,8 @@ class CurveFit:
                 # to construct the GradientMonitor) instead of rebuilding it.
                 config = _resolved_diag_config
 
-                # Get Jacobian from result, dropping padded/masked-out rows
-                # (jnp.where(data_mask, ..., 0) zeros them in res.jac already,
-                # but keeping them inflates jacobian.shape[0] and makes the
-                # analyzer's rank/conditioning threshold over-aggressive —
-                # the same padding-count bug _compute_covariance's SVD
-                # threshold already guards against via `ysize`).
+                # res.jac is already unpadded (padded/masked rows are not part of
+                # it), so no slicing is needed before the analyzers.
                 jacobian = np.asarray(res.jac)
 
                 # Run identifiability analysis
@@ -4863,13 +5335,27 @@ class CurveFit:
                     )
                     sloppy_model_report = sensitivity_analyzer.analyze(jacobian)
 
+                # Registered diagnostic plugins (isolated per plugin by run_plugins;
+                # a failure here must not discard the built-in reports).
+                plugin_results = _run_diagnostic_plugins(
+                    self.logger,
+                    jacobian,
+                    popt,
+                    res.fun,
+                    xdata=xdata,
+                    ydata=ydata,
+                    bounds=bounds,
+                    model=f,
+                    config=config,
+                )
+
                 # Create aggregated health report using factory function
                 # Note: verbose and emit_warnings are handled by create_health_report
                 health_report = create_health_report(
                     identifiability=ident_report,
                     gradient_health=gradient_health_report,
                     sloppy_model=sloppy_model_report,
-                    plugin_results=None,  # Plugin system not yet implemented
+                    plugin_results=plugin_results,
                     config=config,
                 )
 

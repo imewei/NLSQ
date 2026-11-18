@@ -8,11 +8,16 @@ loads none of them.)
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
-from nlsq.core._option_checks import validate_max_nfev
+from nlsq.core._option_checks import (
+    require_usable_tolerances,
+    validate_max_nfev,
+    validate_tolerance,
+)
 from nlsq.streaming.validators import (
     coerce_integral_fields,
     validate_non_negative_int,
@@ -256,6 +261,14 @@ class Exact:
         _validate_chunk_size(self.chunk_size)
         coerce_integral_fields(self, ("chunk_size",))
         object.__setattr__(self, "max_nfev", validate_max_nfev(self.max_nfev))
+        # the solver's own check, at construction; its sub-epsilon warning is left to fit time
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            tols = [
+                validate_tolerance(name, getattr(self, name), strict=True)
+                for name in ("ftol", "xtol", "gtol")
+            ]
+        require_usable_tolerances(*tols)
 
 
 @dataclass(frozen=True)

@@ -328,6 +328,65 @@ class AutosaveManager(QObject):
         valid = np.all(arr > 0) if positive else np.all(np.isfinite(arr))
         return arr if valid else None
 
+    @staticmethod
+    def _clear_data(state: Any) -> None:
+        state.xdata = state.ydata = state.sigma = None
+
+    def _restore_data(self, state: Any, data: dict[str, Any]) -> None:
+        """Restore x/y/sigma as one tuple (see ``_restore_state``)."""
+        # Restore data arrays — validate before accepting to avoid emitting
+        # data_changed with NaN/Inf-contaminated or malformed arrays.
+        # All-or-nothing: a partial restore would pair the wrong x/y/sigma.
+        raw = {key: data[key] for key in ("xdata", "ydata", "sigma") if key in data}
+        if ("xdata" in raw) != ("ydata" in raw):
+            # half a pair (and any sigma with it) must never meet the old
+            # y/x: keep the existing data untouched
+            logger.warning(
+                "Autosave recovery ignored its data: it has %s but not %s.",
+                "xdata" if "xdata" in raw else "ydata",
+                "ydata" if "xdata" in raw else "xdata",
+            )
+            raw = {}
+        restored: dict[str, np.ndarray] = {}
+        for key, value in raw.items():
+            try:
+                arr = self._validate_restored_array(
+                    value, positive=key == "sigma", max_ndim=2 if key == "xdata" else 1
+                )
+            except (TypeError, ValueError):
+                arr = None
+            if arr is not None:
+                restored[key] = arr
+        # sigma is only meaningful with the x/y it was recorded for: never pair
+        # a recovered sigma with the current data.
+        if "sigma" in restored and not {"xdata", "ydata"} & restored.keys():
+            logger.warning("Autosave recovery dropped sigma: no x/y data with it.")
+            del restored["sigma"]
+            raw = {k: v for k, v in raw.items() if k != "sigma"}
+        # Cross-validate lengths — independently-valid arrays of mismatched
+        # length would silently pair the wrong sigma/y with the wrong x.
+        lengths = {a.shape[-1] for a in restored.values()}
+        if len(restored) < len(raw) or len(lengths) > 1:
+            logger.warning(
+                "Autosave recovery dropped all data arrays: %s invalid or "
+                "inconsistent in the recovery file.",
+                ", ".join(k for k in raw if k not in restored) or "lengths of arrays",
+            )
+            self._clear_data(state)  # never pair the recovered model with old data
+        else:
+            if "xdata" in restored or "ydata" in restored:
+                # a recovered dataset replaces the old x/y/sigma as one tuple
+                state.sigma = None
+            for key, arr in restored.items():
+                setattr(state, key, arr)
+        if "data_skipped" in data:
+            logger.warning(
+                "Autosave recovery has no data: the %s-point dataset exceeded "
+                "the autosave limit and must be reloaded.",
+                data["data_skipped"],
+            )
+            self._clear_data(state)
+
     def _restore_state(self, data: dict[str, Any]) -> None:
         """Restore session state from a dictionary.
 
@@ -341,39 +400,11 @@ class AutosaveManager(QObject):
         # fit result itself -- otherwise a fit_result from before recovery
         # would silently survive paired with the restored data/model.
         self._app_state._clear_fit_result()
+        # Inputs change here without going through set_data()/set_model(): bump
+        # the epoch so a fit still running cannot attach its result to them.
+        self._app_state.input_epoch += 1
 
-        # Restore data arrays — validate before accepting to avoid emitting
-        # data_changed with NaN/Inf-contaminated or malformed arrays.
-        # All-or-nothing: a partial restore would pair the wrong x/y/sigma.
-        raw = {key: data[key] for key in ("xdata", "ydata", "sigma") if key in data}
-        restored: dict[str, np.ndarray] = {}
-        for key, value in raw.items():
-            try:
-                arr = self._validate_restored_array(
-                    value, positive=key == "sigma", max_ndim=2 if key == "xdata" else 1
-                )
-            except (TypeError, ValueError):
-                arr = None
-            if arr is not None:
-                restored[key] = arr
-        # Cross-validate lengths — independently-valid arrays of mismatched
-        # length would silently pair the wrong sigma/y with the wrong x.
-        lengths = {a.shape[-1] for a in restored.values()}
-        if len(restored) < len(raw) or len(lengths) > 1:
-            logger.warning(
-                "Autosave recovery dropped all data arrays: %s invalid or "
-                "inconsistent in the recovery file.",
-                ", ".join(k for k in raw if k not in restored) or "lengths of arrays",
-            )
-        else:
-            for key, arr in restored.items():
-                setattr(state, key, arr)
-        if "data_skipped" in data:
-            logger.warning(
-                "Autosave recovery has no data: the %s-point dataset exceeded "
-                "the autosave limit and must be reloaded.",
-                data["data_skipped"],
-            )
+        self._restore_data(state, data)
 
         # Restore model config
         if isinstance(data.get("model_config"), dict):

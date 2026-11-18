@@ -136,7 +136,7 @@ class TestStatusAndCounts:
             max_warmup_iterations=6,
             warmup_iterations=5,
         )
-        assert r.message == "Maximum iterations reached"
+        assert r.message.startswith("Maximum iterations reached")
         assert not r.success and r["status"] == 0
         out = _hyb(
             x,

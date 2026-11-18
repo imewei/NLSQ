@@ -68,15 +68,19 @@ ModelFunction: TypeAlias = Callable[..., ArrayLike]
 #     J: Jacobian matrix of shape (m, n) where m = len(f(x)) and n = len(params)
 JacobianFunction: TypeAlias = Callable[..., ArrayLike]
 
-# Callback function for monitoring optimization progress.
+# Callback function for monitoring optimization progress, called as
+# ``callback(iteration, cost, params, info)`` after each iteration (the first
+# call receives iteration=1).
 #
 # Parameters:
+#     iteration: Iteration number (int)
+#     cost: Current cost value (float)
 #     params: Current parameter estimates
-#     residuals: Current residual values
+#     info: Dict with gradient_norm, nfev, ...
 #
 # Returns:
-#     True to stop optimization, False/None to continue
-CallbackFunction: TypeAlias = Callable[[FloatArray, FloatArray], bool | None]
+#     True (or raising StopOptimization) to stop, False/None to continue
+CallbackFunction: TypeAlias = Callable[[int, float, FloatArray, dict[str, Any]], Any]
 
 # Loss function rho(z) for robust fitting.
 #
@@ -118,9 +122,10 @@ BoundsTuple: TypeAlias = tuple[ArrayLike, ArrayLike]
 #     - "cmaes": CMA-ES global optimization
 #     - "multi-start": Multi-start local optimization
 #     - "trf": Trust Region Reflective (local, supports bounds)
+#     - "lm": Levenberg-Marquardt (unbounded problems)
 #     - "hybrid_streaming": Adaptive hybrid streaming optimizer
 MethodLiteral: TypeAlias = Literal[
-    "auto", "cmaes", "multi-start", "trf", "hybrid_streaming"
+    "auto", "cmaes", "multi-start", "trf", "lm", "hybrid_streaming"
 ]
 
 

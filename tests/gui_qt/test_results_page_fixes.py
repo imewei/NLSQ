@@ -80,12 +80,18 @@ def test_dense_grid_failure_keeps_results_and_draws_curve_at_data(app_state, qtb
 
 
 def test_confidence_band_is_not_zero_for_float32_parameters():
-    x = np.linspace(1.0, 5.0, 11)
-    popt = np.array([1.0], dtype=np.float32)
-    pcov = np.array([[0.04]])
+    from nlsq.gui_qt.adapters.fit_adapter import confidence_band
 
-    lower, upper = ResultsPage._compute_confidence_bands(
-        object(), x, popt, pcov, lambda x, a: a * x
+    x = np.linspace(1.0, 5.0, 11)
+    result = CurveFitResult(
+        popt=np.array([1.0], dtype=np.float32),
+        pcov=np.array([[0.04]]),
+        success=True,
+        model=lambda x, a: a * x,
+        xdata=x,
+        ydata=x.copy(),
     )
+
+    lower, upper = confidence_band(result, x)
 
     assert np.all(upper - lower > 0)

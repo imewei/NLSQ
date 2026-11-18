@@ -254,12 +254,6 @@ def default_config() -> DiagnosticsConfig:
     return DiagnosticsConfig()
 
 
-@pytest.fixture
-def full_level_config() -> DiagnosticsConfig:
-    """Create diagnostics configuration with FULL level."""
-    return DiagnosticsConfig(level=DiagnosticLevel.FULL)
-
-
 # =============================================================================
 # T027: ModelHealthReport Aggregation Tests
 # =============================================================================

@@ -33,10 +33,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from scipy import stats
 
 from nlsq.cli.result_exporter import NumpyJSONEncoder, _atomic_write
-from nlsq.gui_qt.adapters.fit_adapter import _resolve_workflow
+from nlsq.gui_qt.adapters.fit_adapter import (
+    _resolve_workflow,
+    parameter_confidence_intervals,
+)
 from nlsq.gui_qt.session_state import n_points
 
 if TYPE_CHECKING:
@@ -457,10 +459,9 @@ class ExportPage(QWidget):
                 popt = getattr(result, "popt", [])
             pcov = getattr(result, "pcov", None)
 
-            # Compute t-value for 95% CI
+            # 95% CI from the result (same numbers as the Results table)
             n_data = len(state.ydata) if state.ydata is not None else 0
-            dof = max(n_data - len(popt), 1)
-            t_val = stats.t.ppf(0.975, dof)
+            intervals = parameter_confidence_intervals(result, n_data)
 
             lines = ["parameter,value,uncertainty,ci_lower,ci_upper"]
             for i, name in enumerate(param_names):
@@ -468,8 +469,7 @@ class ExportPage(QWidget):
                 if pcov is not None:
                     try:
                         uncert = np.sqrt(pcov[i, i])
-                        ci_lower = value - t_val * uncert
-                        ci_upper = value + t_val * uncert
+                        ci_lower, ci_upper = intervals[i]
                     except Exception:
                         uncert = ci_lower = ci_upper = ""
                 else:
@@ -590,6 +590,8 @@ class ExportPage(QWidget):
                 extra.insert(1, "    absolute_sigma=True,")
         if not state.check_finite:  # fit()'s default is True
             extra.append("    check_finite=False,")
+        if getattr(state, "auto_bounds", False):  # fit()'s default is False
+            extra.append("    auto_bounds=True,")
         return extra
 
     def generate_python_code(self, for_bundle: bool = False) -> str:
@@ -806,20 +808,19 @@ class ExportPage(QWidget):
             param_names = self._get_param_names()
 
             if popt is not None:
-                # Compute t-value for 95% CI
+                # 95% CI from the result (same numbers as the Results table)
                 n_data = len(state.ydata) if state.ydata is not None else 0
-                dof = max(n_data - len(popt), 1)
-                t_val = stats.t.ppf(0.975, dof)
+                intervals = parameter_confidence_intervals(result, n_data)
 
                 params = {}
                 for i, name in enumerate(param_names):
                     value = float(popt[i]) if i < len(popt) else 0.0
                     uncert = float("nan")
+                    ci_lower = ci_upper = float("nan")
                     if pcov is not None:
                         with contextlib.suppress(Exception):
                             uncert = float(np.sqrt(pcov[i, i]))
-                    ci_lower = value - t_val * uncert
-                    ci_upper = value + t_val * uncert
+                            ci_lower, ci_upper = map(float, intervals[i])
                     # NLSQ deliberately reports +inf uncertainty for a
                     # singular covariance, which makes ci_lower/ci_upper
                     # +/-inf too. json.dumps emits non-standard NaN/Infinity

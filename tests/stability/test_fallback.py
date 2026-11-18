@@ -276,7 +276,7 @@ class TestFallbackOrchestratorRescaleDispatch:
             calls.append((f, xd, yd, kw))
             if len(calls) == 1:
                 raise RuntimeError("simulated failure of original-scale fit")
-            if len(calls) == 3:  # final refit on the original problem
+            if len(calls) == 3:  # final solve on the original problem
                 assert xd is xdata and yd is ydata
                 assert kw["p0"] == pytest.approx([true_a, true_c])
 
@@ -317,6 +317,7 @@ class TestFallbackOrchestratorRescaleDispatch:
         result = orchestrator.fit_with_fallback(linear, xdata, ydata, p0=[1.0, 1.0])
 
         assert result.fallback_strategy_used == "rescale_problem"
+        # original attempt + callback-free scaled pre-solve + final solve
         assert len(calls) == 3
 
     def test_orchestrator_scales_2d_sigma_quadratically(self, monkeypatch):
@@ -336,7 +337,7 @@ class TestFallbackOrchestratorRescaleDispatch:
             calls.append(kw)
             if len(calls) == 1:
                 raise RuntimeError("simulated failure of original-scale fit")
-            if len(calls) == 3:  # refit: original sigma restored
+            if len(calls) == 3:  # final solve: original sigma restored
                 np.testing.assert_array_equal(kw["sigma"], cov_2d)
             else:
                 np.testing.assert_allclose(

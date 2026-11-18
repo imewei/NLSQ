@@ -64,7 +64,10 @@ def test_fit_with_progress_carries_the_flag(caplog):
 def test_failed_multi_chunk_fit_is_flagged(caplog):
     x, y = _data()
     y[::2] = np.nan  # every chunk sees non-finite data and fails
-    result = _fitter(0.0001, caplog).fit(_model, x, y, p0=[1.0, 0.0])
+    # check_finite=False is the explicit opt-out (the default now raises)
+    result = _fitter(0.0001, caplog).fit(
+        _model, x, y, p0=[1.0, 0.0], check_finite=False
+    )
 
     assert not result.success
     assert result[FLAG] is False

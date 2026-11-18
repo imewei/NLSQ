@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextvars
 import copy
+import dataclasses
 import json
 import logging
 import math
@@ -53,16 +55,20 @@ class MemoryConfig:
     gpu_memory_fraction : float | None
         Fraction of GPU memory to use (0.0-1.0, None for automatic)
     chunk_size_mb : int | None
-        Default chunk size in MB for data processing
+        Default chunk size in MB for data processing. Stored and validated only:
+        nothing reads it yet (as ``NLSQ_CHUNK_SIZE_MB``, it warns).
     out_of_memory_strategy : str
-        Strategy when out of memory: 'fallback', 'reduce', 'error'
+        Strategy when out of memory: 'fallback', 'reduce', 'error'. Stored and
+        validated only: nothing reads it yet (as ``NLSQ_OOM_STRATEGY``, it warns).
     safety_factor : float | None
         Fraction of the memory limit that strategy selection may use
         (0.1-1.0). ``None`` (default) leaves the workflow default of 0.75.
     auto_chunk_threshold_gb : float
-        Automatically enable chunking above this memory threshold
+        Automatically enable chunking above this memory threshold. Stored only:
+        nothing reads it yet.
     progress_reporting : bool
-        Enable progress reporting for large operations
+        Enable progress reporting for large operations. Stored only: nothing
+        reads it yet (``NLSQ_DISABLE_PROGRESS_REPORTING`` warns).
     min_chunk_size : int
         Minimum chunk size in data points
     max_chunk_size : int
@@ -138,7 +144,9 @@ class LargeDatasetConfig:
     enable_automatic_solver_selection : bool
         Automatically select optimal solver based on dataset size
     solver_selection_thresholds : Dict[str, int]
-        Thresholds for automatic solver selection
+        Thresholds for automatic solver selection. Both fields are stored and
+        validated only: nothing reads them yet (``NLSQ_DISABLE_AUTO_SOLVER_SELECTION``
+        warns).
 
     Notes
     -----
@@ -179,6 +187,34 @@ class LargeDatasetConfig:
                     f"solver_selection_thresholds['{key}'] must be positive, "
                     f"got {val!r}",
                 )
+
+
+# MemoryConfig fields that are validated and stored but that nothing consumes yet.
+_UNCONSUMED_ENV = {
+    "chunk_size_mb": "NLSQ_CHUNK_SIZE_MB",
+    "out_of_memory_strategy": "NLSQ_OOM_STRATEGY",
+    "progress_reporting": "NLSQ_DISABLE_PROGRESS_REPORTING",
+}
+
+
+def _warn_unconsumed_env(overrides: dict) -> None:
+    for key, env_name in _UNCONSUMED_ENV.items():
+        if key in overrides:
+            warnings.warn(
+                f"{env_name} is set but no NLSQ code reads MemoryConfig.{key} "
+                "yet; it has no effect.",
+                UserWarning,
+                stacklevel=4,
+            )
+
+
+# Context-local overrides installed by memory_context / large_dataset_context.
+_memory_override: contextvars.ContextVar[MemoryConfig | None] = contextvars.ContextVar(
+    "nlsq_memory_override", default=None
+)
+_large_dataset_override: contextvars.ContextVar[LargeDatasetConfig | None] = (
+    contextvars.ContextVar("nlsq_large_dataset_override", default=None)
+)
 
 
 class JAXConfig:
@@ -433,6 +469,7 @@ class JAXConfig:
                     stacklevel=2,
                 )
 
+        _warn_unconsumed_env(overrides)
         self._memory_config = MemoryConfig(**overrides)
 
     def _initialize_large_dataset_config(self):
@@ -446,6 +483,13 @@ class JAXConfig:
         # Override from environment variables
         if _env_flag("NLSQ_DISABLE_AUTO_SOLVER_SELECTION"):
             large_dataset_config.enable_automatic_solver_selection = False
+            warnings.warn(
+                "NLSQ_DISABLE_AUTO_SOLVER_SELECTION is set but no NLSQ code reads "
+                "LargeDatasetConfig.enable_automatic_solver_selection yet; it has "
+                "no effect.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         self._large_dataset_config = large_dataset_config
 
@@ -523,6 +567,16 @@ class JAXConfig:
                 cls.enable_x64(original_state)
 
     # Memory configuration methods
+    #
+    # memory_context / large_dataset_context install a context-local override
+    # (contextvars) that the getters consult before the process-wide value, so
+    # contexts never block each other or a setter on another thread. The override
+    # is seen by the creating thread/asyncio task and by anything that runs in a
+    # copy of its context; a plain ``threading.Thread`` (or a pool that does not
+    # use ``contextvars.copy_context().run``) starts with an empty context and
+    # reads the process-wide value. A setter called inside a context updates that
+    # context's value (discarded on exit); outside any context it updates the
+    # process-wide value under a short-lived lock.
     @classmethod
     def get_memory_config(cls) -> MemoryConfig:
         """Get the current memory configuration.
@@ -530,8 +584,12 @@ class JAXConfig:
         Returns
         -------
         MemoryConfig
-            Current memory configuration
+            Current memory configuration (the innermost ``memory_context``
+            override of the calling context, else the process-wide value)
         """
+        override = _memory_override.get()
+        if override is not None:
+            return copy.copy(override)
         instance = cls()
         if instance._memory_config is None:
             instance._initialize_memory_config()
@@ -544,14 +602,20 @@ class JAXConfig:
     def set_memory_config(cls, config: MemoryConfig):
         """Set the memory configuration.
 
+        Inside a ``memory_context`` this changes only that context's value;
+        otherwise the process-wide value.
+
         Parameters
         ----------
         config : MemoryConfig
             New memory configuration
         """
-        instance = cls()
-        with cls._lock:
-            instance._memory_config = copy.deepcopy(config)
+        if _memory_override.get() is not None:
+            _memory_override.set(copy.deepcopy(config))
+        else:
+            instance = cls()
+            with cls._lock:
+                instance._memory_config = copy.deepcopy(config)
 
         # Apply GPU memory settings immediately if possible
         try:
@@ -571,8 +635,13 @@ class JAXConfig:
         Returns
         -------
         LargeDatasetConfig
-            Current large dataset configuration
+            Current large dataset configuration (the innermost
+            ``large_dataset_context`` override of the calling context, else the
+            process-wide value)
         """
+        override = _large_dataset_override.get()
+        if override is not None:
+            return copy.deepcopy(override)
         instance = cls()
         if instance._large_dataset_config is None:
             instance._initialize_large_dataset_config()
@@ -585,19 +654,30 @@ class JAXConfig:
     def set_large_dataset_config(cls, config: LargeDatasetConfig):
         """Set the large dataset configuration.
 
+        Inside a ``large_dataset_context`` this changes only that context's
+        value; otherwise the process-wide value.
+
         Parameters
         ----------
         config : LargeDatasetConfig
             New large dataset configuration
         """
-        instance = cls()
-        with cls._lock:
-            instance._large_dataset_config = copy.deepcopy(config)
+        if _large_dataset_override.get() is not None:
+            _large_dataset_override.set(copy.deepcopy(config))
+        else:
+            instance = cls()
+            with cls._lock:
+                instance._large_dataset_config = copy.deepcopy(config)
 
     @classmethod
     @contextmanager
     def memory_context(cls, memory_config: MemoryConfig):
         """Context manager for temporarily changing memory configuration.
+
+        The change is local to the calling thread/asyncio task (see the note
+        above): other threads keep the process-wide value, and a helper
+        ``threading.Thread`` started inside the block does not see it. Contexts
+        nest, never block, and are undone on exit, including on exceptions.
 
         Parameters
         ----------
@@ -613,44 +693,31 @@ class JAXConfig:
         ...     result = fit_large_dataset(func, x, y)
         >>> # Back to previous memory settings
         """
-        instance = cls()
-        with cls._lock:
-            original_config = copy.deepcopy(instance._memory_config)
-
+        cls()  # make sure the process-wide config is initialised
+        token = _memory_override.set(copy.deepcopy(memory_config))
         try:
-            cls.set_memory_config(memory_config)
             yield
         finally:
-            if original_config is not None:
-                cls.set_memory_config(original_config)
-            else:
-                with cls._lock:
-                    instance._memory_config = None
-                    instance._initialize_memory_config()
+            _memory_override.reset(token)
 
     @classmethod
     @contextmanager
     def large_dataset_context(cls, large_dataset_config: LargeDatasetConfig):
         """Context manager for temporarily changing large dataset configuration.
 
+        Context-local like :meth:`memory_context`.
+
         Parameters
         ----------
         large_dataset_config : LargeDatasetConfig
             Temporary large dataset configuration
         """
-        instance = cls()
-        with cls._lock:
-            original_config = copy.deepcopy(instance._large_dataset_config)
-
+        cls()
+        token = _large_dataset_override.set(copy.deepcopy(large_dataset_config))
         try:
-            cls.set_large_dataset_config(large_dataset_config)
             yield
         finally:
-            if original_config is not None:
-                cls.set_large_dataset_config(original_config)
-            else:
-                instance._large_dataset_config = None
-                instance._initialize_large_dataset_config()
+            _large_dataset_override.reset(token)
 
 
 # Initialize configuration on module import
@@ -731,6 +798,13 @@ def set_memory_limits(
         Fraction of the limit that strategy selection may use. ``None``
         (default) keeps the current setting.
 
+    Notes
+    -----
+    Inside a ``memory_context`` the change is context-local (thread / asyncio-task
+    local, via ``contextvars``) and is discarded when the context exits. Plain
+    threads started inside the context do not inherit it; use
+    ``contextvars.copy_context().run`` to propagate it.
+
     Examples
     --------
     >>> from nlsq.config import set_memory_limits
@@ -774,13 +848,20 @@ def configure_for_large_datasets(
         Maximum memory to use in GB. ``None`` (default) leaves the limit
         unset, so strategy selection uses the detected system memory.
     enable_chunking : bool, optional
-        Enable automatic data chunking (default: True)
+        Enable automatic data chunking (default: True). Recorded only: nothing
+        reads ``auto_chunk_threshold_gb`` yet, so False has no effect (warns).
     progress_reporting : bool, optional
-        Enable progress reporting for long operations (default: True)
+        Enable progress reporting for long operations (default: True). Recorded
+        only: nothing reads it yet, so False has no effect (warns).
 
     Notes
     -----
     All large datasets use streaming optimization for 100% data utilization.
+    Memory fields this call does not take (``safety_factor``,
+    ``gpu_memory_fraction``, ``chunk_size_mb``, ...) keep their current values.
+    Inside a ``memory_context`` the change is context-local (thread / asyncio-task
+    local) and is discarded when the context exits; plain threads started there do
+    not inherit it (use ``contextvars.copy_context().run``).
 
     Examples
     --------
@@ -791,8 +872,16 @@ def configure_for_large_datasets(
     ...     progress_reporting=True
     ... )
     """
-    # Configure memory settings
-    memory_config = MemoryConfig(
+    if not enable_chunking or not progress_reporting:
+        warnings.warn(
+            "enable_chunking=False and progress_reporting=False are recorded in the "
+            "configuration but no NLSQ code reads them yet, so they have no effect.",
+            UserWarning,
+            stacklevel=2,
+        )
+    # Keep the fields this call does not take (safety_factor, gpu_memory_fraction, ...)
+    memory_config = dataclasses.replace(
+        get_memory_config(),
         memory_limit_gb=memory_limit_gb,
         auto_chunk_threshold_gb=(
             memory_limit_gb if memory_limit_gb is not None else 8.0
@@ -840,6 +929,14 @@ def memory_context(memory_config: MemoryConfig):
     memory_config : MemoryConfig
         Temporary memory configuration
 
+    Notes
+    -----
+    The change is context-local (thread / asyncio-task local, via ``contextvars``):
+    other threads are unaffected and never block. A plain ``threading.Thread``
+    started inside the block does not inherit it and reads the process-wide
+    value; run pool work through ``contextvars.copy_context().run`` to propagate
+    it.
+
     Examples
     --------
     >>> from nlsq.config import memory_context, MemoryConfig
@@ -859,6 +956,14 @@ def large_dataset_context(large_dataset_config: LargeDatasetConfig):
     ----------
     large_dataset_config : LargeDatasetConfig
         Temporary large dataset configuration
+
+    Notes
+    -----
+    The change is context-local (thread / asyncio-task local, via ``contextvars``):
+    other threads are unaffected and never block. A plain ``threading.Thread``
+    started inside the block does not inherit it and reads the process-wide
+    value; run pool work through ``contextvars.copy_context().run`` to propagate
+    it.
 
     Examples
     --------

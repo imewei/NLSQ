@@ -158,7 +158,7 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--theme",
         choices=("light", "dark"),
         default=None,
-        help="initial color scheme (default: last saved, else dark)",
+        help="initial color scheme (default: last saved, else the system scheme)",
     )
     return parser.parse_known_args(list(argv))[0]
 
@@ -239,14 +239,16 @@ def run_desktop(argv: Sequence[str] | None = None) -> int:
     app.setStyle("Fusion")
     _stage("Fusion style applied")
 
-    # Apply the requested (default dark) theme using Qt 6.5+ built-in color scheme.
+    # Without --theme the OS color scheme stays in force (ThemeManager follows it);
+    # an explicit one is applied via Qt 6.5+ built-in color scheme.
     # Protected: some macOS + PySide6 combinations crash here.
     import contextlib
 
-    with contextlib.suppress(Exception):
-        app.styleHints().setColorScheme(
-            Qt.ColorScheme.Light if args.theme == "light" else Qt.ColorScheme.Dark
-        )
+    if args.theme is not None:
+        with contextlib.suppress(Exception):
+            app.styleHints().setColorScheme(
+                Qt.ColorScheme.Light if args.theme == "light" else Qt.ColorScheme.Dark
+            )
     _stage("color scheme set")
 
     # Let the platform plugin fully initialise its native surfaces before
@@ -254,6 +256,12 @@ def run_desktop(argv: Sequence[str] | None = None) -> int:
     # valid context, preventing SIGBUS when the first widget paints.
     app.processEvents()
     _stage("processEvents done")
+
+    # Route a fit thread's library warnings to its results (never undone, so it
+    # cannot clash with catch_warnings blocks entered on the GUI thread).
+    from nlsq.gui_qt.adapters.fit_adapter import install_warning_hook
+
+    install_warning_hook()
 
     # Create centralized state
     app_state = AppState()

@@ -78,6 +78,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.12", "3.13", "3.14"]
+        # macOS arm64 runners are capacity-limited: a job that waits too long is
+        # cancelled with "not acquired by Runner" before any step runs, which fails
+        # the whole run and skips the Build job. On pull requests run macOS only on
+        # Python 3.13; main and manual runs keep the full matrix.
+        exclude: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"macos-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.14"}]' || '[]') }}
     env:
       # Limit pytest-xdist workers on ubuntu to prevent OOM (JAX per-worker memory
       # exceeds runner RAM with auto workers). macOS/Windows use auto.

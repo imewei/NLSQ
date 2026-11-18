@@ -32,6 +32,7 @@ except ImportError:
     warnings.warn(
         "psutil not installed, memory monitoring will be limited",
         UserWarning,
+        stacklevel=2,
     )
 
 
@@ -40,15 +41,22 @@ class MemoryManager:
 
     This class provides:
     - Memory usage monitoring and prediction
-    - Array pooling to reduce allocations with LRU eviction
+    - Opt-in array pooling (``allocate_array`` / ``free_array``); nothing in
+      the library's fit paths uses the pool
     - Automatic garbage collection triggers
     - Context managers for memory-safe operations
 
+    Units: memory sizes reported or accepted in "GB" (``memory_limit_gb``,
+    ``*_gb`` stats) are decimal gigabytes (1e9 bytes). The psutil-failure
+    fallback of 16 GB available is 16 GiB (``16 * 1024**3`` bytes).
+
     LRU Memory Pool (Task Group 7 - 1.2a)
     -------------------------------------
-    The memory pool uses an OrderedDict to track access order, enabling true
-    LRU (Least Recently Used) eviction when at capacity. This improves cache
-    utilization for frequently accessed array shapes by 5-10%.
+    The memory pool uses an OrderedDict to track access order. The pool has
+    no automatic capacity limit: ``free_array`` never evicts, and LRU
+    eviction happens only when ``optimize_memory_pool(max_arrays)`` is called
+    explicitly. ``clear_pool()`` empties it; ``UnifiedCache.clear_cache()``
+    does not touch it.
 
     Telemetry Circular Buffer (Task Group 9 - 1.3a)
     ------------------------------------------------
@@ -130,13 +138,12 @@ class MemoryManager:
         self._memory_usage_cache_time: float = 0.0
         self._memory_fraction_cache: float | None = None
         self._memory_fraction_cache_time: float = 0.0
+        self._fraction_fallback_warned = False
 
         # Adaptive TTL feature (Task 3 - 1.1a)
         # Tracks timestamps of last 100 calls to compute call frequency
         self._adaptive_ttl = adaptive_ttl
         self._call_frequency_tracker: deque[float] = deque(maxlen=100)
-
-        self._initial_memory = self.get_memory_usage_bytes()
 
         # Task 9.4 (1.3a): Telemetry Circular Buffer
         # Use deque with maxlen=1000 to prevent memory leak in multi-day runs
@@ -144,6 +151,11 @@ class MemoryManager:
         self._safety_telemetry: deque[dict] = deque(maxlen=1000)
         self._warmup_runs = 10  # Number of runs before adapting
         self._min_safety_factor = 1.05  # Target minimum safety factor
+        # Upper bound for upward adaptation; keeps noisy RSS deltas from
+        # inflating the factor without limit.
+        self._max_safety_factor = max(3.0, self._initial_safety_factor)
+        self._safety_saturated = False
+        self._saturation_warned = False
 
     def _get_effective_ttl(self) -> float:
         """Calculate effective TTL based on call frequency.
@@ -192,8 +204,15 @@ class MemoryManager:
         # Low frequency: use default TTL
         return self._memory_cache_ttl
 
-    def get_available_memory(self) -> float:
+    def get_available_memory(self, refresh: bool = False) -> float:
         """Get available memory in bytes.
+
+        Parameters
+        ----------
+        refresh : bool
+            Bypass the TTL cache and query psutil. Used for admission
+            decisions, where a value up to ``adaptive_ttl`` seconds old
+            (15 s) could admit an allocation that no longer fits.
 
         Returns
         -------
@@ -217,7 +236,8 @@ class MemoryManager:
 
         # Return cached value if still valid
         if (
-            self._available_memory_cache is not None
+            not refresh
+            and self._available_memory_cache is not None
             and now - self._available_memory_cache_time < effective_ttl
         ):
             return self._available_memory_cache
@@ -323,7 +343,13 @@ class MemoryManager:
                 self._memory_fraction_cache_time = now
                 return fraction
             except Exception as e:
-                logger.debug(f"psutil memory fraction check failed (non-critical): {e}")
+                if not self._fraction_fallback_warned:
+                    self._fraction_fallback_warned = True
+                    logger.warning(
+                        f"psutil memory fraction check failed, using a constant "
+                        f"0.5 usage fraction (the memory_guard GC trigger is "
+                        f"effectively disabled; non-critical): {e}",
+                    )
 
         # Conservative estimate
         return 0.5
@@ -334,6 +360,7 @@ class MemoryManager:
         n_params: int,
         algorithm: str = "trf",
         dtype: jnp.dtype = jnp.float64,
+        bounded: bool = False,
     ) -> int:
         """Predict memory requirement for optimization.
 
@@ -347,7 +374,10 @@ class MemoryManager:
             Algorithm name ('trf', 'lm', 'dogbox')
         dtype : jnp.dtype, optional
             Data type for computations (default: jnp.float64).
-            Affects memory calculations: float32 uses 4 bytes, float64 uses 8 bytes.
+            Element size is ``np.dtype(dtype).itemsize`` (float32: 4, float64: 8).
+        bounded : bool, optional
+            Estimate the bounded trust-region layout (default False). Callers
+            with finite bounds must pass True; ``'dogbox'`` is always bounded.
 
         Returns
         -------
@@ -359,9 +389,21 @@ class MemoryManager:
         Memory requirements scale linearly with precision:
         - float32: 4 bytes per element (50% memory savings)
         - float64: 8 bytes per element (default, higher precision)
+
+        ``'lm'`` is an alias that runs the same trust-region solver as
+        ``'trf'`` and shares its estimate. The unbounded TRF step
+        (``_svd_no_bounds_jit``) holds ``J``, ``J * d`` and the thin-SVD ``U``,
+        three m-by-n arrays. The bounded step (``_svd_bounds_jit``, used by
+        ``'dogbox'`` here and by ``'trf'`` with bounds in practice) also holds
+        ``J_augmented`` and a ``U`` of shape (m + n) x n. ``'trf'`` and
+        ``'lm'`` use the bounded layout only when ``bounded=True``.
+
+        The estimate still sits about 1.3x below measured peak RSS (CPU,
+        2e6 x 10). The cause is not verified: SVD workspace inside LAPACK,
+        model intermediates and autodiff buffers are all candidates, and none
+        is visible in ``trf_jit.py``.
         """
-        # Size of float depends on dtype (4 bytes for float32, 8 bytes for float64)
-        float_size = 4 if dtype == jnp.float32 else 8
+        float_size = np.dtype(dtype).itemsize
 
         # Base arrays: x, y, params
         base_memory = float_size * (2 * n_points + n_params)
@@ -370,25 +412,24 @@ class MemoryManager:
         jacobian_memory = float_size * n_points * n_params
 
         # Algorithm-specific memory
-        if algorithm == "trf":
-            # Trust Region Reflective
-            # Needs: SVD decomposition, working arrays
-            svd_memory = float_size * min(n_points, n_params) ** 2
-            working_memory = float_size * (3 * n_points + 5 * n_params)
-            total = base_memory + jacobian_memory + svd_memory + working_memory
-
-        elif algorithm == "lm":
-            # Levenberg-Marquardt
-            # Needs: Normal equations, working arrays
-            normal_memory = float_size * n_params**2
-            working_memory = float_size * (2 * n_points + 3 * n_params)
-            total = base_memory + jacobian_memory + normal_memory + working_memory
-
-        elif algorithm == "dogbox":
-            # Dogbox
-            # Similar to TRF but with additional bound constraints
-            svd_memory = float_size * min(n_points, n_params) ** 2
-            working_memory = float_size * (4 * n_points + 6 * n_params)
+        k = min(n_points, n_params)
+        if algorithm in ("trf", "lm", "dogbox"):
+            if bounded or algorithm == "dogbox":
+                # J_h (m x n), J_augmented ((m+n) x n), U ((m+n) x n), V (n x n).
+                aug = n_points + n_params
+                svd_memory = float_size * (
+                    n_points * n_params + 2 * aug * n_params + n_params**2
+                )
+            else:
+                # J_h = J * d (m x n), thin-SVD U (m x k) and V (n x k); J itself
+                # is counted in jacobian_memory.
+                svd_memory = float_size * (
+                    n_points * n_params + n_points * k + n_params * k
+                )
+            if algorithm == "dogbox":
+                working_memory = float_size * (4 * n_points + 6 * n_params)
+            else:
+                working_memory = float_size * (3 * n_points + 5 * n_params)
             total = base_memory + jacobian_memory + svd_memory + working_memory
 
         else:
@@ -413,7 +454,8 @@ class MemoryManager:
         message : str
             Descriptive message
         """
-        available = self.get_available_memory()
+        # Admission decision: bypass the TTL cache (up to 15 s stale).
+        available = self.get_available_memory(refresh=True)
 
         if available >= bytes_needed:
             return (
@@ -423,8 +465,7 @@ class MemoryManager:
 
         # Try garbage collection
         gc.collect()
-        self._available_memory_cache = None  # TTL cache would hide freed memory
-        available = self.get_available_memory()
+        available = self.get_available_memory(refresh=True)
 
         if available >= bytes_needed:
             return True, "Memory available after garbage collection"
@@ -442,7 +483,7 @@ class MemoryManager:
         ----------
         bytes_needed : int
             Required memory in bytes, including the safety factor (as returned
-            by ``predict_memory_usage``)
+            by ``predict_memory_requirement``)
         record_telemetry : bool
             Feed the measured RSS delta to the adaptive safety-factor telemetry.
             Pass False when ``bytes_needed`` is a raw size or the RSS delta is
@@ -464,6 +505,9 @@ class MemoryManager:
             if not is_available:
                 raise MemoryError(message)
 
+        # The prediction that produced bytes_needed used the factor in force now.
+        safety_at_entry = self.safety_factor
+
         # Delta measurement: bypass the TTL cache or both reads return the same RSS.
         self._memory_usage_cache = None
         initial_memory = self.get_memory_usage_bytes()
@@ -484,7 +528,7 @@ class MemoryManager:
             self.allocation_history.append(
                 {
                     "bytes_requested": bytes_needed,
-                    "bytes_used": current_memory - initial_memory,
+                    "bytes_used": max(0, current_memory - initial_memory),
                     "peak_memory": self._peak_memory,
                 },
             )
@@ -493,10 +537,17 @@ class MemoryManager:
             # RSS can drop when memory is freed; clamp so a negative delta counts as "used nothing".
             if record_telemetry:
                 self._record_safety_telemetry(
-                    bytes_needed, max(0, current_memory - initial_memory)
+                    bytes_needed,
+                    max(0, current_memory - initial_memory),
+                    safety_at_entry,
                 )
 
-    def _record_safety_telemetry(self, bytes_predicted: int, bytes_actual: float):
+    def _record_safety_telemetry(
+        self,
+        bytes_predicted: int,
+        bytes_actual: float,
+        safety_factor_used: float | None = None,
+    ):
         """Record telemetry for adaptive safety factor calculation.
 
         Parameters
@@ -505,6 +556,9 @@ class MemoryManager:
             Predicted memory requirement (with current safety factor)
         bytes_actual : int | float
             Actual memory used
+        safety_factor_used : float, optional
+            Safety factor in force when ``bytes_predicted`` was computed
+            (default: the current factor).
 
         Notes
         -----
@@ -519,7 +573,10 @@ class MemoryManager:
             return
 
         # Calculate base prediction (without safety factor)
-        bytes_predicted_base = bytes_predicted / self.safety_factor
+        factor_used = (
+            self.safety_factor if safety_factor_used is None else safety_factor_used
+        )
+        bytes_predicted_base = bytes_predicted / factor_used
 
         # Calculate minimum safety factor needed for this allocation
         if bytes_predicted_base > 0:
@@ -545,7 +602,14 @@ class MemoryManager:
         """Update safety factor based on telemetry (after warmup).
 
         Calculates p95(safety_factor_needed) from telemetry and uses it to
-        gradually reduce safety factor from initial value (1.2) to target minimum (1.05).
+        gradually reduce safety factor from initial value (1.2) to target minimum
+        (1.05). When the p95 exceeds the current factor (under-prediction), the
+        factor is raised immediately, up to ``_max_safety_factor``; beyond that
+        ``safety_saturated`` is set and a warning is logged once.
+
+        RSS deltas that include first-call XLA compile memory can push the p95
+        to the cap during warmup; the factor stays high until fewer than 5% of
+        the retained records need more.
         """
         telemetry = self._safety_telemetry.copy()
         if not self.enable_adaptive_safety or len(telemetry) < self._warmup_runs:
@@ -561,8 +625,22 @@ class MemoryManager:
         # This ensures we never go below 1.05, but use higher if needed
         adaptive_safety = max(self._min_safety_factor, p95_safety)
 
-        # Gradually reduce safety factor (don't jump abruptly)
-        if adaptive_safety < self.safety_factor:
+        # Needed factor above the cap: predictions stay short of measured usage.
+        self._safety_saturated = bool(adaptive_safety > self._max_safety_factor)
+        if self._safety_saturated and not self._saturation_warned:
+            self._saturation_warned = True
+            logger.warning(
+                f"Adaptive safety factor saturated at {self._max_safety_factor:.2f} "
+                f"(observed p95 need {p95_safety:.2f}): memory predictions "
+                f"under-cover the measured usage; treat admission checks as "
+                f"optimistic."
+            )
+
+        if adaptive_safety > self.safety_factor:
+            # Raising is the safe direction: no smoothing.
+            self.safety_factor = min(adaptive_safety, self._max_safety_factor)
+        elif adaptive_safety < self.safety_factor:
+            # Gradually reduce safety factor (don't jump abruptly)
             # Reduce by at most 0.05 per update to avoid sudden changes
             self.safety_factor = max(adaptive_safety, self.safety_factor - 0.05)
 
@@ -592,6 +670,7 @@ class MemoryManager:
             "min_safety_factor": self._min_safety_factor,
             "telemetry_entries": len(entries),
             "adaptive_enabled": self.enable_adaptive_safety,
+            "safety_saturated": self._safety_saturated,
         }
 
         if entries:
@@ -679,6 +758,12 @@ class MemoryManager:
         The array becomes the pooled buffer for its (shape, dtype), replacing
         any earlier one, and is marked as most recently used.
         """
+        # allocate_array hands pooled buffers out writable and C-contiguous;
+        # a read-only or strided array would break that contract.
+        if not isinstance(arr, np.ndarray) or not (
+            arr.flags.writeable and arr.flags.c_contiguous
+        ):
+            return
         key = (arr.shape, arr.dtype)
         # Keep the most recently returned buffer for each shape/dtype.
         with self._pool_lock:
@@ -790,6 +875,7 @@ class MemoryManager:
         n_params: int,
         algorithm: str = "trf",
         memory_limit_gb: float | None = None,
+        bounded: bool = False,
     ) -> dict:
         """Estimate optimal chunking strategy for large datasets.
 
@@ -802,7 +888,11 @@ class MemoryManager:
         algorithm : str
             Algorithm to use
         memory_limit_gb : float, optional
-            Memory limit in GB (uses available memory if None)
+            Memory limit in GB (uses available memory if None); must be
+            finite and positive.
+        bounded : bool, optional
+            Plan for the bounded trust-region layout (see
+            ``predict_memory_requirement``). Default False.
 
         Returns
         -------
@@ -811,57 +901,66 @@ class MemoryManager:
 
         Raises
         ------
+        ValueError
+            If ``n_points`` or ``n_params`` is negative, or ``memory_limit_gb``
+            is not finite and positive.
         MemoryError
-            If ``n_points > 0`` and the memory budget cannot hold even one
-            data point.
+            If the whole problem does not fit and the memory budget cannot
+            hold even one data point.
         """
+        if n_points < 0 or n_params < 0:
+            raise ValueError(
+                f"n_points and n_params must be >= 0, got {n_points}, {n_params}"
+            )
         if memory_limit_gb is None:
             memory_limit = self.get_available_memory() * 0.8  # Use 80% of available
         else:
+            if not (np.isfinite(memory_limit_gb) and memory_limit_gb > 0):
+                raise ValueError(
+                    f"memory_limit_gb must be finite and positive, got {memory_limit_gb}"
+                )
             memory_limit = memory_limit_gb * 1e9
 
-        # Calculate memory per point
-        memory_per_point = self.predict_memory_requirement(1, n_params, algorithm)
-
-        # Calculate maximum points that fit in memory
-        max_points = int(memory_limit / memory_per_point)
-        if n_points > 0 and max_points < 1:
-            raise MemoryError(
-                "Memory budget cannot hold even one data point "
-                f"(requires approximately {memory_per_point:g} bytes)."
+        def predict(m: int) -> int:
+            return self.predict_memory_requirement(
+                m, n_params, algorithm, bounded=bounded
             )
 
-        if max_points >= n_points:
+        required = predict(n_points)
+        if n_points <= 0 or required <= memory_limit:
             # No chunking needed
             return {
                 "needs_chunking": False,
                 "chunk_size": n_points,
                 "n_chunks": 1,
-                "memory_per_chunk_gb": self.predict_memory_requirement(
-                    n_points,
-                    n_params,
-                    algorithm,
-                )
-                / 1e9,
+                "memory_per_chunk_gb": required / 1e9,
             }
 
-        # Calculate chunking parameters
-        chunk_size = min(
-            max_points,
-            max(100, n_points // 100),
-        )  # At least 100 points per chunk
+        one_point = predict(1)
+        if one_point > memory_limit:
+            raise MemoryError(
+                "Memory budget cannot hold even one data point "
+                f"(requires approximately {one_point:g} bytes)."
+            )
+
+        # predict() is non-decreasing in n_points but not affine below
+        # n_points == n_params, so bisect for the largest chunk that fits:
+        # predict(lo) <= limit < predict(hi).
+        lo, hi = 1, n_points
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            if predict(mid) <= memory_limit:
+                lo = mid
+            else:
+                hi = mid
+        chunk_size = lo
         n_chunks = (n_points + chunk_size - 1) // chunk_size
 
         return {
             "needs_chunking": True,
             "chunk_size": chunk_size,
             "n_chunks": n_chunks,
-            "memory_per_chunk_gb": self.predict_memory_requirement(
-                chunk_size,
-                n_params,
-                algorithm,
-            )
-            / 1e9,
+            "memory_per_chunk_gb": predict(chunk_size) / 1e9,
             "total_points": n_points,
         }
 

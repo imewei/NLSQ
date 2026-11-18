@@ -70,6 +70,16 @@ def phi_and_derivative_jax(
     return phi, phi_prime
 
 
+def _safe_norm(v: jnp.ndarray) -> jnp.ndarray:
+    """2-norm that cannot overflow/underflow through squaring (JIT-safe).
+
+    Non-finite input gives a non-finite result (never 0).
+    """
+    mx = jnp.max(jnp.abs(v))
+    safe = jnp.where(mx > 0, mx, 1.0)
+    return jnp.where(mx == 0, 0.0, mx * jnp.linalg.norm(v / safe))
+
+
 def _solve_lsq_trust_region_jax_impl(
     n: int,
     m: int,
@@ -93,10 +103,19 @@ def _solve_lsq_trust_region_jax_impl(
         lambda: False,
     )
 
-    # Gauss-Newton step (if full rank)
-    p_gn = -V @ (uf / s)
-    p_gn_norm = jnp.linalg.norm(p_gn)
-    use_gauss_newton = full_rank & (p_gn_norm <= Delta)
+    # Gauss-Newton step over every positive singular value (exactly zero ones
+    # never change the model and are skipped, giving the minimum-norm step). When
+    # it fits in the ball it is the exact model minimizer, for a full-rank J as
+    # in SciPy and also for a rank-deficient or underdetermined one (SciPy sends
+    # those to the boundary, an uphill step when the minimizer is interior).
+    # Otherwise the secular solve below runs, as in SciPy. The norm is
+    # max-scaled so a huge step cannot overflow while squaring.
+    positive = s > 0
+    p_gn = -V @ (uf * jnp.where(positive, 1.0 / jnp.where(positive, s, 1.0), 0.0))
+    p_gn_norm = _safe_norm(p_gn)
+    use_gauss_newton = (
+        jnp.all(jnp.isfinite(p_gn)) & jnp.isfinite(p_gn_norm) & (p_gn_norm <= Delta)
+    )
 
     # Compute alpha bounds
     safe_Delta = jnp.maximum(Delta, jnp.finfo(jnp.result_type(Delta)).tiny)
@@ -206,6 +225,28 @@ def _solve_lsq_trust_region_jax_impl(
     safe_norm = jnp.maximum(p_iterative_norm, jnp.finfo(p_iterative.dtype).tiny)
     p_iterative_normalized = p_iterative * (Delta / safe_norm)
 
+    # Extreme singular values (e.g. s**2 underflowing to 0) can make the secular
+    # iteration non-finite. Fall back to the alpha -> infinity limit, the
+    # steepest-descent direction scaled to the boundary, which is always finite.
+    # Direction -V @ (s * uf) built from max-scaled factors so s * uf cannot
+    # overflow, then normalised and scaled to the boundary.
+    s_max = jnp.max(jnp.abs(s))
+    uf_max = jnp.max(jnp.abs(uf))
+    d = (s / jnp.where(s_max > 0, s_max, 1.0)) * (
+        uf / jnp.where(uf_max > 0, uf_max, 1.0)
+    )
+    d_max = jnp.max(jnp.abs(d))
+    d_n = d / jnp.where(d_max > 0, d_max, 1.0)
+    p_sd = -V @ d_n
+    p_sd = p_sd * (
+        Delta / jnp.maximum(jnp.linalg.norm(p_sd), jnp.finfo(p_sd.dtype).tiny)
+    )
+    iterative_ok = jnp.all(jnp.isfinite(p_iterative_normalized)) & jnp.isfinite(
+        final_alpha
+    )
+    p_iterative_normalized = jnp.where(iterative_ok, p_iterative_normalized, p_sd)
+    final_alpha = jnp.where(iterative_ok, final_alpha, 0.0)
+
     # Select between Gauss-Newton and iterative solution
     p_final = lax.cond(
         use_gauss_newton,
@@ -228,6 +269,12 @@ def _solve_lsq_trust_region_jax_impl(
     # Override the degenerate zero-Jacobian case with a finite zero step.
     p_final = jnp.where(jac_is_zero, jnp.zeros_like(p_final), p_final)
     alpha_final = jnp.where(jac_is_zero, jnp.array(0.0), alpha_final)
+
+    # Last resort (non-finite inputs or extreme magnitudes): the zero step is
+    # always feasible, never NaN.
+    step_ok = jnp.all(jnp.isfinite(p_final)) & jnp.isfinite(alpha_final)
+    p_final = jnp.where(step_ok, p_final, jnp.zeros_like(p_final))
+    alpha_final = jnp.where(step_ok, alpha_final, jnp.zeros_like(alpha_final))
 
     return p_final, alpha_final, n_iter_out
 
@@ -402,7 +449,12 @@ def _evaluate_quadratic_diagonal2(J, g, s, diag):
 
 @jit
 def _jac_sum_func(J):
-    return jnp.sum(J**2, axis=0) ** 0.5
+    # Column 2-norms scaled by the column max so squaring cannot over/underflow.
+    col_max = jnp.max(jnp.abs(J), axis=0)
+    safe = jnp.where(col_max > 0, col_max, 1.0)
+    norm = col_max * jnp.sqrt(jnp.sum((J / safe) ** 2, axis=0))
+    # inf/inf would give NaN; an infinite entry means an infinite norm
+    return jnp.where(jnp.isinf(col_max), jnp.inf, norm)
 
 
 class CommonJIT:
@@ -529,7 +581,7 @@ class CommonJIT:
         s: jnp.ndarray,
         diag: jnp.ndarray | None = None,
         s0: jnp.ndarray | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray] | tuple[jnp.ndarray, jnp.ndarray]:
         """Parameterize a multivariate quadratic function along a line.
 
         The resulting univariate quadratic function is given as follows:
@@ -565,23 +617,25 @@ class CommonJIT:
         s_jnp = jnp.asarray(s)
         v = self.js_dot(J, s_jnp)
 
-        a = np.dot(v, v)
+        g = jnp.asarray(g)
+        s = s_jnp
+        a = jnp.dot(v, v)
         if diag is not None:
-            a += np.dot(s * diag, s)
-        a *= 0.5
+            diag = jnp.asarray(diag)
+            a = a + jnp.dot(s * diag, s)
+        a = a * 0.5
 
-        b = np.dot(g, s)
+        b = jnp.dot(g, s)
 
         if s0 is not None:
-            # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
             s0_jnp = jnp.asarray(s0)
             u = self.js0_dot(J, s0_jnp)
 
-            b += np.dot(u, v)
-            c = 0.5 * np.dot(u, u) + np.dot(g, s0)
+            b = b + jnp.dot(u, v)
+            c = 0.5 * jnp.dot(u, u) + jnp.dot(g, s0_jnp)
             if diag is not None:
-                b += np.dot(s0 * diag, s)
-                c += 0.5 * np.dot(s0 * diag, s0)
+                b = b + jnp.dot(s0_jnp * diag, s)
+                c = c + 0.5 * jnp.dot(s0_jnp * diag, s0_jnp)
             return a, b, c
         return a, b
 
@@ -918,6 +972,14 @@ def intersect_trust_region_jax(
     """Find intersection of a line with trust region boundary (JAX version).
 
     Solves ||(x + s*t)||^2 = Delta^2 for t.
+
+    Notes
+    -----
+    Preconditions: ``s != 0`` and ``||x|| <= Delta``. Being jitted, this cannot
+    raise where ``scipy.optimize._lsq.common.intersect_trust_region`` does: for
+    ``s == 0`` it returns ``(0, 0)``, and for ``x`` outside the region it clamps
+    the discriminant to 0 and returns the double root, which is not a boundary
+    intersection. The only caller (trf reflective step) passes a step already restricted to the region.
 
     Parameters
     ----------
