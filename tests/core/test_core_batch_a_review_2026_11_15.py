@@ -542,14 +542,21 @@ def test_nonfinite_sigma_on_unused_row_is_accepted(mode, kind, bad_row, stabilit
 
 
 @pytest.mark.parametrize("stability", [False, True])
-@pytest.mark.parametrize("kind", ["1d", "cov"])
 @pytest.mark.parametrize("value", [np.nan, np.inf])
-@pytest.mark.parametrize("mode", ["mask", "omit", "both"])
+@pytest.mark.parametrize(
+    ("mode", "kind"),
+    # a non-finite 1-D sigma row is omitted by nan_policy='omit', so only the
+    # covariance-matrix form is retained (and rejected) in the omit modes
+    [
+        ("mask", "1d"),
+        ("mask", "cov"),
+        ("omit", "cov"),
+        ("both", "cov"),
+    ],
+)
 def test_nonfinite_sigma_on_retained_row_still_raises(mode, kind, value, stability):
     x, y, kw = _unused_case(mode, kind, 0)  # row 0 is used in every mode
     kw["sigma"] = _nan_sigma(kind, [0], value)
-    if kind == "1d" and mode in ("omit", "both"):
-        pytest.skip("a non-finite 1-D sigma row is omitted by nan_policy='omit'")
     with pytest.raises(ValueError, match=r"sigma|Sigma"):
         prepare_problem(
             _linear, x, y, ctx=PrepareContext(enable_stability=stability), **kw
