@@ -677,7 +677,9 @@ class HybridStreamingConfig:
         - Smaller chunks to reduce memory usage
         - L-BFGS warmup with reduced iterations
         - Enable checkpoints for recovery (important when memory is tight)
-        - Lower CG threshold for more aggressive CG usage (avoids O(p^2) J^T J)
+        - Keeps the default ``cg_param_threshold``: the CG solver is not wired
+          into Phase 2, so a lower value would only make fits with
+          p >= threshold raise ``NotImplementedError``
 
         Returns
         -------

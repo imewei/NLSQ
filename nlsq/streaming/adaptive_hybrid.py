@@ -1185,8 +1185,9 @@ class AdaptiveHybridStreamingOptimizer:
         Notes
         -----
         Batches are ``(x, y)`` and candidates are ranked on the unweighted loss:
-        ``fit()`` rejects ``sigma`` (and ``data_mask``) with ``NotImplementedError``
-        before this runs, so there is no weighting to pass. If sigma support is added
+        ``fit()`` rejects ``sigma`` with ``NotImplementedError`` (the
+        ``curve_fit(method="hybrid_streaming")`` wrapper rejects ``data_mask`` the
+        same way) before this runs, so there is no weighting to pass. If sigma support is added
         to the engine, yield ``(x, y, sigma)`` batches here (1-D sigma only; a
         covariance-matrix sigma would need whitening first).
 
@@ -2488,9 +2489,13 @@ class AdaptiveHybridStreamingOptimizer:
         Uses regularization to handle rank-deficient or ill-conditioned J^T J.
 
         Algorithm:
-        1. Compute SVD: J^T J = U S V^T
-        2. Solve regularized system: (J^T J + λI)^-1 (-J^T r)
-        3. Scale step if norm exceeds trust radius
+        1. Jacobi-scale J^T J to unit diagonal and add ``regularization * I``
+           in the scaled space
+        2. Compute the SVD and solve with a pseudo-inverse truncated at
+           ``max(s) * n * eps`` (the sign convention follows the in-code comments
+           below)
+        3. If the step norm exceeds the trust radius, take a damped step to the
+           radius
         """
         n_params = JTJ.shape[0]
         if regularization is None:

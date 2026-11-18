@@ -4316,7 +4316,7 @@ class CurveFit:
         p0 : array_like, optional
             Initial parameter guess
         sigma : array_like, optional
-            Uncertainties in ydata
+            Not supported by this method; passing one raises NotImplementedError.
         absolute_sigma : bool, default=False
             Whether sigma is absolute or relative
         check_finite : bool, default=True

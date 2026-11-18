@@ -232,11 +232,6 @@ def finite_rows(
     return np.compress(valid, xa, axis=pts_axis), ya[valid]
 
 
-def _is_complex(a: Any) -> bool:
-    """True when ``a`` is complex (also a boxed complex in an object array)."""
-    return has_complex(a)
-
-
 _ALL_ZERO_WEIGHT_MSG = (
     "sigma is infinite for every observation used; nothing to fit "
     "(every row has zero weight)."
@@ -247,7 +242,7 @@ def reject_complex_inputs(x: Any, y: Any, sigma: Any = None) -> None:
     """Raise ``ValueError`` for complex x/y/sigma (the float casts would drop the
     imaginary part)."""
     for name, arr in (("xdata", x), ("ydata", y), ("sigma", sigma)):
-        if _is_complex(arr):
+        if has_complex(arr):
             raise ValueError(
                 f"`{name}` must be real-valued; complex input is not supported."
             )

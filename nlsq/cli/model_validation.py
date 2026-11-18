@@ -1217,7 +1217,8 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             ):
                 self.violations.append(
                     f"Dangerous import: import {alias.name} (only "
-                    "`import nlsq.core.functions as name` is allowed from nlsq)"
+                    "`import nlsq.core.functions as name` or `nlsq.functions` is "
+                    "allowed from nlsq)"
                 )
             if alias.asname:
                 self._aliases[alias.asname] = alias.name
@@ -1267,7 +1268,8 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                 ):
                     self.violations.append(
                         f"Dangerous import: from {node.module} import {alias.name} "
-                        "(only nlsq.core.functions is allowed from nlsq)"
+                        "(only nlsq.core.functions / nlsq.functions are allowed "
+                        "from nlsq)"
                     )
             self._aliases[alias.asname or alias.name] = (
                 f"{node.module}.{alias.name}" if node.module else alias.name

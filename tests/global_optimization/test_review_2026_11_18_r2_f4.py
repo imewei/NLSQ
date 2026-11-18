@@ -131,7 +131,8 @@ def test_global_config_to_dict_is_json_ready():
     cfg = GlobalOptimizationConfig(
         scale_factor=np.float32(0.5), elimination_fraction=np.float32(0.25)
     )
-    json.dumps(cfg.to_dict())
+    d = json.loads(json.dumps(cfg.to_dict()))
+    assert d["scale_factor"] == 0.5 and d["elimination_fraction"] == 0.25
 
 
 def _checkpoint_state(generation):
