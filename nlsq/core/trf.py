@@ -689,12 +689,12 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         callback : callable, optional
             Called once per iteration as ``callback(iteration, cost, params, info)``
             (``info`` carries ``gradient_norm``, ``gradient``, ``nfev``,
-            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization``
-            stops the fit. Default is None.
+            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization`` or
+            ``StopIteration``, or returning True, stops the fit. Default is None.
         fuse_scalars : bool, optional
             Read the per-attempt scalars with one fused device-to-host transfer.
-            Only valid for ``loss_function`` None or a built-in loss. Default is
-            False.
+            Only valid for ``loss_function`` None or a built-in loss. Unbounded
+            fits only; the bounded path ignores it. Default is False.
         initial_times : tuple of float, optional
             Wall times ``(residual, Jacobian)`` of the evaluations at ``x0`` done
             before this call; recorded when ``timeit`` is True.
@@ -2072,8 +2072,8 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         callback : callable, optional
             Called once per iteration as ``callback(iteration, cost, params, info)``
             (``info`` carries ``gradient_norm``, ``gradient``, ``nfev``,
-            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization``
-            stops the fit. Default is None.
+            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization`` or
+            ``StopIteration``, or returning True, stops the fit. Default is None.
         profiler : TRFProfiler, NullProfiler, or None, optional
             Profiler for timing algorithm operations. If None, uses NullProfiler
             (zero overhead). Use TRFProfiler() for detailed performance analysis.
@@ -2432,8 +2432,8 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         callback : callable, optional
             Called once per iteration as ``callback(iteration, cost, params, info)``
             (``info`` carries ``gradient_norm``, ``gradient``, ``nfev``,
-            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization``
-            stops the fit. Default is None.
+            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization`` or
+            ``StopIteration``, or returning True, stops the fit. Default is None.
         diagnostics : OptimizationDiagnostics, optional
             Collector that records per-iteration diagnostics. Default is None.
         **kwargs
