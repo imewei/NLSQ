@@ -155,6 +155,7 @@ def check_not_nan(name: str, tol: Any) -> float:
 
 
 def validate_tr_solver(tr_solver: Any) -> None:
+    """Raise ``ValueError`` unless ``tr_solver`` is None, 'exact', 'lsmr', 'sparse' or 'cg'."""
     # "sparse" is set internally after validation; "cg" is a trf.py branch.
     if tr_solver not in (None, "exact", "lsmr", "sparse", "cg"):
         raise ValueError(
@@ -164,6 +165,7 @@ def validate_tr_solver(tr_solver: Any) -> None:
 
 
 def validate_f_scale(f_scale: Any) -> None:
+    """Raise ``ValueError`` unless ``f_scale`` is positive and finite."""
     if not (np.isfinite(f_scale) and f_scale > 0):
         raise ValueError(f"`f_scale` must be positive and finite, got {f_scale!r}.")
 

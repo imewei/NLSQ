@@ -228,6 +228,22 @@ class HPCCheckpointManager:
         state: CMAESCheckpointState,
         fingerprint: dict[str, Any],
     ) -> None:
+        """Write a CMA-ES checkpoint atomically, keeping the previous one as ``.bak``.
+
+        The file is written to a temporary directory next to ``path``, fsynced,
+        and moved into place with ``os.replace``. An intact existing checkpoint
+        is first rotated to the backup path; a corrupt primary is not, so it
+        cannot overwrite the only good backup.
+
+        Parameters
+        ----------
+        path : str or Path
+            Checkpoint file path; parent directories are created.
+        state : CMAESCheckpointState
+            Optimizer state to store.
+        fingerprint : dict
+            Problem fingerprint stored with the state and checked by ``load``.
+        """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         bak_path = self.bak_path(path)
@@ -301,6 +317,31 @@ class HPCCheckpointManager:
         path: str | Path,
         expected_fingerprint: dict[str, Any],
     ) -> CMAESCheckpointState:
+        """Load a CMA-ES checkpoint, falling back to the ``.bak`` copy.
+
+        Parameters
+        ----------
+        path : str or Path
+            Checkpoint file path.
+        expected_fingerprint : dict
+            Fingerprint of the current problem; the stored one must match.
+
+        Returns
+        -------
+        CMAESCheckpointState
+            The restored optimizer state.
+
+        Raises
+        ------
+        CheckpointFingerprintMismatch
+            If the checkpoint belongs to a different problem. The backup is not
+            tried in that case.
+        FileNotFoundError
+            If neither the primary nor a backup exists.
+        ValueError
+            If the primary is unreadable or malformed (torn write, wrong version,
+            invalid shapes) and no readable backup exists.
+        """
         path = Path(path)
         bak_path = self.bak_path(path)
 

@@ -1030,6 +1030,19 @@ def curve_fit_large(
         on the TSQR route beyond ``1e4``, where the fitted parameters can also
         stop short: check such results. ``compute_covariance=False`` skips
         both routes (and their warnings).
+    stability : {'auto', 'check', False}, optional
+        Stability checks, as in ``curve_fit``: 'auto' and 'check' warn without
+        modifying data, False skips the checks. Only the in-memory path applies it
+        (see "Options ignored by chunked processing"). Must stay at its default
+        with ``method="exact_streaming"``; ignored with a warning by
+        ``method="hybrid_streaming"``. Default: False.
+    rescale_data : bool, optional
+        As in ``curve_fit``: no data is rescaled; with ``stability='auto'`` it only
+        controls a warning. Same restrictions as ``stability``. Default: True.
+    max_jacobian_elements_for_svd : int, optional
+        Largest Jacobian (m x n elements) for which the stability checks compute
+        an SVD, as in ``curve_fit``. Same restrictions as ``stability``.
+        Default: 10,000,000.
     memory_limit_gb : float, optional
         Maximum memory usage in GB.
     auto_size_detection : bool, optional

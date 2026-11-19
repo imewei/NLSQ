@@ -972,6 +972,8 @@ def run_fit(
     ------
     ValueError
         If required data or model is missing from state.
+    TypeError
+        If the state's model function is not callable.
     RuntimeError
         If fitting fails.
     """

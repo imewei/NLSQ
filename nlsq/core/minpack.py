@@ -3366,6 +3366,15 @@ def curve_fit(
         streaming or chunked strategy raise ``ValueError``, because those
         engines compute the covariance internally (the chunked GLS combiner
         needs the per-chunk covariances).
+    compute_diagnostics : bool, optional
+        If True, compute a fit-quality report and attach it to the result as
+        ``result.diagnostics``. Default: False.
+    diagnostics_level : DiagnosticLevel, optional
+        Level of diagnostics to compute. A non-default level overrides
+        ``diagnostics_config.level``. Default: ``DiagnosticLevel.BASIC``.
+    diagnostics_config : DiagnosticsConfig or None, optional
+        Diagnostics configuration. Registered diagnostic plugins run
+        automatically and appear in ``result.diagnostics.plugin_results``.
     *args, **kwargs
         Additional arguments passed to CurveFit.curve_fit method.
 
@@ -5217,6 +5226,28 @@ class CurveFit:
             If None (default), no callback is invoked. See ``nlsq.callbacks`` module
             for built-in callbacks (ProgressBar, IterationLogger, EarlyStopping).
             .. versionadded:: 0.2.0
+        data_mask : array_like of bool, optional
+            Mask of length ``len(ydata)``; rows where it is False are excluded from
+            the fit. Default is None (all rows used).
+        timeit : bool, optional
+            Record the execution time of each residual and Jacobian evaluation in
+            ``result.all_times`` (unbounded fits only). Adds a device sync per
+            evaluation. Default is False.
+        return_eval : bool, optional
+            Return ``(popt, pcov, f(xdata, *popt))``, evaluated at the rows kept by
+            ``data_mask``. Default is False.
+        full_output : bool, optional
+            Return the SciPy-style ``(popt, pcov, infodict, mesg, ier)`` tuple.
+            Default is False.
+        compute_diagnostics : bool, optional
+            If True, compute a fit-quality report and attach it to the result as
+            ``result.diagnostics``. Default is False.
+        diagnostics_level : DiagnosticLevel, optional
+            Level of diagnostics to compute. A non-default level overrides
+            ``diagnostics_config.level``. Default is ``DiagnosticLevel.BASIC``.
+        diagnostics_config : DiagnosticsConfig or None, optional
+            Diagnostics configuration. Registered diagnostic plugins run
+            automatically and appear in ``result.diagnostics.plugin_results``.
         kwargs
             Keyword arguments passed to `leastsq` for ``method='lm'`` or
             `least_squares` otherwise.
