@@ -1494,6 +1494,14 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
     -------
     decorator : function
         Decorator function that validates inputs
+
+    Raises
+    ------
+    ValueError
+        Raised by the decorated function when called, not by this call: if
+        too few required arguments are passed, if input validation reports
+        errors, or if ``validation_type`` is not ``'curve_fit'`` or
+        ``'least_squares'``.
     """
 
     def decorator(func: Callable) -> Callable:

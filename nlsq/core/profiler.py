@@ -169,14 +169,42 @@ class NullProfiler:
     __slots__ = ()
 
     def time_operation(self, operation: str, jax_result):
-        """No-op timing - returns result unchanged."""
+        """No-op timing - returns result unchanged.
+
+        Parameters
+        ----------
+        operation : str
+            Operation name; not used.
+        jax_result : Any
+            Value to return.
+
+        Returns
+        -------
+        Any
+            ``jax_result``, unchanged and without synchronization.
+        """
         return jax_result
 
     def time_conversion(self, operation: str, start_time: float) -> None:
-        """No-op conversion timing."""
+        """No-op conversion timing.
+
+        Parameters
+        ----------
+        operation : str
+            Conversion operation name; not used.
+        start_time : float
+            Start time; not used.
+        """
 
     def get_timing_data(self) -> dict[str, list[float]]:
-        """Returns empty timing data."""
+        """Returns empty timing data.
+
+        Returns
+        -------
+        dict[str, list[float]]
+            Dictionary with the same keys as ``TRFProfiler.get_timing_data``,
+            each mapped to a new empty list.
+        """
         return {
             "ftimes": [],
             "jtimes": [],

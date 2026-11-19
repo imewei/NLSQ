@@ -78,11 +78,17 @@ class ParamResultsWidget(QWidget):
     ) -> None:
         """Set the parameter results.
 
-        Args:
-            names: Parameter names
-            values: Fitted values
-            uncertainties: Standard errors
-            confidence_intervals: Optional 95% CI as (lower, upper) tuples
+        Parameters
+        ----------
+        names : list[str]
+            Parameter names; one table row is created per name.
+        values : list[float]
+            Fitted values. A row with no matching entry shows ``0``.
+        uncertainties : list[float]
+            Standard errors. A row with no matching entry shows ``-``.
+        confidence_intervals : list[tuple[float, float]] or None, optional
+            Confidence interval as (lower, upper) per row. A row with no
+            matching entry shows ``-``. Default is None.
         """
         self._table.setRowCount(len(names))
 
@@ -129,7 +135,9 @@ class ParamResultsWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration.
         """
         # Theme is applied globally via Qt color scheme

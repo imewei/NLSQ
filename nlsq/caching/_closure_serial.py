@@ -30,6 +30,17 @@ def closure_serial(func: Callable) -> int:
     always misses the lookup and gets a fresh, higher serial even if its
     id() happens to match a dead one's.
 
+    Parameters
+    ----------
+    func : Callable
+        Object to identify. Must support weak references.
+
+    Returns
+    -------
+    int
+        Serial number of ``func``; the same value on every call while ``func``
+        is alive.
+
     Raises
     ------
     TypeError

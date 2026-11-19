@@ -253,16 +253,20 @@ class ResultsPage(QWidget):
     def set_app_state(self, state: AppState) -> None:
         """Set the application state.
 
-        Args:
-            state: Application state manager
+        Parameters
+        ----------
+        state : AppState
+            Application state manager.
         """
         self._app_state = state
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this page.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration.
         """
         self._theme_name = theme.name
         self._set_status(self._status_label.text(), self._status_role)
@@ -282,8 +286,10 @@ class ResultsPage(QWidget):
     def update_results(self, result: Any) -> None:
         """Update the display with new fit results.
 
-        Args:
-            result: The fit result object (OptimizeResult)
+        Parameters
+        ----------
+        result : OptimizeResult or None
+            The fit result object. None clears the page.
         """
         if result is None:
             self.clear()
@@ -777,7 +783,9 @@ class ResultsPage(QWidget):
     def has_results(self) -> bool:
         """Check if results are available.
 
-        Returns:
-            True if results are displayed
+        Returns
+        -------
+        bool
+            True if results are displayed.
         """
         return self._has_results

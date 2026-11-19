@@ -48,11 +48,42 @@ class Strategy(Protocol):
     engine: Any
 
     def fit(self, f: Any, x: Any, y: Any, p0: Any, /, **common: Any) -> Any:
-        """Run the engine; return its native result unchanged."""
+        """Run the engine; return its native result unchanged.
+
+        Parameters
+        ----------
+        f : Any
+            Model function.
+        x : Any
+            Independent-variable data.
+        y : Any
+            Dependent-variable data.
+        p0 : Any
+            Initial parameter guess.
+        **common
+            Keyword arguments forwarded to the engine's fit call.
+
+        Returns
+        -------
+        Any
+            The engine's native result.
+        """
         ...
 
     def unpack(self, native: Any, /) -> Any:
-        """Turn ``fit``'s native result into what ``curve_fit_large`` returns."""
+        """Turn ``fit``'s native result into what ``curve_fit_large`` returns.
+
+        Parameters
+        ----------
+        native : Any
+            The value returned by ``fit``.
+
+        Returns
+        -------
+        Any
+            What ``curve_fit_large`` returns for this strategy (``(popt, pcov)``,
+            or the in-memory result unchanged).
+        """
         ...
 
 
@@ -105,6 +136,23 @@ def scipy_layout_to_points_first(f: Any, x: Any) -> tuple[Any, Any]:
     ``(k, M)`` layout pass ``f, x`` through here: it returns the transposed x
     and a model that gives the user's ``f`` its ``(k, chunk)`` layout back.
     No-op for 1-D x.
+
+    Parameters
+    ----------
+    f : Any
+        Model function written for the scipy ``(k, M)`` layout. An
+        ``estimate_p0`` attribute, if callable, is re-wrapped the same way.
+    x : Any
+        Independent-variable data; for ``np.ndim(x) > 1`` it has shape ``(k, M)``.
+
+    Returns
+    -------
+    f : Any
+        ``f`` itself for 1-D ``x``; otherwise a wrapper that calls ``f`` with the
+        transposed chunk.
+    x : Any
+        ``x`` unchanged for 1-D ``x``; otherwise ``np.asarray(x).T``, shape
+        ``(M, k)``.
     """
     if np.ndim(x) <= 1:
         return f, x
@@ -228,6 +276,20 @@ def build_large_strategy(
         ``show_progress`` to make ``fit`` call ``fit_with_progress``. Exact and
         in-memory: none (build-time kwargs raise ``TypeError``).
 
+    Returns
+    -------
+    Strategy
+        The constructed strategy for ``kind``.
+
+    Raises
+    ------
+    ValueError
+        If ``kind`` is not one of ``"hybrid"``, ``"chunked"``, ``"exact"`` or
+        ``"in_memory"``.
+    TypeError
+        If build-time kwargs or ``config`` are not accepted by the chosen
+        kind (see ``config`` and ``**common``).
+
     Notes
     -----
     ``Strategy.fit(f, x, y, p0, **common)`` forwards ``common`` to the engine's
@@ -256,7 +318,25 @@ def build_large_strategy(
 
 
 def default_p0(f: Callable[..., Any]) -> np.ndarray:
-    """Ones for positional fit parameters after ``x`` (curve_fit's p0=None)."""
+    """Ones for positional fit parameters after ``x`` (curve_fit's p0=None).
+
+    Parameters
+    ----------
+    f : Callable
+        Model function ``f(x, *params)``; the parameter count is taken from its
+        signature.
+
+    Returns
+    -------
+    np.ndarray
+        Array of ones with one entry per fit parameter.
+
+    Raises
+    ------
+    ValueError
+        If the number of fit parameters cannot be determined (fewer than one
+        found).
+    """
     from nlsq.core.problem import _n_params_from_signature
 
     n_params = _n_params_from_signature(f)
@@ -268,7 +348,25 @@ def default_p0(f: Callable[..., Any]) -> np.ndarray:
 def normalize_p0_bounds(
     f: Callable[..., Any], p0: ArrayLike | None, bounds: Any
 ) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
-    """Return ``(p0, (lb, ub))``: ``p0`` defaulted from ``f`` and 1-D, bounds broadcast."""
+    """Return ``(p0, (lb, ub))``: ``p0`` defaulted from ``f`` and 1-D, bounds broadcast.
+
+    Parameters
+    ----------
+    f : Callable
+        Model function; used only to default ``p0`` when it is None.
+    p0 : array_like or None
+        Initial guess. If None, it is defaulted from ``f`` and, when the bounds
+        shapes match, replaced by a point inside the bounds.
+    bounds : Any
+        Bounds as accepted by ``prepare_bounds``.
+
+    Returns
+    -------
+    p0 : np.ndarray
+        1-D initial guess.
+    bounds : tuple[np.ndarray, np.ndarray]
+        ``(lb, ub)`` arrays prepared for ``len(p0)`` parameters.
+    """
     from nlsq.core.least_squares import prepare_bounds
     from nlsq.core.problem import _initialize_feasible
 
@@ -290,6 +388,26 @@ def check_exact_sources(
     ``shape`` (lists, tuples) are converted. A callable ``xdata`` is a chunk factory:
     ``ydata`` and ``sigma`` must be None and ``n_points`` (accepted only then) is
     optional; blocks are validated as they arrive.
+
+    Parameters
+    ----------
+    xdata : Any
+        Array-like of x values, or a callable chunk factory.
+    ydata : Any
+        Array-like of y values; must be None for a chunk factory.
+    sigma : Any
+        Uncertainties (array-like, or a scalar), or None; must be None for a
+        chunk factory.
+    n_points : int or None
+        Total number of points; allowed only with a chunk factory.
+
+    Raises
+    ------
+    ValueError
+        If a chunk factory is given together with ``ydata`` or ``sigma``; if
+        ``n_points`` is given without a chunk factory; if ``xdata``, ``ydata``
+        or a non-scalar ``sigma`` is not 1-D; if ``xdata`` and ``ydata`` differ
+        in length; or if there are fewer than 2 points.
     """
     from nlsq.streaming import exact_lm
 

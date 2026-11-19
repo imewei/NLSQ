@@ -185,10 +185,6 @@ class ResultExporter:
             - metadata: Workflow metadata (optional)
             - model: Model configuration (optional)
 
-        Returns
-        -------
-        None
-
         Raises
         ------
         CLIError

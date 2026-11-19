@@ -87,16 +87,20 @@ class StatCard(QFrame):
     def set_value(self, value: str) -> None:
         """Set the displayed value.
 
-        Args:
-            value: Value string to display
+        Parameters
+        ----------
+        value : str
+            Value string to display
         """
         self._value_label.setText(value)
 
     def set_value_color(self, color: str) -> None:
         """Set the value text color.
 
-        Args:
-            color: CSS color string
+        Parameters
+        ----------
+        color : str
+            CSS color string
         """
         self._value_label.setStyleSheet(
             f"font-size: 20px; font-weight: bold; color: {color}; "
@@ -106,8 +110,10 @@ class StatCard(QFrame):
     def apply_theme(self, theme: ThemeConfig) -> None:
         """Re-apply base card styling from a ThemeConfig.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         self._apply_card_style(
             surface_variant=theme.surface_variant,
@@ -186,15 +192,23 @@ class FitStatisticsWidget(QWidget):
     ) -> None:
         """Set the statistics values.
 
-        Args:
-            r_squared: Coefficient of determination
-            rmse: Root mean square error
-            mae: Mean absolute error
-            aic: Akaike information criterion
-            bic: Bayesian information criterion
-            n_iterations: Number of function evaluations (shown on the
-                "Function evaluations" card)
-            converged: Whether the fit converged
+        Parameters
+        ----------
+        r_squared : float
+            Coefficient of determination
+        rmse : float
+            Root mean square error
+        mae : float
+            Mean absolute error
+        aic : float
+            Akaike information criterion
+        bic : float
+            Bayesian information criterion
+        n_iterations : int
+            Number of function evaluations (shown on the
+            "Function evaluations" card)
+        converged : bool
+            Whether the fit converged
         """
         # R² with theme-aware semantic color coding
         if math.isnan(r_squared):
@@ -251,8 +265,10 @@ class FitStatisticsWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         self._theme = theme
 

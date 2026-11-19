@@ -335,6 +335,15 @@ class CurveFitResult(OptimizeResult):
         -------
         predictions : ndarray
             Model predictions: f(xdata, \\*popt)
+
+        Raises
+        ------
+        AttributeError
+            If neither ``model`` and ``xdata`` nor ``ydata`` and ``fun`` are
+            available on the result.
+        ValueError
+            If only ``ydata`` and ``fun`` are available and ``sigma``'s shape
+            does not match ``fun``.
         """
 
         def compute():
@@ -358,6 +367,15 @@ class CurveFitResult(OptimizeResult):
         -------
         residuals : ndarray
             Residuals: ydata - predictions
+
+        Raises
+        ------
+        AttributeError
+            If neither ``model``, ``xdata`` and ``ydata`` nor ``ydata`` and ``fun``
+            are available on the result.
+        ValueError
+            If only ``ydata`` and ``fun`` are available and ``sigma``'s shape
+            does not match ``fun``.
 
         Notes
         -----
@@ -399,6 +417,11 @@ class CurveFitResult(OptimizeResult):
         r2 : float
             R² value in range (-∞, 1]. Values closer to 1 indicate better fit.
 
+        Raises
+        ------
+        AttributeError
+            If ``ydata`` is not available on the result.
+
         Notes
         -----
         R² = 1 - SS_res / SS_tot
@@ -438,6 +461,11 @@ class CurveFitResult(OptimizeResult):
         -------
         adj_r2 : float
             Adjusted R² value.
+
+        Raises
+        ------
+        AttributeError
+            If ``ydata`` is not available on the result.
 
         Notes
         -----
@@ -605,6 +633,11 @@ class CurveFitResult(OptimizeResult):
         bic : float
             BIC value. Lower is better.
 
+        Raises
+        ------
+        AttributeError
+            If ``ydata`` is not available on the result.
+
         Notes
         -----
         BIC = k*ln(n) + L
@@ -632,6 +665,14 @@ class CurveFitResult(OptimizeResult):
         -------
         intervals : ndarray
             Array of shape (n_params, 2) with [lower, upper] bounds for each parameter.
+
+        Raises
+        ------
+        AttributeError
+            If ``pcov`` is ``None`` (the fit was run with
+            ``compute_covariance=False``).
+        ValueError
+            If ``alpha`` is not finite and strictly between 0 and 1.
 
         Examples
         --------
@@ -930,6 +971,15 @@ class CurveFitResult(OptimizeResult):
         intervals : ndarray
             Array of shape (n_points, 2) with [lower, upper] bounds for each point.
 
+        Raises
+        ------
+        AttributeError
+            If ``model`` is not available, if ``pcov`` is ``None`` (the fit was
+            run with ``compute_covariance=False``), or if ``x`` is None and
+            ``xdata`` is not stored on the result.
+        ValueError
+            If ``alpha`` is not finite and strictly between 0 and 1.
+
         Examples
         --------
         >>> result = curve_fit(model, x, y)
@@ -1089,6 +1139,15 @@ class CurveFitResult(OptimizeResult):
         upper : ndarray
             Upper confidence bound.
 
+        Raises
+        ------
+        AttributeError
+            If ``model`` is not available, if ``pcov`` is missing or ``None`` (the
+            fit was run with ``compute_covariance=False``), or if ``x`` is None
+            and ``xdata`` is not stored on the result.
+        ValueError
+            If ``alpha`` is not finite and strictly between 0 and 1.
+
         Notes
         -----
         This calculates the confidence interval for the mean response (f(x)),
@@ -1157,6 +1216,13 @@ class CurveFitResult(OptimizeResult):
             Figure object.
         axes : matplotlib.axes.Axes or array of Axes
             Axes object(s).
+
+        Raises
+        ------
+        ImportError
+            If matplotlib is not installed.
+        AttributeError
+            If ``xdata`` or ``ydata`` is not available on the result.
 
         Examples
         --------

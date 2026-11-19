@@ -83,6 +83,20 @@ def reject_owned_kwargs(strategy: Any, kwargs: Mapping[str, Any]) -> None:
     Used by ``fit_with_strategy``, whose caller keywords are merged over (or
     forwarded beside) the strategy's own settings; an owned key would otherwise
     be silently overwritten (or bypass a check). ``Hybrid`` is not covered.
+
+    Parameters
+    ----------
+    strategy : object
+        The strategy spec. Only ``InMemory``, ``Chunked`` and ``Exact`` instances
+        are checked; any other object returns without checking.
+    kwargs : Mapping[str, Any]
+        Caller keyword arguments. Keys in ``strategy.options`` are checked too.
+
+    Raises
+    ------
+    TypeError
+        If a key of ``kwargs`` or of ``strategy.options`` is one the strategy
+        owns.
     """
     if isinstance(strategy, InMemory):
         reserved: frozenset[str] = _IN_MEMORY_RESERVED
@@ -315,7 +329,20 @@ class Auto:
             raise TypeError(f"Auto.exact must be Exact or None, got {self.exact!r}")
 
     def resolve(self, n_points: int) -> InMemory | Chunked | Exact:
-        """Return the concrete strategy for ``n_points`` data points (count only)."""
+        """Return the concrete strategy for ``n_points`` data points (count only).
+
+        Parameters
+        ----------
+        n_points : int
+            Number of data points.
+
+        Returns
+        -------
+        InMemory or Chunked or Exact
+            ``in_memory`` if ``auto_size_detection`` is True and ``n_points`` is
+            below ``size_threshold``; otherwise ``exact`` if it is not None, else
+            ``chunked``.
+        """
         if self.auto_size_detection and n_points < self.size_threshold:
             return self.in_memory
         return self.exact if self.exact is not None else self.chunked

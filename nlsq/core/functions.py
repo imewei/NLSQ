@@ -59,11 +59,27 @@ class FittableFunction(Protocol):
     """
 
     def __call__(self, x: ArrayLike, *args: float) -> ArrayReturn:
-        """Evaluate the function at x with given parameters."""
+        """Evaluate the function at x with given parameters.
+
+        Parameters
+        ----------
+        x : ArrayLike
+            Independent variable values.
+        *args : float
+            Model parameters.
+        """
         ...
 
     def estimate_p0(self, xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
-        """Estimate initial parameters from data."""
+        """Estimate initial parameters from data.
+
+        Parameters
+        ----------
+        xdata : np.ndarray
+            Independent variable data.
+        ydata : np.ndarray
+            Dependent variable data.
+        """
         ...
 
     def bounds(self) -> BoundsTuple:
@@ -855,6 +871,14 @@ def polynomial(degree: int) -> Callable:
     -------
     poly_func : callable
         Polynomial function with signature poly(x, \\*coeffs)
+
+    Raises
+    ------
+    ValueError
+        If ``degree`` is not a finite, non-negative integer (``bool`` and
+        ``str`` are rejected).
+    TypeError
+        If ``degree`` is ``None`` or otherwise not numeric.
 
     Examples
     --------

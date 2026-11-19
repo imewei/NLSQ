@@ -265,6 +265,12 @@ class LossFunctionsJIT:
 
         Returns a function that stacks rho0, rho1, rho2 into a (3, n) array
         for efficient loss and derivative computation.
+
+        Returns
+        -------
+        callable
+            Jitted function ``(rho0, rho1, rho2) -> jax.Array`` that stacks its
+            three arguments along a new leading axis.
         """
         return _stack_rhos
 
@@ -291,7 +297,23 @@ class LossFunctionsJIT:
         self.huber2 = _huber2
 
     def huber(self, z, cost_only):
-        """Compute Huber loss rho values."""
+        """Compute Huber loss rho values.
+
+        Parameters
+        ----------
+        z : array_like
+            Scaled squared residuals ``(f / f_scale) ** 2``.
+        cost_only : bool
+            If True, skip the derivative computation and return zeros for
+            ``rho1`` and ``rho2``.
+
+        Returns
+        -------
+        jax.Array
+            Stacked ``(rho0, rho1, rho2)`` of shape ``(3, ...)``, with the
+            trailing shape of ``z``. With ``cost_only=True`` the ``rho1`` and
+            ``rho2`` rows are zeros.
+        """
         rho0, mask = self.huber1(z)
         return self._rhos(rho0, cost_only, lambda: self.huber2(z, mask))
 
@@ -305,7 +327,23 @@ class LossFunctionsJIT:
         self.soft_l1_2 = _soft_l1_2
 
     def soft_l1(self, z, cost_only):
-        """Compute soft L1 loss rho values."""
+        """Compute soft L1 loss rho values.
+
+        Parameters
+        ----------
+        z : array_like
+            Scaled squared residuals ``(f / f_scale) ** 2``.
+        cost_only : bool
+            If True, skip the derivative computation and return zeros for
+            ``rho1`` and ``rho2``.
+
+        Returns
+        -------
+        jax.Array
+            Stacked ``(rho0, rho1, rho2)`` of shape ``(3, ...)``, with the
+            trailing shape of ``z``. With ``cost_only=True`` the ``rho1`` and
+            ``rho2`` rows are zeros.
+        """
         rho0, t = self.soft_l1_1(z)
         return self._rhos(rho0, cost_only, lambda: self.soft_l1_2(t))
 
@@ -319,7 +357,23 @@ class LossFunctionsJIT:
         self.cauchy2 = _cauchy2
 
     def cauchy(self, z, cost_only):
-        """Compute Cauchy loss rho values."""
+        """Compute Cauchy loss rho values.
+
+        Parameters
+        ----------
+        z : array_like
+            Scaled squared residuals ``(f / f_scale) ** 2``.
+        cost_only : bool
+            If True, skip the derivative computation and return zeros for
+            ``rho1`` and ``rho2``.
+
+        Returns
+        -------
+        jax.Array
+            Stacked ``(rho0, rho1, rho2)`` of shape ``(3, ...)``, with the
+            trailing shape of ``z``. With ``cost_only=True`` the ``rho1`` and
+            ``rho2`` rows are zeros.
+        """
         rho0 = self.cauchy1(z)
         return self._rhos(rho0, cost_only, lambda: self.cauchy2(z))
 
@@ -333,7 +387,23 @@ class LossFunctionsJIT:
         self.arctan2 = _arctan2
 
     def arctan(self, z, cost_only):
-        """Compute arctan loss rho values."""
+        """Compute arctan loss rho values.
+
+        Parameters
+        ----------
+        z : array_like
+            Scaled squared residuals ``(f / f_scale) ** 2``.
+        cost_only : bool
+            If True, skip the derivative computation and return zeros for
+            ``rho1`` and ``rho2``.
+
+        Returns
+        -------
+        jax.Array
+            Stacked ``(rho0, rho1, rho2)`` of shape ``(3, ...)``, with the
+            trailing shape of ``z``. With ``cost_only=True`` the ``rho1`` and
+            ``rho2`` rows are zeros.
+        """
         rho0 = self.arctan1(z)
         return self._rhos(rho0, cost_only, lambda: self.arctan2(z))
 
@@ -363,6 +433,20 @@ class LossFunctionsJIT:
 
         With ``cost_only=True`` the wrapper returns the scalar cost (masked rows
         excluded); otherwise it returns the scaled ``rho`` derivatives.
+
+        Parameters
+        ----------
+        loss : callable
+            Loss method called as ``loss(z, cost_only=...)`` on the scaled squared
+            residuals ``z`` and returning the stacked ``(rho0, rho1, rho2)``
+            array (for example ``self.huber``).
+
+        Returns
+        -------
+        callable
+            ``loss_function(f, f_scale, data_mask=None, cost_only=False)``.
+            It returns the scalar cost if ``cost_only`` is True, otherwise the
+            ``(3, ...)`` array of ``rho`` values scaled by ``f_scale``.
         """
 
         def loss_function(f, f_scale, data_mask=None, cost_only=False):
@@ -379,7 +463,15 @@ class LossFunctionsJIT:
         return loss_function
 
     def construct_all_loss_functions(self):
-        """Build the wrapped loss function for every implemented loss except 'linear'."""
+        """Build the wrapped loss function for every implemented loss except 'linear'.
+
+        Returns
+        -------
+        dict
+            Maps each loss name (``"huber"``, ``"soft_l1"``, ``"cauchy"``,
+            ``"arctan"``) to the callable built by
+            ``construct_single_loss_function``.
+        """
         loss_funcs = {}
         for key, loss in self.IMPLEMENTED_LOSSES.items():
             if loss is not None:

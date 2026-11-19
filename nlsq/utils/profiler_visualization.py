@@ -692,6 +692,13 @@ class ProfilingDashboard:
         ----------
         output_dir : str or Path
             Directory to save dashboard files
+
+        Raises
+        ------
+        ValueError
+            If a tracked profile name would produce a plot filename that
+            resolves outside ``output_dir``. This is checked before anything
+            is written.
         """
         output_dir = Path(output_dir)
 

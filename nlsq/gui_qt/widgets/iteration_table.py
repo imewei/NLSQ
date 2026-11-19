@@ -76,11 +76,16 @@ class IterationTableWidget(QWidget):
     ) -> None:
         """Add an iteration to the table.
 
-        Args:
-            iteration: Iteration number
-            cost: Cost function value
-            step_norm: Optional step norm
-            gradient_norm: Optional gradient norm
+        Parameters
+        ----------
+        iteration : int
+            Iteration number.
+        cost : float
+            Cost function value.
+        step_norm : float, optional
+            Step norm; ``-`` is shown if ``None``.
+        gradient_norm : float, optional
+            Gradient norm; ``-`` is shown if ``None``.
         """
         # Remove oldest rows if at limit
         if self._table.rowCount() >= self.MAX_ROWS:
@@ -128,7 +133,9 @@ class IterationTableWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration.
         """
         # Theme is applied globally via Qt color scheme

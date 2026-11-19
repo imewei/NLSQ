@@ -210,8 +210,9 @@ def check_tolerance(
     This function checks the tolerance values for the optimization and
     prepares them for use. If any of the tolerances is `None`, it is set to
     0. If any of the tolerances is lower than the machine epsilon, a warning
-    is issued and the tolerance is set to the machine epsilon. If all
-    tolerances are lower than the machine epsilon, a `ValueError` is raised.
+    is issued and the tolerance is left as given; with ``method="lm"`` a
+    `ValueError` is raised instead. If all tolerances are lower than the
+    machine epsilon, a `ValueError` is raised.
 
     Parameters
     ----------
@@ -228,6 +229,13 @@ def check_tolerance(
     -------
     Tuple[float, float, float]
         The prepared tolerance values.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` is ``"lm"`` and any tolerance is below machine epsilon,
+        if all three tolerances are below machine epsilon, or if
+        ``validate_tolerance`` rejects a tolerance (for example NaN).
     """
 
     ftol = validate_tolerance("ftol", ftol)
@@ -266,6 +274,12 @@ def check_x_scale(
     -------
     str | np.ndarray
         The prepared `x_scale` parameter.
+
+    Raises
+    ------
+    ValueError
+        If ``x_scale`` is neither ``'jac'`` nor an array_like of finite
+        positive numbers, or if its shape is inconsistent with ``x0``.
     """
 
     if isinstance(x_scale, str) and x_scale == "jac":
@@ -927,10 +941,40 @@ class LeastSquares:
 
         Parameters
         ----------
+        x0 : np.ndarray
+            Initial guess. Must be real, finite, at most 1-D and feasible.
+        bounds : tuple
+            ``(lb, ub)`` pair, or an object with ``lb`` and ``ub`` attributes
+            (such as ``scipy.optimize.Bounds``).
+        method : str
+            ``'trf'`` or ``'lm'``. ``'lm'`` requires ``loss='linear'`` and no
+            finite bounds.
+        jac : callable or None
+            Jacobian function; must be ``None`` or callable.
+        loss : str or callable
+            Loss function name from ``IMPLEMENTED_LOSSES``, or a callable.
+        verbose : int
+            Verbosity level; must be 0, 1 or 2.
+        max_nfev : float or None
+            Maximum number of function evaluations. Not used by this method.
+        ftol : float
+            Function tolerance, validated by ``check_tolerance``.
+        xtol : float
+            Parameter tolerance, validated by ``check_tolerance``.
+        gtol : float
+            Gradient tolerance, validated by ``check_tolerance``.
+        x_scale : str or array_like
+            Parameter scaling, validated by ``check_x_scale``.
         prepared_bounds : tuple[np.ndarray, np.ndarray] or None, optional
             Pre-prepared bounds as (lb, ub). If provided, skips prepare_bounds call.
             This optimization avoids redundant bounds preparation when caller has
             already called prepare_bounds. Default is None.
+        tr_solver : str or None, optional
+            Trust-region solver option, checked by ``validate_tr_solver``.
+            Default is None.
+        f_scale : float, optional
+            Soft margin between inlier and outlier residuals, checked by
+            ``validate_f_scale`` unless ``loss == 'linear'``. Default is 1.0.
 
         Returns
         -------
@@ -1664,6 +1708,25 @@ class LeastSquares:
         -------
         result : OptimizeResult
             Optimization result with solution, convergence info, and statistics.
+
+        Raises
+        ------
+        TypeError
+            If ``options`` is passed as a keyword argument, or (via
+            ``_ImproperInputError``) if ``method='lm'`` and there are fewer
+            residuals than parameters.
+        ValueError
+            If ``data_mask`` is not one-dimensional, has a length different
+            from ``ydata``, excludes every observation, or its shape differs
+            from the number of residuals; if ``jacobian_mode`` is not
+            ``'auto'``, ``'fwd'`` or ``'rev'``; or if the inputs fail
+            validation (``loss``, ``method``, ``jac``, ``verbose``,
+            ``bounds``, ``x0``, ``x_scale``, tolerances, ``tr_solver``,
+            ``f_scale``, ``max_nfev``).
+        _ImproperInputError
+            If ``method='lm'`` and the number of unmasked residuals is smaller
+            than the number of parameters. Subclass of both ``TypeError`` and
+            ``ValueError``.
         """
         # Step 1: Initialize parameters and validate options
         if kwargs is None:
@@ -2252,6 +2315,15 @@ class LeastSquares:
         -------
         jnp.ndarray
             The masked Jacobian of the function evaluated at `args` with respect to the data.
+
+        Raises
+        ------
+        ValueError
+            Raised by the wrapped Jacobian when it is traced or called, if
+            ``jac`` returns a 2-D array whose shape is neither
+            ``(n_params, m)`` nor ``(m, n_params)``, or a 1-D array for a
+            one-parameter model whose length differs from the number of
+            observations.
         """
 
         # Note: Uses @jit (not cached_jit) because these closures capture 'jac'

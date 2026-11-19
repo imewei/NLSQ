@@ -16,6 +16,15 @@ def intersect_trust_region(x, s, Delta):
     This function solves the quadratic equation with respect to t
     ||(x + s*t)||**2 = Delta**2.
 
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Starting point of the line; must lie within the trust region.
+    s : array_like, shape (n,)
+        Direction of the line; must be non-zero.
+    Delta : float
+        Trust-region radius.
+
     Returns
     -------
     t_neg, t_pos : tuple of float
@@ -261,6 +270,21 @@ def update_tr_radius(
 ):
     """Update the radius of a trust region based on the cost reduction.
 
+    Parameters
+    ----------
+    Delta : float
+        Current trust-region radius.
+    actual_reduction : float
+        Actual reduction of the cost function.
+    predicted_reduction : float
+        Reduction predicted by the quadratic model.
+    step_norm : float
+        Norm of the step. The radius is reset to ``0.25 * step_norm`` when
+        the ratio is below 0.25.
+    bound_hit : bool
+        Whether the step reached the trust-region boundary. The radius is
+        doubled when the ratio exceeds 0.75 and this is true.
+
     Returns
     -------
     Delta : float
@@ -290,6 +314,19 @@ def update_tr_radius(
 def minimize_quadratic_1d(a, b, lb, ub, c=0):
     """Minimize a 1-D quadratic function subject to bounds.
     The free term `c` is 0 by default. Bounds must be finite.
+
+    Parameters
+    ----------
+    a : float
+        Coefficient of the quadratic term.
+    b : float
+        Coefficient of the linear term.
+    lb : float
+        Lower bound of the variable.
+    ub : float
+        Upper bound of the variable.
+    c : float, optional
+        Free term, added to the returned minimum value. Default 0.
 
     Returns
     -------
@@ -354,7 +391,23 @@ def evaluate_quadratic(J, g, s, diag=None):
 
 
 def in_bounds(x, lb, ub):
-    """Check if a point lies within bounds."""
+    """Check if a point lies within bounds.
+
+    Parameters
+    ----------
+    x : ndarray
+        Point to check.
+    lb : ndarray
+        Lower bounds, broadcastable against ``x``.
+    ub : ndarray
+        Upper bounds, broadcastable against ``x``.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``lb <= x <= ub`` holds for every element (bounds are
+        inclusive).
+    """
     return np.all((x >= lb) & (x <= ub))
 
 
@@ -362,6 +415,17 @@ def step_size_to_bound(x, s, lb, ub):
     """Compute a min_step size required to reach a bound.
     The function computes a positive scalar t, such that x + s * t is on
     the bound.
+
+    Parameters
+    ----------
+    x : ndarray, shape (n,)
+        Current point.
+    s : ndarray, shape (n,)
+        Direction.
+    lb : ndarray, shape (n,)
+        Lower bounds.
+    ub : ndarray, shape (n,)
+        Upper bounds.
 
     Returns
     -------
@@ -395,6 +459,19 @@ def find_active_constraints(x, lb, ub, rtol=1e-10):
     """Determine which constraints are active in a given point.
     The threshold is computed using `rtol` and the absolute value of the
     closest bound.
+
+    Parameters
+    ----------
+    x : ndarray
+        Point to check.
+    lb : ndarray
+        Lower bounds, same shape as ``x``.
+    ub : ndarray
+        Upper bounds, same shape as ``x``.
+    rtol : float, optional
+        Relative tolerance of the active-constraint threshold. With
+        ``rtol=0`` a bound is active if ``x`` is at or beyond it.
+        Default 1e-10.
 
     Returns
     -------
@@ -436,6 +513,24 @@ def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     Each element of the returned vector is at least at a distance
     ``rstep * max(|bound|, min(1, ub - lb))`` from the closest bound. If
     ``rstep=0`` then `np.nextafter` is used.
+
+    Parameters
+    ----------
+    x : array_like
+        Point to shift.
+    lb : array_like
+        Lower bounds.
+    ub : array_like
+        Upper bounds.
+    rstep : float, optional
+        Relative distance from the bounds. Default 1e-10.
+
+    Returns
+    -------
+    ndarray
+        Copy of ``x`` shifted into the interior. Elements that still fall
+        outside ``[lb, ub]`` after the shift are set to the midpoint of
+        their bounds.
     """
     # Convert to NumPy array to ensure mutability (JAX arrays are immutable)
     x_new = np.array(x, copy=True)
@@ -489,6 +584,17 @@ def CL_scaling_vector(x, g, lb, ub):
     Derivatives of v with respect to x take value 1, -1 or 0 depending on a
     case.
 
+    Parameters
+    ----------
+    x : ndarray
+        Current point.
+    g : ndarray, shape of x
+        Gradient at ``x``.
+    lb : ndarray, shape of x
+        Lower bounds.
+    ub : ndarray, shape of x
+        Upper bounds.
+
     Returns
     -------
     v : ndarray with shape of x
@@ -519,7 +625,24 @@ def CL_scaling_vector(x, g, lb, ub):
 
 
 def reflective_transformation(y, lb, ub):
-    """Compute reflective transformation and its gradient."""
+    """Compute reflective transformation and its gradient.
+
+    Parameters
+    ----------
+    y : ndarray
+        Point to transform.
+    lb : ndarray
+        Lower bounds, same shape as ``y``.
+    ub : ndarray
+        Upper bounds, same shape as ``y``.
+
+    Returns
+    -------
+    x : ndarray
+        Transformed point; ``y`` itself if it is within bounds.
+    g : ndarray
+        Derivative of ``x`` with respect to ``y`` per element (1 or -1).
+    """
     if in_bounds(y, lb, ub):
         return y, np.ones_like(y)
 
@@ -577,7 +700,24 @@ def print_iteration_nonlinear(
     step_norm,
     optimality,
 ):
-    """Print a single iteration row for nonlinear optimization progress."""
+    """Print a single iteration row for nonlinear optimization progress.
+
+    Parameters
+    ----------
+    iteration : int
+        Iteration number.
+    nfev : int
+        Total number of function evaluations.
+    cost : float
+        Current cost.
+    cost_reduction : float or None
+        Cost reduction of the last step; a blank column is printed if
+        ``None``.
+    step_norm : float or None
+        Norm of the last step; a blank column is printed if ``None``.
+    optimality : float
+        First-order optimality measure.
+    """
     cost_reduction = " " * 15 if cost_reduction is None else f"{cost_reduction:^15.2e}"
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
@@ -601,7 +741,22 @@ def print_header_linear():
 
 
 def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimality):
-    """Print a single iteration row for linear optimization progress."""
+    """Print a single iteration row for linear optimization progress.
+
+    Parameters
+    ----------
+    iteration : int
+        Iteration number.
+    cost : float
+        Current cost.
+    cost_reduction : float or None
+        Cost reduction of the last step; a blank column is printed if
+        ``None``.
+    step_norm : float or None
+        Norm of the last step; a blank column is printed if ``None``.
+    optimality : float
+        First-order optimality measure.
+    """
     cost_reduction = " " * 15 if cost_reduction is None else f"{cost_reduction:^15.2e}"
 
     step_norm = " " * 15 if step_norm is None else f"{step_norm:^15.2e}"
@@ -612,7 +767,33 @@ def print_iteration_linear(iteration, cost, cost_reduction, step_norm, optimalit
 
 
 def check_termination(dF, F, dx_norm, x_norm, ratio, ftol, xtol):
-    """Check termination condition for nonlinear least squares."""
+    """Check termination condition for nonlinear least squares.
+
+    Parameters
+    ----------
+    dF : float
+        Cost reduction of the step.
+    F : float
+        Current cost.
+    dx_norm : float
+        Norm of the step.
+    x_norm : float
+        Norm of the current parameter vector.
+    ratio : float
+        Ratio of actual to predicted cost reduction.
+    ftol : float
+        Tolerance on the cost change. Satisfied if ``dF < ftol * F`` and
+        ``ratio > 0.25``.
+    xtol : float
+        Tolerance on the step. Satisfied if
+        ``dx_norm < xtol * (xtol + x_norm)``.
+
+    Returns
+    -------
+    int or None
+        4 if both ``ftol`` and ``xtol`` are satisfied, 2 if only ``ftol``,
+        3 if only ``xtol``, ``None`` if neither.
+    """
     ftol_satisfied = dF < ftol * F and ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
 

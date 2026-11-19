@@ -172,8 +172,10 @@ class ColumnSelectorWidget(QWidget):
         Populates all dropdowns with the column names and attempts
         to auto-select sensible defaults.
 
-        Args:
-            column_names: List of column names from loaded data
+        Parameters
+        ----------
+        column_names : list of str
+            Column names from loaded data.
         """
         self._column_names = column_names
 
@@ -217,8 +219,11 @@ class ColumnSelectorWidget(QWidget):
     def get_selection(self) -> dict[str, int | None]:
         """Get the current column selection.
 
-        Returns:
+        Returns
+        -------
+        dict
             Dictionary with column indices:
+
             - "x": int - X column index
             - "y": int - Y column index
             - "z": int | None - Z column index (2D mode only)
@@ -237,7 +242,21 @@ class ColumnSelectorWidget(QWidget):
         return selection
 
     def set_selection(self, selection: dict[str, int | str | None]) -> None:
-        """Assign columns by zero-based index or by their loaded names."""
+        """Assign columns by zero-based index or by their loaded names.
+
+        Parameters
+        ----------
+        selection : dict
+            Maps a role (``"x"``, ``"y"``, ``"z"``, ``"sigma"``) to a column
+            index or column name. A None value is skipped except for ``"sigma"``.
+
+        Raises
+        ------
+        ValueError
+            If a column name is not among the loaded names, or a column is not
+            among the combo box entries for its role. No selection is changed
+            in that case.
+        """
         combos = {
             "x": self._x_combo,
             "y": self._y_combo,
@@ -265,8 +284,15 @@ class ColumnSelectorWidget(QWidget):
     def set_mode(self, mode: str) -> None:
         """Set the data mode.
 
-        Args:
-            mode: Either "1d" for curve data or "2d" for surface data
+        Parameters
+        ----------
+        mode : str
+            Either "1d" for curve data or "2d" for surface data.
+
+        Raises
+        ------
+        ValueError
+            If ``mode`` is neither ``"1d"`` nor ``"2d"``.
         """
         if mode not in ("1d", "2d"):
             raise ValueError(f"Invalid mode: {mode}. Must be '1d' or '2d'.")
@@ -284,8 +310,11 @@ class ColumnSelectorWidget(QWidget):
         - In 2D mode, Z column is different from X and Y
         - Sigma column (if set) is different from data columns
 
-        Returns:
-            Tuple of (is_valid, error_message)
+        Returns
+        -------
+        tuple of (bool, str)
+            ``(is_valid, message)``; ``message`` is the error text when the
+            selection is invalid.
         """
         selection = self.get_selection()
 
@@ -324,8 +353,10 @@ class ColumnSelectorWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration.
         """
         # Update validation label color based on theme
         # Warning color is consistent across themes

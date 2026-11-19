@@ -81,7 +81,27 @@ class BoundsInference:
         safety_factor: float = 10.0,
         enforce_positivity: bool = True,
     ):
-        """Initialize bounds inference."""
+        """Initialize bounds inference.
+
+        Parameters
+        ----------
+        xdata : array_like
+            Independent variable data. Converted to ``float64``.
+        ydata : array_like
+            Dependent variable data. Converted to ``float64``.
+        p0 : array_like
+            Initial parameter guess.
+        safety_factor : float, optional
+            Multiplier for bound ranges. Must be finite and ``>= 1``.
+        enforce_positivity : bool, optional
+            Force bounds to be non-negative when ``p0`` is positive.
+
+        Raises
+        ------
+        ValueError
+            If ``p0``, ``xdata`` or ``ydata`` contains non-finite values, or
+            if ``safety_factor`` is not finite and ``>= 1``.
+        """
         # float64 so integer / float16 data cannot wrap or overflow in ranges
         self.xdata = np.asarray(xdata, dtype=np.float64)
         self.ydata = np.asarray(ydata, dtype=np.float64)
@@ -314,6 +334,14 @@ def infer_bounds_for_multistart(
     upper_bounds : ndarray
         Upper bounds suitable for LHS sampling
 
+    Raises
+    ------
+    ValueError
+        If ``xdata``, ``ydata``, ``p0`` or ``safety_factor`` is rejected by
+        :func:`infer_bounds`, if ``user_bounds`` is rejected by
+        :func:`merge_bounds`, or if no finite interval with ``lower < upper``
+        can be formed for some parameter.
+
     Notes
     -----
     This function ensures that returned bounds are always finite, which is
@@ -454,6 +482,13 @@ def merge_bounds(
         Merged lower bounds
     upper_bounds : ndarray
         Merged upper bounds
+
+    Raises
+    ------
+    ValueError
+        If ``user_bounds`` contains NaN, a ``+inf`` lower bound or a ``-inf``
+        upper bound, or if a user bound is not a scalar or a 1-D array with
+        one element per inferred parameter.
 
     Examples
     --------

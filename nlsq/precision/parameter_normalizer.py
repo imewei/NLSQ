@@ -131,6 +131,14 @@ class ParameterNormalizer:
             Per-parameter scales used instead of 1 where ``|p0|`` is ~0 and the
             p0 magnitude is the scale source ('p0' strategy, or an infinite
             bound under 'bounds'). Non-finite or non-positive entries keep 1.
+
+        Raises
+        ------
+        ValueError
+            If ``p0`` is not 1-D, if a bound is neither a scalar nor has one
+            element per parameter, contains NaN, or a lower bound exceeds its
+            upper bound, or if ``strategy`` is not one of ``'bounds'``,
+            ``'p0'``, ``'none'`` or ``'auto'``.
         """
         self.zero_p0_scales = zero_p0_scales
         self.p0 = jnp.atleast_1d(jnp.asarray(p0, dtype=jnp.float64))

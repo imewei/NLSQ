@@ -135,6 +135,25 @@ def make_chunk_stats(
     ``jacobian=None`` differentiates the chunk with ``jax.jacfwd``; a callable
     ``jacobian(theta, x_chunk) -> (n_chunk, p)`` replaces it (``d model / d theta``, for
     models ``jacfwd`` cannot differentiate), with the same masking and weighting.
+
+    Parameters
+    ----------
+    model : Callable
+        Model ``model(x, *theta)`` returning one value per row of ``x``.
+    weighted : bool, optional
+        Build the weighted kernel described above.
+    jacobian : Callable or None, optional
+        ``jacobian(theta, x_chunk) -> (n_chunk, p)``; ``None`` uses ``jax.jacfwd``.
+    track_rel : bool, optional
+        Append the relative-residual and data-range outputs described above.
+
+    Returns
+    -------
+    Callable
+        Jitted kernel returning ``(F, g, H)`` with ``F = 0.5 sum r^2``,
+        ``g = J^T r`` and ``H = J^T J`` over the real rows; with ``track_rel`` it
+        returns three more values (the maximum relative residual, ``max y`` and
+        ``max -y``).
     """
 
     def jac(f: Callable[[jax.Array], jax.Array], theta: jax.Array, x: jax.Array) -> Any:
@@ -186,6 +205,21 @@ def make_chunk_jacobian(
     With ``weighted=True`` the signature is ``(theta, x, sigma, mask)`` and rows are
     divided by ``|sigma|`` (a per-row block or a scalar). Masked rows are set to 0 with ``jnp.where`` after weighting, and
     ``jacobian`` replaces ``jax.jacfwd`` exactly as in :func:`make_chunk_stats`.
+
+    Parameters
+    ----------
+    model : Callable
+        Model ``model(x, *theta)`` returning one value per row of ``x``.
+    weighted : bool, optional
+        Build the weighted kernel described above.
+    jacobian : Callable or None, optional
+        ``jacobian(theta, x_chunk) -> (n_chunk, p)``; ``None`` uses ``jax.jacfwd``.
+
+    Returns
+    -------
+    Callable
+        Jitted kernel returning the ``(n_chunk, p)`` Jacobian with masked rows
+        set to 0.
     """
 
     def jac(theta: jax.Array, x: jax.Array) -> Any:
@@ -239,6 +273,30 @@ def iter_blocks(
     ``sigma`` tail is padded with 1, which is valid, so the sigma checks need no mask.
     ``sigma`` is ``None`` (unweighted), a scalar (yielded as is) or a 1-D array of the
     same length.
+
+    Parameters
+    ----------
+    source_x : Any
+        1-D array-like of inputs, read by slice.
+    source_y : Any
+        1-D array-like of observations, the same length as ``source_x``.
+    source_sigma : Any
+        ``None``, a scalar, or a 1-D array-like the same length as ``source_x``.
+    chunk : int
+        Rows per yielded block.
+
+    Yields
+    ------
+    tuple
+        ``(x, y, sigma, mask)``: float64 blocks of ``chunk`` rows (``sigma`` is
+        ``None`` or the scalar if so given) and a boolean mask that is True on the
+        real rows.
+
+    Raises
+    ------
+    ValueError
+        If ``y`` or ``sigma`` has a different length from ``x``, or a slice
+        returns a different number of rows than requested.
     """
     n = _source_len(source_x)
     for name, a in (("y", source_y), ("sigma", source_sigma)):
@@ -294,7 +352,18 @@ def _as64(a: Any) -> Any:
 def is_chunk_factory(
     x: Any,
 ) -> TypeGuard[Callable[[int], Iterator[tuple[Any, ...]]]]:
-    """True for a replayable chunk factory: a callable that is not an array-like."""
+    """True for a replayable chunk factory: a callable that is not an array-like.
+
+    Parameters
+    ----------
+    x : Any
+        Object to test.
+
+    Returns
+    -------
+    bool
+        True if ``x`` is callable and has no ``shape`` attribute.
+    """
     return callable(x) and not hasattr(x, "shape")
 
 
@@ -385,7 +454,20 @@ class FactorySource:
         return parts
 
     def blocks(self) -> Iterator[tuple[Any, Any, Any, jax.Array]]:
-        """One full pass: validated, padded ``(x, y, sigma, mask)`` blocks."""
+        """One full pass: validated, padded ``(x, y, sigma, mask)`` blocks.
+
+        Yields
+        ------
+        tuple
+            ``(x, y, sigma, mask)`` with ``chunk`` rows, ``sigma`` None for an
+            unweighted factory, and a boolean mask that is True on the real rows.
+
+        Raises
+        ------
+        ValueError
+            If a block fails the validation described in the class docstring, or
+            if the pass yields a different number of points from ``n``.
+        """
         if self._pending is None:
             items: Iterator[Any] = iter(self.factory(self.chunk))
             head: list[tuple[Any, ...]] = []
@@ -456,6 +538,34 @@ def run_pass(
     ``stats`` must be the weighted kernel when ``sigma`` is not None. The finite and
     sigma checks and the point count are reduced on device alongside the statistics, so
     the only host sync is the final ``device_get``.
+
+    Parameters
+    ----------
+    stats : Callable
+        Chunk kernel from :func:`make_chunk_stats`.
+    theta : array_like
+        Parameter vector, converted to float64.
+    source : tuple or FactorySource
+        ``(x, y, sigma)`` array-likes (``sigma`` may be ``None``) or a
+        :class:`FactorySource`.
+    chunk : int
+        Rows per block for an ``(x, y, sigma)`` source.
+    check_finite : bool, optional
+        Record in ``PassStats.data_finite`` whether all ``x`` and ``y`` are finite.
+    check_sigma : bool, optional
+        Record in ``PassStats.sigma_finite`` and ``PassStats.sigma_nonzero``
+        whether ``sigma`` is finite and nonzero.
+
+    Returns
+    -------
+    PassStats
+        Summed cost, gradient and Gauss-Newton matrix with the check results.
+
+    Raises
+    ------
+    ValueError
+        If the source yields no blocks. A ``ValueError`` from the source is
+        propagated (see :func:`iter_blocks` and :meth:`FactorySource.blocks`).
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
     acc: tuple[jax.Array, ...] | None = None
@@ -529,7 +639,26 @@ class NormalEquations:
         mask: jax.Array,
         sigma: jax.Array | None = None,
     ) -> tuple[jax.Array, jax.Array, jax.Array]:
-        """``(F, g, H)`` of one chunk; ``sigma`` only for a ``weighted=True`` instance."""
+        """``(F, g, H)`` of one chunk; ``sigma`` only for a ``weighted=True`` instance.
+
+        Parameters
+        ----------
+        theta : jax.Array
+            Parameter vector.
+        x : jax.Array
+            Chunk inputs.
+        y : jax.Array
+            Chunk observations.
+        mask : jax.Array
+            Boolean mask, True on the real rows.
+        sigma : jax.Array or None, optional
+            Per-row or scalar ``sigma``; ``None`` for an unweighted instance.
+
+        Returns
+        -------
+        tuple of jax.Array
+            ``(F, g, H)`` as in :func:`make_chunk_stats`.
+        """
         if sigma is None:
             return self._stats(theta, x, y, mask)
         return self._stats(theta, x, y, sigma, mask)
@@ -542,7 +671,24 @@ class NormalEquations:
         check_finite: bool = False,
         check_sigma: bool = False,
     ) -> PassStats:
-        """One full pass over ``source``; see :func:`run_pass`."""
+        """One full pass over ``source``; see :func:`run_pass`.
+
+        Parameters
+        ----------
+        theta : Any
+            Parameter vector.
+        source : tuple or FactorySource
+            ``(x, y, sigma)`` array-likes or a :class:`FactorySource`.
+        check_finite : bool, optional
+            As in :func:`run_pass`.
+        check_sigma : bool, optional
+            As in :func:`run_pass`.
+
+        Returns
+        -------
+        PassStats
+            Summed statistics of the pass.
+        """
         return run_pass(
             self._stats,
             theta,
@@ -568,6 +714,29 @@ class NormalEquations:
         (``None``: all points are real). ``sigma`` is required for, and only valid
         with, a ``weighted=True`` instance (see :meth:`chunk_stats`); the returned
         sum is then the weighted ``sum (r/sigma)^2``.
+
+        Parameters
+        ----------
+        theta : jax.Array
+            Parameter vector.
+        x : jax.Array
+            Chunk inputs.
+        y : jax.Array
+            Chunk observations.
+        H_prev : jax.Array
+            Running ``J^T J``.
+        g_prev : jax.Array
+            Running ``J^T r``.
+        valid_size : int or None, optional
+            Number of real leading points; ``None`` means all of them.
+        sigma : jax.Array or None, optional
+            Per-row or scalar ``sigma`` for a ``weighted=True`` instance.
+
+        Returns
+        -------
+        tuple
+            ``(H_prev + H, g_prev + g, sum r^2)`` for the chunk, the last as a
+            ``float``.
         """
         n = len(x)
         mask = (
@@ -586,6 +755,18 @@ def cached_kernel(owner: Any) -> NormalEquations:
     Cached on ``owner._normal_eq`` as ``(model, jacobian_fn, kernel)`` and rebuilt
     whenever ``owner.normalized_model`` or ``owner._jacobian_fn_compiled`` is a
     different object than at the last build (the jitted kernel bakes both in).
+
+    Parameters
+    ----------
+    owner : Any
+        Object providing ``normalized_model``, ``_jacobian_fn_compiled``,
+        ``_compute_jacobian_chunk``, ``config.chunk_size`` and the cache slot
+        ``_normal_eq``.
+
+    Returns
+    -------
+    NormalEquations
+        The cached kernel, or a new one stored on ``owner._normal_eq``.
     """
     model, jac = owner.normalized_model, owner._jacobian_fn_compiled
     cached = owner._normal_eq

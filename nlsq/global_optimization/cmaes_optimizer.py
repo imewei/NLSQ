@@ -605,6 +605,11 @@ class CMAESOptimizer:
             Wording for the evaluation budget in the budget-exhausted warning
             (default ``max_total_evaluations=<budget>``); set by the implicit
             ``method='auto'`` route to say the budget is automatic.
+
+        Raises
+        ------
+        ImportError
+            If ``evosax`` is not installed.
         """
         self.config = config if config is not None else CMAESConfig()
         self._budget_label = budget_label
@@ -1095,6 +1100,15 @@ class CMAESOptimizer:
             Number of parameters.
         diagnostics : CMAESDiagnostics
             Diagnostics object to update with run information.
+        checkpoint_manager : HPCCheckpointManager | None, optional
+            Forwarded to the single-run path only; not used when
+            ``restart_strategy`` is ``"bipop"``.
+        checkpoint_path : Path | None, optional
+            Forwarded to the single-run path only.
+        checkpoint_fingerprint : dict[str, Any] | None, optional
+            Forwarded to the single-run path only.
+        preemption_event : threading.Event | None, optional
+            Forwarded to the single-run path only.
 
         Returns
         -------
@@ -1148,6 +1162,17 @@ class CMAESOptimizer:
             Number of parameters.
         diagnostics : CMAESDiagnostics
             Diagnostics object to update with run information.
+        checkpoint_manager : HPCCheckpointManager | None, optional
+            Checkpoint manager used to load and save CMA-ES state. When
+            ``None``, no checkpointing is done.
+        checkpoint_path : Path | None, optional
+            Checkpoint file. Required when ``checkpoint_manager`` is given.
+        checkpoint_fingerprint : dict[str, Any] | None, optional
+            Fingerprint passed to the manager on load and save. Required when
+            ``checkpoint_manager`` is given.
+        preemption_event : threading.Event | None, optional
+            When set during the run, the current state is saved and
+            ``CMAESPreempted`` is raised.
 
         Returns
         -------

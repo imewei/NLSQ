@@ -69,6 +69,19 @@ def fit_param_range(model: Any) -> tuple[int, int] | None:
     Only positional parameters after ``x`` count; defaulted ones may be omitted
     (curve_fit sizes the fit from p0). None for ``*args`` models or when the
     signature cannot be inspected.
+
+    Parameters
+    ----------
+    model : callable
+        Model function ``f(x, *params)``.
+
+    Returns
+    -------
+    tuple of int or None
+        ``(required, total)`` counts of the positional parameters after the
+        first one; ``required`` excludes those with defaults. ``None`` if the
+        signature cannot be inspected, has ``*args``, or has no positional
+        parameter.
     """
     try:
         params = list(inspect.signature(model).parameters.values())

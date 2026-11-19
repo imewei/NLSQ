@@ -69,7 +69,24 @@ def check_checkpoint_dataset(
     ``MAX_CHECKPOINT_ELEMENTS``, a mismatch with the expected ``shape`` (``None``
     entries are wildcards), and
     chunked datasets with unallocated chunks (a tiny sparse file would
-    otherwise expand to the full declared shape). Raises ``ValueError``.
+    otherwise expand to the full declared shape).
+
+    Parameters
+    ----------
+    dset : Any
+        Object read from the checkpoint file; must be an ``h5py.Dataset``.
+    name : str
+        Entry name, used in error messages.
+    shape : tuple of (int or None), optional
+        Expected shape; ``None`` entries match any size. ``None`` skips the
+        shape check.
+    kinds : str, optional
+        Accepted NumPy dtype kind characters (default ``"fiu"``).
+
+    Raises
+    ------
+    ValueError
+        If any of the rejections above applies.
     """
     if not isinstance(dset, h5py.Dataset):
         raise ValueError(f"Checkpoint entry '{name}' is not a dataset")
@@ -105,13 +122,45 @@ MAX_CHECKPOINT_BYTES = 1 << 26
 
 
 def read_checkpoint_scalar(dset: Any, name: str) -> Any:
-    """Validate a numeric dataset is a scalar (shape ``()``), then read it."""
+    """Validate a numeric dataset is a scalar (shape ``()``), then read it.
+
+    Parameters
+    ----------
+    dset : Any
+        Checkpoint entry; see :func:`check_checkpoint_dataset`.
+    name : str
+        Entry name, used in error messages.
+
+    Returns
+    -------
+    Any
+        The scalar value, ``dset[()]``.
+    """
     check_checkpoint_dataset(dset, name, shape=())
     return dset[()]
 
 
 def read_checkpoint_bytes(dset: Any, name: str) -> bytes:
-    """Validate an opaque scalar dataset (``np.void``) from metadata, then read it."""
+    """Validate an opaque scalar dataset (``np.void``) from metadata, then read it.
+
+    Parameters
+    ----------
+    dset : Any
+        Checkpoint entry; must be an ``h5py.Dataset``.
+    name : str
+        Entry name, used in error messages.
+
+    Returns
+    -------
+    bytes
+        The stored bytes.
+
+    Raises
+    ------
+    ValueError
+        If ``dset`` is not a dataset, is not an opaque scalar (dtype kind ``"V"``,
+        shape ``()``), or holds more than ``MAX_CHECKPOINT_BYTES`` bytes.
+    """
     if not isinstance(dset, h5py.Dataset):
         raise ValueError(f"Checkpoint entry '{name}' is not a dataset")
     if dset.dtype.kind != "V" or dset.shape != ():
@@ -133,7 +182,22 @@ def read_checkpoint_array(
     *,
     shape: tuple[int | None, ...] | None = None,
 ) -> Array:
-    """``check_checkpoint_dataset`` then read as a JAX array."""
+    """``check_checkpoint_dataset`` then read as a JAX array.
+
+    Parameters
+    ----------
+    dset : Any
+        Checkpoint entry; see :func:`check_checkpoint_dataset`.
+    name : str
+        Entry name, used in error messages.
+    shape : tuple of (int or None), optional
+        Expected shape, as in :func:`check_checkpoint_dataset`.
+
+    Returns
+    -------
+    jax.Array
+        The dataset contents, ``jnp.array(dset)``.
+    """
     check_checkpoint_dataset(dset, name, shape=shape)
     return jnp.array(dset)
 

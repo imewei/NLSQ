@@ -54,6 +54,25 @@ def call_user_callback(
     A pure ``(*args, **kwargs)`` ``functools.wraps`` wrapper is dispatched by the
     wrapped signature but still called positionally unless the wrapped names
     are in a non-canonical order.
+
+    Parameters
+    ----------
+    callback : callable
+        User callback to invoke.
+    iteration : int
+        Current iteration number.
+    cost : float
+        Current cost/objective function value.
+    params : np.ndarray
+        Current parameter values.
+    info : dict
+        Additional information (``gradient_norm``, ``nfev``, etc.).
+
+    Returns
+    -------
+    object
+        Whatever ``callback`` returns. Exceptions raised by the callback
+        propagate.
     """
     passthrough = False
     try:
@@ -211,7 +230,20 @@ class ProgressBar(CallbackBase):
         params: np.ndarray,
         info: dict[str, Any],
     ) -> None:
-        """Update progress bar."""
+        """Update progress bar.
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number.
+        cost : float
+            Current cost/objective function value.
+        params : np.ndarray
+            Current parameter values (not used by the progress bar).
+        info : dict
+            Additional information; ``nfev`` and ``gradient_norm`` are read
+            when present.
+        """
         if self.tqdm is None:
             return
 
@@ -330,7 +362,21 @@ class IterationLogger(CallbackBase):
         params: np.ndarray,
         info: dict[str, Any],
     ) -> None:
-        """Log iteration information."""
+        """Log iteration information.
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number.
+        cost : float
+            Current cost/objective function value.
+        params : np.ndarray
+            Current parameter values; written to the log when ``log_params``
+            is set.
+        info : dict
+            Additional information; ``nfev`` and ``gradient_norm`` are read
+            when present.
+        """
         with self._lock:
             self._log(iteration, cost, params, info)
 
@@ -470,7 +516,27 @@ class EarlyStopping(CallbackBase):
         params: np.ndarray,
         info: dict[str, Any],
     ) -> None:
-        """Check for improvement and stop if patience exceeded."""
+        """Check for improvement and stop if patience exceeded.
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number. A value not greater than the previous
+            one resets the state (a new fit).
+        cost : float
+            Current cost/objective function value. Non-finite values are
+            skipped.
+        params : np.ndarray
+            Current parameter values (not used).
+        info : dict
+            Additional information (not used).
+
+        Raises
+        ------
+        StopOptimization
+            If ``patience`` consecutive iterations pass without the cost
+            improving by more than ``min_delta``.
+        """
         # Iteration numbers restart each fit, so a non-increasing one means a new fit
         if iteration <= self._last_iter:
             self.best_cost = np.inf
@@ -531,7 +597,35 @@ class CallbackChain(CallbackBase):
         params: np.ndarray,
         info: dict[str, Any],
     ) -> bool | None:
-        """Call all callbacks in sequence; return True if any asked to stop."""
+        """Call all callbacks in sequence; return True if any asked to stop.
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number.
+        cost : float
+            Current cost/objective function value.
+        params : np.ndarray
+            Current parameter values.
+        info : dict
+            Additional information (``gradient_norm``, ``nfev``, etc.).
+
+        Returns
+        -------
+        bool or None
+            True if any callback returned ``True``, otherwise None.
+
+        Raises
+        ------
+        StopOptimization
+            Propagated at once from a callback.
+        StopIteration
+            Propagated at once from a callback.
+        Exception
+            The first other exception raised by a callback, re-raised after the
+            remaining callbacks have run, unless a callback returned ``True``
+            (then it is reported as a ``RuntimeWarning``).
+        """
         # One failing callback must not starve the others (e.g. EarlyStopping
         # behind a broken logger). StopOptimization/StopIteration propagate at
         # once; a ``True`` return (the scipy stop protocol) is OR-combined and
@@ -567,7 +661,14 @@ class CallbackChain(CallbackBase):
         return True if stop else None
 
     def close(self):
-        """Close all callbacks that have a close method."""
+        """Close all callbacks that have a close method.
+
+        Raises
+        ------
+        Exception
+            The first exception raised by a callback's ``close``, re-raised
+            after every callback has been closed.
+        """
         # One failing close must not leave the later callbacks open; the first
         # error is re-raised once every callback has been closed.
         first_error: Exception | None = None

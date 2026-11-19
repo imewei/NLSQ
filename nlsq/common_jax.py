@@ -883,6 +883,26 @@ def CL_scaling_vector_jax(
     """JIT-compiled Coleman-Li scaling vector (replaces common_scipy.CL_scaling_vector).
 
     Keeps result on-device to avoid GPU→CPU sync at call sites.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Current parameter vector.
+    g : jnp.ndarray
+        Gradient at ``x``; its sign selects which bound applies per component.
+    lb : jnp.ndarray
+        Lower bounds.
+    ub : jnp.ndarray
+        Upper bounds.
+
+    Returns
+    -------
+    v : jnp.ndarray
+        Scaling vector: ``ub - x`` where ``g < 0`` and ``ub`` is finite,
+        ``x - lb`` where ``g > 0`` and ``lb`` is finite, and ``1`` elsewhere.
+    dv : jnp.ndarray
+        Derivative of ``v`` with respect to ``x``: ``-1``, ``1`` or ``0`` for
+        the same three cases.
     """
     v = jnp.ones_like(x)
     dv = jnp.zeros_like(x)
@@ -901,6 +921,20 @@ def in_bounds_jax(x: jnp.ndarray, lb: jnp.ndarray, ub: jnp.ndarray) -> jnp.ndarr
     """JIT-compiled bounds check (replaces common_scipy.in_bounds).
 
     Returns a JAX scalar boolean, avoiding GPU→CPU sync until Python checks it.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Parameter vector.
+    lb : jnp.ndarray
+        Lower bounds.
+    ub : jnp.ndarray
+        Upper bounds.
+
+    Returns
+    -------
+    jnp.ndarray
+        Scalar boolean, ``True`` if ``lb <= x <= ub`` holds for every component.
     """
     return jnp.all((x >= lb) & (x <= ub))
 
@@ -917,6 +951,23 @@ def make_strictly_feasible_jax(
     guard against XLA's DAZ (Denormals-Are-Zero) behavior on CPU where
     nextafter(0, x) produces a denormal that compares equal to zero.
     Only supports rstep=0 (the only value used in trf.py hot path).
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Parameter vector.
+    lb : jnp.ndarray
+        Lower bounds.
+    ub : jnp.ndarray
+        Upper bounds.
+
+    Returns
+    -------
+    jnp.ndarray
+        Array shaped like ``x``. Components with ``x <= lb`` or ``x >= ub``
+        are moved just inside the bound; components where that still leaves
+        them outside the bounds are set to ``0.5 * (lb + ub)``. Other
+        components are unchanged.
     """
     # find_active_constraints with rtol=0 inlined
     lower_mask = x <= lb

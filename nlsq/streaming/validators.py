@@ -75,6 +75,13 @@ def coerce_integral_fields(obj: object, names: tuple[str, ...]) -> None:
     downstream code (slicing, shapes, ``range``) receives a real ``int``. Uses
     ``object.__setattr__`` so frozen and slotted dataclasses work. bool and
     ``None`` are left untouched.
+
+    Parameters
+    ----------
+    obj : object
+        Object whose attributes are updated in place.
+    names : tuple[str, ...]
+        Names of the attributes to coerce.
     """
     for name in names:
         value = _unwrap_scalar(getattr(obj, name))
@@ -88,6 +95,13 @@ def validate_positive_int(value: float, param_name: str) -> None:
     Accepts ints, numpy integers and integral floats (e.g. ``100.0``); rejects
     bool, NaN/inf, non-integral values and values below 1. Validation only:
     owners of the value convert it with :func:`coerce_integral_fields`.
+
+    Parameters
+    ----------
+    value : float or int
+        The value to validate.
+    param_name : str
+        Name of the parameter for error messages.
 
     Raises
     ------
@@ -103,6 +117,13 @@ def validate_non_negative_int(value: float, param_name: str) -> None:
 
     Integral floats such as ``5.0`` pass; owners convert them with
     :func:`coerce_integral_fields`.
+
+    Parameters
+    ----------
+    value : float or int
+        The value to validate.
+    param_name : str
+        Name of the parameter for error messages.
 
     Raises
     ------
@@ -203,7 +224,18 @@ def validate_less_than_or_equal(
 
 
 def validate_normalization_strategy(strategy: str) -> None:
-    """Validate normalization strategy parameter."""
+    """Validate normalization strategy parameter.
+
+    Parameters
+    ----------
+    strategy : str
+        Normalization strategy.
+
+    Raises
+    ------
+    ConfigValidationError
+        If ``strategy`` is not ``"auto"``, ``"bounds"``, ``"p0"`` or ``"none"``.
+    """
     validate_enum_value(
         strategy,
         ("auto", "bounds", "p0", "none"),
@@ -212,12 +244,34 @@ def validate_normalization_strategy(strategy: str) -> None:
 
 
 def validate_loop_strategy(strategy: str) -> None:
-    """Validate loop strategy parameter."""
+    """Validate loop strategy parameter.
+
+    Parameters
+    ----------
+    strategy : str
+        Loop strategy.
+
+    Raises
+    ------
+    ConfigValidationError
+        If ``strategy`` is not ``"auto"``, ``"scan"`` or ``"loop"``.
+    """
     validate_enum_value(strategy, ("auto", "scan", "loop"), "loop_strategy")
 
 
 def validate_lbfgs_line_search(line_search: str) -> None:
-    """Validate L-BFGS line search method."""
+    """Validate L-BFGS line search method.
+
+    Parameters
+    ----------
+    line_search : str
+        L-BFGS line search method.
+
+    Raises
+    ------
+    ConfigValidationError
+        If ``line_search`` is not ``"wolfe"``, ``"strong_wolfe"`` or ``"backtracking"``.
+    """
     validate_enum_value(
         line_search,
         ("wolfe", "strong_wolfe", "backtracking"),
@@ -226,7 +280,18 @@ def validate_lbfgs_line_search(line_search: str) -> None:
 
 
 def validate_multistart_sampler(sampler: str) -> None:
-    """Validate multi-start sampler method."""
+    """Validate multi-start sampler method.
+
+    Parameters
+    ----------
+    sampler : str
+        Multi-start sampler method.
+
+    Raises
+    ------
+    ConfigValidationError
+        If ``sampler`` is not ``"lhs"``, ``"sobol"`` or ``"halton"``.
+    """
     validate_enum_value(sampler, ("lhs", "sobol", "halton"), "multistart_sampler")
 
 
@@ -444,6 +509,15 @@ def validate_group_variance_bounds(config: Any, n_params: int) -> None:
     Phase 1 (padded/masked) and Phase 2 (slice) would otherwise compute
     different penalties for an out-of-range group without any error.
 
+    Parameters
+    ----------
+    config : Any
+        Configuration object with ``enable_group_variance_regularization`` and
+        ``group_variance_indices`` attributes; nothing is checked when the
+        former is false.
+    n_params : int
+        Number of parameters.
+
     Raises
     ------
     ConfigValidationError
@@ -491,6 +565,15 @@ def validate_error_handling_config(
     log_frequency: int,
 ) -> None:
     """Validate batch-retry, success-rate and logging-frequency settings.
+
+    Parameters
+    ----------
+    max_retries_per_batch : int
+        Maximum retries per batch.
+    min_success_rate : float
+        Minimum success rate.
+    log_frequency : int
+        Logging frequency.
 
     Raises
     ------

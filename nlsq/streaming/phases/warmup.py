@@ -41,6 +41,22 @@ def coerce_residual_weights(weights: Any) -> jnp.ndarray:
 
     Raises ``ValueError`` for complex, non-1-D, empty, non-positive or non-finite
     weights (a complex array would otherwise lose its imaginary part silently).
+
+    Parameters
+    ----------
+    weights : array_like
+        Per-group residual weights.
+
+    Returns
+    -------
+    jnp.ndarray
+        The weights as a ``float64`` JAX array.
+
+    Raises
+    ------
+    ValueError
+        If ``weights`` is complex, or fails ``validate_residual_weighting_config``
+        (not 1-D, empty, non-positive or non-finite).
     """
     arr = np.asarray(weights)
     if np.iscomplexobj(arr):
@@ -191,6 +207,24 @@ def chunked_loss_fn(
     context (each variant is compiled once and cached), so a tighter
     ``memory_context`` enforces chunking even for shapes already compiled whole.
     Inside an outer ``jit`` the choice is fixed when that outer function traces.
+
+    Parameters
+    ----------
+    loss_fn : Callable
+        Loss function ``loss_fn(params, x, y)``. Chunked evaluation needs the
+        ``base_sums`` and ``penalty`` attributes set by ``build_warmup_loss``.
+    chunk_size : int
+        Maximum number of rows per model evaluation in the chunked variant.
+    full_batch_fits : Callable[[int, int], bool] or None, optional
+        Called as ``full_batch_fits(n_points, n_params)``; returns ``True`` to
+        evaluate the whole batch at once. If None, ``_full_batch_fits`` is used.
+
+    Returns
+    -------
+    Callable
+        ``loss_fn`` itself if it has no ``base_sums`` attribute; otherwise a
+        function ``loss(params, x, y)`` that picks the whole-batch or chunked
+        variant on each call.
     """
     if not hasattr(loss_fn, "base_sums"):
         return loss_fn
@@ -217,6 +251,27 @@ def lbfgs_step_fns(
     whole batch comfortably fits the memory budget). As in ``chunked_loss_fn`` the
     choice is re-made on every call (``value_and_grad.decide``; a step decides once and
     passes ``full=`` to both functions); one compiled pair is cached per choice.
+
+    Parameters
+    ----------
+    loss_fn : Callable
+        Loss function ``loss_fn(params, x, y)``; chunked evaluation needs its
+        ``base_sums`` and ``penalty`` attributes.
+    optimizer : Any
+        optax optimizer whose ``update`` accepts the ``value``, ``grad`` and
+        ``value_fn`` keyword arguments (as ``optax.lbfgs`` does).
+    chunk_size : int
+        Maximum number of rows per model evaluation in the chunked variant.
+
+    Returns
+    -------
+    value_and_grad : Callable
+        ``value_and_grad(p, x, y, full=None)`` returning the loss value and
+        its gradient. It has a ``decide(p, x)`` attribute that returns the
+        whole-batch/chunked choice for one step.
+    update : Callable
+        ``update(grads, state, p, value, x, y, full=None)`` returning the
+        result of ``optimizer.update``.
     """
     pairs: dict[bool, tuple[Callable, Callable]] = {}
 
@@ -366,6 +421,37 @@ def build_warmup_loss(
 
     ``loss_fn.base_sums`` and ``loss_fn.penalty`` are the parts used for chunked
     evaluation (see :func:`_chunked_loss`).
+
+    Parameters
+    ----------
+    normalized_model : Callable
+        Model called as ``normalized_model(x_batch, *params)`` on normalized
+        parameters.
+    denormalize : Callable[[jnp.ndarray], jnp.ndarray]
+        Maps normalized parameters to physical parameters; used by the
+        variance penalty.
+    var_reg_enabled : bool
+        Whether group variance regularization is requested. It is applied only
+        if ``var_indices`` is also non-empty.
+    var_lambda : float
+        Weight of the variance penalty.
+    var_indices : Any
+        Sequence of ``(start, end)`` index pairs, one per parameter group.
+    weights : array_like or None, optional
+        Per-group residual weights indexed by column 0 of ``x_batch``. If
+        None, the unweighted mean squared residual is used. Default is None.
+
+    Returns
+    -------
+    Callable
+        JIT-compiled ``loss_fn(params, x_batch, y_batch)`` returning a scalar,
+        with the ``base_sums`` and ``penalty`` attributes.
+
+    Raises
+    ------
+    ValueError
+        Raised when the returned loss is traced or evaluated, if ``weights`` is
+        given and ``x_batch`` has fewer than 2 dimensions.
     """
     enable_var_reg = bool(var_reg_enabled and var_indices)
     enable_weighting = weights is not None
@@ -554,7 +640,30 @@ class WarmupPhase:
         phase_history: list[dict[str, Any]],
         best_tracker: dict[str, Any],
     ) -> dict[str, Any]:
-        """Run Phase 1 L-BFGS warmup (see :meth:`_run`); always ends its telemetry token."""
+        """Run Phase 1 L-BFGS warmup (see :meth:`_run`); always ends its telemetry token.
+
+        Parameters
+        ----------
+        data_source : tuple of array_like
+            Data source as (x_data, y_data).
+        initial_params : array_like
+            Initial parameters in normalized space.
+        phase_history : list
+            Phase history list to append records to.
+        best_tracker : dict
+            Dictionary tracking best_params_global and best_cost_global.
+
+        Returns
+        -------
+        dict
+            Phase 1 result as returned by :meth:`_run`, with keys
+            ``'final_params'``, ``'best_params'``, ``'best_loss'``,
+            ``'final_loss'``, ``'iterations'``, ``'switch_reason'`` and
+            ``'warmup_result'``, plus ``'warm_start'``, ``'lr_mode'`` and
+            ``'relative_loss'`` depending on the exit path, and
+            ``'cost_guard_triggered'`` and ``'cost_increase_ratio'`` when the cost
+            guard stops the phase.
+        """
         self._warmup_token = None
         try:
             return self._run(data_source, initial_params, phase_history, best_tracker)

@@ -54,6 +54,12 @@ class ProfileMetrics:
         """Return a rough heuristic estimate of speedup vs SciPy (not a measurement).
 
         Derived only from ``backend`` and ``n_data_points``; no SciPy run is timed.
+
+        Returns
+        -------
+        float
+            ``min(270, 100 * n_data_points / 100000)`` when ``backend`` is
+            ``"gpu"``, otherwise ``1.0``.
         """
         if self.backend == "gpu":
             # GPU typically 100-300x faster for large problems
@@ -61,19 +67,41 @@ class ProfileMetrics:
         return 1.0
 
     def iterations_per_second(self) -> float:
-        """Calculate iterations per second."""
+        """Calculate iterations per second.
+
+        Returns
+        -------
+        float
+            ``n_iterations / optimization_time``, or ``0.0`` if
+            ``optimization_time`` is not positive.
+        """
         if self.optimization_time > 0:
             return self.n_iterations / self.optimization_time
         return 0.0
 
     def function_evals_per_second(self) -> float:
-        """Calculate function evaluations per second."""
+        """Calculate function evaluations per second.
+
+        Returns
+        -------
+        float
+            ``n_function_evals / optimization_time``, or ``0.0`` if
+            ``optimization_time`` is not positive.
+        """
         if self.optimization_time > 0:
             return self.n_function_evals / self.optimization_time
         return 0.0
 
     def to_dict(self) -> dict:
-        """Convert to dictionary."""
+        """Convert to dictionary.
+
+        Returns
+        -------
+        dict
+            All metric fields, plus ``iterations_per_second``,
+            ``function_evals_per_second`` and the heuristic
+            ``estimated_speedup_vs_scipy``; ``metadata`` is a copy.
+        """
         return {
             "total_time": self.total_time,
             "jit_compile_time": self.jit_compile_time,
@@ -221,6 +249,12 @@ class PerformanceProfiler:
         ----------
         name : str
             Name for this profiling session
+
+        Returns
+        -------
+        ProfileContext
+            Context manager that starts a profile on entry (yielding its
+            ``ProfileMetrics``) and ends it on exit.
 
         Examples
         --------

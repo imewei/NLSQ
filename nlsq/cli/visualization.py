@@ -132,7 +132,24 @@ _DRAW_LOCK = threading.RLock()
 
 
 def normalize_formats(formats: Any) -> Any:
-    """Wrap a bare string (``formats: pdf``) in a list; iterating it splits chars."""
+    """Wrap a bare string (``formats: pdf``) in a list; iterating it splits chars.
+
+    Parameters
+    ----------
+    formats : Any
+        Value of ``visualization.formats``: a string, list or tuple of file
+        extensions.
+
+    Returns
+    -------
+    list or tuple
+        ``[formats]`` if ``formats`` is a string, otherwise ``formats`` unchanged.
+
+    Raises
+    ------
+    ConfigError
+        If ``formats`` is neither a string, a list nor a tuple.
+    """
     if isinstance(formats, str):
         return [formats]
     if not isinstance(formats, (list, tuple)):
@@ -144,7 +161,18 @@ def normalize_formats(formats: Any) -> Any:
 
 
 def check_filename_prefix(prefix: Any) -> None:
-    """Reject prefixes that could write outside ``output_dir``."""
+    """Reject prefixes that could write outside ``output_dir``.
+
+    Parameters
+    ----------
+    prefix : Any
+        Value of ``visualization.filename_prefix`` (converted with ``str``).
+
+    Raises
+    ------
+    ConfigError
+        If the prefix contains ``/`` or ``\\``, or is empty, ``.`` or ``..``.
+    """
     text = str(prefix)
     if "/" in text or "\\" in text or text in ("", ".", ".."):
         raise ConfigError(
@@ -216,6 +244,14 @@ class FitVisualizer:
         -------
         list[str]
             List of output file paths that were generated.
+
+        Raises
+        ------
+        ValueError
+            If ``data["xdata"]`` has more than one dimension.
+        ConfigError
+            If ``visualization.filename_prefix`` is not a plain file name, or if
+            ``visualization.formats`` is not a string, list or tuple.
         """
         vis_config = config.get("visualization") or {}
 

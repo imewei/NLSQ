@@ -74,7 +74,13 @@ class ThemeConfig:
 
     @property
     def is_dark(self) -> bool:
-        """Check if this is a dark theme."""
+        """Check if this is a dark theme.
+
+        Returns
+        -------
+        bool
+            True if ``name`` is ``"dark"``.
+        """
         return self.name == "dark"
 
 
@@ -209,12 +215,25 @@ class ThemeManager(QObject):
 
     @property
     def current_theme(self) -> ThemeConfig:
-        """Get the current theme configuration."""
+        """Get the current theme configuration.
+
+        Returns
+        -------
+        ThemeConfig
+            The active theme.
+        """
         return self._current_theme
 
     @property
     def explicit(self) -> bool:
-        """True once the user (or --theme / saved settings) chose a theme."""
+        """True once the user (or --theme / saved settings) chose a theme.
+
+        Returns
+        -------
+        bool
+            True if a theme was set explicitly, False while following the OS
+            color scheme.
+        """
         return self._explicit
 
     def _on_system_scheme_changed(self, scheme: Qt.ColorScheme) -> None:
@@ -227,8 +246,11 @@ class ThemeManager(QObject):
     def set_theme(self, name: str) -> None:
         """Set the application theme.
 
-        Args:
-            name: Theme name ("light" or "dark")
+        Parameters
+        ----------
+        name : str
+            Theme name (``"light"`` or ``"dark"``). Any value other than
+            ``"light"`` selects the dark theme.
         """
         self._explicit = True
         if name == "light":
@@ -243,8 +265,10 @@ class ThemeManager(QObject):
     def get_theme(self) -> ThemeConfig:
         """Get the current theme configuration.
 
-        Returns:
-            The current ThemeConfig
+        Returns
+        -------
+        ThemeConfig
+            The current theme configuration.
         """
         return self._current_theme
 

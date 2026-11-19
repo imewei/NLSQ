@@ -1453,7 +1453,15 @@ class AllowlistVisitor(DangerousPatternVisitor):
 
 
 def strict_models_enabled() -> bool:
-    """True when ``NLSQ_STRICT_MODELS`` requests the strict allowlist everywhere."""
+    """True when ``NLSQ_STRICT_MODELS`` requests the strict allowlist everywhere.
+
+    Returns
+    -------
+    bool
+        ``True`` if the ``NLSQ_STRICT_MODELS`` environment variable, stripped and
+        lower-cased, is one of ``"1"``, ``"true"``, ``"yes"`` or ``"on"``;
+        ``False`` otherwise (including when unset).
+    """
     return os.environ.get("NLSQ_STRICT_MODELS", "").strip().lower() in (
         "1",
         "true",

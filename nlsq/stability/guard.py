@@ -478,6 +478,11 @@ class NumericalStabilityGuard:
             Fixed Jacobian matrix
         issues : dict
             Dictionary with 'has_nan', 'has_inf', 'condition_number', etc.
+
+        Raises
+        ------
+        ValueError
+            If ``J`` is not 2-D.
         """
         if J.ndim != 2:
             raise ValueError(
@@ -816,6 +821,12 @@ class NumericalStabilityGuard:
         -------
         H_reg : jnp.ndarray
             Regularized Hessian
+
+        Notes
+        -----
+        If the eigendecomposition fails or yields non-finite eigenvalues, a
+        warning is issued and ``min_eigenvalue`` is added to the diagonal
+        instead; no exception is raised for that case.
         """
         n = H.shape[0]
 

@@ -351,6 +351,40 @@ def accept_step_scalars(
     ``check_termination_jax``, alpha rescaling). The other entries are ignored by
     the host when the residuals or the trial cost are not finite (entry
     ``ACC_FINITE`` is 0), so the loss may be evaluated before the finiteness check.
+
+    Parameters
+    ----------
+    f_new : jnp.ndarray
+        Residuals at the trial point.
+    cost_new : jnp.ndarray
+        Cost at the trial point.
+    cost : jnp.ndarray
+        Cost at the current point.
+    Delta : jnp.ndarray
+        Current trust-region radius.
+    alpha : jnp.ndarray
+        Current ``alpha``; returned rescaled by ``Delta / Delta_new``.
+    predicted_reduction : jnp.ndarray
+        Cost reduction predicted by the quadratic model.
+    step_h : jnp.ndarray
+        Step in the scaled (hat) space; its norm is compared with ``Delta``.
+    step : jnp.ndarray
+        Step in parameter space; its norm enters the termination test.
+    x : jnp.ndarray
+        Current parameter vector.
+    ftol : float
+        Cost tolerance for the termination test.
+    xtol : float
+        Parameter tolerance for the termination test.
+
+    Returns
+    -------
+    jnp.ndarray
+        float64 vector indexed by the ``ACC_*`` constants: ``ACC_FINITE``
+        (1 if ``f_new`` and ``cost_new`` are finite), ``ACC_REDUCTION`` (actual
+        cost reduction), ``ACC_TERM`` (termination status from
+        ``check_termination_jax``), ``ACC_DELTA`` (new radius), ``ACC_ALPHA``
+        (rescaled ``alpha``), ``ACC_STEP_H_NORM`` and ``ACC_STEP_NORM``.
     """
     finite = jnp.all(jnp.isfinite(f_new)) & jnp.isfinite(cost_new)
     actual_reduction = cost - cost_new

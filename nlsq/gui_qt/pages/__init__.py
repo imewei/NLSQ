@@ -65,11 +65,15 @@ class PageState:
     def from_session_state(cls, state: SessionState) -> PageState:
         """Create PageState from the current SessionState.
 
-        Args:
-            state: The current session state
+        Parameters
+        ----------
+        state : SessionState
+            The current session state.
 
-        Returns:
-            PageState with computed access flags
+        Returns
+        -------
+        PageState
+            PageState with computed access flags.
         """
         data_loaded = state.xdata is not None and state.ydata is not None
         # model_type defaults to "builtin": a model counts as selected only once
@@ -91,11 +95,16 @@ class PageState:
     def can_access(self, page: str) -> bool:
         """Check if a page is accessible based on workflow state.
 
-        Args:
-            page: Page name (data_loading, model_selection, fitting_options, results, export)
+        Parameters
+        ----------
+        page : str
+            Page name (data_loading, model_selection, fitting_options, results,
+            export).
 
-        Returns:
-            True if the page can be accessed
+        Returns
+        -------
+        bool
+            True if the page can be accessed. Unknown page names are accessible.
         """
         # Block navigating to Data Loading/Model Selection while a fit is
         # running: the background worker holds a snapshot of the current

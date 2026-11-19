@@ -373,16 +373,20 @@ class ExportPage(QWidget):
     def set_app_state(self, state: AppState) -> None:
         """Set the application state.
 
-        Args:
-            state: Application state manager
+        Parameters
+        ----------
+        state : AppState
+            Application state manager.
         """
         self._app_state = state
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this page.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration.
         """
         if theme.is_dark:
             fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
@@ -404,8 +408,10 @@ class ExportPage(QWidget):
     def export_session_bundle(self, path: str) -> None:
         """Export session as a ZIP bundle.
 
-        Args:
-            path: Output file path
+        Parameters
+        ----------
+        path : str
+            Output file path.
         """
         state = self._app_state.state
 
@@ -427,8 +433,10 @@ class ExportPage(QWidget):
     def export_json(self, path: str) -> None:
         """Export results as JSON.
 
-        Args:
-            path: Output file path
+        Parameters
+        ----------
+        path : str
+            Output file path.
         """
         json_str = self._generate_json()
         _atomic_write(Path(path).resolve(), json_str)
@@ -436,9 +444,19 @@ class ExportPage(QWidget):
     def export_csv(self, path: str, include_data: bool = False) -> None:
         """Export parameters/data as CSV.
 
-        Args:
-            path: Output file path
-            include_data: If True, export data with fit; if False, export parameters only
+        Parameters
+        ----------
+        path : str
+            Output file path.
+        include_data : bool, optional
+            If True, export data with fit; if False, export parameters only.
+            Default is False.
+
+        Raises
+        ------
+        ValueError
+            If ``include_data`` is True and there is no data, or if it is False
+            and there is no fit result.
         """
         state = self._app_state.state
 
@@ -630,12 +648,22 @@ class ExportPage(QWidget):
         Uses the fit() function with workflow presets for consistency
         with NLSQ's recommended approach.
 
-        Args:
-            for_bundle: True when the script ships next to data.csv in the
-                ZIP bundle, so data is read from that file instead of inlined.
+        Parameters
+        ----------
+        for_bundle : bool, optional
+            True when the script ships next to data.csv in the ZIP bundle, so
+            data is read from that file instead of inlined. Default is False.
 
-        Returns:
-            Python code string
+        Returns
+        -------
+        str
+            Python code string.
+
+        Raises
+        ------
+        ValueError
+            If the built-in model name or the custom model function name is
+            not a valid Python identifier.
         """
         state = self._app_state.fit_settings
 

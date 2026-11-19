@@ -37,6 +37,16 @@ def scaled_norm(v: Any) -> float:
 
     ``jnp.linalg.norm`` squares first, so a finite vector with entries above
     ~1e154 gets an ``inf`` norm. Non-finite entries give ``inf``/``nan``.
+
+    Parameters
+    ----------
+    v : array_like
+        Vector, converted to a float array.
+
+    Returns
+    -------
+    float
+        Euclidean norm of ``v``.
     """
     a = np.abs(np.asarray(v, dtype=float))
     m = float(a.max(initial=0.0))
@@ -69,6 +79,19 @@ def clip_to_radius(step: Any, radius: float) -> Any:
 
     Overflow-safe: a finite step of norm 1e180 is clipped, not zeroed. A
     non-finite step is returned unchanged.
+
+    Parameters
+    ----------
+    step : array_like
+        Step vector.
+    radius : float
+        Trust-region radius.
+
+    Returns
+    -------
+    array_like
+        ``step`` itself if it is zero, non-finite or within ``radius``,
+        otherwise a JAX array scaled to norm ``radius``.
     """
     a = np.abs(np.asarray(step, dtype=float))
     m = float(a.max(initial=0.0))
@@ -85,6 +108,19 @@ def validate_phase_data(x_data: Any, y_data: Any) -> None:
 
     The standalone phases slice both arrays by ``len(x_data)``, so an unmatched
     tail of ``y_data`` would otherwise be dropped without a trace.
+
+    Parameters
+    ----------
+    x_data : array_like
+        Independent data; its length is the number of observations.
+    y_data : array_like
+        Response data.
+
+    Raises
+    ------
+    ValueError
+        If ``x_data`` is empty or ``y_data`` is not 1-D with length
+        ``len(x_data)``.
     """
     n, m = len(x_data), np.shape(y_data)
     if n == 0 or len(m) != 1 or m[0] != n:
@@ -95,7 +131,21 @@ def validate_phase_data(x_data: Any, y_data: Any) -> None:
 
 
 def project_to_bounds(params: Any, bounds: Any) -> Any:
-    """``params`` clipped into ``bounds`` (a ``(lb, ub)`` pair or ``None``)."""
+    """``params`` clipped into ``bounds`` (a ``(lb, ub)`` pair or ``None``).
+
+    Parameters
+    ----------
+    params : array_like
+        Parameter vector.
+    bounds : tuple or None
+        ``(lb, ub)`` pair, or None for no bounds.
+
+    Returns
+    -------
+    array_like
+        ``params`` unchanged if ``bounds`` is None, otherwise
+        ``jnp.clip(params, lb, ub)``.
+    """
     return params if bounds is None else jnp.clip(params, *bounds)
 
 
@@ -235,11 +285,23 @@ class GaussNewtonPhase:
         self._normal_eq: tuple[Any, Any, NormalEquations] | None = None
 
     def set_jacobian_fn(self, fn: Callable | None) -> None:
-        """Set pre-compiled Jacobian function."""
+        """Set pre-compiled Jacobian function.
+
+        Parameters
+        ----------
+        fn : callable or None
+            Pre-compiled Jacobian function, or None to clear it.
+        """
         self._jacobian_fn_compiled = fn
 
     def set_cost_fn(self, fn: Callable | None) -> None:
-        """Set pre-compiled cost function."""
+        """Set pre-compiled cost function.
+
+        Parameters
+        ----------
+        fn : callable or None
+            Pre-compiled cost function, or None to clear it.
+        """
         self._cost_fn_compiled = fn
 
     @staticmethod

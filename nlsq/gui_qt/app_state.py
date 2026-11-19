@@ -57,6 +57,12 @@ class AppState(QObject):
         Exports must describe the fit whose popt/pcov are shown, not whatever
         the options widgets say now. Falls back to live state when no snapshot
         was recorded (result set directly, or no result yet).
+
+        Returns
+        -------
+        SessionState
+            The snapshot taken when the current fit result was stored, or the
+            live session state if there is no result or no snapshot.
         """
         if self._state.fit_result is not None and self._fit_settings is not None:
             return self._fit_settings
@@ -64,12 +70,24 @@ class AppState(QObject):
 
     @property
     def state(self) -> SessionState:
-        """Get the underlying SessionState."""
+        """Get the underlying SessionState.
+
+        Returns
+        -------
+        SessionState
+            The wrapped session state.
+        """
         return self._state
 
     @property
     def theme(self) -> str:
-        """Get the current theme name."""
+        """Get the current theme name.
+
+        Returns
+        -------
+        str
+            Current theme name (``"light"`` or ``"dark"``).
+        """
         return self._theme
 
     def set_data(
@@ -81,11 +99,16 @@ class AppState(QObject):
     ) -> None:
         """Update data arrays and emit signal.
 
-        Args:
-            xdata: X data array
-            ydata: Y data array
-            sigma: Optional uncertainty array
-            file_name: Optional source file name
+        Parameters
+        ----------
+        xdata : ndarray or None
+            X data array.
+        ydata : ndarray or None
+            Y data array.
+        sigma : ndarray, optional
+            Uncertainty array.
+        file_name : str, optional
+            Source file name.
         """
         self._state.xdata = xdata
         self._state.ydata = ydata
@@ -105,11 +128,17 @@ class AppState(QObject):
     ) -> None:
         """Update model configuration and emit signal.
 
-        Args:
-            model_type: Model type ("builtin", "polynomial", "custom")
-            config: Model configuration dictionary
-            model_func: The model function callable
-            **kwargs: Additional model configuration (legacy)
+        Parameters
+        ----------
+        model_type : str
+            Model type (``"builtin"``, ``"polynomial"``, ``"custom"``).
+        config : dict, optional
+            Model configuration dictionary.
+        model_func : callable, optional
+            The model function.
+        **kwargs
+            Additional model configuration (legacy); each key that is an
+            attribute of the session state is set on it.
         """
         previous = self._state.model_config  # None right after a YAML import
         model_changed = model_type != self._state.model_type or (
@@ -156,8 +185,10 @@ class AppState(QObject):
     def set_fit_running(self, running: bool) -> None:
         """Set the fit running state.
 
-        Args:
-            running: True if fit is in progress
+        Parameters
+        ----------
+        running : bool
+            ``True`` if a fit is in progress.
         """
         if running:
             # A previous fit_result is about to be superseded. Clear it now
@@ -183,9 +214,12 @@ class AppState(QObject):
     ) -> None:
         """Store fit result and emit signal.
 
-        Args:
-            result: The fit result object
-            settings: Snapshot of the settings the fit ran with (see fit_settings)
+        Parameters
+        ----------
+        result : object
+            The fit result object.
+        settings : SessionState, optional
+            Snapshot of the settings the fit ran with (see ``fit_settings``).
         """
         self._state.fit_result = result
         self._fit_settings = settings
@@ -197,17 +231,22 @@ class AppState(QObject):
     def emit_fit_progress(self, iteration: int, cost: float) -> None:
         """Emit fit progress signal.
 
-        Args:
-            iteration: Current iteration number
-            cost: Current cost function value
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number.
+        cost : float
+            Current cost function value.
         """
         self.fit_progress.emit(iteration, cost)
 
     def set_theme_name(self, theme: str) -> None:
         """Set the theme name and emit signal.
 
-        Args:
-            theme: Theme name ("light" or "dark")
+        Parameters
+        ----------
+        theme : str
+            Theme name (``"light"`` or ``"dark"``).
         """
         self._theme = theme
         self.theme_changed.emit(theme)

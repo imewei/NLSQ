@@ -438,10 +438,28 @@ def estimate_cmaes_memory_gb(
 def cmaes_resident_bytes(xdata: Any, ydata: Any, sigma: Any = None) -> tuple[int, int]:
     """Split the fit's resident float64 arrays into ``(data_bytes, fixed_bytes)``.
 
-    ``data_bytes`` covers xdata, ydata and a 0-/1-D sigma: per-point arrays that
+    ``data_bytes`` covers xdata, ydata and a non-2-D sigma: per-point arrays that
     data chunking pads and copies. A 2-D sigma is a covariance matrix that CMA-ES
     whitens with its Cholesky factor, applied whole; the matrix and the factor
     (``2 * 8 * N**2`` bytes) are ``fixed_bytes``, which chunking cannot shrink.
+
+    Parameters
+    ----------
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    sigma : array_like or None, optional
+        Uncertainties. A 2-D array is counted in ``fixed_bytes``; any other
+        shape is counted in ``data_bytes``. Default is None.
+
+    Returns
+    -------
+    data_bytes : int
+        ``8 *`` the total number of elements of ``xdata``, ``ydata`` and a
+        non-2-D ``sigma``.
+    fixed_bytes : int
+        ``2 * 8 *`` the number of elements of a 2-D ``sigma``; 0 otherwise.
     """
     fixed = 0
     arrays = [xdata, ydata]

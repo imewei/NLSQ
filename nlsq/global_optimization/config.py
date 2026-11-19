@@ -426,6 +426,11 @@ class GlobalOptimizationConfig:
         GlobalOptimizationConfig
             New configuration with overrides applied.
 
+        Raises
+        ------
+        TypeError
+            If a keyword is not a field of ``GlobalOptimizationConfig``.
+
         Examples
         --------
         >>> config = GlobalOptimizationConfig.from_preset('robust')

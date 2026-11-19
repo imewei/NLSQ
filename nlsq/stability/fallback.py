@@ -47,7 +47,9 @@ __all__ = [
 class StrategyFactory(Protocol):
     """Protocol for strategy classes that can be instantiated with no arguments."""
 
-    def __call__(self) -> "FallbackStrategy": ...
+    def __call__(self) -> "FallbackStrategy":
+        """Create a new strategy instance."""
+        ...
 
 
 class FallbackStrategy:
@@ -85,6 +87,11 @@ class FallbackStrategy:
         -------
         modified_kwargs : dict
             Modified keyword arguments
+
+        Raises
+        ------
+        NotImplementedError
+            Always, in the base class; subclasses must override ``apply``.
         """
         raise NotImplementedError("Subclasses must implement apply()")
 
@@ -93,6 +100,11 @@ class FallbackStrategy:
 
         Queried by the orchestrator after each apply(); single-shot strategies
         keep the default ``False`` and are tried once per fit.
+
+        Returns
+        -------
+        bool
+            ``False`` in the base class.
         """
         return False
 
@@ -135,7 +147,19 @@ class AlternativeMethodStrategy(FallbackStrategy):
         self.current_index = 0
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Try next method in sequence."""
+        """Try next method in sequence.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments of the fit; ``method`` is read (unset means ``"trf"``).
+
+        Returns
+        -------
+        dict
+            Copy of ``kwargs`` with ``method`` set to the next entry of
+            ``method_sequence``, unless that is the method already in use.
+        """
         modified = kwargs.copy()
         if self.current_index < len(self.method_sequence):
             method = self.method_sequence[self.current_index]
@@ -146,6 +170,13 @@ class AlternativeMethodStrategy(FallbackStrategy):
         return modified
 
     def has_more(self) -> bool:
+        """Whether ``method_sequence`` has entries not yet tried.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``method_sequence`` has entries not yet tried.
+        """
         return self.current_index < len(self.method_sequence)
 
     def reset(self) -> None:
@@ -173,7 +204,20 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
         self.seed = seed
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Add random perturbation to p0."""
+        """Add random perturbation to p0.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments of the fit; ``p0`` (default ``[1.0]``) and
+            ``bounds`` (default unbounded) are read.
+
+        Returns
+        -------
+        dict
+            Copy of ``kwargs`` with ``p0`` replaced by a perturbed value clipped
+            to ``bounds``; unchanged once ``max_perturbations`` is reached.
+        """
         modified = kwargs.copy()
         p0 = np.array(modified.get("p0", [1.0]))
 
@@ -198,6 +242,13 @@ class PerturbInitialGuessStrategy(FallbackStrategy):
         return modified
 
     def has_more(self) -> bool:
+        """Whether the perturbation budget is not yet exhausted.
+
+        Returns
+        -------
+        bool
+            ``True`` if the perturbation budget is not exhausted.
+        """
         return self.perturbation_count < self.max_perturbations
 
     def reset(self) -> None:
@@ -220,7 +271,21 @@ class AdjustTolerancesStrategy(FallbackStrategy):
         self._relaxations = 0
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Relax ftol, xtol, gtol."""
+        """Relax ftol, xtol, gtol.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments of the fit; ``ftol``, ``xtol`` and ``gtol`` are
+            read (``1e-8`` when absent).
+
+        Returns
+        -------
+        dict
+            Copy of ``kwargs`` with each of the three tolerances multiplied by
+            the cumulative relaxation factor; a tolerance set to ``None`` is
+            left unchanged.
+        """
         modified = kwargs.copy()
 
         # Default tolerances
@@ -235,6 +300,13 @@ class AdjustTolerancesStrategy(FallbackStrategy):
         return modified
 
     def has_more(self) -> bool:
+        """Whether the relaxation budget is not yet exhausted.
+
+        Returns
+        -------
+        bool
+            ``True`` if the relaxation budget is not exhausted.
+        """
         return self._relaxations < self.max_relaxations
 
     def reset(self) -> None:
@@ -262,7 +334,22 @@ class AddParameterBoundsStrategy(FallbackStrategy):
         )
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Infer reasonable bounds from data and p0."""
+        """Infer reasonable bounds from data and p0.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments of the fit; ``bounds``, ``p0`` and the internal
+            ``_xdata`` / ``_ydata`` entries are read.
+
+        Returns
+        -------
+        dict
+            Copy of ``kwargs`` with ``bounds`` set to the inferred box and
+            ``_invented_bounds`` set to ``True``. Returned without those
+            changes when non-default bounds are already present or ``_xdata``
+            / ``_ydata`` are missing.
+        """
         modified = kwargs.copy()
 
         # Check if bounds already provided. Bounds may be per-parameter arrays,
@@ -309,7 +396,19 @@ class UseRobustLossStrategy(FallbackStrategy):
         self.current_index = 0
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Try next robust loss function."""
+        """Try next robust loss function.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments of the fit.
+
+        Returns
+        -------
+        dict
+            Copy of ``kwargs`` with ``loss`` set to the next entry of
+            ``loss_sequence``; unchanged once the sequence is exhausted.
+        """
         modified = kwargs.copy()
 
         if self.current_index < len(self.loss_sequence):
@@ -319,6 +418,13 @@ class UseRobustLossStrategy(FallbackStrategy):
         return modified
 
     def has_more(self) -> bool:
+        """Whether ``loss_sequence`` has entries not yet tried.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``loss_sequence`` has entries not yet tried.
+        """
         return self.current_index < len(self.loss_sequence)
 
     def reset(self) -> None:
@@ -418,7 +524,22 @@ class RescaleProblemStrategy(FallbackStrategy):
         )
 
     def apply(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Normalize data to [0, 1] range."""
+        """Normalize data to [0, 1] range.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments of the fit; ``p0`` and the internal ``_xdata`` /
+            ``_ydata`` entries are read.
+
+        Returns
+        -------
+        dict
+            Copy of ``kwargs`` with the scaling factors ``_x_scale``,
+            ``_y_scale``, ``_x_offset``, ``_y_offset`` and ``_scaled=True``
+            added. Unchanged when ``p0``, ``_xdata`` or ``_ydata`` is missing
+            or either data range is not positive.
+        """
         modified = kwargs.copy()
 
         xdata = modified.get("_xdata")

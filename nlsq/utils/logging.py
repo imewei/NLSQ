@@ -202,6 +202,12 @@ class NLSQLogger:
 
         The history is per thread (a fit runs in one thread): read or save it
         from the thread that ran the fit.
+
+        Returns
+        -------
+        deque[dict[str, Any]]
+            The calling thread's history; created empty (``maxlen=10000``) on
+            first access from a thread.
         """
         hist = getattr(self._history_tls, "history", None)
         if hist is None:
@@ -307,17 +313,43 @@ class NLSQLogger:
         return " ".join(parts)
 
     def debug(self, message: str, **kwargs):
-        """Log debug message with optional structured data."""
+        """Log debug message with optional structured data.
+
+        Parameters
+        ----------
+        message : str
+            Message text.
+        **kwargs
+            Structured key/value data appended to the message.
+        """
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug(self._format_message(message, **kwargs))
 
     def info(self, message: str, **kwargs):
-        """Log info message with optional structured data."""
+        """Log info message with optional structured data.
+
+        Parameters
+        ----------
+        message : str
+            Message text.
+        **kwargs
+            Structured key/value data appended to the message.
+        """
         if self.logger.isEnabledFor(logging.INFO):
             self.logger.info(self._format_message(message, **kwargs))
 
     def warning(self, message: str, exc_info: bool = False, **kwargs):
-        """Log warning message with optional structured data."""
+        """Log warning message with optional structured data.
+
+        Parameters
+        ----------
+        message : str
+            Message text.
+        exc_info : bool, optional
+            Attach the current exception information. Default is False.
+        **kwargs
+            Structured key/value data appended to the message.
+        """
         if self.logger.isEnabledFor(logging.WARNING):
             self.logger.warning(
                 self._format_message(message, **kwargs),
@@ -325,15 +357,43 @@ class NLSQLogger:
             )
 
     def error(self, message: str, exc_info: bool = False, **kwargs):
-        """Log error message with optional exception info."""
+        """Log error message with optional exception info.
+
+        Parameters
+        ----------
+        message : str
+            Message text.
+        exc_info : bool, optional
+            Attach the current exception information. Default is False.
+        **kwargs
+            Structured key/value data appended to the message.
+        """
         self.logger.error(self._format_message(message, **kwargs), exc_info=exc_info)
 
     def critical(self, message: str, exc_info: bool = True, **kwargs):
-        """Log critical error with exception info."""
+        """Log critical error with exception info.
+
+        Parameters
+        ----------
+        message : str
+            Message text.
+        exc_info : bool, optional
+            Attach the current exception information. Default is True.
+        **kwargs
+            Structured key/value data appended to the message.
+        """
         self.logger.critical(self._format_message(message, **kwargs), exc_info=exc_info)
 
     def performance(self, message: str, **kwargs):
-        """Log performance-related message."""
+        """Log performance-related message.
+
+        Parameters
+        ----------
+        message : str
+            Message text.
+        **kwargs
+            Structured key/value data appended to the message.
+        """
         if not self.logger.isEnabledFor(LogLevel.PERFORMANCE):
             return
         self.logger.log(LogLevel.PERFORMANCE, self._format_message(message, **kwargs))
@@ -351,6 +411,12 @@ class NLSQLogger:
             Name of the operation (e.g., "curve_fit", "jacobian")
         **context
             Additional context to log (e.g., n_points, n_params)
+
+        Yields
+        ------
+        str
+            The operation ID (a UUID hex string) attached to log messages
+            inside the block.
 
         Examples
         --------
@@ -465,7 +531,14 @@ class NLSQLogger:
 
     def records_iterations(self) -> bool:
         """True when per-iteration metrics are kept: PERFORMANCE level or
-        NLSQ_SAVE_ITERATIONS set."""
+        NLSQ_SAVE_ITERATIONS set.
+
+        Returns
+        -------
+        bool
+            ``True`` if the logger is enabled for the PERFORMANCE level or the
+            ``NLSQ_SAVE_ITERATIONS`` setting is truthy.
+        """
         return self.logger.isEnabledFor(LogLevel.PERFORMANCE) or bool(
             _save_iterations_setting()
         )
@@ -648,6 +721,12 @@ class NLSQLogger:
             Name of the timed section
         log_result : bool
             Whether to log the timing result
+
+        Yields
+        ------
+        None
+            Nothing is yielded; the elapsed time is stored in ``self.timers[name]``
+            on exit.
 
         Examples
         --------

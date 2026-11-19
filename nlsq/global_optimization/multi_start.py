@@ -895,6 +895,13 @@ class MultiStartOrchestrator:
         CurveFitResult
             Best optimization result with multi-start diagnostics.
 
+        Raises
+        ------
+        ValueError
+            If ``bounds`` is given and, after a length-1 lower or upper bound is
+            broadcast, its number of entries differs from the number of
+            parameters.
+
         Examples
         --------
         >>> orchestrator = MultiStartOrchestrator.from_preset('robust')
