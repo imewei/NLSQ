@@ -533,7 +533,7 @@ def test_unlink_race_between_check_and_remove_keeps_live_snapshot(
         # B atomically replaces the file right before A's rename takes it
         tmp = autosave_dir / "b.tmp"
         _snapshot(tmp, {"pid": os.getppid(), "token": "b"}, [7.0, 8.0])
-        real_rename(tmp, primary)
+        os.replace(tmp, primary)  # os.rename refuses an existing target on Windows
         return real_rename(src, dst)
 
     monkeypatch.setattr(autosave.os, "rename", racing_rename)
@@ -560,7 +560,7 @@ def test_unlink_race_when_destination_retaken_leaves_tombstone(
     def racing_rename(src, dst):
         tmp = autosave_dir / "b.tmp"
         _snapshot(tmp, {"pid": os.getppid(), "token": "b"}, [7.0, 8.0])
-        real_rename(tmp, primary)
+        os.replace(tmp, primary)  # os.rename refuses an existing target on Windows
         return real_rename(src, dst)
 
     def racing_link(src, dst):
@@ -602,7 +602,7 @@ def _race_with_live_writer(autosave, autosave_dir, monkeypatch, link):
         if str(dst).endswith(".rm"):
             tmp = autosave_dir / "b.tmp"
             _snapshot(tmp, {"pid": os.getppid(), "token": "b"}, [7.0, 8.0])
-            real_rename(tmp, primary)
+            os.replace(tmp, primary)  # os.rename refuses an existing target on Windows
         return real_rename(src, dst)
 
     monkeypatch.setattr(autosave.os, "rename", racing_rename)
