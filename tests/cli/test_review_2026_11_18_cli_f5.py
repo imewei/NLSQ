@@ -251,7 +251,7 @@ def test_explicit_numeric_header_selectable_by_name(tmp_path):
 def test_shipped_template_leaves_csv_header_unset():
     from nlsq.cli.templates import get_workflow_template
 
-    cfg = yaml.safe_load(get_workflow_template().read_text())
+    cfg = yaml.safe_load(get_workflow_template().read_text(encoding="utf-8"))
     assert "header" not in cfg["data"]["csv"]
 
 
@@ -360,7 +360,7 @@ def test_config_command_force_success_removes_backups(tmp_path, monkeypatch):
     (tmp_path / "workflow_config.yaml").write_text("old")
     config_module.run_config(force=True)
     assert _names(tmp_path) == ["custom_model.py", "workflow_config.yaml"]
-    assert (tmp_path / "workflow_config.yaml").read_text() != "old"
+    assert (tmp_path / "workflow_config.yaml").read_text(encoding="utf-8") != "old"
 
 
 def test_config_command_accepts_251_character_output_name(tmp_path, monkeypatch):

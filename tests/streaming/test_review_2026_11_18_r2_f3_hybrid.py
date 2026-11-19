@@ -3,6 +3,7 @@ hybrid engine (adaptive_hybrid.py, hybrid_config.py, telemetry.py, phases/)."""
 
 import os
 import stat
+import sys
 import warnings
 
 import jax.numpy as jnp
@@ -344,6 +345,7 @@ def test_standalone_warmup_weight_setter_accepts_lists_and_validates():
         w.set_residual_weights([1.0, 0.0])
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
 def test_checkpoint_replace_keeps_restricted_mode(tmp_path):
     state = CheckpointState(
         current_phase=1,
