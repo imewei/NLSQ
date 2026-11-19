@@ -674,6 +674,7 @@ class HybridStreamingConfig:
         """Create memory-optimized profile: smaller chunks, efficient settings.
 
         This preset minimizes memory footprint:
+
         - Smaller chunks to reduce memory usage
         - L-BFGS warmup with reduced iterations
         - Enable checkpoints for recovery (important when memory is tight)

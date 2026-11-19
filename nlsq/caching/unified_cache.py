@@ -55,6 +55,7 @@ class UnifiedCache:
     """Unified compilation cache merging three legacy cache patterns.
 
     This cache provides:
+
     - Shape-relaxed keys: cache based on (func_hash, dtype, rank) not exact shapes
     - Stats: hits, misses, hit_rate, cache_size, and wrapper-creation counts and
       time (``compilations`` / ``compile_time_ms`` do not include XLA compile time)
@@ -424,6 +425,7 @@ class UnifiedCache:
         -------
         stats : dict
             Cache statistics including:
+
             - hits : int - Number of cache hits
             - misses : int - Number of cache misses
             - compilations : int - Number of ``jax.jit`` wrappers built (not XLA

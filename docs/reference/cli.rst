@@ -281,6 +281,9 @@ categories include:
   ``update_wrapper``, ``__match_args__``, ``__subclasshook__``,
   ``__instancecheck__`` and ``__subclasscheck__`` and the keyword arguments
   ``assigned=`` / ``updated=`` are rejected wherever they appear;
+* relative imports, and imports from ``nlsq`` other than ``nlsq.core.functions``
+  and ``nlsq.functions`` (``import nlsq`` and ``from nlsq import ...`` are rejected;
+  use ``from nlsq.core.functions import gaussian``);
 * process, thread and interpreter control (``os``, ``subprocess``,
   ``multiprocessing``, ``threading``, ``signal``, ``cProfile``, ``pdb`` ...);
 * network modules (``socket``, ``urllib``, ``http``, ``requests`` ...);

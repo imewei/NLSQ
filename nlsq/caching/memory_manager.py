@@ -40,6 +40,7 @@ class MemoryManager:
     """Intelligent memory management for optimization algorithms.
 
     This class provides:
+
     - Memory usage monitoring and prediction
     - Opt-in array pooling (``allocate_array`` / ``free_array``); nothing in
       the library's fit paths uses the pool

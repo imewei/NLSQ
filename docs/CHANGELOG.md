@@ -1,6 +1,12 @@
 # Documentation Changelog
 
 ## Unreleased
+- Hybrid streaming and validator docs corrected against `nlsq/streaming/hybrid_config.py` and
+  `nlsq/cli/model_validation.py`. `HybridStreamingConfig.memory_optimized()` was documented as using float32
+  (`api/nlsq.hybrid_streaming_config`, `api/nlsq.adaptive_hybrid_streaming`); it sets `chunk_size=5000`,
+  `warmup_iterations=40`, `max_warmup_iterations=100` and checkpoints every 50 iterations, and keeps the default
+  `cg_param_threshold`. `reference/cli` now lists the import rule the validator enforces (relative imports and any
+  `nlsq` import outside `nlsq.core.functions` / `nlsq.functions` are rejected).
 - `workflow="hpc"` documentation corrected against `nlsq/core/workflow.py` and `nlsq/core/minpack.py`.
   `ClusterDetector.detect()` recognises PBS (`$PBS_NODEFILE`) and local multi-GPU only; there is no SLURM
   detection, and the result is logged for diagnostics without changing the fit. Fixed in `README.md`,

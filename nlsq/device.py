@@ -363,6 +363,7 @@ def get_device_info() -> dict:
     -------
     dict
         Dictionary with:
+
         - jax_version: JAX version string
         - jax_backend: Current backend (cpu, gpu)
         - devices: List of device strings

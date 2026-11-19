@@ -222,7 +222,7 @@ Minimize memory footprint:
     config = HybridStreamingConfig.memory_optimized()
     optimizer = AdaptiveHybridStreamingOptimizer(config)
 
-    # Smaller chunks, float32, frequent checkpoints
+    # Smaller chunks, fewer warmup iterations, frequent checkpoints
     result = optimizer.fit((x_data, y_data), model, p0)
 
 Custom Switching Criteria

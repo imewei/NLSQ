@@ -640,7 +640,8 @@ class AdaptiveHybridStreamingOptimizer:
         -----
         A call made while Phase 1 is running (e.g. from the ``fit`` callback)
         rebuilds the warmup objective and restarts L-BFGS from the current point
-        on the next iteration. Weights must be positive. The weighted MSE is computed as:
+        on the next iteration. Weights must be positive. The weighted MSE is computed as::
+
             wMSE = sum(w[group_idx] * residuals^2) / sum(w[group_idx])
         """
         self._residual_weights_jax = coerce_residual_weights(weights)

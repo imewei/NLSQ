@@ -6,6 +6,7 @@ This module provides automatic fallback mechanisms that attempt to recover
 from optimization failures by trying alternative approaches.
 
 Key Features:
+
 - Alternative method selection (currently only "trf"; a no-op when TRF is
   already the method, so it never repeats the original fit)
 - Initial guess perturbation for escaping local minima
