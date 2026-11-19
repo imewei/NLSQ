@@ -42,9 +42,21 @@ def is_gpu_error(error: Exception | str) -> bool:
     Prefers type-based matching against jax.errors.JaxRuntimeError (or the
     legacy jaxlib.xla_extension.XlaRuntimeError on older jaxlib). Falls back to string heuristics for
     older JAX (<0.8) or error types that don't inherit from XlaRuntimeError:
+
     - Legacy: "cuSolver internal error" (JAX <0.8)
     - FFI: "No FFI handler registered for cusolver_gesvdj_ffi" (JAX >=0.8)
     - XLA status: "INTERNAL: ..." (gRPC/XLA status code prefix, case-sensitive)
+
+    Parameters
+    ----------
+    error : Exception or str
+        The exception, or its message, to classify.
+
+    Returns
+    -------
+    bool
+        True if ``error`` is a JAX runtime error type or its message matches one
+        of the GPU failure patterns above.
     """
     # Type-based check: robust against JAX error message format changes
     if not isinstance(error, str):
@@ -97,6 +109,15 @@ def compute_svd_with_fallback(
     V : jnp.ndarray
         Right singular vectors (note: V is the conjugate transpose of Vh, NOT Vt;
         for real input this is the plain transpose)
+
+    Raises
+    ------
+    FloatingPointError
+        If the final NumPy SVD also returns non-finite factors.
+    numpy.linalg.LinAlgError
+        If the first SVD attempt fails with a GPU error or non-finite factors and
+        ``J_h`` itself contains non-finite values. Any other exception from the
+        first attempt is re-raised unchanged.
     """
 
     def _finite_or_raise(U, s, V, tier: str):

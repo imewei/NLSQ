@@ -78,9 +78,12 @@ class LiveCostPlotWidget(QWidget):
     def add_point(self, iteration: int, cost: float) -> None:
         """Add a data point to the plot.
 
-        Args:
-            iteration: Iteration number
-            cost: Cost function value
+        Parameters
+        ----------
+        iteration : int
+            Iteration number.
+        cost : float
+            Cost function value.
         """
         self._iterations.append(iteration)
         self._costs.append(cost)
@@ -100,16 +103,20 @@ class LiveCostPlotWidget(QWidget):
     def set_log_scale(self, enabled: bool) -> None:
         """Set log scale for y-axis.
 
-        Args:
-            enabled: Whether to use log scale
+        Parameters
+        ----------
+        enabled : bool
+            Whether to use log scale.
         """
         self._plot_widget.setLogMode(x=False, y=enabled)
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration.
         """
         self._theme = theme
 

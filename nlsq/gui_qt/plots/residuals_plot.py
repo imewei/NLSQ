@@ -127,11 +127,16 @@ class ResidualsPlotWidget(QWidget):
     ) -> None:
         """Set the residuals data.
 
-        Args:
-            x: X data array
-            residuals: Residuals (y - y_fit)
-            fitted: Fitted values (optional, for residuals vs fitted)
-            confidence_interval: Half-width of confidence bands (at x points)
+        Parameters
+        ----------
+        x : NDArray
+            X data array.
+        residuals : NDArray
+            Residuals (y - y_fit).
+        fitted : NDArray, optional
+            Fitted values, used for the residuals-vs-fitted plot types.
+        confidence_interval : NDArray, optional
+            Half-width of confidence bands (at x points).
         """
         self._x = np.asarray(x)
         self._residuals = np.asarray(residuals)
@@ -335,8 +340,12 @@ class ResidualsPlotWidget(QWidget):
     def get_statistics(self) -> dict:
         """Get residuals statistics.
 
-        Returns:
-            Dictionary with residual statistics
+        Returns
+        -------
+        dict
+            Dictionary with the keys ``"mean"``, ``"std"``, ``"min"``, ``"max"``
+            and ``"median"`` of the finite residuals; empty if no residuals are
+            set or none is finite.
         """
         if self._residuals is None:
             return {}
@@ -366,8 +375,11 @@ class ResidualsPlotWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration; its ``plot_background`` and ``plot_foreground``
+            colors are applied to the plot widget.
         """
         self._theme = theme
 
@@ -386,8 +398,10 @@ class ResidualsPlotWidget(QWidget):
     def export_image(self, path: str) -> None:
         """Export the plot as an image.
 
-        Args:
-            path: Output file path
+        Parameters
+        ----------
+        path : str
+            Output file path.
         """
         from nlsq.gui_qt.plots import export_plot_image
 

@@ -90,17 +90,35 @@ class BIPOPRestarter:
 
     @property
     def exhausted(self) -> bool:
-        """Whether maximum restarts have been reached."""
+        """Whether maximum restarts have been reached.
+
+        Returns
+        -------
+        bool
+            True when ``restart_count >= max_restarts``.
+        """
         return self.restart_count >= self.max_restarts
 
     @property
     def best_solution(self) -> jax.Array | None:
-        """Best solution found across all restarts."""
+        """Best solution found across all restarts.
+
+        Returns
+        -------
+        jax.Array or None
+            Best solution recorded so far, or None if none has been recorded.
+        """
         return self._best_solution
 
     @property
     def best_fitness(self) -> float:
-        """Best fitness found across all restarts."""
+        """Best fitness found across all restarts.
+
+        Returns
+        -------
+        float
+            Best fitness recorded so far (``inf`` initially).
+        """
         return self._best_fitness
 
     def get_next_popsize(self) -> int:

@@ -79,12 +79,34 @@ class CMAESCheckpointState:
 
 
 def serialize_key(key: jax.Array) -> np.ndarray:
-    """Convert a typed JAX PRNG key to a plain uint32 array for storage."""
+    """Convert a typed JAX PRNG key to a plain uint32 array for storage.
+
+    Parameters
+    ----------
+    key : jax.Array
+        Typed JAX PRNG key.
+
+    Returns
+    -------
+    numpy.ndarray
+        Raw key data from ``jax.random.key_data``.
+    """
     return np.asarray(jax.random.key_data(key))
 
 
 def deserialize_key(data: np.ndarray) -> jax.Array:
-    """Reconstruct a typed JAX PRNG key from `serialize_key`'s output."""
+    """Reconstruct a typed JAX PRNG key from `serialize_key`'s output.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Raw key data; converted to ``uint32``.
+
+    Returns
+    -------
+    jax.Array
+        Typed PRNG key built with ``jax.random.wrap_key_data``.
+    """
 
     return jax.random.wrap_key_data(jnp.asarray(data, dtype=jnp.uint32))
 
@@ -96,7 +118,19 @@ def serialize_evosax_state(
     -- or a `CMAESCheckpointState`, which duck-types the same field names --
     to a plain dict of numpy arrays, safe for HDF5 storage. `HPCCheckpointManager.save()`
     calls this directly so the code path real checkpoints go through is the
-    same one this module's serialization round-trip tests exercise."""
+    same one this module's serialization round-trip tests exercise.
+
+    Parameters
+    ----------
+    state : EvosaxState or CMAESCheckpointState
+        State to convert.
+
+    Returns
+    -------
+    dict
+        ``generation_counter`` as an ``int`` plus one numpy array per evosax
+        array field of ``state``.
+    """
     out: dict[str, np.ndarray | int] = {
         "generation_counter": int(state.generation_counter),
     }
@@ -114,6 +148,19 @@ def deserialize_evosax_state(
     `template_state` supplies the dataclass shape/type (from a fresh
     `es.init(...)` call with the same popsize/n_params) -- only its field
     values are replaced, not its structure.
+
+    Parameters
+    ----------
+    d : dict
+        Output of `serialize_evosax_state`.
+    template_state : EvosaxState
+        State whose structure is reused.
+
+    Returns
+    -------
+    EvosaxState
+        ``template_state`` with the array fields and ``generation_counter``
+        replaced by the values in ``d``.
     """
 
     replacements: dict[str, Any] = {
@@ -156,10 +203,30 @@ def compute_fingerprint(
     not part of the identity either: a resumed run continues from the stored
     state, which supersedes any new ``p0``.
 
-    Returns a mix of string/int fields (compared by equality on load) and
-    the raw bounds_lower/bounds_upper arrays (stored for human
-    auditability per spec section 6 -- not used for the equality check,
-    bounds_hash covers that)."""
+    Parameters
+    ----------
+    model_id : str
+        Model identifier stored in the fingerprint.
+    xdata : numpy.ndarray
+        Independent data, hashed into ``data_hash``.
+    ydata : numpy.ndarray
+        Dependent data, hashed into ``data_hash``.
+    sigma : numpy.ndarray or None
+        Uncertainties, hashed into ``data_hash`` when not None.
+    bounds : tuple of numpy.ndarray
+        ``(lower, upper)`` parameter bounds.
+    config_fields : dict
+        Identity-relevant configuration, hashed into ``config_hash`` with keys
+        in sorted order.
+
+    Returns
+    -------
+    dict
+        A mix of string/int fields (compared by equality on load) and
+        the raw bounds_lower/bounds_upper arrays (stored for human
+        auditability per spec section 6 -- not used for the equality check,
+        bounds_hash covers that).
+    """
     data_hasher = hashlib.sha256()
     data_hasher.update(_hash_array(np.asarray(xdata)).encode())
     data_hasher.update(_hash_array(np.asarray(ydata)).encode())
@@ -218,7 +285,18 @@ class HPCCheckpointManager:
         """The `.bak` path `save()`/`load()` use for a given checkpoint
         path -- the single source of truth for this naming convention, so
         callers (e.g. CMAESOptimizer's resume-on-entry check) never need to
-        reconstruct it independently."""
+        reconstruct it independently.
+
+        Parameters
+        ----------
+        path : str or Path
+            Checkpoint file path.
+
+        Returns
+        -------
+        Path
+            ``path`` with ``.bak`` appended to its suffix.
+        """
         path = Path(path)
         return path.with_suffix(path.suffix + ".bak")
 

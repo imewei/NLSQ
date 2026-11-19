@@ -75,7 +75,19 @@ def _unit_spread(values: NDArray) -> tuple[NDArray, float, float]:
 
 
 def population_std(values: NDArray) -> float:
-    """Population standard deviation robust to large offsets and tiny spreads."""
+    """Population standard deviation robust to large offsets and tiny spreads.
+
+    Parameters
+    ----------
+    values : NDArray
+        Non-empty array of finite values.
+
+    Returns
+    -------
+    float
+        Population standard deviation (``ddof=0``) of ``values``; ``0.0`` when
+        all values are equal.
+    """
     import numpy as np
 
     z, s, k = _unit_spread(values)
@@ -85,9 +97,19 @@ def population_std(values: NDArray) -> float:
 def export_plot_image(plot_item: object, path: str) -> None:
     """Export a pyqtgraph plot to ``path`` (``.svg`` as SVG, else a raster image).
 
-    Raises:
-        OSError: if the file could not be written (unsupported suffix, missing
-            directory, ...); pyqtgraph's raster exporter only returns False.
+    Parameters
+    ----------
+    plot_item : object
+        pyqtgraph plot item to export.
+    path : str
+        Output file path. A ``.svg`` suffix (case-insensitive) selects the SVG
+        exporter, anything else the raster image exporter.
+
+    Raises
+    ------
+    OSError
+        If the file could not be written (unsupported suffix, missing
+        directory, ...); pyqtgraph's raster exporter only returns False.
     """
     from pathlib import Path
 
@@ -101,7 +123,21 @@ def export_plot_image(plot_item: object, path: str) -> None:
 
 
 def decimation_note(n: int, threshold: int) -> str:
-    """Status-line text describing plot decimation, or "" if none applies."""
+    """Status-line text describing plot decimation, or "" if none applies.
+
+    Parameters
+    ----------
+    n : int
+        Number of data points.
+    threshold : int
+        Point count above which plots are decimated.
+
+    Returns
+    -------
+    str
+        ``"plots show K of n points"`` with the stride-decimated count ``K``
+        when ``n > threshold``, else ``""``.
+    """
     if n <= threshold:
         return ""
     stride = n // threshold

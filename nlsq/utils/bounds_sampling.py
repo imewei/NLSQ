@@ -21,6 +21,26 @@ def sample_in_bounds(
     ``center + (u - 0.5) * 2 * halfwidth`` instead and are clipped into
     ``[lb, ub]``. A result that would overflow float64 saturates at
     ``+-finfo(float64).max``, so the output is finite unless an input is NaN.
+
+    Parameters
+    ----------
+    u : array_like
+        Samples in the unit cube, shape ``(n, d)``.
+    lb : array_like
+        Lower bounds, broadcast against ``u``. May be ``-inf``.
+    ub : array_like
+        Upper bounds, broadcast against ``u``. May be ``inf``.
+    center : array_like
+        Centre of the sampling interval used on dimensions without two finite
+        endpoints, broadcast against ``u``.
+    halfwidth : array_like
+        Half-width of that sampling interval, broadcast against ``u``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Float64 samples with the broadcast shape of the inputs (``(n, d)`` for
+        the shapes above).
     """
     u, lb, ub, center, halfwidth = np.broadcast_arrays(
         *(np.asarray(a, dtype=np.float64) for a in (u, lb, ub, center, halfwidth))

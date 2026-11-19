@@ -23,6 +23,17 @@ def n_points(xdata: Any) -> int:
 
     1-D data is ``(n,)``; 2-D surface data is ``(n_coords, n)``, so the point
     count is always the last axis, not ``len()``.
+
+    Parameters
+    ----------
+    xdata : array_like
+        Independent data, 1-D or 2-D.
+
+    Returns
+    -------
+    int
+        Size of the last axis for 2-D or higher data, otherwise the number of
+        elements.
     """
     arr = np.asarray(xdata)
     return int(arr.shape[-1]) if arr.ndim > 1 else int(arr.size)
@@ -274,6 +285,13 @@ class SessionState:
         Unlike copy(), this deep-copies all mutable fields (numpy arrays,
         lists, dicts) so the worker thread sees a stable view even if the UI
         thread reassigns or mutates state fields while the fit is running.
+
+        Returns
+        -------
+        SessionState
+            Copy with ``xdata``, ``ydata``, ``zdata`` and ``sigma`` arrays, the
+            ``model_config``, ``p0`` and ``bounds`` copied, and ``fit_result``
+            set to None.
         """
         snap = self.copy()
         # Deep-copy numpy arrays — copy() shares the same ndarray objects

@@ -101,6 +101,11 @@ class UnifiedCache:
             Track cache statistics (hits, misses, wrapper-creation time)
         disk_cache_enabled : bool, default=False
             Not implemented. ``True`` emits a ``UserWarning`` and is ignored.
+
+        Raises
+        ------
+        ValueError
+            If ``maxsize`` is less than 1.
         """
         if maxsize < 1:
             raise ValueError(f"maxsize must be >= 1, got {maxsize}")

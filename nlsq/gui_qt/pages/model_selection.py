@@ -584,16 +584,20 @@ class ModelSelectionPage(QWidget):
     def set_app_state(self, state: AppState) -> None:
         """Set the application state.
 
-        Args:
-            state: Application state manager
+        Parameters
+        ----------
+        state : AppState
+            Application state manager
         """
         self._app_state = state
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this page.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         self._code_editor.set_theme(theme)
 

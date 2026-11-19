@@ -58,7 +58,13 @@ CHUNK_BUCKETS: tuple[int, ...] = (1024, 2048, 4096, 8192, 16384, 32768, 65536, 1
 # Use functools.cache for clean caching without global statement
 @cache
 def get_cached_devices() -> list:
-    """Get cached JAX devices, computing once on first call."""
+    """Get cached JAX devices, computing once on first call.
+
+    Returns
+    -------
+    list
+        The result of ``jax.devices()`` from the first call.
+    """
     return jax.devices()
 
 
@@ -180,7 +186,13 @@ class ChunkBuffer:
         )
 
     def get_valid_data(self) -> np.ndarray:
-        """Return only the valid (non-padded) portion of the data."""
+        """Return only the valid (non-padded) portion of the data.
+
+        Returns
+        -------
+        np.ndarray
+            ``data[:valid_length]``.
+        """
         return self.data[: self.valid_length]
 
 
@@ -271,17 +283,35 @@ class ChunkBufferPool:
 
     @property
     def chunk_size(self) -> int:
-        """Return the pool's chunk size."""
+        """Return the pool's chunk size.
+
+        Returns
+        -------
+        int
+            Number of points per pre-allocated buffer.
+        """
         return self._chunk_size
 
     @property
     def dtype(self) -> np.dtype:
-        """Return the pool's data type."""
+        """Return the pool's data type.
+
+        Returns
+        -------
+        np.dtype
+            Data type of the buffers.
+        """
         return self._dtype
 
     @property
     def x_feature_shape(self) -> tuple[int, ...]:
-        """Return the pool's xdata trailing feature shape."""
+        """Return the pool's xdata trailing feature shape.
+
+        Returns
+        -------
+        tuple[int, ...]
+            Trailing dimensions of the x buffer beyond the point axis.
+        """
         return self._x_feature_shape
 
 
@@ -949,6 +979,19 @@ class DataChunker:
         A ragged tail (1000 + 1 points, or 4 + 4 + 2 for three parameters) is
         rank-deficient and skews the precision-weighted combination of chunk
         fits, so sizes differ by at most one and never exceed ``chunk_size``.
+
+        Parameters
+        ----------
+        n_points : int
+            Total number of points.
+        chunk_size : int
+            Maximum chunk size.
+
+        Returns
+        -------
+        list[tuple[int, int]]
+            ``(start, end)`` index pairs, one per chunk; empty if ``n_points``
+            is 0.
         """
         if n_points == 0:
             return []
@@ -1001,6 +1044,14 @@ class DataChunker:
         tuple[np.ndarray, np.ndarray, int, int]
             (x_chunk, y_chunk, chunk_index, valid_length)
             where valid_length is the actual number of data points (before padding)
+
+        Raises
+        ------
+        ValueError
+            If both ``indices`` and ``shuffle=True`` are given, if ``indices``
+            is not a 1-D integer array, if its length differs from
+            ``len(xdata)``, or if it has values outside ``[0, len(xdata))``.
+            Raised when the generator is first iterated.
 
         Notes
         -----
@@ -1516,6 +1567,12 @@ class LargeDatasetFitter:
             Dependent variable data
         p0 : np.ndarray | list | None
             Initial parameter guess
+        bounds : tuple, optional
+            Parameter bounds; ``p0`` (or the default probe point) is clipped
+            into them before the model is called.
+        row_mask : np.ndarray, optional
+            Boolean mask of the rows the fit keeps; the probe uses the first
+            100 rows it selects.
 
         Raises
         ------
@@ -3418,7 +3475,13 @@ class LargeDatasetFitter:
 
     @contextmanager
     def memory_monitor(self):
-        """Context manager for monitoring memory usage during fits."""
+        """Context manager for monitoring memory usage during fits.
+
+        Yields
+        ------
+        None
+            Logs the process resident memory at entry and exit at debug level.
+        """
 
         try:
             process = psutil.Process()

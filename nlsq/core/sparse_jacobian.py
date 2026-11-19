@@ -157,6 +157,18 @@ class SparseJacobianComputer:
             Boolean array indicating non-zero elements
         sparsity : float
             Fraction of zero elements
+
+        Raises
+        ------
+        TypeError
+            If ``n_samples`` is not an integer.
+        ValueError
+            If ``n_samples`` is negative; if ``xdata_sample`` mixes scalars and
+            sequences or holds coordinate arrays of unequal length; if the
+            model output at ``x0`` or after perturbing a parameter is not
+            finite; or if the model output length differs from the number of
+            sampled points (for example a model that uses closure-captured
+            data instead of ``xdata``).
         """
         # Integer p0 would make `.at[i].add(1e-8 * ...)` truncate to a zero step.
         x0 = np.asarray(x0, dtype=np.float64)
@@ -285,6 +297,19 @@ class SparseJacobianComputer:
         -------
         J_sparse : csr_matrix
             Sparse Jacobian matrix
+
+        Raises
+        ------
+        TypeError
+            If ``chunk_size`` is not an integer.
+        ValueError
+            If ``chunk_size`` is less than 1; if ``data_mask`` or ``xdata``
+            does not have the same number of points as ``ydata``; if
+            ``jac_func`` is not callable and ``func`` is None; if a Jacobian
+            chunk is complex or does not have shape
+            ``(points in chunk, n_params)``; or if ``xdata`` is malformed
+            (mixed scalars and sequences, or coordinate arrays of unequal
+            length).
         """
         chunk_size = _check_positive_int("chunk_size", chunk_size)
         xdata = _normalize_xdata(xdata)
@@ -805,6 +830,15 @@ def detect_jacobian_sparsity(
         Fraction of zero elements
     info : dict
         Additional sparsity information
+
+    Raises
+    ------
+    TypeError
+        If ``n_samples`` is not an integer.
+    ValueError
+        If ``n_samples`` is less than 1, ``threshold`` is not a number in
+        ``[0, 1)``, or ``xdata_sample`` is empty; also any ``ValueError`` raised
+        by ``SparseJacobianComputer.detect_sparsity_pattern``.
     """
     # Get number of data points, handling multi-dimensional xdata
     xdata_sample = _normalize_xdata(xdata_sample)

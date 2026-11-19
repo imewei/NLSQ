@@ -475,7 +475,14 @@ class MemoryBudgetSelector:
 
     @property
     def safety_factor(self) -> float:
-        """The factor ``select`` applies, resolved at call time."""
+        """The factor ``select`` applies, resolved at call time.
+
+        Returns
+        -------
+        float
+            The constructor's ``safety_factor`` if given, otherwise the
+            configured ``MemoryConfig.safety_factor`` (default 0.75).
+        """
         from nlsq.config import JAXConfig
 
         return _resolve_safety_factor(
@@ -845,6 +852,11 @@ def calculate_adaptive_tolerances(
     -------
     dict[str, float]
         Dictionary with 'gtol', 'ftol', 'xtol' keys and corresponding tolerance values.
+
+    Raises
+    ------
+    TypeError
+        If ``goal`` is neither ``None`` nor an ``OptimizationGoal``.
 
     Examples
     --------
@@ -1245,11 +1257,24 @@ class MultiGPUConfig:
 
     @property
     def total_batch_size(self) -> int:
-        """Total batch size across all devices."""
+        """Total batch size across all devices.
+
+        Returns
+        -------
+        int
+            ``n_devices * per_device_batch_size``.
+        """
         return self.n_devices * self.per_device_batch_size
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to dictionary."""
+        """Serialize to dictionary.
+
+        Returns
+        -------
+        dict
+            Dictionary with keys ``n_devices``, ``shard_axis``, ``use_pmap``,
+            ``use_pjit`` and ``per_device_batch_size``.
+        """
         return {
             "n_devices": self.n_devices,
             "shard_axis": self.shard_axis,
@@ -1382,6 +1407,12 @@ def create_checkpoint_directory(base_dir: str | Path | None = None) -> str:
     -------
     str
         Absolute path to the created checkpoint directory.
+
+    Raises
+    ------
+    FileExistsError
+        If no unused timestamped subdirectory name is found after 10,000
+        attempts.
 
     Examples
     --------

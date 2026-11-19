@@ -209,6 +209,33 @@ def pcov_from_jacobian(
     ``OptimizeWarning`` instead. Fallback messages go to ``logger`` (default: the
     ``curve_fit`` module logger; ``CurveFit`` passes ``self.logger``). The warning is
     attributed to the first frame outside ``nlsq/``.
+
+    Parameters
+    ----------
+    J : array_like, shape (m, p)
+        Jacobian at the solution; ``m`` may include padded rows.
+    cost : float
+        Cost at the solution. With ``absolute_sigma=False`` the covariance is
+        scaled by ``2 * cost / (n_eff - p)``.
+    n_eff : int
+        True number of data points (excluding padding).
+    p : int
+        Number of fit parameters.
+    absolute_sigma : bool
+        If ``True``, the covariance is not scaled by the residual variance.
+    svd : callable
+        ``svd(J_eq) -> (s, VT)``, returning the singular values and right
+        singular vectors of the column-equilibrated Jacobian.
+    logger : optional
+        Logger for fallback messages; the module logger if ``None``.
+
+    Returns
+    -------
+    pcov : ndarray, shape (p, p)
+        Parameter covariance; all ``inf`` when it cannot be estimated.
+    warn_cov : bool
+        ``True`` if the covariance could not be estimated (the all-``inf``
+        fallback was used and an ``OptimizeWarning`` was emitted).
     """
     # Equilibrate columns to unit norm before the SVD so the rank cutoff sees
     # identifiability, not parameter units (x in 1e8 units made one direction look
@@ -365,6 +392,17 @@ def normal_condition(H: np.ndarray) -> float:
 
     Overflow-safe (eigenvalues of the power-of-two scaled ``H``). ``inf`` when ``H`` is
     non-finite or ``lambda_min <= 0``.
+
+    Parameters
+    ----------
+    H : ndarray, shape (p, p)
+        Symmetric normal matrix ``J^T J``.
+
+    Returns
+    -------
+    float
+        ``sqrt(lambda_max / lambda_min)``, or ``inf`` if ``H`` is non-finite
+        or its smallest eigenvalue is not positive.
     """
     H = np.asarray(H, dtype=np.float64)
     if not np.isfinite(H).all():
@@ -395,6 +433,29 @@ def pcov_from_normal(
     survives, any value is non-finite, or ``n_eff <= p`` without ``absolute_sigma``.
     A ``UserWarning`` is emitted when ``sqrt(cond(H)) > COND_WARN`` unless
     ``cond_warn`` is False (the hybrid optimizer, whose callers never got that warning).
+
+    Parameters
+    ----------
+    H : ndarray, shape (p, p)
+        Symmetric normal matrix ``J^T J``.
+    cost : float
+        Cost at the solution; used for the ``2 * cost / (n_eff - p)`` scaling.
+    n_eff : int
+        True number of data points.
+    p : int
+        Number of fit parameters.
+    absolute_sigma : bool
+        If ``True``, the covariance is not scaled by the residual variance.
+    cond_warn : bool, optional
+        Emit the ill-conditioning ``UserWarning``. Default ``True``.
+
+    Returns
+    -------
+    pcov : ndarray, shape (p, p)
+        Parameter covariance; all ``inf`` when it cannot be estimated.
+    fired : bool
+        ``True`` if the result contains ``inf`` (the all-``inf`` fallback) and
+        the "could not be estimated" ``OptimizeWarning`` was emitted.
     """
     n = n_eff
     H = np.asarray(H, dtype=np.float64)

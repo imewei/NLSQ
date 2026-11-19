@@ -700,6 +700,12 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             before this call; recorded when ``timeit`` is True.
         **kwargs
             Accepted for call compatibility; not read.
+
+        Returns
+        -------
+        result : OptimizeResult
+            The result of ``trf_no_bounds`` when both ``lb`` and ``ub`` are
+            infinite, otherwise of ``trf_bounds``.
         """
         # bounded or unbounded version
         if np.all(lb == -np.inf) and np.all(ub == np.inf):
@@ -961,6 +967,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Levenberg-Marquardt parameter
         solver : str
             Solver type ('cg' or 'exact')
+        gtol : float, optional
+            Gradient tolerance; sets the inner tolerance of the CG solver
+            (``solver`` ``'cg'`` or ``'lsmr'``). Default is 1e-8.
 
         Returns
         -------
@@ -1167,6 +1176,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Maximum function evaluations
         nfev : int
             Current function evaluation count
+        gtol : float, optional
+            Gradient tolerance; sets the inner tolerance of the CG solver
+            (``solver`` ``'cg'`` or ``'lsmr'``). Default is 1e-8.
         fuse_scalars : bool, optional
             Read the per-attempt scalars (finiteness, reduction, termination
             code, radius, alpha, norms) with one fused device-to-host transfer
@@ -1443,6 +1455,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Step norm (None if not computed)
         actual_reduction : float | None
             Actual cost reduction (None if not computed)
+        g : jnp.ndarray | None, optional
+            Current gradient; passed to the callback as ``info["gradient"]``
+            (None if not given).
 
         Returns
         -------
@@ -1588,6 +1603,9 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Solver type
         n : int
             Number of parameters
+        gtol : float, optional
+            Gradient tolerance; sets the inner tolerance of the CG solver
+            (``solver`` ``'cg'`` or ``'lsmr'``). Default is 1e-8.
 
         Returns
         -------
@@ -1731,12 +1749,17 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         loss_function : Loss function
         f_scale : Residual scale
         lb, ub : Bounds
+        lb_jnp, ub_jnp : jnp.ndarray
+            Bounds as JAX arrays.
         theta : Step back ratio
         solver : Solver type
         ftol, xtol : Tolerances
         max_nfev : Max function evals
         nfev : Current function evals
         n, m : Problem dimensions
+        gtol : float, optional
+            Gradient tolerance; sets the inner tolerance of the CG solver
+            (``solver`` ``'cg'`` or ``'lsmr'``). Default is 1e-8.
 
         Returns
         -------

@@ -46,6 +46,22 @@ def use_host_for_small_svd(
     """True when a ``shape`` SVD should run on the CPU device under ``backend``.
 
     ``max_elements`` defaults to ``HOST_SVD_MAX_ELEMENTS`` (read at call time).
+
+    Parameters
+    ----------
+    shape : tuple of int
+        Shape of the matrix to decompose; only its element count is used.
+    backend : str
+        JAX backend (platform) name the matrix lives on.
+    max_elements : int or None, optional
+        Largest element count that still runs on the host. ``None`` uses
+        ``HOST_SVD_MAX_ELEMENTS``.
+
+    Returns
+    -------
+    bool
+        True if ``backend`` is a GPU backend, ``prod(shape) <= max_elements`` and
+        a CPU platform is available.
     """
     limit = HOST_SVD_MAX_ELEMENTS if max_elements is None else max_elements
     return (
@@ -56,7 +72,13 @@ def use_host_for_small_svd(
 
 
 def host_device() -> jax.Device:
-    """The CPU device used for host-side SVDs."""
+    """The CPU device used for host-side SVDs.
+
+    Returns
+    -------
+    jax.Device
+        The first CPU device, ``jax.devices("cpu")[0]``.
+    """
     return jax.devices("cpu")[0]
 
 
@@ -64,6 +86,20 @@ def use_host_svd_for(J: object, max_elements: int | None = None) -> bool:
     """Policy for a concrete array ``J``: small, one accelerator device, never a tracer.
 
     Tracers (``J`` inside ``jax.jit``) and non-JAX arrays keep the plain jitted path.
+
+    Parameters
+    ----------
+    J : object
+        Matrix to decompose. Only a concrete ``jax.Array`` on a single device can
+        select the host path.
+    max_elements : int or None, optional
+        Passed to :func:`use_host_for_small_svd`.
+
+    Returns
+    -------
+    bool
+        True if ``J`` is a concrete single-device ``jax.Array`` for which
+        :func:`use_host_for_small_svd` is true on its device platform.
     """
     return (
         isinstance(J, jax.Array)

@@ -100,6 +100,11 @@ class DefenseLayerTelemetry:
 
         Pass the token as ``warmup=`` to :meth:`record_lbfgs_line_search_failure` so
         concurrent warmups are told apart.
+
+        Returns
+        -------
+        int
+            Token identifying this warmup.
         """
         with self._lock:
             self.total_warmup_calls += 1
@@ -108,7 +113,13 @@ class DefenseLayerTelemetry:
             return self._token_seq
 
     def record_warmup_end(self, token: int | None) -> None:
-        """Mark a warmup finished so its de-duplication state may be evicted."""
+        """Mark a warmup finished so its de-duplication state may be evicted.
+
+        Parameters
+        ----------
+        token : int or None
+            Token returned by :meth:`record_warmup_start`.
+        """
         with self._lock:
             self._live_warmups.discard(token)
 

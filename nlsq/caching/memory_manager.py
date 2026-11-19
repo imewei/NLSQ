@@ -490,6 +490,11 @@ class MemoryManager:
             Pass False when ``bytes_needed`` is a raw size or the RSS delta is
             not meaningful (e.g. lazily-committed ``np.zeros`` pages).
 
+        Yields
+        ------
+        None
+            Control returns to the ``with`` body once the memory check passes.
+
         Raises
         ------
         MemoryError

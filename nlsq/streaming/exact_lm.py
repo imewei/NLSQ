@@ -132,6 +132,28 @@ def derive_chunk_size(
     1024 points (``n`` if ``n < 1024``). Raises ``ValueError`` if even the floor chunk does
     not fit the budget. The budget goes to chunk workspace first; :func:`_place` puts
     in-memory data on a device under a limit only if data plus workspace also fits.
+
+    Parameters
+    ----------
+    n : int
+        Number of data points.
+    p : int
+        Number of parameters.
+    memory_limit_gb : float or None
+        Memory budget in GiB for the chunk workspace; ``None`` for no budget.
+    chunk_size : int or None
+        Explicit chunk length; ``None`` to derive it.
+
+    Returns
+    -------
+    int
+        Chunk length, at most ``n``.
+
+    Raises
+    ------
+    ValueError
+        If ``chunk_size`` is not positive, or if ``memory_limit_gb`` is too
+        small for the floor chunk (and no explicit ``chunk_size`` is given).
     """
     if chunk_size is not None:
         if chunk_size <= 0:
@@ -171,7 +193,31 @@ def step_termination(
     ftol: float,
     xtol: float,
 ) -> Termination | None:
-    """Step-based criteria after an accepted step; ``F`` is the cost before the step."""
+    """Step-based criteria after an accepted step; ``F`` is the cost before the step.
+
+    Parameters
+    ----------
+    dF : float
+        Cost decrease achieved by the accepted step.
+    F : float
+        Cost before the step.
+    rho : float
+        Ratio of the actual to the predicted decrease.
+    s_norm : float
+        Scaled norm of the step.
+    x_norm : float
+        Scaled norm of the parameters before the step.
+    ftol : float
+        Relative cost-decrease tolerance.
+    xtol : float
+        Relative step tolerance.
+
+    Returns
+    -------
+    {"ftol", "xtol"} or None
+        ``"ftol"`` if ``dF < ftol * F`` and ``rho > 0.25``; otherwise
+        ``"xtol"`` if ``s_norm < xtol * (xtol + x_norm)``; otherwise ``None``.
+    """
     if dF < ftol * F and rho > 0.25:
         return "ftol"
     if s_norm < xtol * (xtol + x_norm):
@@ -198,7 +244,28 @@ def _scaled_eig(
 def newton_certificate(
     g: np.ndarray, H: np.ndarray, F: float, ftol: float, bounds_active: bool = False
 ) -> bool:
-    """Damping-independent stationarity: the undamped GN step cannot gain ``ftol*F``."""
+    """Damping-independent stationarity: the undamped GN step cannot gain ``ftol*F``.
+
+    Parameters
+    ----------
+    g : ndarray
+        Gradient ``J^T r``.
+    H : ndarray
+        Normal matrix ``J^T J``.
+    F : float
+        Current cost ``0.5*sum(r^2)``.
+    ftol : float
+        Relative cost-decrease tolerance.
+    bounds_active : bool, optional
+        If True, no certificate is given.
+
+    Returns
+    -------
+    bool
+        True if ``F == 0``, or if ``g`` and ``H`` are finite, ``bounds_active``
+        is False, the scaled ``H`` is not truncated as rank-deficient, and the
+        undamped Gauss-Newton decrease is at most ``ftol * F``.
+    """
     if F == 0:
         return True
     if bounds_active or not (np.all(np.isfinite(g)) and np.all(np.isfinite(H))):
@@ -235,6 +302,27 @@ def box_certificate(
     ``m(v) - m(u) <= r~.(v - u) - (v - u)^T H^ (v - u) / 2 <= r~^T H^-1 r~ / 2``, and also
     ``<= sum_i max over the box of r~_i (v_i - u_i)``. Certified only if ``m(u)`` plus the
     smaller bound is at most ``ftol*F``; solver failure gives no certificate.
+
+    Parameters
+    ----------
+    g : ndarray
+        Gradient ``J^T r``.
+    H : ndarray
+        Normal matrix ``J^T J``.
+    F : float
+        Current cost ``0.5*sum(r^2)``.
+    ftol : float
+        Relative cost-decrease tolerance.
+    theta : ndarray
+        Current parameters.
+    lo, hi : ndarray
+        Lower and upper bounds, one per parameter.
+
+    Returns
+    -------
+    bool
+        True if the constrained stationarity is certified; False when the
+        inputs are non-finite, ``H`` is truncated, or the solver fails.
     """
     if F == 0:
         return True
@@ -285,6 +373,20 @@ def free_set(
 
     ``g = J^T r`` is the descent direction of ``F``, so ``g <= 0`` pushes below ``lo`` and
     ``g >= 0`` above ``hi``.
+
+    Parameters
+    ----------
+    theta : ndarray
+        Current parameters.
+    g : ndarray
+        Gradient ``J^T r``.
+    lo, hi : ndarray
+        Lower and upper bounds, one per parameter.
+
+    Returns
+    -------
+    ndarray of bool
+        True for each variable that is free to move.
     """
     return ~(((theta <= lo) & (g <= 0)) | ((theta >= hi) & (g >= 0)))
 
@@ -457,6 +559,23 @@ def check_model_contract(
     anchored at the batch min or max on sorted ``x``, which the first half keeps). Values
     within 1e-12 of the largest ``|f|`` also pass, so a zero crossing cannot trigger a
     false alarm. A model that behaves differently only on later chunks is not detected.
+
+    Parameters
+    ----------
+    model : callable
+        Model ``model(x, *theta)``.
+    theta : sequence of float or ndarray
+        Parameter values at which the model is probed.
+    x_chunk : array_like
+        Probe batch of ``x``.
+
+    Raises
+    ------
+    ValueError
+        If the model raises ``TypeError`` or ``ValueError`` on a probe batch,
+        returns an output whose shape is not ``(len(x_chunk),)`` (after
+        broadcasting a constant), or gives different values on a half batch or
+        the reversed batch.
     """
     m = len(x_chunk)
     # the real fit passes JAX float64 arrays/tracers: probe with the same types
@@ -512,6 +631,24 @@ def check_bounds(bounds: tuple[Any, Any], p: int) -> tuple[np.ndarray, np.ndarra
 
     Raises ``ValueError`` on any other shape and unless ``lo < hi`` elementwise, so
     ``lo == hi``, inverted infinite bounds such as ``(inf, -inf)`` and NaN are rejected.
+
+    Parameters
+    ----------
+    bounds : tuple
+        ``(lower, upper)``, each a scalar or an array of shape ``(p,)``.
+    p : int
+        Number of parameters.
+
+    Returns
+    -------
+    lo, hi : ndarray
+        Lower and upper bounds as float64 arrays of shape ``(p,)``.
+
+    Raises
+    ------
+    ValueError
+        If a bound is neither a scalar nor of shape ``(p,)``, or unless
+        ``lo < hi`` elementwise.
     """
     lo, hi = (np.asarray(b, dtype=np.float64) for b in bounds)
     for name, b in (("lower", lo), ("upper", hi)):
@@ -568,6 +705,25 @@ def compute_covariance(
 
     Thin wrapper over :func:`nlsq.core.covariance.pcov_from_normal` returning only
     ``pcov`` (``cost = 0.5*sum(r^2)``).
+
+    Parameters
+    ----------
+    H : ndarray
+        Normal matrix ``J^T J`` at the solution.
+    cost : float
+        Cost ``0.5*sum(r^2)`` at the solution.
+    n : int
+        Number of data points.
+    p : int
+        Number of parameters.
+    absolute_sigma : bool
+        If True, ``sigma`` is taken as absolute and ``pcov`` is not rescaled
+        by the residual variance.
+
+    Returns
+    -------
+    ndarray
+        Parameter covariance ``pcov``.
     """
     return pcov_from_normal(H, cost, n, p, absolute_sigma)[0]
 
@@ -663,6 +819,34 @@ def tsqr_r_factor(
     without forming ``J^T J``, so ``R`` carries ``cond(J)``, not its square. Chunks and the
     padded-tail mask are those of :func:`run_pass`; a factory source verifies its count and
     an array source is checked against ``n`` (the fitted count) when given.
+
+    Parameters
+    ----------
+    model : callable
+        Model ``model(x, *theta)``.
+    theta : array_like
+        Parameters at which the Jacobian is evaluated.
+    source : tuple or FactorySource
+        Data source in the form accepted by :func:`run_pass`.
+    chunk : int
+        Chunk length.
+    weighted : bool
+        Whether the source carries ``sigma`` (Jacobian rows are weighted).
+    jac : callable, optional
+        Chunk Jacobian kernel; built with :func:`make_chunk_jacobian` when
+        ``None``.
+    n : int, optional
+        Expected number of points; the pass is checked against it when given.
+
+    Returns
+    -------
+    ndarray
+        The R factor of the full weighted Jacobian, shape ``(min(n, p), p)``.
+
+    Raises
+    ------
+    ValueError
+        If ``n`` is given and the pass saw a different number of points.
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
     if (
@@ -858,10 +1042,59 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     contract probe runs on the leading blocks of pass 1, joined until they hold at least 2
     points; a factory yielding fewer than 2 points in total raises ``ValueError``.
 
-    Raises ``ValueError`` for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
+    ``ValueError`` is raised for non-finite ``x``/``y`` (when ``check_finite``), a ``sigma``
     that is not a scalar or 1-D, of the wrong length, non-finite or zero, a non-finite cost,
     gradient or Hessian at ``p0``, and for ``bounds`` of the wrong shape or with
     ``lb >= ub`` anywhere (equal, inverted or NaN bounds).
+
+    Parameters
+    ----------
+    model : callable
+        Pointwise model ``model(x, *p)`` that is JAX-traceable.
+    x : array_like or callable
+        Independent variable (1-D), or a chunk factory.
+    y : array_like or None
+        Dependent variable; ``None`` when ``x`` is a chunk factory.
+    p0 : sequence of float or ndarray
+        Initial parameters; finite and 1-D.
+    sigma : array_like, float or None, optional
+        Per-point standard deviations (scalar or 1-D).
+    bounds : tuple, optional
+        ``(lower, upper)``, each a scalar or length-``p`` array.
+    chunk_size : int or None, optional
+        Points per chunk. Derived from ``memory_limit_gb`` when ``None``.
+    ftol : float, optional
+        Relative cost-decrease tolerance.
+    xtol : float, optional
+        Relative step tolerance.
+    gtol : float, optional
+        Tolerance of the scale-free gradient (cosine) test.
+    max_nfev : int or None, optional
+        Maximum number of full-data passes. Default ``100 * p``.
+    check_finite : bool, optional
+        Check ``x`` and ``y`` for NaN/inf during the first pass.
+    absolute_sigma : bool, optional
+        If True, ``sigma`` is absolute and ``pcov`` is not rescaled.
+    memory_limit_gb : float or None, optional
+        Memory budget in GiB for chunk workspace and device placement.
+    show_progress : bool, optional
+        Log the cost after each data pass.
+    n_points : int or None, optional
+        Declared number of points; must match the source length when given.
+    compute_covariance : bool, optional
+        If False, ``pcov`` is skipped.
+
+    Returns
+    -------
+    OptimizeResult
+        Fit result; see the fields listed above.
+
+    Raises
+    ------
+    ValueError
+        As described above; also for a ``p0`` that is not a finite 1-D vector,
+        an invalid ``memory_limit_gb`` or ``chunk_size``, a model that is not
+        pointwise, and a source whose length changes between passes.
     """
     if not 0 < LAM0 <= LAMBDA_MAX:
         raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")

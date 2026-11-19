@@ -463,8 +463,10 @@ class MainWindow(QMainWindow):
     def navigate_to(self, page_name: str) -> None:
         """Navigate to a specific page, if the current workflow state allows it.
 
-        Args:
-            page_name: Name of the page to navigate to
+        Parameters
+        ----------
+        page_name : str
+            Name of the page to navigate to.
         """
         page_state = PageState.from_session_state(self._app_state.state)
         if not page_state.can_access(page_name):
@@ -477,8 +479,10 @@ class MainWindow(QMainWindow):
     def set_theme(self, theme: str) -> None:
         """Set the application theme.
 
-        Args:
-            theme: "light" or "dark"
+        Parameters
+        ----------
+        theme : str
+            ``"light"`` or ``"dark"``.
         """
         is_dark = theme == "dark"
         self._theme_toggle.setChecked(is_dark)
@@ -568,8 +572,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         """Handle window close event.
 
-        Args:
-            event: Close event
+        Parameters
+        ----------
+        event : QCloseEvent
+            Close event. It is ignored if a fit is running and the user
+            declines to close.
         """
         # A fit still running on a background QThread would otherwise keep
         # emitting progress/finished/error signals into page widgets that

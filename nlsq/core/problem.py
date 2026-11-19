@@ -220,6 +220,23 @@ def finite_rows(
     ``(k, m)`` (``points_axis_last=True``) or the first axis ``(m, k)``
     (``points_axis_last=False``), of the same length as ``ydata`` is filtered;
     anything else is returned unchanged.
+
+    Parameters
+    ----------
+    xdata : object
+        Independent variable data.
+    ydata : object
+        Dependent variable data.
+    points_axis_last : bool, optional
+        Layout of multi-dimensional ``xdata``: points on the last axis when
+        True, on the first axis when False.
+
+    Returns
+    -------
+    tuple
+        ``(xdata, ydata)`` with the non-finite rows removed (as float arrays),
+        or the inputs unchanged when they cannot be converted to float or are
+        not row-aligned.
     """
     try:
         xa, ya = np.asarray(xdata, float), np.asarray(ydata, float)
@@ -240,7 +257,22 @@ _ALL_ZERO_WEIGHT_MSG = (
 
 def reject_complex_inputs(x: Any, y: Any, sigma: Any = None) -> None:
     """Raise ``ValueError`` for complex x/y/sigma (the float casts would drop the
-    imaginary part)."""
+    imaginary part).
+
+    Parameters
+    ----------
+    x : array_like
+        Independent variable data.
+    y : array_like
+        Dependent variable data.
+    sigma : array_like, optional
+        Uncertainties in ``y``.
+
+    Raises
+    ------
+    ValueError
+        If ``x``, ``y`` or ``sigma`` holds complex values.
+    """
     for name, arr in (("xdata", x), ("ydata", y), ("sigma", sigma)):
         if has_complex(arr):
             raise ValueError(
@@ -269,6 +301,17 @@ def coerce_real_sigma(sigma: Any) -> Any:
 
     Other inputs (None, float arrays, complex, out-of-core sources) are returned
     as given; downstream code may then use float ufuncs such as ``np.isinf``.
+
+    Parameters
+    ----------
+    sigma : object
+        Uncertainties as supplied by the caller.
+
+    Returns
+    -------
+    object
+        A float ``ndarray`` when ``sigma`` is an object-dtype array whose
+        entries are all real numbers, otherwise ``sigma`` unchanged.
     """
     if isinstance(sigma, np.ndarray) and sigma.dtype == object:
         real = _real_weights(sigma)
@@ -281,6 +324,19 @@ def zero_weight_rows(sigma: Any, mask: np.ndarray) -> int:
     """Used rows with ``sigma=inf`` (1-D sigma): zero weight, so not observations.
 
     ``mask`` may be longer than ``sigma`` (padded data); the extra rows are padding.
+
+    Parameters
+    ----------
+    sigma : array_like or None
+        Uncertainties in ``ydata``; only a 1-D ``sigma`` is counted.
+    mask : np.ndarray
+        Boolean mask of the rows used by the fit.
+
+    Returns
+    -------
+    int
+        Number of used rows whose ``sigma`` is infinite; 0 when ``sigma`` is
+        None, not 1-D or numeric, or longer than ``mask``.
     """
     s = None if sigma is None else _real_weights(sigma)
     if s is None or s.ndim != 1 or s.shape[0] > mask.shape[0]:
@@ -294,6 +350,20 @@ def reject_all_zero_weight(sigma: Any, data_mask: Any = None) -> None:
 
     Called at the entry of every route so that all of them share one contract.
     Misaligned or non-numeric inputs are left to the route's own validation.
+
+    Parameters
+    ----------
+    sigma : array_like or float or None
+        Uncertainties in ``ydata``. Only in-memory containers are inspected;
+        out-of-core sources are not read.
+    data_mask : array_like, optional
+        Boolean mask of the rows used by the fit. None means every row.
+
+    Raises
+    ------
+    ValueError
+        If every used row has infinite ``sigma`` (a scalar infinite ``sigma``
+        counts as every row).
     """
     # In-memory containers only (host or JAX arrays, sequences, numbers): an
     # out-of-core source (memmap/h5py/zarr/lazy loader) must not be read here.
@@ -336,6 +406,31 @@ def rows_used_by_fit(
     Drops rows excluded by ``data_mask`` and, for ``nan_policy='omit'``, rows with
     non-finite x, y or 1-D sigma. Inputs that are not row-aligned are returned
     unchanged (the fit's own validation reports them).
+
+    Parameters
+    ----------
+    xdata : array_like
+        Independent variable data.
+    ydata : array_like
+        Dependent variable data.
+    sigma : array_like, optional
+        Uncertainties in ``ydata``; a non-finite 1-D entry drops its row when
+        ``nan_policy='omit'``.
+    data_mask : array_like, optional
+        Boolean mask of the rows to keep; ignored if its shape differs from
+        ``ydata``.
+    nan_policy : {'raise', 'omit', 'propagate'} or None, optional
+        Only ``'omit'`` removes non-finite rows here.
+    points_axis_last : bool, optional
+        Layout of multi-dimensional ``xdata``: points on the last axis when
+        True, on the first axis when False.
+
+    Returns
+    -------
+    tuple
+        ``(xdata, ydata)`` restricted to the used rows (as float arrays), or
+        the inputs unchanged when nothing is dropped or they are not
+        row-aligned.
     """
     try:
         xa, ya = np.asarray(xdata, float), np.asarray(ydata, float)
@@ -387,6 +482,8 @@ def _determine_parameter_count(
         Independent variable data (for auto p0 estimation)
     ydata : np.ndarray, optional
         Dependent variable data (for auto p0 estimation)
+    ctx : PrepareContext
+        Preparation context; its logger reports the auto-estimate result.
 
     Returns
     -------
@@ -544,6 +641,9 @@ def _select_optimization_method(
         Bounds tuple
     kwargs : dict
         Additional optimization parameters
+    ctx : PrepareContext
+        Preparation context; ``enable_stability`` turns on auto-selection and
+        its logger reports the choice.
 
     Returns
     -------
@@ -635,6 +735,20 @@ def _validate_and_sanitize_inputs(
         Y data
     p0 : np.ndarray
         Initial parameter guess
+    bounds : tuple, optional
+        Normalized ``(lb, ub)`` bounds used for the validator's bounds checks.
+    check_finite : bool, optional
+        Whether the sigma validation checks for finite values.
+    sigma : np.ndarray, optional
+        Uncertainties in ``ydata`` (1-D) or a covariance matrix (2-D).
+    ctx : PrepareContext
+        Preparation context; supplies the validator, the logger and
+        ``enable_stability``.
+    data_mask : np.ndarray, optional
+        Boolean mask of the rows used by the fit; sigma is validated on those
+        rows only.
+    omit_mask : np.ndarray, optional
+        Boolean mask of the rows kept by ``nan_policy='omit'``.
 
     Returns
     -------
@@ -642,6 +756,12 @@ def _validate_and_sanitize_inputs(
         Cleaned X data
     ydata : np.ndarray
         Cleaned Y data
+
+    Raises
+    ------
+    ValueError
+        If the security-constraint, sigma or (with ``enable_stability``)
+        full input validation reports errors.
     """
     # Security constraints (array-size/Jacobian-overflow DoS limits,
     # bounds/parameter range checks) must run regardless of
@@ -839,6 +959,9 @@ def _setup_data_mask_and_padding(
         Optional data mask
     m : int
         Data length
+    ctx : PrepareContext
+        Preparation context; ``flength`` and ``use_dynamic_sizing`` decide
+        the padding.
 
     Returns
     -------
@@ -908,10 +1031,20 @@ def _preprocess_input_data(
         Initial parameter guess
     check_finite : bool
         Whether to check for finite values
+    nan_policy : {'raise', 'omit', 'propagate'}, optional
+        ``'omit'`` drops rows with non-finite values; ``'omit'`` and
+        ``'propagate'`` defer the ``check_finite`` error.
+    bounds : tuple, optional
+        Normalized ``(lb, ub)`` bounds forwarded to the input validation.
     sigma : np.ndarray, optional
         Uncertainties/weights. When nan_policy='omit', rows dropped for
         non-finite x/y (or a non-finite 1D sigma entry) are also dropped
         from sigma, so the returned sigma stays aligned with xdata/ydata.
+    ctx : PrepareContext
+        Preparation context; ``x_points_axis_last`` gives the layout of
+        multi-dimensional ``xdata``.
+    data_mask : np.ndarray, optional
+        Caller mask over the original data length, used when validating sigma.
 
     Returns
     -------
@@ -1097,6 +1230,9 @@ def _apply_padding_if_needed(
         Length difference
     should_pad : bool
         Whether padding is needed
+    ctx : PrepareContext
+        Preparation context; ``flength``, ``use_dynamic_sizing`` and
+        ``x_points_axis_last`` control the padding.
 
     Returns
     -------
@@ -1153,11 +1289,57 @@ def prepare_problem(
     (``ftol``/``xtol``/``gtol``/``max_nfev`` are left alone). ``nan_policy`` is passed
     explicitly; the caller reads it from its own ``kwargs``.
 
+    Parameters
+    ----------
+    f : callable
+        Model function ``f(x, *params)``.
+    x : array_like
+        Independent variable data.
+    y : array_like
+        Dependent variable data.
+    p0 : np.ndarray or 'auto' or None, optional
+        Initial parameter guess. ``'auto'`` estimates it from the data; None
+        derives it from the bounds, with the parameter count taken from the
+        signature of ``f``.
+    bounds : tuple, optional
+        Parameter bounds as ``(lower, upper)``.
+    sigma : np.ndarray, optional
+        Uncertainties in ``y`` (1-D) or a covariance matrix (2-D).
+    data_mask : np.ndarray, optional
+        Boolean mask over the data; ``False`` rows are excluded from the fit.
+    check_finite : bool, optional
+        Whether to raise on NaN/Inf in the inputs.
+    nan_policy : {'raise', 'omit', 'propagate'} or None, optional
+        Handling of non-finite values. None behaves as ``'raise'``.
+    method : str, optional
+        Optimization method. None selects one (``'trf'`` unless
+        ``ctx.enable_stability`` auto-selects).
+    solver : {'auto', 'svd', 'cg', 'lsqr', 'minibatch'}, optional
+        Solver; validated only.
+    batch_size : int, optional
+        Batch size, validated only when ``solver='minibatch'``.
+    kwargs : dict, optional
+        The caller's optimization options; mutated in place as described
+        above.
+    ctx : PrepareContext, optional
+        Preparation context (padding length, dynamic sizing, stability,
+        validator, logger).
+
     Returns
     -------
     PreparedProblem
         See the module docstring for the step order and the field mapping
         from the legacy 13-tuple.
+
+    Raises
+    ------
+    ValueError
+        If ``nan_policy``, ``solver`` or ``batch_size`` is invalid; if
+        ``x``, ``y`` or ``sigma`` is complex; if ``x`` and ``y`` lengths or
+        the bounds length do not match; if input validation fails or
+        ``nan_policy='omit'`` removes every point; if ``data_mask`` has the
+        wrong length or excludes every point; or if every used row has
+        infinite ``sigma``.
     """
     if kwargs is None:
         kwargs = {}

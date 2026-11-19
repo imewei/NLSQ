@@ -65,7 +65,22 @@ _MAPPING_SECTIONS = (
 def validate_config_sections(
     config: dict[str, Any], config_file: str | None = None
 ) -> None:
-    """Raise ConfigError unless every present workflow section is a mapping or null."""
+    """Raise ConfigError unless every present workflow section is a mapping or null.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Workflow configuration. Each of the sections ``data``, ``model``,
+        ``fitting``, ``export``, ``metadata``, ``validation`` and
+        ``visualization`` that is present must be a ``dict`` or ``None``.
+    config_file : str or None, optional
+        Config file path attached to the raised ``ConfigError`` for context.
+
+    Raises
+    ------
+    ConfigError
+        If a present section is neither ``None`` nor a ``dict``.
+    """
     for key in _MAPPING_SECTIONS:
         value = config.get(key)
         if value is not None and not isinstance(value, dict):

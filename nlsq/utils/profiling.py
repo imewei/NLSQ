@@ -54,19 +54,40 @@ class PerformanceMetrics:
 
     @property
     def avg_iteration_time_ms(self) -> float:
-        """Average iteration time in milliseconds."""
+        """Average iteration time in milliseconds.
+
+        Returns
+        -------
+        float
+            ``total_time_sec / iteration_count`` in milliseconds; ``0.0`` if
+            ``iteration_count`` is 0.
+        """
         if self.iteration_count == 0:
             return 0.0
         return (self.total_time_sec / self.iteration_count) * 1000
 
     @property
     def min_iteration_time_ms(self) -> float:
-        """Minimum iteration time in milliseconds."""
+        """Minimum iteration time in milliseconds.
+
+        Returns
+        -------
+        float
+            Smallest entry of ``iteration_times`` in milliseconds; ``0.0`` if the
+            list is empty.
+        """
         return min(self.iteration_times) * 1000 if self.iteration_times else 0.0
 
     @property
     def max_iteration_time_ms(self) -> float:
-        """Maximum iteration time in milliseconds."""
+        """Maximum iteration time in milliseconds.
+
+        Returns
+        -------
+        float
+            Largest entry of ``iteration_times`` in milliseconds; ``0.0`` if the
+            list is empty.
+        """
         return max(self.iteration_times) * 1000 if self.iteration_times else 0.0
 
 
@@ -132,6 +153,11 @@ def analyze_source_transfers(source_code: str) -> dict:
         - 'np_asarray_calls': Number of np.asarray() calls
         - 'block_until_ready_calls': Number of .block_until_ready() calls
         - 'total_potential_transfers': Sum of all transfer patterns
+
+    Raises
+    ------
+    TypeError
+        If ``source_code`` is not a string.
 
     Notes
     -----
@@ -219,6 +245,12 @@ def compare_transfer_reduction(
     dict
         Comparison results with reduction percentages
 
+    Raises
+    ------
+    TypeError
+        If ``source_before``, ``source_after`` or ``module_name`` is not a
+        string.
+
     Examples
     --------
     >>> before = "x = np.array(y); z = np.array(w)"
@@ -291,6 +323,12 @@ def profile_transfers_runtime(
     tuple
         (result, transfer_stats) where result is func's return value and
         transfer_stats contains profiling information
+
+    Raises
+    ------
+    TypeError
+        If ``func`` is not callable, or ``trace_dir`` is neither a string nor
+        ``None``.
 
     Notes
     -----

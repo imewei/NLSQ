@@ -152,6 +152,11 @@ def latin_hypercube_sample(
     jax.Array
         Array of shape (n_samples, n_dims) with values in [0, 1).
 
+    Raises
+    ------
+    ValueError
+        If ``n_samples`` or ``n_dims`` is not positive.
+
     Notes
     -----
     The stratification property ensures that when samples are sorted in any
@@ -232,6 +237,12 @@ def sobol_sample(
     jax.Array
         Array of shape (n_samples, n_dims) with values in [0, 1].
 
+    Raises
+    ------
+    ValueError
+        If ``n_samples`` or ``n_dims`` is not positive, ``n_dims`` exceeds 21, or
+        ``skip`` is negative.
+
     Notes
     -----
     This implementation uses a Gray code approach for efficient generation.
@@ -309,6 +320,12 @@ def halton_sample(
     -------
     jax.Array
         Array of shape (n_samples, n_dims) with values in [0, 1).
+
+    Raises
+    ------
+    ValueError
+        If ``n_samples`` or ``n_dims`` is not positive, ``n_dims`` exceeds the
+        number of available prime bases, or ``skip`` is negative.
 
     Notes
     -----

@@ -163,6 +163,17 @@ def fit_with_strategy(
     CurveFitResult or tuple
         In-memory: ``curve_fit``'s native return, unchanged. Otherwise
         ``(popt, pcov)``.
+
+    Raises
+    ------
+    ValueError
+        If a chunk factory (callable ``xdata`` or ``ydata=None``) is passed
+        without an ``Exact`` strategy, if ``compute_covariance=False`` is used
+        with ``Hybrid``, or if ``Auto`` resolves to ``Exact`` but the input
+        cannot be fitted by exact streaming for a data reason.
+    TypeError
+        If ``strategy`` is not a known large-fit strategy, or if ``kwargs``
+        contains a key the strategy owns (or any key for ``Hybrid``).
     """
     common: dict[str, Any] = {
         "sigma": sigma,

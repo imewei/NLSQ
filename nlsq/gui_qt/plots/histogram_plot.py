@@ -140,8 +140,10 @@ class HistogramPlotWidget(QWidget):
     def set_data(self, data: NDArray) -> None:
         """Set the data for histogram.
 
-        Args:
-            data: Data array (typically residuals)
+        Parameters
+        ----------
+        data : NDArray
+            Data array (typically residuals)
         """
         self._data = np.asarray(data)
         self._update_plot()
@@ -248,8 +250,13 @@ class HistogramPlotWidget(QWidget):
     def get_statistics(self) -> dict:
         """Get histogram statistics.
 
-        Returns:
-            Dictionary with statistics
+        Returns
+        -------
+        dict
+            Statistics of the finite data values with keys ``"mean"``,
+            ``"std"``, ``"skewness"``, ``"kurtosis"`` and ``"normality_p"``
+            (the Shapiro-Wilk p-value, ``None`` if the test failed). Empty when
+            no data is set or none of it is finite.
         """
         if self._data is None:
             return {}
@@ -297,8 +304,10 @@ class HistogramPlotWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         self._theme = theme
 
@@ -317,8 +326,10 @@ class HistogramPlotWidget(QWidget):
     def export_image(self, path: str) -> None:
         """Export the plot as an image.
 
-        Args:
-            path: Output file path
+        Parameters
+        ----------
+        path : str
+            Output file path
         """
         from nlsq.gui_qt.plots import export_plot_image
 

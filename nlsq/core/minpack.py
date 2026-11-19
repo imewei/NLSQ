@@ -855,6 +855,12 @@ def _fit_with_auto_global(
         Number of parameters.
     goal : OptimizationGoal | None
         Optimization goal.
+    method : str or None, optional
+        Requested global method, passed to ``MethodSelector.select`` as
+        ``requested_method`` (``None`` is treated as ``"auto"``).
+    _workflow_name : str, default="auto_global"
+        Workflow name used in error messages and forwarded as ``workflow_name``
+        to the multi-start route. ``_fit_with_hpc`` passes ``"hpc"``.
     **kwargs : Any
         Additional arguments including:
         - n_starts: int (default 10) - Number of multi-start runs
@@ -1134,6 +1140,8 @@ def _fit_with_hpc(
         Data dimensions.
     goal : OptimizationGoal | None
         Optimization goal.
+    method : str or None, optional
+        Requested global method, forwarded to ``_fit_with_auto_global``.
     **kwargs : Any
         Additional arguments including:
         - checkpoint_dir: str | None - Checkpoint directory
@@ -1225,6 +1233,20 @@ def _fit_global_cmaes(
 
     Parameters
     ----------
+    f : callable
+        Model function f(x, *params) -> y.
+    xdata : np.ndarray
+        Independent variable data.
+    ydata : np.ndarray
+        Dependent variable data.
+    p0 : ArrayLike | None
+        Initial parameter guess.
+    sigma : ArrayLike | None
+        Uncertainties in ydata.
+    absolute_sigma : bool
+        Whether sigma is absolute; forwarded to the NLSQ refinement fit.
+    bounds : tuple[np.ndarray, np.ndarray]
+        Parameter bounds (lower, upper).
     strategy : str
         Memory strategy: 'standard', 'chunked', or 'streaming'.
     memory_config : HybridStreamingConfig | LDMemoryConfig | None
@@ -1233,6 +1255,16 @@ def _fit_global_cmaes(
         a chunk size from n_points alone when available.
     cmaes_config : CMAESConfig | None
         CMA-ES configuration override.
+    check_finite : bool, default=True
+        Check for finite input values.
+    **kwargs : Any
+        Optional ``seed``, ``data_mask``, ``nan_policy``, ``compute_covariance``
+        and the internal ``_hpc_checkpoint_dir`` / ``_hpc_checkpoint_interval`` /
+        ``_hpc_run_id`` / ``_hpc_model_id`` markers are consumed here. The
+        multi-start sampler options ``sampler``, ``center_on_p0`` and
+        ``scale_factor`` are dropped with a ``UserWarning``. The remaining
+        keywords are forwarded to ``CMAESOptimizer.fit``, except ``timeit``,
+        ``return_eval`` and ``full_output``, which are applied to the result.
     """
     import dataclasses
 
@@ -1406,6 +1438,22 @@ def _fit_global_multistart(
 
     Parameters
     ----------
+    f : callable
+        Model function f(x, *params) -> y.
+    xdata : np.ndarray
+        Independent variable data.
+    ydata : np.ndarray
+        Dependent variable data.
+    p0 : ArrayLike | None
+        Initial parameter guess.
+    sigma : ArrayLike | None
+        Uncertainties in ydata.
+    absolute_sigma : bool
+        Whether sigma is absolute.
+    check_finite : bool
+        Check for finite input values.
+    bounds : tuple[np.ndarray, np.ndarray]
+        Parameter bounds (lower, upper).
     strategy : str
         Memory strategy: 'standard', 'chunked', or 'streaming'.
     memory_config : LDMemoryConfig | HybridStreamingConfig | None
@@ -1423,6 +1471,11 @@ def _fit_global_multistart(
         Option names the caller passed, before goal-derived tolerances were
         injected into ``kwargs`` (so an ignored ``ftol``/``xtol`` is only
         reported when the caller set it).
+    **kwargs : Any
+        Additional fit options. The internal ``_hpc_checkpoint_*``,
+        ``_hpc_run_id`` and ``_hpc_model_id`` markers are dropped (a
+        ``UserWarning`` is emitted when ``_hpc_checkpoint_dir`` is set); the
+        rest are forwarded to the selected fitting route.
     """
     reject_all_zero_weight(sigma, kwargs.get("data_mask"))
     if kwargs.pop("_hpc_checkpoint_dir", None) is not None:
@@ -1633,6 +1686,9 @@ def _log_memory_budget_diagnostics(
         Dependent variable data.
     p0 : array_like or None
         Initial parameter guess.
+    bounds : tuple or None, optional
+        Parameter bounds. Only used to decide whether the bounded trust-region
+        memory layout applies to the estimate.
     """
     from nlsq.core.workflow import MemoryBudget, MemoryBudgetSelector
 
@@ -2611,6 +2667,9 @@ def _run_cmaes_optimization(
         Configuration for CMA-ES optimization.
     kwargs : dict
         Additional keyword arguments.
+    compute_covariance : bool, default=True
+        When False, the covariance is skipped in the NLSQ refinement and
+        ``pcov`` of the returned result is ``None``.
 
     Returns
     -------
@@ -4090,6 +4149,22 @@ class CurveFit:
         Appends ``len_diff`` entries of ``EPS`` to ``xdata`` (along the second
         axis if multidimensional) and to ``ydata`` so JAX does not retrace the
         JITted functions. See :func:`nlsq.core.problem.pad_fit_data`.
+
+        Parameters
+        ----------
+        xdata : np.ndarray
+            The independent variables of the data.
+        ydata : np.ndarray
+            The dependent variables of the data.
+        xdims : int
+            The number of dimensions in the ``xdata`` array.
+        len_diff : int
+            Number of padding entries to append.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            The padded ``xdata`` and ``ydata`` arrays.
         """
         return _pad_fit_data(xdata, ydata, xdims, len_diff)
 
@@ -4347,6 +4422,9 @@ class CurveFit:
         compute_covariance : bool, default=True
             ``False`` raises ``ValueError``: the hybrid engine always computes
             the covariance.
+        compute_diagnostics : bool, default=False
+            Not supported by this method; ``True`` emits a ``UserWarning`` and
+            is ignored.
         **kwargs
             Additional parameters (verbose, config overrides, nan_policy)
 
@@ -4553,6 +4631,9 @@ class CurveFit:
             ``diagnostics_config.level``.
         diagnostics_config : DiagnosticsConfig, optional
             Configuration for diagnostics
+        full_output : bool, default=False
+            Return the SciPy-style ``(popt, pcov, infodict, mesg, ier)`` tuple,
+            as in ``curve_fit``.
         compute_covariance : bool, default=True
             When False, ``pcov`` is ``None``. Only the standard strategy
             honours it; the streaming and chunked strategies raise
@@ -4870,6 +4951,43 @@ class CurveFit:
 
         Parameters
         ----------
+        f : callable
+            Model function f(x, *params) -> y.
+        p0 : np.ndarray
+            Initial parameter guess.
+        xdata : np.ndarray
+            Independent variable data.
+        ydata : np.ndarray
+            Dependent variable data.
+        data_mask : np.ndarray
+            Boolean mask of the data points that enter the fit.
+        transform : callable or None
+            Sigma transformation passed to ``least_squares``.
+        bounds : tuple[np.ndarray, np.ndarray]
+            Parameter bounds (lower, upper).
+        method : str
+            Optimization method passed to ``least_squares``.
+        solver : str
+            Solver choice (``"minibatch"`` enables the minibatch logging path;
+            otherwise it selects ``tr_solver``).
+        batch_size : int or None
+            Batch size for the minibatch solver.
+        jac : callable or None
+            Jacobian function.
+        m : int
+            Number of data points.
+        n : int
+            Number of parameters.
+        sigma : np.ndarray or None
+            Only used to log whether uncertainties were given; the weighting is
+            applied through ``transform``.
+        timeit : bool
+            Passed to ``least_squares`` to request timing.
+        callback : callable or None
+            Progress callback passed to ``least_squares``.
+        kwargs : dict
+            Additional keyword arguments for ``least_squares``. ``maxfev`` is
+            accepted as an alias of ``max_nfev``.
         prepared_bounds : tuple[np.ndarray, np.ndarray] or None, optional
             Pre-prepared bounds as (lb, ub). If provided, passes to least_squares
             to skip redundant prepare_bounds call. Default is None.
@@ -4882,6 +5000,11 @@ class CurveFit:
             JAX array of x data
         ctime : float
             Conversion time (if timeit=True)
+
+        Raises
+        ------
+        ValueError
+            If ``kwargs`` contains ``args``.
         """
         # Validate kwargs
         if "args" in kwargs:
@@ -5277,6 +5400,7 @@ class CurveFit:
             fails. Exhausting ``max_nfev`` only emits an ``OptimizeWarning``.
         OptimizeWarning
             if covariance of the parameters can not be estimated.
+
         See Also
         --------
         least_squares : Minimize the sum of squares of nonlinear functions.

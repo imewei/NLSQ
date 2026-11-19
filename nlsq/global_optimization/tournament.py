@@ -153,6 +153,11 @@ class TournamentSelector:
             Array of shape (n_candidates, n_params) with candidate starting points.
         config : GlobalOptimizationConfig
             Configuration for tournament parameters.
+
+        Raises
+        ------
+        ValueError
+            If ``candidates`` is empty.
         """
         self.candidates = np.asarray(candidates)
         self.config = config
@@ -191,7 +196,13 @@ class TournamentSelector:
 
     @property
     def n_survivors(self) -> int:
-        """Number of currently surviving candidates."""
+        """Number of currently surviving candidates.
+
+        Returns
+        -------
+        int
+            Count of candidates whose ``survival_mask`` entry is ``True``.
+        """
         return int(np.sum(self.survival_mask))
 
     def run_tournament(
@@ -541,6 +552,14 @@ class TournamentSelector:
         -------
         list[np.ndarray]
             List of top candidate parameter arrays, sorted by loss (best first).
+
+        Raises
+        ------
+        ValueError
+            If ``top_m`` is not a positive integer.
+        RuntimeError
+            If no candidate qualifies: no data batches were evaluated, or
+            every surviving candidate has a non-finite loss.
         """
         if not isinstance(top_m, int) or isinstance(top_m, bool) or top_m < 1:
             raise ValueError(f"top_m must be a positive integer, got {top_m}")
@@ -648,6 +667,13 @@ class TournamentSelector:
         -------
         TournamentSelector
             Restored tournament selector.
+
+        Raises
+        ------
+        ValueError
+            If the checkpoint lacks ``loss_sums`` / ``obs_counts`` (written by
+            an older version), if ``candidates`` is empty, or if a per-candidate
+            array in the checkpoint does not have shape ``(n_candidates,)``.
 
         Examples
         --------

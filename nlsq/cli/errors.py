@@ -61,7 +61,14 @@ class Colors:
 
     @classmethod
     def is_terminal(cls) -> bool:
-        """Check if stdout is a terminal (supports colors)."""
+        """Check if stdout is a terminal (supports colors).
+
+        Returns
+        -------
+        bool
+            ``True`` if ``sys.stdout`` has an ``isatty`` method that returns
+            ``True``.
+        """
         return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
 
@@ -76,6 +83,19 @@ def beside_workflow_file(workflow_path: str | Path, value: str) -> Path | None:
     A relative ``data.input_file`` / ``model.path`` next to the YAML wins over a
     same-named file in the CWD (matches the GUI). ``fit`` reads it from here and
     ``batch`` guards it from being overwritten, so both must use this one lookup.
+
+    Parameters
+    ----------
+    workflow_path : str or Path
+        Path to the workflow YAML file.
+    value : str
+        File path as written in the workflow config.
+
+    Returns
+    -------
+    Path or None
+        ``workflow_path``'s parent directory joined with ``value`` if ``value``
+        is relative and that file exists, otherwise ``None``.
     """
     path = Path(value)
     beside = Path(workflow_path).resolve().parent / path
@@ -86,13 +106,49 @@ def cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
     """``cfg.get(key, default)`` that also returns *default* for a bare YAML key.
 
     A bare ``key:`` parses to ``None``, which ``dict.get`` would pass through.
+
+    Parameters
+    ----------
+    cfg : Any
+        Mapping-like object with a ``get`` method.
+    key : str
+        Key to look up.
+    default : Any, optional
+        Value returned when ``cfg.get(key)`` is ``None``.
+
+    Returns
+    -------
+    Any
+        ``cfg.get(key)`` if it is not ``None``, otherwise ``default``.
     """
     value = cfg.get(key)
     return default if value is None else value
 
 
 def cfg_bool(cfg: Any, key: str, default: bool, section: str) -> bool:
-    """``cfg_get`` that requires a real YAML boolean (``"false"`` is truthy)."""
+    """``cfg_get`` that requires a real YAML boolean (``"false"`` is truthy).
+
+    Parameters
+    ----------
+    cfg : Any
+        Mapping-like object with a ``get`` method.
+    key : str
+        Key to look up.
+    default : bool
+        Value used when the key is missing or ``None``.
+    section : str
+        Config section name, used in the error message.
+
+    Returns
+    -------
+    bool
+        The configured value, or ``default``.
+
+    Raises
+    ------
+    CLIError
+        If the value is not a ``bool``.
+    """
     value = cfg_get(cfg, key, default)
     if not isinstance(value, bool):
         raise CLIError(
@@ -139,6 +195,12 @@ class CLIError(Exception):
             Extra keyword arguments (e.g. ``file_path=``, ``model_name=``)
             merged into ``context`` — subclasses accept these without
             needing their own ``__init__``.
+
+        Raises
+        ------
+        TypeError
+            If ``context`` is not a dict (e.g. a positional argument meant for
+            a removed per-subclass constructor).
         """
         if context is not None and not isinstance(context, dict):
             raise TypeError(
@@ -173,7 +235,14 @@ class CLIError(Exception):
         return "\n".join(parts)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert exception to dictionary for JSON serialization."""
+        """Convert exception to dictionary for JSON serialization.
+
+        Returns
+        -------
+        dict
+            Dictionary with keys ``error_type`` (class name), ``message``,
+            ``context`` and ``suggestion``.
+        """
         return {
             "error_type": self.__class__.__name__,
             "message": self.message,
@@ -396,7 +465,13 @@ class CLILogger:
 
     @property
     def verbosity(self) -> int:
-        """Get current verbosity level."""
+        """Get current verbosity level.
+
+        Returns
+        -------
+        int
+            Verbosity level (0=silent, 1=progress, 2=detailed, 3=debug).
+        """
         return self._verbosity
 
     @verbosity.setter

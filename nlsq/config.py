@@ -541,6 +541,12 @@ class JAXConfig:
             If True, use 64-bit precision within context.
             If False, use 32-bit precision.
 
+        Yields
+        ------
+        None
+            Control returns to the body of the ``with`` block; the previous
+            setting is restored on exit.
+
         Examples
         --------
         >>> with JAXConfig.precision_context(use_x64=False):
@@ -594,6 +600,12 @@ class JAXConfig:
         MemoryConfig
             Current memory configuration (the innermost ``memory_context``
             override of the calling context, else the process-wide value)
+
+        Raises
+        ------
+        RuntimeError
+            If the process-wide memory configuration is still unset after
+            initialization.
         """
         override = _memory_override.get()
         if override is not None:
@@ -646,6 +658,12 @@ class JAXConfig:
             Current large dataset configuration (the innermost
             ``large_dataset_context`` override of the calling context, else the
             process-wide value)
+
+        Raises
+        ------
+        RuntimeError
+            If the process-wide large dataset configuration is still unset
+            after initialization.
         """
         override = _large_dataset_override.get()
         if override is not None:
@@ -692,6 +710,12 @@ class JAXConfig:
         memory_config : MemoryConfig
             Temporary memory configuration
 
+        Yields
+        ------
+        None
+            Control returns to the body of the ``with`` block; the previous
+            setting is restored on exit.
+
         Examples
         --------
         >>> from nlsq.config import JAXConfig, MemoryConfig
@@ -728,6 +752,12 @@ class JAXConfig:
         ----------
         large_dataset_config : LargeDatasetConfig
             Temporary large dataset configuration
+
+        Yields
+        ------
+        None
+            Control returns to the body of the ``with`` block; the previous
+            setting is restored on exit.
         """
         cls()
         token = _large_dataset_override.set(copy.deepcopy(large_dataset_config))
@@ -773,6 +803,12 @@ def precision_context(use_x64: bool):
     use_x64 : bool
         If True, use 64-bit precision within context.
         If False, use 32-bit precision.
+
+    Returns
+    -------
+    context manager
+        Context manager from :meth:`JAXConfig.precision_context`; it yields
+        ``None`` and restores the previous precision on exit.
 
     Examples
     --------
@@ -947,6 +983,12 @@ def memory_context(memory_config: MemoryConfig):
     memory_config : MemoryConfig
         Temporary memory configuration
 
+    Returns
+    -------
+    context manager
+        Context manager from :meth:`JAXConfig.memory_context`; it yields
+        ``None`` and restores the previous configuration on exit.
+
     Notes
     -----
     The change is context-local (thread / asyncio-task local, via ``contextvars``):
@@ -974,6 +1016,12 @@ def large_dataset_context(large_dataset_config: LargeDatasetConfig):
     ----------
     large_dataset_config : LargeDatasetConfig
         Temporary large dataset configuration
+
+    Returns
+    -------
+    context manager
+        Context manager from :meth:`JAXConfig.large_dataset_context`; it yields
+        ``None`` and restores the previous configuration on exit.
 
     Notes
     -----

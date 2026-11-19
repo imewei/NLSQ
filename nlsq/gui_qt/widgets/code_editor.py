@@ -229,8 +229,10 @@ class PythonHighlighter(QSyntaxHighlighter):
     def set_theme_colors(self, theme: ThemeConfig) -> None:
         """Update all format colors from a ThemeConfig and force re-highlight.
 
-        Args:
-            theme: Theme configuration carrying syntax_* color fields
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration carrying syntax_* color fields
         """
         self._build_formats(
             keyword=theme.syntax_keyword,
@@ -247,8 +249,10 @@ class PythonHighlighter(QSyntaxHighlighter):
     def highlightBlock(self, text: str) -> None:
         """Apply highlighting to a block of text.
 
-        Args:
-            text: The text to highlight
+        Parameters
+        ----------
+        text : str
+            The text to highlight
         """
         # Highlight keywords
         self._highlight_words(text, PYTHON_KEYWORDS, self._keyword_format)
@@ -483,7 +487,9 @@ class CodeEditorWidget(QWidget):
     def get_code(self) -> str:
         """Get the current code.
 
-        Returns:
+        Returns
+        -------
+        str
             The code content
         """
         return self._editor.toPlainText()
@@ -491,15 +497,19 @@ class CodeEditorWidget(QWidget):
     def set_code(self, code: str) -> None:
         """Set the code content.
 
-        Args:
-            code: The code to set
+        Parameters
+        ----------
+        code : str
+            The code to set
         """
         self._editor.setPlainText(code)
 
     def get_function_names(self) -> list[str]:
         """Get function names defined in the code.
 
-        Returns:
+        Returns
+        -------
+        list of str
             List of function names
         """
         from nlsq.gui_qt.adapters.model_adapter import list_functions_in_module
@@ -513,8 +523,12 @@ class CodeEditorWidget(QWidget):
     def validate_syntax(self) -> tuple[bool, str]:
         """Validate the code syntax.
 
-        Returns:
-            Tuple of (is_valid, error_message)
+        Returns
+        -------
+        tuple of (bool, str)
+            ``(is_valid, message)``. Empty code is valid with message ``""``;
+            valid code gives ``"Syntax valid"``; a syntax error gives
+            ``False`` and a message with the line (and column, if known).
         """
         import ast
 
@@ -533,8 +547,10 @@ class CodeEditorWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         self._theme = theme
 
@@ -555,16 +571,20 @@ class CodeEditorWidget(QWidget):
     def setReadOnly(self, read_only: bool) -> None:
         """Set read-only mode.
 
-        Args:
-            read_only: Whether to make the editor read-only
+        Parameters
+        ----------
+        read_only : bool
+            Whether to make the editor read-only
         """
         self._editor.setReadOnly(read_only)
 
     def setMaximumHeight(self, height: int) -> None:
         """Set maximum height for both the widget and its internal editor.
 
-        Args:
-            height: Maximum height in pixels
+        Parameters
+        ----------
+        height : int
+            Maximum height in pixels
         """
         super().setMaximumHeight(height)
         self._editor.setMaximumHeight(height)

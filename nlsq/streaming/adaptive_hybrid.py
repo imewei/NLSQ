@@ -3499,6 +3499,9 @@ class AdaptiveHybridStreamingOptimizer:
             Full dataset as (x_data, y_data)
         initial_params : array_like
             Starting parameters in normalized space (from Phase 1)
+        verbose : int, optional
+            Verbosity level. ``None`` uses ``config.verbose``; otherwise the
+            smaller of this value and ``config.verbose`` is used.
 
         Returns
         -------
@@ -4510,7 +4513,8 @@ class AdaptiveHybridStreamingOptimizer:
         bounds : tuple of array_like, optional
             Parameter bounds as (lb, ub)
         sigma : array_like, optional
-            Uncertainties in y_data for weighted least squares
+            Uncertainties in y_data for weighted least squares. Must be
+            ``None``: any other value raises ``NotImplementedError``.
         absolute_sigma : bool, default=False
             If True, sigma is used in absolute sense (pcov not scaled)
         callback : Callable, optional
@@ -4533,6 +4537,17 @@ class AdaptiveHybridStreamingOptimizer:
             - 'pcov': Covariance matrix (Phase 3)
             - 'perr': Standard errors (Phase 3)
             - 'streaming_diagnostics': Phase information, timing, etc.
+
+        Raises
+        ------
+        ValueError
+            If ``data_source`` does not hold non-empty ``x_data`` and one-dimensional
+            ``y_data`` with the same number of observations, or if ``x_data`` or
+            ``y_data`` contains NaN or inf.
+        NotImplementedError
+            If ``data_source`` is not a 2-tuple, ``sigma`` is not ``None``, the
+            number of parameters is at least ``config.cg_param_threshold``, or
+            ``config.use_learning_rate_schedule`` is True.
 
         Notes
         -----

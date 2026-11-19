@@ -500,6 +500,15 @@ def fit(
         returns (a plain ``(popt, pcov)`` tuple for the exact default).
         Both support tuple unpacking: popt, pcov = fit(...)
 
+    Raises
+    ------
+    ValueError
+        If ``method="exact_streaming"`` is passed (only available through
+        ``curve_fit_large``), or if ``goal`` names an unknown goal.
+    TypeError
+        If the removed ``preset`` keyword is passed with a value other than
+        None.
+
     Examples
     --------
     Basic usage:
@@ -1102,6 +1111,14 @@ def curve_fit_large(
         The in-memory path returns whatever ``curve_fit`` returns: a
         ``CurveFitResult`` (which unpacks as ``popt, pcov``), or the special-output
         tuple when options such as ``full_output=True`` are passed.
+
+    Raises
+    ------
+    TypeError
+        If a removed sampling keyword (``enable_sampling``,
+        ``sampling_threshold``, ``max_sampled_size``) is passed, or if
+        ``strategy`` is combined with a non-default path option or with extra
+        keyword arguments.
 
     Notes
     -----

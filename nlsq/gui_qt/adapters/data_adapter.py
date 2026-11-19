@@ -288,6 +288,21 @@ def parse_numeric_rows(
     cannot express empty cells. ``start`` is the number reported for the first
     line (``2`` when a header line was already consumed).
 
+    Parameters
+    ----------
+    lines : list of str
+        Text lines to parse. Blank lines are skipped.
+    delimiter : str or None
+        Cell delimiter, or ``None`` to split on whitespace. ``";"`` also makes
+        a decimal comma acceptable in numbers.
+    start : int, default=1
+        Line number reported for ``lines[0]`` in error messages.
+
+    Returns
+    -------
+    list of list of float
+        One list of floats per non-blank line.
+
     Raises
     ------
     ValueError
@@ -342,6 +357,11 @@ def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
     Shared by file loading and clipboard paste so they cannot drift. Strips a
     leading UTF-8 BOM (otherwise the first cell is non-numeric and the first
     data row would be mistaken for a header), ``#`` comments and blank lines.
+
+    Parameters
+    ----------
+    text : str
+        Delimited text; the delimiter is detected with ``detect_delimiter``.
 
     Returns
     -------

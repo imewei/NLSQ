@@ -13,7 +13,13 @@ import sys
 
 
 def main() -> int:
-    """Main entry point for the NLSQ Qt GUI."""
+    """Main entry point for the NLSQ Qt GUI.
+
+    Returns
+    -------
+    int
+        The value returned by ``run_desktop`` (process exit code).
+    """
     # Enable debug logging if requested
     if os.environ.get("NLSQ_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
         import logging

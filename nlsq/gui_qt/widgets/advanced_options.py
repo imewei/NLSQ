@@ -330,8 +330,10 @@ class AdvancedOptionsWidget(QWidget):
     def get_options(self) -> dict[str, Any]:
         """Get the current options.
 
-        Returns:
-            Dictionary with all option values
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary with all option values.
         """
         return {
             # Termination
@@ -362,8 +364,11 @@ class AdvancedOptionsWidget(QWidget):
     def set_options(self, options: dict[str, Any]) -> None:
         """Set the options.
 
-        Args:
-            options: Dictionary with option values
+        Parameters
+        ----------
+        options : dict[str, Any]
+            Dictionary with option values; keys that are absent are left
+            unchanged.
         """
         self._set_spinbox_options(options)
         self._set_checkbox_options(options)
@@ -452,7 +457,10 @@ class AdvancedOptionsWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration. The method body does nothing: the theme is
+            applied globally through the Qt color scheme.
         """
         # Theme is applied globally via Qt color scheme

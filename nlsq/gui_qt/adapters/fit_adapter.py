@@ -374,6 +374,12 @@ def capture_fit_diagnostics() -> Iterator[list[str]]:
     survive via the log handler. ``catch_warnings`` blocks inside the library
     on the fit thread (``streaming/specs.py``, ``stability/fallback.py``) can
     leave a stale ignore filter; that is outside ``gui_qt`` and not fixed here.
+
+    Yields
+    ------
+    list of str
+        Message list for the calling thread; warnings and log records are
+        appended to it in place while the block runs.
     """
     install_warning_hook()
     messages: list[str] = []
@@ -795,6 +801,20 @@ def parameter_confidence_intervals(result: Any, n_data: int) -> np.ndarray | Non
     undefined (``n <= p`` with an estimated noise scale), never a made-up
     interval. Results that cannot compute their own (plain objects, or a
     result with no data attached) fall back to the t interval with ``n_data``.
+
+    Parameters
+    ----------
+    result : Any
+        Fit result. Its ``pcov`` and, when callable, ``confidence_intervals``
+        are used; the fallback reads ``x`` or ``popt``.
+    n_data : int
+        Number of data points, used for the fallback t interval.
+
+    Returns
+    -------
+    numpy.ndarray or None
+        ``(n_params, 2)`` array of lower and upper bounds, or None when the
+        result has no ``pcov`` (or, in the fallback, no parameters).
     """
     pcov = getattr(result, "pcov", None)
     if pcov is None:
@@ -826,6 +846,19 @@ def confidence_band(result: Any, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]
 
     Delegates to ``CurveFitResult.confidence_band`` (domain-aware derivative,
     non-finite covariance handled). None when the result cannot provide one.
+
+    Parameters
+    ----------
+    result : Any
+        Fit result with a ``pcov`` and a callable ``confidence_band`` method.
+    x : numpy.ndarray
+        Points at which to evaluate the band.
+
+    Returns
+    -------
+    tuple of numpy.ndarray or None
+        ``(lower, upper)`` float arrays, or None when the result has no
+        ``confidence_band`` method or ``pcov``, or the call fails.
     """
     method = getattr(result, "confidence_band", None)
     if not callable(method) or getattr(result, "pcov", None) is None:
