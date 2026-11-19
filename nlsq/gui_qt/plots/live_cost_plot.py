@@ -32,8 +32,10 @@ class LiveCostPlotWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the live cost plot widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self._max_points: int = 10_000  # cap to prevent unbounded growth

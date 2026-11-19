@@ -15,18 +15,20 @@ Available Loss Functions:
     - 'cauchy': Heavy-tailed, very robust to outliers
     - 'arctan': Bounded loss function
 
-Example:
-    >>> from nlsq import curve_fit
-    >>> import jax.numpy as jnp
-    >>>
-    >>> def model(x, a, b): return a * jnp.exp(-b * x)
-    >>>
-    >>> # Fit with Huber loss to handle outliers
-    >>> popt, pcov = curve_fit(model, x, y, p0=[2.0, 0.5], loss='huber')
+Examples
+--------
+>>> from nlsq import curve_fit
+>>> import jax.numpy as jnp
+>>>
+>>> def model(x, a, b): return a * jnp.exp(-b * x)
+>>>
+>>> # Fit with Huber loss to handle outliers
+>>> popt, pcov = curve_fit(model, x, y, p0=[2.0, 0.5], loss='huber')
 
-See Also:
-    nlsq.curve_fit : Main fitting function that uses these loss functions
-    nlsq.least_squares : Lower-level interface with loss function control
+See Also
+--------
+nlsq.curve_fit : Main fitting function that uses these loss functions
+nlsq.least_squares : Lower-level interface with loss function control
 """
 
 # Initialize JAX configuration through central config

@@ -202,8 +202,10 @@ class ThemeManager(QObject):
     def __init__(self, app: QApplication) -> None:
         """Initialize the theme manager.
 
-        Args:
-            app: The QApplication instance
+        Parameters
+        ----------
+        app : QApplication
+            The QApplication instance
         """
         super().__init__()
         self._app = app

@@ -116,8 +116,10 @@ def _ensure_private_dir(path: Path) -> None:
     The ownership/symlink checks are POSIX-only; Windows temp dirs are
     already per-user.
 
-    Raises:
-        PermissionError: If ``path`` exists but is not a directory owned by us.
+    Raises
+    ------
+    PermissionError
+        If ``path`` exists but is not a directory owned by us.
     """
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     if not hasattr(os, "getuid"):
@@ -279,9 +281,12 @@ class AutosaveManager(QObject):
     def __init__(self, app_state: AppState, parent: QObject | None = None) -> None:
         """Initialize the autosave manager.
 
-        Args:
-            app_state: Application state manager
-            parent: Parent QObject
+        Parameters
+        ----------
+        app_state : AppState
+            Application state manager
+        parent : QObject | None
+            Parent QObject
         """
         super().__init__(parent)
         self._app_state = app_state
@@ -440,7 +445,9 @@ class AutosaveManager(QObject):
     def check_recovery(self) -> bool:
         """Check if a recovery file exists.
 
-        Returns:
+        Returns
+        -------
+        bool
             True if a snapshot of an ended session exists
         """
         for path in self._recovery_candidates():
@@ -458,7 +465,9 @@ class AutosaveManager(QObject):
         replaced it (see ``_do_autosave``), so a second crash right after
         recovery does not lose it.
 
-        Returns:
+        Returns
+        -------
+        bool
             True if recovery was successful
         """
         if self._recovery_file is None:
@@ -548,7 +557,9 @@ class AutosaveManager(QObject):
     def _serialize_state(self) -> dict[str, Any]:
         """Serialize current session state to a dictionary.
 
-        Returns:
+        Returns
+        -------
+        dict[str, Any]
             Serializable dictionary
         """
         state = self._app_state.state
@@ -607,12 +618,16 @@ class AutosaveManager(QObject):
     ) -> np.ndarray | None:
         """Validate an array restored from autosave JSON.
 
-        Args:
-            raw: Raw list from the serialized dictionary.
-            max_ndim: 1 for y/sigma; 2 for xdata (2-D surface data).
-            positive: If True, require strictly positive values (accepting
-                +inf, the SciPy convention for "no weight" on sigma) instead
-                of the default finite-values check.
+        Parameters
+        ----------
+        raw : Any
+            Raw list from the serialized dictionary.
+        max_ndim : int
+            1 for y/sigma; 2 for xdata (2-D surface data).
+        positive : bool
+            If True, require strictly positive values (accepting
+            +inf, the SciPy convention for "no weight" on sigma) instead
+            of the default finite-values check.
         """
         arr = np.array(raw, dtype=np.float64)
         if not 1 <= arr.ndim <= max_ndim:
@@ -682,8 +697,10 @@ class AutosaveManager(QObject):
     def _restore_state(self, data: dict[str, Any]) -> None:
         """Restore session state from a dictionary.
 
-        Args:
-            data: Serialized state dictionary
+        Parameters
+        ----------
+        data : dict[str, Any]
+            Serialized state dictionary
         """
         state = self._app_state.state
 

@@ -51,8 +51,10 @@ class FitWorker(QObject):
     def __init__(self, state: Any) -> None:
         """Initialize the worker.
 
-        Args:
-            state: Session state with fit configuration
+        Parameters
+        ----------
+        state : Any
+            Session state with fit configuration
         """
         super().__init__()
         self._state = state
@@ -109,8 +111,10 @@ class FittingOptionsPage(QWidget):
     def __init__(self, app_state: AppState) -> None:
         """Initialize the fitting options page.
 
-        Args:
-            app_state: Application state manager
+        Parameters
+        ----------
+        app_state : AppState
+            Application state manager
         """
         super().__init__()
         self._app_state = app_state
@@ -316,8 +320,10 @@ class FittingOptionsPage(QWidget):
     def _on_mode_changed(self, mode_id: int) -> None:
         """Handle mode change.
 
-        Args:
-            mode_id: Mode button ID (0=Guided, 1=Advanced)
+        Parameters
+        ----------
+        mode_id : int
+            Mode button ID (0=Guided, 1=Advanced)
         """
         is_advanced = mode_id == 1
         self._app_state.state.mode = "advanced" if is_advanced else "guided"
@@ -327,8 +333,10 @@ class FittingOptionsPage(QWidget):
     def _on_preset_changed(self, preset_name: str) -> None:
         """Handle preset change.
 
-        Args:
-            preset_name: Selected preset name
+        Parameters
+        ----------
+        preset_name : str
+            Selected preset name
         """
         if preset_name in PRESETS:
             self._app_state.state.preset = preset_name
@@ -449,9 +457,12 @@ class FittingOptionsPage(QWidget):
     def _on_fit_progress(self, iteration: int, cost: float) -> None:
         """Handle fit progress update.
 
-        Args:
-            iteration: Current iteration
-            cost: Current cost value
+        Parameters
+        ----------
+        iteration : int
+            Current iteration
+        cost : float
+            Current cost value
         """
         self._cost_plot.add_point(iteration, cost)
         self._iteration_table.add_iteration(iteration, cost)
@@ -462,8 +473,10 @@ class FittingOptionsPage(QWidget):
     def _on_fit_finished(self, result: object) -> None:
         """Handle fit completion.
 
-        Args:
-            result: Fit result object
+        Parameters
+        ----------
+        result : object
+            Fit result object
         """
         if self._fit_is_stale():
             # data/model changed mid-fit: the result belongs to the old inputs
@@ -480,8 +493,10 @@ class FittingOptionsPage(QWidget):
     def _on_fit_error(self, message: str) -> None:
         """Handle fit error.
 
-        Args:
-            message: Error message
+        Parameters
+        ----------
+        message : str
+            Error message
         """
         if self._fit_is_stale():
             self._discard_stale_fit()
@@ -566,8 +581,10 @@ class FittingOptionsPage(QWidget):
     def _set_running_state(self, running: bool) -> None:
         """Update UI for running/stopped state.
 
-        Args:
-            running: Whether fit is running
+        Parameters
+        ----------
+        running : bool
+            Whether fit is running
         """
         self._run_btn.setEnabled(not running)
         self._abort_btn.setEnabled(running)

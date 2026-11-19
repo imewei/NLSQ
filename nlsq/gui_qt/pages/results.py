@@ -132,8 +132,10 @@ class ResultsPage(QWidget):
     def __init__(self, app_state: AppState) -> None:
         """Initialize the results page.
 
-        Args:
-            app_state: Application state manager
+        Parameters
+        ----------
+        app_state : AppState
+            Application state manager
         """
         super().__init__()
         self._app_state = app_state
@@ -578,7 +580,9 @@ class ResultsPage(QWidget):
     def _get_param_names(self) -> list[str]:
         """Get parameter names from the model.
 
-        Returns:
+        Returns
+        -------
+        list[str]
             List of parameter names
         """
         from nlsq.gui_qt.adapters.model_adapter import get_model_info
@@ -598,12 +602,17 @@ class ResultsPage(QWidget):
     ) -> None:
         """Update fit statistics display.
 
-        Args:
-            ydata: Y data
-            popt: Fitted parameters
-            result: Fit result object
-            y_fit: Model values at the data, or None if unavailable (all
-                quality statistics are then shown as NaN, never faked)
+        Parameters
+        ----------
+        ydata : np.ndarray
+            Y data
+        popt : np.ndarray
+            Fitted parameters
+        result : Any
+            Fit result object
+        y_fit : np.ndarray | None
+            Model values at the data, or None if unavailable (all
+            quality statistics are then shown as NaN, never faked)
         """
         if y_fit is None:
             nan = float("nan")
@@ -672,14 +681,22 @@ class ResultsPage(QWidget):
     ) -> int:
         """Update all plots with fit results.
 
-        Args:
-            xdata: X data
-            ydata: Y data
-            popt: Fitted parameters
-            result: Fit result object
-            y_fit: Model values at the data, or None if unavailable
+        Parameters
+        ----------
+        xdata : np.ndarray
+            X data
+        ydata : np.ndarray
+            Y data
+        popt : np.ndarray
+            Fitted parameters
+        result : Any
+            Fit result object
+        y_fit : np.ndarray | None
+            Model values at the data, or None if unavailable
 
-        Returns:
+        Returns
+        -------
+        int
             Count of non-finite (NaN/Inf) residuals excluded from the
             histogram/residuals plots — 0 if none. The plot widgets filter
             these out to avoid crashing, so this is the caller's only signal

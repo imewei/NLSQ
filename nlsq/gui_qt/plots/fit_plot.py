@@ -45,8 +45,10 @@ class FitPlotWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the fit plot widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self._data_x: NDArray | None = None
@@ -118,10 +120,14 @@ class FitPlotWidget(QWidget):
     ) -> None:
         """Set the original data points.
 
-        Args:
-            x: X data array
-            y: Y data array
-            sigma: Optional uncertainty array for error bars
+        Parameters
+        ----------
+        x : NDArray
+            X data array
+        y : NDArray
+            Y data array
+        sigma : NDArray | None
+            Optional uncertainty array for error bars
         """
         self._data_x = np.asarray(x)
         self._data_y = np.asarray(y)
@@ -160,11 +166,16 @@ class FitPlotWidget(QWidget):
     ) -> None:
         """Set the fitted curve and optional confidence bands.
 
-        Args:
-            x: X values for fit curve (dense grid)
-            y: Y values for fit curve
-            conf_lower: Lower confidence band (y - delta)
-            conf_upper: Upper confidence band (y + delta)
+        Parameters
+        ----------
+        x : NDArray
+            X values for fit curve (dense grid)
+        y : NDArray
+            Y values for fit curve
+        conf_lower : NDArray | None
+            Lower confidence band (y - delta)
+        conf_upper : NDArray | None
+            Upper confidence band (y + delta)
         """
         self._fit_x = np.asarray(x)
         self._fit_y = np.asarray(y)
@@ -272,9 +283,12 @@ class FitPlotWidget(QWidget):
     def set_labels(self, x_label: str, y_label: str) -> None:
         """Set axis labels.
 
-        Args:
-            x_label: X axis label
-            y_label: Y axis label
+        Parameters
+        ----------
+        x_label : str
+            X axis label
+        y_label : str
+            Y axis label
         """
         self._plot_widget.setLabel("bottom", x_label)
         self._plot_widget.setLabel("left", y_label)
@@ -282,8 +296,10 @@ class FitPlotWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         self._theme = theme
 
@@ -315,8 +331,10 @@ class FitPlotWidget(QWidget):
     def export_image(self, path: str) -> None:
         """Export the plot as an image.
 
-        Args:
-            path: Output file path (PNG, JPG, SVG)
+        Parameters
+        ----------
+        path : str
+            Output file path (PNG, JPG, SVG)
         """
         from nlsq.gui_qt.plots import export_plot_image
 

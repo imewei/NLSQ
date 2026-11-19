@@ -44,8 +44,10 @@ class ColumnSelectorWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the column selector widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self._column_names: list[str] = []
@@ -128,8 +130,10 @@ class ColumnSelectorWidget(QWidget):
     def _on_mode_changed(self, checked: bool) -> None:
         """Handle mode radio button change.
 
-        Args:
-            checked: Whether 1D mode is checked
+        Parameters
+        ----------
+        checked : bool
+            Whether 1D mode is checked
         """
         self._mode = "1d" if checked else "2d"
         self._update_mode_visibility()

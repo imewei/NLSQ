@@ -98,8 +98,10 @@ class ParamConfigWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the parameter config widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self._param_names: list[str] = []
@@ -151,8 +153,10 @@ class ParamConfigWidget(QWidget):
     def _on_auto_toggled(self, checked: bool) -> None:
         """Handle auto-estimate toggle.
 
-        Args:
-            checked: Whether auto-estimate is enabled
+        Parameters
+        ----------
+        checked : bool
+            Whether auto-estimate is enabled
         """
         for row in range(self._table.rowCount()):
             initial_value = self._table.cellWidget(row, 1)
@@ -168,8 +172,10 @@ class ParamConfigWidget(QWidget):
     def set_param_names(self, names: list[str]) -> None:
         """Set the parameter names.
 
-        Args:
-            names: List of parameter names
+        Parameters
+        ----------
+        names : list[str]
+            List of parameter names
         """
         self._param_names = names
         self._table.setRowCount(len(names))
@@ -207,9 +213,12 @@ class ParamConfigWidget(QWidget):
     ) -> None:
         """Set the parameter values.
 
-        Args:
-            p0: Initial parameter values
-            bounds: Parameter bounds as (lower, upper) or None
+        Parameters
+        ----------
+        p0 : list[float]
+            Initial parameter values
+        bounds : tuple[list[float], list[float]] | None
+            Parameter bounds as (lower, upper) or None
         """
         for row, val in enumerate(p0):
             if row >= self._table.rowCount():
@@ -238,7 +247,9 @@ class ParamConfigWidget(QWidget):
     ) -> tuple[list[float], tuple[list[float | None], list[float | None]] | None]:
         """Get the current parameter values.
 
-        Returns:
+        Returns
+        -------
+        tuple[list[float], tuple[list[float | None], list[float | None]] | None]
             Tuple of (p0, bounds) where bounds is (lower, upper) or None.
             Bound values are None when infinite (unbounded).
         """
@@ -277,7 +288,9 @@ class ParamConfigWidget(QWidget):
     def is_auto_p0(self) -> bool:
         """Check if auto-estimate is enabled.
 
-        Returns:
+        Returns
+        -------
+        bool
             True if auto-estimate is checked
         """
         return self._auto_p0_check.isChecked()
@@ -285,7 +298,9 @@ class ParamConfigWidget(QWidget):
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         # Theme is applied globally via Qt color scheme

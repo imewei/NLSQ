@@ -18,18 +18,21 @@ class OptimizeWarning(UserWarning):
     completing but should be brought to the user's attention.
 
     Common scenarios:
+
         - Unknown or deprecated solver options passed to optimizer
         - Convergence achieved but with warnings about numerical conditioning
         - Parameter bounds adjusted automatically
         - Automatic algorithm selection overrides
 
-    Example:
-        >>> import warnings
-        >>> warnings.filterwarnings('error', category=OptimizeWarning)
-        >>> # Now OptimizeWarning will raise an exception instead of warning
+    Examples
+    --------
+    >>> import warnings
+    >>> warnings.filterwarnings('error', category=OptimizeWarning)
+    >>> # Now OptimizeWarning will raise an exception instead of warning
 
-    See Also:
-        nlsq.utils.error_messages : Exceptions for critical failures
+    See Also
+    --------
+    nlsq.utils.error_messages : Exceptions for critical failures
     """
 
 

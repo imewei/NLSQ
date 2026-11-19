@@ -11,12 +11,13 @@ Key Features:
 - Conservative bounds that avoid over-constraining
 - Support for user-provided partial bounds
 
-Example:
-    >>> from nlsq.precision.bound_inference import infer_bounds
-    >>>
-    >>> bounds = infer_bounds(xdata, ydata, p0=[1, 0.5, 0.1])
-    >>> print(f"Lower bounds: {bounds[0]}")
-    >>> print(f"Upper bounds: {bounds[1]}")
+Examples
+--------
+>>> from nlsq.precision.bound_inference import infer_bounds
+>>>
+>>> bounds = infer_bounds(xdata, ydata, p0=[1, 0.5, 0.1])
+>>> print(f"Lower bounds: {bounds[0]}")
+>>> print(f"Upper bounds: {bounds[1]}")
 """
 
 from typing import Any

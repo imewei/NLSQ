@@ -2277,11 +2277,16 @@ class LargeDatasetFitter:
         Returns None when the chunk covariance is missing, wrong-shaped,
         non-finite, or not numerically positive definite (singular/indefinite).
 
-        Args:
-            pcov_chunk: Per-chunk parameter covariance from curve_fit, or None.
-            n_params: Expected number of parameters.
+        Parameters
+        ----------
+        pcov_chunk : np.ndarray | None
+            Per-chunk parameter covariance from curve_fit, or None.
+        n_params : int
+            Expected number of parameters.
 
-        Returns:
+        Returns
+        -------
+        np.ndarray | None
             An (n_params, n_params) precision matrix, or None if unusable.
         """
         if pcov_chunk is None:
@@ -2341,20 +2346,32 @@ class LargeDatasetFitter:
         early stopping is done: all chunks are processed so the full dataset
         informs the result.
 
-        Args:
-            current_params: Running combined estimate (None on first chunk).
-            popt_chunk: Newly fitted parameters from current chunk.
-            pcov_chunk: Covariance of the current chunk fit, or None.
-            param_history: List of combined estimates from previous chunks.
-            convergence_metric: Current convergence metric value.
-            chunk_idx: Index of current chunk (0-based).
-            n_chunks: Total number of chunks.
-            chunk_ssr: Chunk's (sigma-weighted) sum of squared residuals at
-                ``popt_chunk``, used for the pooled residual variance.
-            chunk_n: Number of points behind ``chunk_ssr``.
+        Parameters
+        ----------
+        current_params : np.ndarray | None
+            Running combined estimate (None on first chunk).
+        popt_chunk : np.ndarray
+            Newly fitted parameters from current chunk.
+        pcov_chunk : np.ndarray | None
+            Covariance of the current chunk fit, or None.
+        param_history : list
+            List of combined estimates from previous chunks.
+        convergence_metric : float
+            Current convergence metric value.
+        chunk_idx : int
+            Index of current chunk (0-based).
+        n_chunks : int
+            Total number of chunks.
+        chunk_ssr : float | None
+            Chunk's (sigma-weighted) sum of squared residuals at
+            ``popt_chunk``, used for the pooled residual variance.
+        chunk_n : int
+            Number of points behind ``chunk_ssr``.
 
-        Returns:
-            tuple: (updated_params, updated_history, new_convergence_metric, should_stop)
+        Returns
+        -------
+        tuple
+            (updated_params, updated_history, new_convergence_metric, should_stop)
         """
         popt_chunk = np.asarray(popt_chunk, dtype=float)
         n_params = len(popt_chunk)
@@ -2486,19 +2503,31 @@ class LargeDatasetFitter:
     ) -> dict:
         """Create a standardized chunk result dictionary.
 
-        Args:
-            chunk_idx: Index of the chunk
-            x_chunk: Input data for this chunk
-            y_chunk: Output data for this chunk
-            chunk_duration: Time taken to process this chunk
-            success: Whether the chunk fitting succeeded
-            popt_chunk: Fitted parameters (if successful)
-            is_retry: Whether this was a retry attempt
-            error: Exception that occurred (if failed)
-            current_params: Current parameter estimates (for failure diagnostics)
+        Parameters
+        ----------
+        chunk_idx : int
+            Index of the chunk
+        x_chunk : np.ndarray
+            Input data for this chunk
+        y_chunk : np.ndarray
+            Output data for this chunk
+        chunk_duration : float
+            Time taken to process this chunk
+        success : bool
+            Whether the chunk fitting succeeded
+        popt_chunk : np.ndarray | None
+            Fitted parameters (if successful)
+        is_retry : bool
+            Whether this was a retry attempt
+        error : Exception | None
+            Exception that occurred (if failed)
+        current_params : np.ndarray | None
+            Current parameter estimates (for failure diagnostics)
 
-        Returns:
-            dict: Standardized chunk result with metadata
+        Returns
+        -------
+        dict
+            Standardized chunk result with metadata
         """
         # Base result structure
         result = {
@@ -2548,27 +2577,43 @@ class LargeDatasetFitter:
     ) -> tuple[dict, np.ndarray | None]:
         """Retry a failed chunk with perturbed parameters.
 
-        Args:
-            f: Model function
-            x_chunk: Input data for this chunk (may be zero-padded to a
-                DataChunker bucket boundary)
-            y_chunk: Output data for this chunk (may be zero-padded)
-            chunk_idx: Index of the chunk
-            chunk_start_time: Start time of chunk processing
-            chunk_times: List to append chunk duration to
-            current_params: Current parameter estimates
-            initial_error: The exception that caused the initial failure
-            bounds: Parameter bounds
-            method: Optimization method
-            solver: Solver type
-            valid_length: Number of real (non-padding) points at the start
-                of x_chunk/y_chunk. Required to avoid fitting the retry
-                against DataChunker's zero-padding. Defaults to the full
-                chunk length when not provided.
-            **kwargs: Additional curve_fit arguments
+        Parameters
+        ----------
+        f : Callable
+            Model function
+        x_chunk : np.ndarray
+            Input data for this chunk (may be zero-padded to a
+            DataChunker bucket boundary)
+        y_chunk : np.ndarray
+            Output data for this chunk (may be zero-padded)
+        chunk_idx : int
+            Index of the chunk
+        chunk_start_time : float
+            Start time of chunk processing
+        chunk_times : list
+            List to append chunk duration to
+        current_params : np.ndarray | None
+            Current parameter estimates
+        initial_error : Exception
+            The exception that caused the initial failure
+        bounds : tuple
+            Parameter bounds
+        method : str
+            Optimization method
+        solver : str
+            Solver type
+        valid_length : int | None
+            Number of real (non-padding) points at the start
+            of x_chunk/y_chunk. Required to avoid fitting the retry
+            against DataChunker's zero-padding. Defaults to the full
+            chunk length when not provided.
+        **kwargs
+            Additional curve_fit arguments.
 
-        Returns:
-            tuple: (chunk_result dict, raw retry popt or None). On success,
+        Returns
+        -------
+        tuple
+            (chunk_result dict, raw retry popt or None). On success,
             chunk_result also carries "pcov_chunk" so the caller can fold
             this chunk into its precision-weighted accumulator the same
             way every other successful chunk does.
@@ -2696,12 +2741,17 @@ class LargeDatasetFitter:
     ) -> dict:
         """Create comprehensive failure summary for diagnostics.
 
-        Args:
-            chunk_results: List of all chunk result dictionaries
-            chunk_times: List of chunk processing durations
+        Parameters
+        ----------
+        chunk_results : list
+            List of all chunk result dictionaries
+        chunk_times : list
+            List of chunk processing durations
 
-        Returns:
-            dict: Failure summary with error types, timing stats, and common errors
+        Returns
+        -------
+        dict
+            Failure summary with error types, timing stats, and common errors
         """
         failed_chunks = [r for r in chunk_results if not r.get("success", False)]
 
@@ -2869,12 +2919,17 @@ class LargeDatasetFitter:
         threshold of NumericalStabilityGuard and the same symmetrize step as
         ``_chunk_precision``.
 
-        Args:
-            param_history: List of parameter estimates from previous chunks
-            current_params: Final parameter estimates
+        Parameters
+        ----------
+        param_history : list
+            List of parameter estimates from previous chunks
+        current_params : np.ndarray
+            Final parameter estimates
 
-        Returns:
-            np.ndarray: Covariance matrix
+        Returns
+        -------
+        np.ndarray
+            Covariance matrix
         """
         accum_information = self._accum_information
         if accum_information is not None:
@@ -3039,14 +3094,25 @@ class LargeDatasetFitter:
     ) -> OptimizeResult:
         """Check success rate and create appropriate result (success or failure).
 
-        Args:
-            chunk_results: List of chunk processing results
-            current_params: Final parameter estimates
-            param_history: History of parameter updates
-            stats: Dataset statistics
-            chunk_times: Processing time for each chunk
+        Parameters
+        ----------
+        f : Callable
+            Model function; used to build the unfitted-parameter fallback when
+            too many chunks failed.
+        chunk_results : list
+            List of chunk processing results
+        current_params : np.ndarray | None
+            Final parameter estimates
+        param_history : list
+            History of parameter updates
+        stats : DatasetStats
+            Dataset statistics
+        chunk_times : list
+            Processing time for each chunk
 
-        Returns:
+        Returns
+        -------
+        OptimizeResult
             OptimizeResult with success or failure status based on success rate
         """
         # Compute final statistics

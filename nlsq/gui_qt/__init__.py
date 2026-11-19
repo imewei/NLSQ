@@ -70,10 +70,14 @@ if sys.platform == "darwin":
 def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) -> None:
     """Global exception hook to handle uncaught exceptions.
 
-    Args:
-        exc_type: Exception type
-        exc_value: Exception value
-        exc_tb: Exception traceback
+    Parameters
+    ----------
+    exc_type : type
+        Exception type
+    exc_value : BaseException
+        Exception value
+    exc_tb : object
+        Exception traceback
     """
     # Format the traceback
     tb_str = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
@@ -187,13 +191,17 @@ def _package_version() -> str:
 def run_desktop(argv: Sequence[str] | None = None) -> int:
     """Launch the NLSQ Qt desktop application.
 
-    Args:
-        argv: Command-line arguments without the program name. Defaults to
-            ``sys.argv[1:]``. ``--help`` and ``--version`` exit before any Qt
-            object is created.
+    Parameters
+    ----------
+    argv : Sequence[str] | None
+        Command-line arguments without the program name. Defaults to
+        ``sys.argv[1:]``. ``--help`` and ``--version`` exit before any Qt
+        object is created.
 
-    Returns:
-        int: Application exit code (0 for success)
+    Returns
+    -------
+    int
+        Application exit code (0 for success)
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     args = _parse_args(argv)
