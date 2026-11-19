@@ -34,6 +34,7 @@ __all__ = [
     "check_exact_sources",
     "default_p0",
     "normalize_p0_bounds",
+    "scipy_layout_to_points_first",
 ]
 
 # AdaptiveHybridStreamingOptimizer.fit has no gtol/ftol/xtol: its single
@@ -111,6 +112,15 @@ def scipy_layout_to_points_first(f: Any, x: Any) -> tuple[Any, Any]:
     @functools.wraps(f)
     def f_points_first(xc: Any, *params: Any) -> Any:
         return f(xc.T, *params)
+
+    # wraps() copied the model's estimate_p0, which expects the caller's (k, M) layout
+    estimate_p0 = getattr(f, "estimate_p0", None)
+    if callable(estimate_p0):
+
+        def estimate_points_first(xc: Any, yc: Any, *a: Any, **kw: Any) -> Any:
+            return estimate_p0(np.asarray(xc).T, yc, *a, **kw)
+
+        f_points_first.estimate_p0 = estimate_points_first  # type: ignore[attr-defined]
 
     return f_points_first, np.asarray(x).T
 
@@ -260,9 +270,14 @@ def normalize_p0_bounds(
 ) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray]]:
     """Return ``(p0, (lb, ub))``: ``p0`` defaulted from ``f`` and 1-D, bounds broadcast."""
     from nlsq.core.least_squares import prepare_bounds
+    from nlsq.core.problem import _initialize_feasible
 
     p0_arr = default_p0(f) if p0 is None else np.atleast_1d(p0)
-    return p0_arr, prepare_bounds(bounds, len(p0_arr))
+    lb, ub = prepare_bounds(bounds, len(p0_arr))
+    if p0 is None and lb.shape == ub.shape == p0_arr.shape:
+        # curve_fit(p0=None) starts inside the box; ones can sit on or outside it
+        p0_arr = _initialize_feasible(lb, ub)
+    return p0_arr, (lb, ub)
 
 
 def check_exact_sources(

@@ -239,7 +239,12 @@ def get_model_info(model: Callable) -> dict[str, Any]:
 
         if not has_var_positional:
             # Standard case: extract parameter names after x
-            param_keys = [name for name, _ in params]
+            # **kwargs is not a fit parameter (the fit passes positionals only)
+            param_keys = [
+                name
+                for name, param in params
+                if param.kind is not inspect.Parameter.VAR_KEYWORD
+            ]
             if param_keys and param_keys[0] in ("x", "X", "xdata"):
                 param_names = param_keys[1:]
             else:
@@ -568,7 +573,7 @@ def _execute_code_safely(code: str, namespace: dict[str, Any]) -> None:
 
         # Copy module contents to namespace
         for name in dir(module):
-            if not name.startswith("_"):
+            if not name.startswith("__"):  # keep _model: the picker lists it
                 namespace[name] = getattr(module, name)
     finally:
         sys.modules.pop("_custom_model_temp", None)
@@ -653,7 +658,12 @@ def parse_custom_model_string(
             f"Custom model has keyword-only parameter(s) {kw_only}; fit parameters "
             "must be positional, e.g. def model(x, a, b)."
         )
-    params = list(sig.parameters.keys())
+    # **kwargs is not a fit parameter: the fit passes positionals only
+    params = [
+        n
+        for n, p in sig.parameters.items()
+        if p.kind is not inspect.Parameter.VAR_KEYWORD
+    ]
 
     # First param is x, rest are model parameters
     if params:
@@ -736,9 +746,9 @@ def list_functions_in_module(code: str) -> list[str]:
     except SyntaxError:
         return []
 
-    functions = [
-        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
-    ]
+    # Top level only: the loader resolves names in the module namespace, so a
+    # nested helper could be listed but never selected.
+    functions = [node.name for node in tree.body if isinstance(node, ast.FunctionDef)]
 
     return functions
 

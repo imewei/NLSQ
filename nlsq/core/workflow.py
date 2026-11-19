@@ -397,10 +397,19 @@ class MemoryBudget:
 
         if use_gpu:
             try:
-                from nlsq.streaming.large_dataset import GPUMemoryEstimator
+                from nlsq.streaming.large_dataset import get_cached_devices
 
-                estimator = GPUMemoryEstimator()
-                gpu_memory = estimator.get_available_gpu_memory_gb()
+                # The unsharded solver keeps J and its scaled copy on ONE device,
+                # so budget that device's free memory, not the sum over all GPUs.
+                gpu_memory = 0.0
+                for device in get_cached_devices():
+                    if getattr(device, "platform", "cpu") == "cpu":
+                        continue
+                    stats = device.memory_stats() or {}
+                    gpu_memory = (
+                        stats.get("bytes_limit", 0) - stats.get("bytes_in_use", 0)
+                    ) / (1024**3)
+                    break
                 if gpu_memory > 0:
                     return gpu_memory
                 # No GPU available, fall back to CPU
@@ -528,9 +537,9 @@ class MemoryBudgetSelector:
         ValueError
             If n_points <= 0 or n_params <= 0.
         """
-        import logging
-
-        logger = logging.getLogger("nlsq")
+        # Validate here too: a caller-supplied budget skips MemoryBudget.compute's checks.
+        n_points = _check_count("n_points", n_points)
+        n_params = _check_count("n_params", n_params)
 
         # Compute memory budget (unless the caller already computed one)
         if budget is None:
@@ -1038,7 +1047,10 @@ class ClusterDetector:
         """
         # Try PBS environment first
         if self.is_pbs_environment():
-            return self.detect_pbs()
+            pbs_info = self.detect_pbs()
+            if pbs_info is not None:
+                return pbs_info
+            # unusable PBS_NODEFILE: fall back to the local GPUs
 
         # Try local multi-GPU
         local_info = self.detect_local_gpus()
@@ -1381,14 +1393,20 @@ def create_checkpoint_directory(base_dir: str | Path | None = None) -> str:
     else:
         base_dir = Path(base_dir)
 
-    # Create timestamp-based subdirectory
+    # Create timestamp-based subdirectory; a second call in the same second gets
+    # a numeric suffix instead of sharing the first call's directory.
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    checkpoint_dir = base_dir / timestamp
-
-    # Create directory (including parents if needed)
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-    return str(checkpoint_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    for attempt in range(10_000):
+        checkpoint_dir = base_dir / (
+            timestamp if attempt == 0 else f"{timestamp}_{attempt}"
+        )
+        try:
+            checkpoint_dir.mkdir()
+        except FileExistsError:
+            continue
+        return str(checkpoint_dir.absolute())
+    raise FileExistsError(f"no free checkpoint directory under {base_dir}")
 
 
 __all__ = [

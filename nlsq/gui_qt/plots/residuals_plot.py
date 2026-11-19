@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from nlsq.gui_qt.plots import _configure_pyqtgraph, _downsample
+from nlsq.gui_qt.plots import _configure_pyqtgraph, _downsample, population_std
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -143,13 +143,21 @@ class ResidualsPlotWidget(QWidget):
         # Compute standardized residuals
         # NaN residuals must not poison the scale: use finite values only
         finite = self._residuals[np.isfinite(self._residuals)]
-        std = np.std(finite) if finite.size else 0.0
+        # population_std translates before scaling, so neither a large common
+        # offset nor a tiny spread distorts the std (squares cannot under/overflow).
+        std = population_std(finite) if finite.size else 0.0
         if std > 0:
             self._std_residuals = self._residuals / std
         else:
             self._std_residuals = self._residuals
 
         self._update_plot()
+
+    def _fitted_label(self) -> str:
+        """X-axis label; without fitted values the plot falls back to x."""
+        if self._fitted is None:
+            return "X (fitted values unavailable)"
+        return "Fitted Values"
 
     def _update_plot(self) -> None:
         """Update the plot based on selected type."""
@@ -171,7 +179,7 @@ class ResidualsPlotWidget(QWidget):
         elif plot_type == 1:  # Residuals vs Fitted
             plot_x = self._fitted if self._fitted is not None else self._x
             plot_y = self._residuals
-            x_label = "Fitted Values"
+            x_label = self._fitted_label()
             y_label = "Residuals"
         elif plot_type == 2:  # Standardized Residuals vs X
             plot_x = self._x
@@ -181,7 +189,7 @@ class ResidualsPlotWidget(QWidget):
         else:  # Standardized Residuals vs Fitted
             plot_x = self._fitted if self._fitted is not None else self._x
             plot_y = self._std_residuals
-            x_label = "Fitted Values"
+            x_label = self._fitted_label()
             y_label = "Standardized Residuals"
 
         # Downsample if needed
@@ -381,7 +389,6 @@ class ResidualsPlotWidget(QWidget):
         Args:
             path: Output file path
         """
-        from pyqtgraph.exporters import ImageExporter
+        from nlsq.gui_qt.plots import export_plot_image
 
-        exporter = ImageExporter(self._plot_widget.plotItem)
-        exporter.export(path)
+        export_plot_image(self._plot_widget.plotItem, path)

@@ -16,7 +16,7 @@ Plus additional tests for:
 
 import subprocess
 import sys
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -70,7 +70,7 @@ class TestCheckGPUAvailability:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
                 # Verify warning was printed with actual format from _print_gpu_warning
@@ -112,7 +112,7 @@ class TestCheckGPUAvailability:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output (silent)
@@ -132,7 +132,7 @@ class TestCheckGPUAvailability:
         with patch("subprocess.run", return_value=mock_result):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output (silent)
@@ -160,7 +160,7 @@ class TestGPUDetectionErrorHandling:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output and no exception raised
@@ -178,7 +178,7 @@ class TestGPUDetectionErrorHandling:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output and no exception raised
@@ -210,7 +210,7 @@ class TestGPUDetectionErrorHandling:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output and no exception raised
@@ -226,7 +226,7 @@ class TestGPUDetectionErrorHandling:
         with patch("subprocess.run", side_effect=RuntimeError("Unexpected error")):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output and no exception raised
@@ -277,7 +277,7 @@ class TestGPUNameSanitization:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify warning printed with the GPU name as-is
@@ -323,7 +323,7 @@ class TestGPUNameSanitization:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify warning printed with the full GPU name (no truncation)
@@ -378,7 +378,7 @@ class TestImportIntegration:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 # Call the function (simulating import behavior)
                 check_gpu_availability()
 
@@ -418,7 +418,7 @@ class TestImportIntegration:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify NO output (silent operation)
@@ -449,7 +449,7 @@ class TestImportIntegration:
                 patch.dict("sys.modules", {"jax": mock_jax}),
             ):
                 output = StringIO()
-                with redirect_stdout(output):
+                with redirect_stderr(output):
                     check_gpu_availability()
 
                 # Verify silent operation for all values
@@ -502,7 +502,7 @@ class TestGPUDetectionWithMultipleDevices:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify warning printed (no GPU in device list)
@@ -535,7 +535,7 @@ class TestGPUDetectionWithMultipleDevices:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output (GPU device found)
@@ -566,7 +566,7 @@ class TestGPUDetectionWithMultipleDevices:
         ):
             # Capture stdout
             output = StringIO()
-            with redirect_stdout(output):
+            with redirect_stderr(output):
                 check_gpu_availability()
 
             # Verify no output (GPU device found)

@@ -91,6 +91,17 @@ def cfg_get(cfg: Any, key: str, default: Any = None) -> Any:
     return default if value is None else value
 
 
+def cfg_bool(cfg: Any, key: str, default: bool, section: str) -> bool:
+    """``cfg_get`` that requires a real YAML boolean (``"false"`` is truthy)."""
+    value = cfg_get(cfg, key, default)
+    if not isinstance(value, bool):
+        raise CLIError(
+            f"{section}.{key} must be true or false, got {value!r}",
+            suggestion=f"Use an unquoted YAML boolean: `{key}: true`.",
+        )
+    return value
+
+
 class CLIError(Exception):
     """Base exception class for NLSQ CLI errors.
 
@@ -433,7 +444,10 @@ class CLILogger:
                 for k in ("exc_info", "stack_info", "stacklevel")
                 if k in kwargs
             }
-            attr(message, *args, extra=kwargs or None, **real)
+            # logging's own ``extra=`` mapping is merged, not nested under a field
+            # literally named "extra"
+            fields = {**(kwargs.pop("extra", None) or {}), **kwargs}
+            attr(message, *args, extra=fields or None, **real)
 
         return wrapper
 
@@ -497,6 +511,47 @@ def setup_logging(
     global _cli_logger  # noqa: PLW0603
 
     with _setup_lock:
+        # Build and validate the replacement handlers BEFORE touching the live
+        # logger: a failure (unwritable path) must leave the old setup intact.
+        file_handler: logging.Handler | None = None
+        console_handler: logging.Handler | None = None
+        try:
+            if log_file is not None:
+                log_path = Path(log_file)
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+
+                if rotation_enabled:
+                    file_handler = RotatingFileHandler(
+                        log_path,
+                        maxBytes=max_bytes,
+                        backupCount=backup_count,
+                        encoding="utf-8",
+                    )
+                else:
+                    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+
+                # Set formatter based on structured option
+                if structured:
+                    file_handler.setFormatter(JsonFormatter())
+                else:
+                    file_handler.setFormatter(
+                        logging.Formatter(
+                            fmt="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+                            datefmt="%Y-%m-%d %H:%M:%S",
+                        ),
+                    )
+                file_handler.setLevel(logging.DEBUG)  # File gets all messages
+
+            if console:
+                console_handler = logging.StreamHandler(sys.stderr)
+                console_handler.setFormatter(
+                    ColoredConsoleFormatter(use_colors=use_colors)
+                )
+        except BaseException:
+            if file_handler is not None:
+                file_handler.close()
+            raise
+
         logger = CLILogger()
         logger.verbosity = verbosity
 
@@ -505,51 +560,23 @@ def setup_logging(
             logger.logger.removeHandler(old)
             old.close()
 
-        # Set up file handler if log_file provided
-        if log_file is not None:
-            log_path = Path(log_file)
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-
-            if rotation_enabled:
-                file_handler: logging.Handler = RotatingFileHandler(
-                    log_path,
-                    maxBytes=max_bytes,
-                    backupCount=backup_count,
-                    encoding="utf-8",
-                )
-            else:
-                file_handler = logging.FileHandler(log_path, encoding="utf-8")
-
-            # Set formatter based on structured option
-            if structured:
-                file_handler.setFormatter(JsonFormatter())
-            else:
-                file_handler.setFormatter(
-                    logging.Formatter(
-                        fmt="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-                        datefmt="%Y-%m-%d %H:%M:%S",
-                    ),
-                )
-
-            file_handler.setLevel(logging.DEBUG)  # File gets all messages
+        level_map = {
+            0: logging.ERROR,
+            1: logging.WARNING,
+            2: logging.INFO,
+            3: logging.DEBUG,
+        }
+        if file_handler is not None:
             logger.logger.addHandler(file_handler)
             logger._file_handler = file_handler
-
-        # Set up console handler if enabled
-        if console:
-            console_handler = logging.StreamHandler(sys.stderr)
-            console_handler.setFormatter(ColoredConsoleFormatter(use_colors=use_colors))
-
-            # Console level based on verbosity
-            level_map = {
-                0: logging.ERROR,
-                1: logging.WARNING,
-                2: logging.INFO,
-                3: logging.DEBUG,
-            }
+        if console_handler is not None:
+            # Console threshold comes from verbosity; the logger itself must pass
+            # every record the file handler is promised.
             console_handler.setLevel(level_map[logger.verbosity])
             logger.logger.addHandler(console_handler)
             logger._console_handler = console_handler
+        if file_handler is not None:
+            logger.logger.setLevel(logging.DEBUG)
 
         # Prevent propagation to root logger
         logger.logger.propagate = False

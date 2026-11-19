@@ -235,7 +235,9 @@ class HPCCheckpointManager:
             tmp_path = Path(tmp_dir) / path.name
             self._write_checkpoint(tmp_path, state, fingerprint)
 
-            if path.exists():
+            # Rotate only an intact primary: after a backup recovery the primary is
+            # the corrupt file, and rotating it would destroy the only good copy.
+            if self._is_intact(path, fingerprint):
                 path.replace(bak_path)
             os.replace(tmp_path, path)
         # fsync the containing directory too: a bare file fsync only
@@ -251,6 +253,19 @@ class HPCCheckpointManager:
                 os.fsync(dir_fd)
             finally:
                 os.close(dir_fd)
+
+    def _is_intact(self, path: Path, fingerprint: dict[str, Any]) -> bool:
+        """True if ``load()`` would not need the backup for ``path``.
+
+        A fingerprint mismatch is intact: the file is a valid checkpoint of another run.
+        """
+        try:
+            self._load_one(path, fingerprint)
+        except CheckpointFingerprintMismatch:
+            return True
+        except Exception:
+            return False
+        return True
 
     def _write_checkpoint(
         self, tmp_path: Path, state: CMAESCheckpointState, fingerprint: dict[str, Any]
@@ -300,14 +315,7 @@ class HPCCheckpointManager:
             # message. Re-raise immediately as the clean, unambiguous
             # hard stop FR6 requires.
             raise
-        except (
-            FileNotFoundError,
-            OSError,
-            ValueError,
-            KeyError,
-            OverflowError,
-            SafeSerializationError,
-        ) as primary_error:
+        except Exception as primary_error:  # any unreadable/malformed primary
             if not bak_path.exists():
                 raise
             logger.warning(
@@ -338,19 +346,6 @@ class HPCCheckpointManager:
                     f"Checkpoint version {version!r} != expected {self.VERSION!r}",
                 )
 
-            fp_group = f["fingerprint"]
-            for k in _FINGERPRINT_COMPARISON_KEYS:
-                expected_v = expected_fingerprint[k]
-                actual_v = fp_group.attrs.get(k)
-                if actual_v != expected_v:
-                    raise CheckpointFingerprintMismatch(
-                        f"Checkpoint fingerprint mismatch on field {k!r}: "
-                        f"checkpoint has {actual_v!r}, current run has "
-                        f"{expected_v!r}. Refusing to resume from an "
-                        "incompatible checkpoint -- use a different run_id "
-                        "or checkpoint_dir if this is intentionally a new run.",
-                    )
-
             state_group = f["state"]
             # Metadata-only validation before any read: a tiny sparse file must
             # not expand to its declared shape (n from `mean`; C/B are (n, n)).
@@ -362,8 +357,22 @@ class HPCCheckpointManager:
 
             n = int(state_group["mean"].shape[0]) if state_group["mean"].ndim else None
             vec = (n,)
-            expected = {"mean": vec, "C": (n, n), "B": (n, n), "D": vec, "p_c": vec}
-            check_checkpoint_dataset(state_group["key_data"], "key_data")
+            expected = {
+                "mean": vec,
+                "C": (n, n),
+                "B": (n, n),
+                "D": vec,
+                "p_c": vec,
+                "p_std": vec,
+                "best_solution": vec,
+            }
+            # A wrong-length key would pass here and only fail in wrap_key_data on
+            # resume, outside the load()/.bak fallback.
+            check_checkpoint_dataset(
+                state_group["key_data"],
+                "key_data",
+                shape=jax.random.key_data(jax.random.key(0)).shape,
+            )
             for name in _EVOSAX_ARRAY_FIELDS:
                 check_checkpoint_dataset(
                     state_group[name], name, shape=expected.get(name)
@@ -387,4 +396,30 @@ class HPCCheckpointManager:
             for name in _EVOSAX_ARRAY_FIELDS:
                 kwargs[name] = jnp.asarray(state_group[name][()])
 
-            return CMAESCheckpointState(**kwargs)
+            state = CMAESCheckpointState(**kwargs)
+
+            # Compared only after the whole payload validated: a mismatch must mean
+            # "a well-formed checkpoint of another run", never "malformed".
+            fp_group = f["fingerprint"]
+            # Every required field must be present before any value is compared:
+            # a missing one is a malformed file, not another run's checkpoint.
+            missing = [
+                k for k in _FINGERPRINT_COMPARISON_KEYS if k not in fp_group.attrs
+            ]
+            if missing:
+                raise ValueError(
+                    f"Checkpoint at {path} is missing fingerprint field(s) {missing}."
+                )
+            for k in _FINGERPRINT_COMPARISON_KEYS:
+                expected_v = expected_fingerprint[k]
+                actual_v = fp_group.attrs[k]
+                if actual_v != expected_v:
+                    raise CheckpointFingerprintMismatch(
+                        f"Checkpoint fingerprint mismatch on field {k!r}: "
+                        f"checkpoint has {actual_v!r}, current run has "
+                        f"{expected_v!r}. Refusing to resume from an "
+                        "incompatible checkpoint -- use a different run_id "
+                        "or checkpoint_dir if this is intentionally a new run.",
+                    )
+
+            return state

@@ -3,14 +3,16 @@
 This module contains the CheckpointManager class that handles
 save/load checkpoint operations for streaming optimizer state.
 
-Checkpoints enable resumption of long-running optimizations
-and provide recovery from failures.
+Checkpoints record the optimizer state of a long-running fit and can be
+loaded back with ``CheckpointManager.load``; ``fit()`` itself does not resume
+from one (``HybridStreamingConfig`` has no ``resume_from_checkpoint`` field).
 """
 
 from __future__ import annotations
 
 import math
 import os
+import stat
 import tempfile
 import time
 from dataclasses import dataclass
@@ -246,6 +248,9 @@ class CheckpointManager:
         with tempfile.TemporaryDirectory(dir=checkpoint_path.parent) as tmp_dir:
             tmp_path = Path(tmp_dir) / checkpoint_path.name
             self._write_all(tmp_path, state)
+            if checkpoint_path.is_file():
+                # keep a restricted (e.g. 0600) mode instead of the umask default
+                os.chmod(tmp_path, stat.S_IMODE(checkpoint_path.stat().st_mode))
             os.replace(tmp_path, checkpoint_path)
 
     def _write_all(self, tmp_path: Path, state: CheckpointState) -> None:

@@ -250,6 +250,7 @@ class GlobalOptimizationConfig:
 
         # Validate scale_factor
         _require_real("scale_factor", self.scale_factor)
+        object.__setattr__(self, "scale_factor", float(self.scale_factor))
         if not math.isfinite(self.scale_factor) or self.scale_factor <= 0:
             raise ValueError(
                 f"scale_factor must be finite and positive, got {self.scale_factor}",
@@ -257,6 +258,9 @@ class GlobalOptimizationConfig:
 
         # Validate elimination_fraction
         _require_real("elimination_fraction", self.elimination_fraction)
+        object.__setattr__(
+            self, "elimination_fraction", float(self.elimination_fraction)
+        )
         if not math.isfinite(self.elimination_fraction) or not (
             0 < self.elimination_fraction < 1
         ):

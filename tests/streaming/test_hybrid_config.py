@@ -318,10 +318,10 @@ class TestMemoryOptimizedProfile:
         assert config.checkpoint_frequency == 50
 
     def test_memory_optimized_cg_threshold(self):
-        """Test memory optimized CG threshold."""
+        """memory_optimized keeps the default threshold: CG is not wired into Phase 2."""
         config = HybridStreamingConfig.memory_optimized()
 
-        assert config.cg_param_threshold == 1000
+        assert config.cg_param_threshold == HybridStreamingConfig().cg_param_threshold
 
 
 class TestWithMultistartProfile:

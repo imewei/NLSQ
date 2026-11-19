@@ -48,7 +48,7 @@ class InputValidator:
         """
         self.fast_mode = fast_mode
         # WeakKeyDictionary prevents stale id() reuse when functions are GC'd
-        self._function_cache: weakref.WeakKeyDictionary[Callable, bool] = (
+        self._function_cache: weakref.WeakKeyDictionary[Callable, tuple] = (
             weakref.WeakKeyDictionary()
         )
 
@@ -366,28 +366,35 @@ class InputValidator:
                 errors.append("bounds must be a 2-tuple of (lower, upper)")
             else:
                 lb, ub = bounds
-                if lb is not None and ub is not None:
+                if lb is not None or ub is not None:
                     # Local import: nlsq.core.least_squares transitively
                     # imports nlsq.utils (via common_scipy -> utils.logging),
                     # which imports this module at package-init time -- a
                     # module-level import here is circular.
                     from nlsq.core.least_squares import prepare_bounds
 
+                    # A None side is unbounded but its partner is still checked.
+                    lb = -np.inf if lb is None else lb
+                    ub = np.inf if ub is None else ub
                     lb, ub = prepare_bounds((lb, ub), n_params)
 
-                    if len(lb) != n_params or len(ub) != n_params:
+                    if lb.ndim != 1 or ub.ndim != 1:
+                        errors.append("bounds must be scalars or 1-D arrays")
+                    elif len(lb) != n_params or len(ub) != n_params:
                         errors.append(
                             f"bounds must have length {n_params} to match parameters",
                         )
+                    else:
+                        if np.any(lb >= ub):
+                            errors.append("Lower bounds must be less than upper bounds")
 
-                    if np.any(lb >= ub):
-                        errors.append("Lower bounds must be less than upper bounds")
-
-                    # Check if p0 is within bounds
-                    if p0 is not None:
-                        p0_array = np.asarray(p0)
-                        if np.any(p0_array < lb) or np.any(p0_array > ub):
-                            warnings_list.append("Initial guess p0 is outside bounds")
+                        # Check if p0 is within bounds
+                        if p0 is not None:
+                            p0_array = np.asarray(p0)
+                            if np.any(p0_array < lb) or np.any(p0_array > ub):
+                                warnings_list.append(
+                                    "Initial guess p0 is outside bounds"
+                                )
 
         except Exception as e:
             errors.append(f"Invalid bounds: {e}")
@@ -595,11 +602,17 @@ class InputValidator:
         warnings: list[str] = []
 
         try:
-            # Cache function test results to avoid repeated calls.
-            # Use the function object directly (WeakKeyDictionary auto-expires on GC).
-            # Fall back to always-test if f is not weakly referenceable (e.g., builtins).
+            # Cache the probe per (function, parameters): a model can be valid at one
+            # p0 and invalid at another. WeakKeyDictionary auto-expires on GC; fall
+            # back to always-test if f is not weakly referenceable (e.g. builtins).
+            params = (
+                np.atleast_1d(np.asarray(p0))  # scalar p0 is valid (as in
+                if p0 is not None  # _validate_initial_guess)
+                else np.ones(n_params)
+            )
+            probe_key = (params.tobytes(), params.dtype.str)
             try:
-                already_tested = f in self._function_cache
+                already_tested = self._function_cache.get(f) == probe_key
             except TypeError:
                 already_tested = False
             if not already_tested:
@@ -607,30 +620,44 @@ class InputValidator:
                     # For tuple xdata, sample from each array
                     test_x = tuple(arr[: min(10, len(arr))] for arr in xdata)
                     expected_len = min(10, len(xdata[0]))
+                    full_len = len(xdata[0])
                 else:
                     # points live on the last axis for (k, M) xdata
                     n_test = min(10, xdata.shape[-1] if xdata.ndim > 0 else 1)
                     test_x = xdata[..., :n_test]
                     expected_len = n_test
+                    full_len = xdata.shape[-1] if xdata.ndim > 0 else 1
 
-                if p0 is not None:
-                    test_result = f(test_x, *p0)
-                else:
-                    # Try with dummy parameters
-                    dummy_params = np.ones(n_params)
-                    test_result = f(test_x, *dummy_params)
+                truncated = expected_len != full_len
+                try:
+                    test_result = f(test_x, *params)
+                    sampled_ok = not (
+                        hasattr(test_result, "__len__")
+                        and np.ndim(test_result) > 0
+                        and len(test_result) != expected_len
+                    )
+                except Exception:
+                    if not truncated:
+                        raise
+                    sampled_ok = False
+                if truncated and not sampled_ok:
+                    # The sample may break a model tied to the full data's shape
+                    # (e.g. a closed-over array); judge it on the real input.
+                    test_result = f(xdata, *params)
+                    expected_len = full_len
 
-                # Cache the result (suppress TypeError for non-referenceable callables)
-                with suppress(TypeError):
-                    self._function_cache[f] = True
-
-                # Check output shape/length
-                if hasattr(test_result, "__len__"):
+                # Check output shape/length (0-d arrays have __len__ but no length)
+                if hasattr(test_result, "__len__") and np.ndim(test_result) > 0:
                     if len(test_result) != expected_len:
                         warnings.append(
                             f"Function output length {len(test_result)} doesn't match "
                             f"expected length {expected_len}",
                         )
+
+                # Cache only after the probe completed (suppress TypeError for
+                # non-referenceable callables)
+                with suppress(TypeError):
+                    self._function_cache[f] = probe_key
 
         except Exception as e:
             errors.append(f"Cannot evaluate function: {e}")
@@ -910,8 +937,10 @@ class InputValidator:
         for name, tol in (("ftol", ftol), ("xtol", xtol), ("gtol", gtol)):
             if tol is None:
                 continue
-            if not tol > 0:
-                errors.append(f"{name} must be positive, got {tol}")
+            if not tol >= 0:  # 0 disables the test (the solver accepts it)
+                errors.append(
+                    f"{name} must be positive (or 0/None to disable), got {tol}"
+                )
             elif name != "gtol" and tol < 1e-15:
                 warnings.append(f"{name}={tol} is very small, may not converge")
 
@@ -942,12 +971,27 @@ class InputValidator:
         warnings: list[str] = []
 
         if max_nfev is not None:
-            if max_nfev <= 0:
-                errors.append(f"max_nfev must be positive, got {max_nfev}")
-            elif max_nfev < n_params:
-                warnings.append(
-                    f"max_nfev={max_nfev} is less than number of parameters {n_params}",
-                )
+            # Same finite-positive-integer contract as the solver (local import:
+            # nlsq.core imports this package at init time).
+            from nlsq.core._option_checks import validate_max_nfev
+
+            try:
+                validate_max_nfev(max_nfev)
+            except ValueError as exc:
+                if (
+                    isinstance(max_nfev, (int, float))
+                    and not isinstance(max_nfev, bool)
+                    and max_nfev <= 0
+                ):
+                    errors.append(f"max_nfev must be positive, got {max_nfev}")
+                else:
+                    errors.append(str(exc))
+            else:
+                if max_nfev < n_params:
+                    warnings.append(
+                        f"max_nfev={max_nfev} is less than number of parameters "
+                        f"{n_params}",
+                    )
 
         return errors, warnings
 
@@ -978,11 +1022,6 @@ class InputValidator:
         if bounds is None:
             return errors
 
-        # Check method compatibility
-        if method == "lm":
-            errors.append("Levenberg-Marquardt method does not support bounds")
-            return errors
-
         # Validate bounds structure
         try:
             lb, ub = bounds
@@ -990,10 +1029,17 @@ class InputValidator:
 
             lb, ub = prepare_bounds((lb, ub), len(x0))
 
+            # LM rejects only *finite* bounds; the solver accepts (-inf, inf).
+            if method == "lm" and (np.any(np.isfinite(lb)) or np.any(np.isfinite(ub))):
+                errors.append("Levenberg-Marquardt method does not support bounds")
+                return errors
+
             if len(lb) != len(x0) or len(ub) != len(x0):
                 errors.append("bounds must have same length as x0")
 
-            if np.any(lb >= ub):
+            if np.any(np.isnan(lb)) or np.any(np.isnan(ub)):
+                errors.append("bounds must not contain NaN")
+            elif np.any(lb >= ub):
                 errors.append("Lower bounds must be less than upper bounds")
 
             # Check x0 within bounds
@@ -1009,6 +1055,8 @@ class InputValidator:
         self,
         fun: Callable,
         x0: np.ndarray,
+        args: tuple = (),
+        kwargs: dict | None = None,
     ) -> tuple[list[str], list[str]]:
         """Validate function can be evaluated at x0.
 
@@ -1018,6 +1066,8 @@ class InputValidator:
             Residual function
         x0 : np.ndarray
             Initial parameter guess
+        args, kwargs : tuple, dict, optional
+            Extra arguments forwarded to ``fun`` (as ``least_squares`` does)
 
         Returns
         -------
@@ -1030,7 +1080,7 @@ class InputValidator:
         warnings: list[str] = []
 
         try:
-            result = fun(x0)
+            result = fun(x0, *args, **(kwargs or {}))
             result = np.asarray(result)
 
             if result.ndim != 1:
@@ -1310,6 +1360,8 @@ class InputValidator:
         xtol: float = DEFAULT_XTOL,
         gtol: float = DEFAULT_GTOL,
         max_nfev: int | None = None,
+        args: tuple = (),
+        kwargs: dict | None = None,
     ) -> tuple[list[str], list[str], np.ndarray]:
         """Validate inputs for least_squares function.
 
@@ -1334,6 +1386,8 @@ class InputValidator:
             Gradient tolerance
         max_nfev : int, optional
             Maximum function evaluations
+        args, kwargs : tuple, dict, optional
+            Extra arguments forwarded to ``fun`` when probing it at ``x0``
 
         Returns
         -------
@@ -1372,11 +1426,60 @@ class InputValidator:
         errors.extend(bounds_errors)
 
         # Step 6: Validate function can be called at x0
-        func_errors, func_warnings = self._validate_function_at_x0(fun, x0)
+        func_errors, func_warnings = self._validate_function_at_x0(
+            fun, x0, args, kwargs
+        )
         errors.extend(func_errors)
         warnings_list.extend(func_warnings)
 
         return errors, warnings_list, x0
+
+
+def _bind_call(func: Callable, args: tuple, kwargs: dict) -> tuple:
+    """Accessors over a call bound to ``func``'s signature.
+
+    Lets the validators see keyword-passed required arguments and
+    positionally-passed options. Returns ``(opt, required, forward)``.
+    """
+    try:
+        sig = signature(func)
+        ba = sig.bind_partial(*args, **kwargs)
+        ba.apply_defaults()  # options omitted by the caller take the wrapped default
+        names = [
+            p.name
+            for p in sig.parameters.values()
+            if p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)  # keyword-only too
+        ]
+        # The *args/**kwargs catch-alls are not options named "args"/"kwargs".
+        bound = {k: v for k, v in ba.arguments.items() if k in names}
+    except (TypeError, ValueError):
+        bound, names = {}, []
+
+    def opt(name: str, default: Any = None) -> Any:
+        return bound[name] if name in bound else kwargs.get(name, default)
+
+    def required(n: int) -> list[Any]:
+        """First ``n`` required args: positional first, then by name."""
+        vals = list(args[:n])
+        for i in range(len(vals), n):
+            if i < len(names) and names[i] in kwargs:
+                vals.append(kwargs[names[i]])
+            else:
+                break
+        return vals
+
+    def forward(cleaned: list[Any]) -> tuple[tuple, dict]:
+        """Put cleaned required args back where they were passed."""
+        new_args = list(args)
+        new_kwargs = dict(kwargs)
+        for i, val in enumerate(cleaned):
+            if i < len(new_args):
+                new_args[i] = val
+            else:
+                new_kwargs[names[i]] = val
+        return tuple(new_args), new_kwargs
+
+    return opt, required, forward
 
 
 def validate_inputs(validation_type: str = "curve_fit") -> Callable:
@@ -1397,24 +1500,25 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             validator = InputValidator()
+            opt, required, forward = _bind_call(func, args, kwargs)
 
             if validation_type == "curve_fit":
                 # Extract arguments
-                if len(args) < 3:
+                req = required(3)
+                if len(req) < 3:
                     raise ValueError(
                         "curve_fit requires at least 3 arguments (f, xdata, ydata)",
                     )
 
-                f, xdata, ydata = args[:3]
-                remaining_args = args[3:]
+                f, xdata, ydata = req
 
                 # Get optional arguments
-                p0 = kwargs.get("p0")
-                bounds = kwargs.get("bounds")
-                sigma = kwargs.get("sigma")
-                absolute_sigma = kwargs.get("absolute_sigma", True)
-                check_finite = kwargs.get("check_finite", True)
-                method = kwargs.get("method")
+                p0 = opt("p0")
+                bounds = opt("bounds")
+                sigma = opt("sigma")
+                absolute_sigma = opt("absolute_sigma", True)
+                check_finite = opt("check_finite", True)
+                method = opt("method")
 
                 # Validate
                 errors, warnings_list, xdata_clean, ydata_clean = (
@@ -1439,25 +1543,27 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                     warnings.warn(warning, UserWarning, stacklevel=2)
 
                 # Replace with cleaned data
-                args = (f, xdata_clean, ydata_clean, *remaining_args)
+                args, kwargs = forward([f, xdata_clean, ydata_clean])
 
             elif validation_type == "least_squares":
                 # Extract arguments
-                if len(args) < 2:
+                req = required(2)
+                if len(req) < 2:
                     raise ValueError(
                         "least_squares requires at least 2 arguments (fun, x0)",
                     )
 
-                fun, x0 = args[:2]
-                remaining_args = args[2:]
+                fun, x0 = req
 
                 # Get optional arguments
-                bounds = kwargs.get("bounds")
-                method = kwargs.get("method", "trf")
-                ftol = kwargs.get("ftol", 1e-8)
-                xtol = kwargs.get("xtol", 1e-8)
-                gtol = kwargs.get("gtol", 1e-8)
-                max_nfev = kwargs.get("max_nfev")
+                bounds = opt("bounds")
+                method = opt("method", "trf")
+                ftol = opt("ftol", 1e-8)
+                xtol = opt("xtol", 1e-8)
+                gtol = opt("gtol", 1e-8)
+                max_nfev = opt("max_nfev")
+                fun_args = opt("args") or ()
+                fun_kwargs = opt("kwargs")
 
                 # Validate
                 errors, warnings_list, x0_clean = (
@@ -1470,6 +1576,8 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                         xtol,
                         gtol,
                         max_nfev,
+                        fun_args,
+                        fun_kwargs,
                     )
                 )
 
@@ -1481,7 +1589,7 @@ def validate_inputs(validation_type: str = "curve_fit") -> Callable:
                     warnings.warn(warning, UserWarning, stacklevel=2)
 
                 # Replace with cleaned data
-                args = (fun, x0_clean, *remaining_args)
+                args, kwargs = forward([fun, x0_clean])
 
             else:
                 raise ValueError(f"Unknown validation type: {validation_type}")

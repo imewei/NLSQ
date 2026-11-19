@@ -287,7 +287,9 @@ def handle_batch(args: argparse.Namespace) -> int:
             verbose=args.verbose if hasattr(args, "verbose") else False,
         )
 
-        if any(r.get("status") == "cancelled" for r in results):
+        if getattr(results, "interrupted", False) or any(
+            r.get("status") == "cancelled" for r in results
+        ):
             return 130  # interrupted (SIGINT convention)
 
         # Return non-zero if any workflows failed
@@ -350,7 +352,7 @@ def handle_config(args: argparse.Namespace) -> int:
     except FileExistsError as e:
         print(f"\nError: {e}", file=sys.stderr)
         return 1
-    except ValueError as e:
+    except (ValueError, OSError) as e:  # e.g. ENAMETOOLONG, unwritable directory
         print(f"\nError: {e}", file=sys.stderr)
         return 1
 

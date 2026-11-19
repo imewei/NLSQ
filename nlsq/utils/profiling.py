@@ -158,13 +158,35 @@ def analyze_source_transfers(source_code: str) -> dict:
             f"source_code must be a string, got {type(source_code).__name__}",
         )
 
-    # Count only NumPy conversions (not JAX operations like jnp.array)
-    # Use negative lookbehind to exclude jnp.array but include np.array
+    # Count only NumPy conversions (not JAX operations like jnp.array), as real
+    # calls: comments, strings and look-alike names must not count.
+    import ast
     import re
+    import textwrap
 
-    np_array_calls = len(re.findall(r"(?<!j)np\.array\(", source_code))
-    np_asarray_calls = len(re.findall(r"(?<!j)np\.asarray\(", source_code))
-    block_until_ready_calls = source_code.count(".block_until_ready(")
+    try:
+        tree = ast.parse(textwrap.dedent(source_code))
+    except SyntaxError:  # a fragment: fall back to a textual match
+        np_array_calls = len(re.findall(r"(?<![\w.])np\s*\.\s*array\s*\(", source_code))
+        np_asarray_calls = len(
+            re.findall(r"(?<![\w.])np\s*\.\s*asarray\s*\(", source_code)
+        )
+        block_until_ready_calls = len(
+            re.findall(r"\.\s*block_until_ready\s*\(", source_code)
+        )
+    else:
+        np_array_calls = np_asarray_calls = block_until_ready_calls = 0
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            ):
+                continue
+            owner = node.func.value
+            if isinstance(owner, ast.Name) and owner.id == "np":
+                np_array_calls += node.func.attr == "array"
+                np_asarray_calls += node.func.attr == "asarray"
+            if node.func.attr == "block_until_ready":
+                block_until_ready_calls += 1
 
     return {
         "np_array_calls": np_array_calls,
@@ -360,3 +382,8 @@ def profile_transfers_runtime(
             "profiler_available": False,
             "error": str(e),
         }
+    except BaseException:
+        # KeyboardInterrupt etc.: drop the private default trace dir, then propagate
+        if created_default:
+            shutil.rmtree(trace_path, ignore_errors=True)
+        raise

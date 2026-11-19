@@ -144,6 +144,9 @@ def _cg_core(
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """CG for (J_scaled^T J_scaled + alpha*I) x = b (traced inside callers' jit)."""
     n = J_scaled.shape[1]
+    # One working dtype: a stronger-typed (e.g. float64) alpha would otherwise
+    # promote the loop carry produced by later iterations.
+    alpha = jnp.asarray(alpha, dtype=b.dtype)
 
     # Solve for a normalized RHS: otherwise the CG curvature p^T A p
     # squares the magnitude of b as well as J and can underflow even when
@@ -234,6 +237,7 @@ def _cg_trust_region_step(
     A single damped solve lands inside the region and the radius never grows.
     """
     b = -J_scaled.T @ f
+    Delta = jnp.asarray(Delta, dtype=b.dtype)  # keep the while_loop carry one dtype
     p_gn, _, _ = _cg_core(J_scaled, b, jnp.asarray(0.0, b.dtype), tol)
     p_gn_norm = jnp.linalg.norm(p_gn)
     alpha_upper = _seed_lm_alpha(jnp.linalg.norm(b), 0.0, Delta)
@@ -311,7 +315,7 @@ def _calculate_cost(rho: jnp.ndarray, data_mask: jnp.ndarray) -> jnp.ndarray:
 
 @jit
 def _check_isfinite(f_new: jnp.ndarray) -> jnp.ndarray:
-    """Check if all residuals are finite."""
+    """Check if all residuals (or a scalar cost) are finite."""
     return jnp.all(jnp.isfinite(f_new))
 
 
@@ -344,11 +348,11 @@ def accept_step_scalars(
     """All scalar math of one trust-region attempt, as one float64 vector.
 
     Same formulas as the sequential path (``update_tr_radius_jax``,
-    ``check_termination_jax``, alpha rescaling). ``cost_new`` is ignored by the
-    host when the residuals are not finite (entry ``ACC_FINITE`` is 0), so the
-    loss may be evaluated before the finiteness check.
+    ``check_termination_jax``, alpha rescaling). The other entries are ignored by
+    the host when the residuals or the trial cost are not finite (entry
+    ``ACC_FINITE`` is 0), so the loss may be evaluated before the finiteness check.
     """
-    finite = jnp.all(jnp.isfinite(f_new))
+    finite = jnp.all(jnp.isfinite(f_new)) & jnp.isfinite(cost_new)
     actual_reduction = cost - cost_new
     step_h_norm = jnp.linalg.norm(step_h)
     step_norm = jnp.linalg.norm(step)
@@ -405,6 +409,14 @@ def _svd_no_bounds_on_host(
     return J_h, U, s, V, uf
 
 
+def _on_device_of(J: jnp.ndarray, *arrays):
+    """Move fallback factors back to ``J``'s device (committed arrays cannot mix)."""
+    devices = J.devices()
+    if len(devices) != 1:
+        return arrays
+    return jax.device_put(arrays, next(iter(devices)))
+
+
 def _svd_no_bounds(
     J: jnp.ndarray,
     d: jnp.ndarray,
@@ -427,7 +439,9 @@ def _svd_no_bounds(
     except Exception as e:
         if is_gpu_error(e):
             J_h = J * d
-            U, s, V = compute_svd_with_fallback(J_h, full_matrices=False)
+            U, s, V = _on_device_of(
+                J, *compute_svd_with_fallback(J_h, full_matrices=False)
+            )
             uf = U.T.dot(f)
             return J_h, U, s, V, uf
         raise
@@ -453,7 +467,9 @@ def _svd_bounds(
             J_h = J * d
             J_augmented = jnp.concatenate([J_h, J_diag])
             f_augmented = jnp.concatenate([f, f_zeros])
-            U, s, V = compute_svd_with_fallback(J_augmented, full_matrices=False)
+            U, s, V = _on_device_of(
+                J, *compute_svd_with_fallback(J_augmented, full_matrices=False)
+            )
             uf = U.T.dot(f_augmented)
             return J_h, U, s, V, uf
         raise

@@ -31,7 +31,7 @@ from typing import Any
 
 import numpy as np
 
-from nlsq.cli.errors import CLIError, cfg_get
+from nlsq.cli.errors import CLIError, cfg_bool, cfg_get
 
 
 def _as_numpy(obj: Any) -> Any:
@@ -201,8 +201,8 @@ class ResultExporter:
             suffix = Path(str(export_config.get("results_file") or "")).suffix.lower()
             fmt = "csv" if suffix == ".csv" else "json"
         output_format = str(fmt).lower()
-        stdout_mode = cfg_get(export_config, "stdout", False)
-        skip_file = cfg_get(export_config, "skip_file_on_stdout", False)
+        stdout_mode = cfg_bool(export_config, "stdout", False, "export")
+        skip_file = cfg_bool(export_config, "skip_file_on_stdout", False, "export")
 
         # Prepare export data
         export_data = self._prepare_export_data(result, config)
@@ -390,6 +390,8 @@ class ResultExporter:
         fun = result.get("fun")
         if fun is not None:
             residuals = np.asarray(fun)
+            if residuals.dtype.kind in "iubf":  # square in float64, not int32/float32
+                residuals = residuals.astype(np.float64)
 
             if not np.all(np.isfinite(residuals)):
                 statistics["statistics_warnings"] = (

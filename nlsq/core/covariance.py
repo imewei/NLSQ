@@ -445,7 +445,10 @@ def pcov_from_normal(
             # overflow is caught below as all-inf + OptimizeWarning; silence numpy's own
             with np.errstate(over="ignore", invalid="ignore"):
                 if absolute_sigma:
-                    pcov = ((Vk / w[keep]) @ Vk.T) / s
+                    # undo the scale on the factor, not on the product: Vk Vk^T can
+                    # overflow although the covariance itself is representable
+                    scaled = Vk / np.sqrt(w[keep]) / np.sqrt(s)
+                    pcov = scaled @ scaled.T
                 elif n > p:
                     if np.isfinite(cost) and cost >= 0:
                         scaled = Vk * (np.sqrt(cost) * np.sqrt(2.0 / (n - p)))

@@ -28,6 +28,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from nlsq.common_scipy import EPS
+from nlsq.core._option_checks import has_complex
 from nlsq.core.least_squares import prepare_bounds
 from nlsq.utils.logging import NLSQLogger, get_logger
 from nlsq.utils.validators import InputValidator
@@ -231,6 +232,130 @@ def finite_rows(
     return np.compress(valid, xa, axis=pts_axis), ya[valid]
 
 
+_ALL_ZERO_WEIGHT_MSG = (
+    "sigma is infinite for every observation used; nothing to fit "
+    "(every row has zero weight)."
+)
+
+
+def reject_complex_inputs(x: Any, y: Any, sigma: Any = None) -> None:
+    """Raise ``ValueError`` for complex x/y/sigma (the float casts would drop the
+    imaginary part)."""
+    for name, arr in (("xdata", x), ("ydata", y), ("sigma", sigma)):
+        if has_complex(arr):
+            raise ValueError(
+                f"`{name}` must be real-valued; complex input is not supported."
+            )
+
+
+def _real_weights(sigma: Any) -> np.ndarray | None:
+    """``sigma`` as a float array, or None when it carries no real weight information.
+
+    Complex and datetime dtypes are never cast (the explicit input validation
+    reports them); object/string/extension (bfloat16, float8) dtypes are converted
+    when every entry is a real number and otherwise give None.
+    """
+    try:
+        raw = np.asarray(sigma)
+        if raw.dtype.kind in "cMm" or has_complex(raw):
+            return None
+        return raw.astype(float)
+    except (TypeError, ValueError):
+        return None
+
+
+def coerce_real_sigma(sigma: Any) -> Any:
+    """An in-memory object-dtype ``sigma`` of real numbers as a float array.
+
+    Other inputs (None, float arrays, complex, out-of-core sources) are returned
+    as given; downstream code may then use float ufuncs such as ``np.isinf``.
+    """
+    if isinstance(sigma, np.ndarray) and sigma.dtype == object:
+        real = _real_weights(sigma)
+        if real is not None:
+            return real
+    return sigma
+
+
+def zero_weight_rows(sigma: Any, mask: np.ndarray) -> int:
+    """Used rows with ``sigma=inf`` (1-D sigma): zero weight, so not observations.
+
+    ``mask`` may be longer than ``sigma`` (padded data); the extra rows are padding.
+    """
+    s = None if sigma is None else _real_weights(sigma)
+    if s is None or s.ndim != 1 or s.shape[0] > mask.shape[0]:
+        return 0
+    # flength padding is appended after the caller's rows; sigma covers only those
+    return int(np.sum(mask[: s.shape[0]] & np.isinf(s)))
+
+
+def reject_all_zero_weight(sigma: Any, data_mask: Any = None) -> None:
+    """Raise ``ValueError`` when every used row has ``sigma=inf`` (nothing weighted).
+
+    Called at the entry of every route so that all of them share one contract.
+    Misaligned or non-numeric inputs are left to the route's own validation.
+    """
+    # In-memory containers only (host or JAX arrays, sequences, numbers): an
+    # out-of-core source (memmap/h5py/zarr/lazy loader) must not be read here.
+    if not isinstance(
+        sigma, (np.ndarray, np.generic, jnp.ndarray, list, tuple, int, float)
+    ) or isinstance(sigma, (bool, np.memmap)):
+        return
+    s = _real_weights(sigma)
+    if s is None:
+        return
+    try:
+        if s.ndim == 0:  # a scalar sigma is broadcast over every observation
+            if np.isinf(s) and (data_mask is None or np.any(np.asarray(data_mask))):
+                raise ValueError(_ALL_ZERO_WEIGHT_MSG)
+            return
+        mask = (
+            np.ones(s.shape, bool) if data_mask is None else np.asarray(data_mask, bool)
+        )
+    except (TypeError, ValueError) as exc:
+        if exc.args == (_ALL_ZERO_WEIGHT_MSG,):
+            raise
+        return
+    if s.ndim != 1 or s.shape != mask.shape:
+        return
+    n_used = int(mask.sum())
+    if n_used > 0 and zero_weight_rows(s, mask) == n_used:
+        raise ValueError(_ALL_ZERO_WEIGHT_MSG)
+
+
+def rows_used_by_fit(
+    xdata: Any,
+    ydata: Any,
+    sigma: Any = None,
+    data_mask: Any = None,
+    nan_policy: str | None = "raise",
+    points_axis_last: bool = True,
+) -> tuple[Any, Any]:
+    """``(xdata, ydata)`` restricted to the rows the fit will use, for ``p0='auto'``.
+
+    Drops rows excluded by ``data_mask`` and, for ``nan_policy='omit'``, rows with
+    non-finite x, y or 1-D sigma. Inputs that are not row-aligned are returned
+    unchanged (the fit's own validation reports them).
+    """
+    try:
+        xa, ya = np.asarray(xdata, float), np.asarray(ydata, float)
+        pts_axis = -1 if (xa.ndim == 1 or points_axis_last) else 0
+        if ya.ndim != 1 or xa.ndim == 0 or xa.shape[pts_axis] != ya.shape[0]:
+            return xdata, ydata
+        keep = np.ones(ya.shape, bool)
+        if data_mask is not None:
+            mask = np.asarray(data_mask, bool)
+            if mask.shape == ya.shape:
+                keep &= mask
+        if nan_policy == "omit":
+            keep &= _omit_valid_mask(xa, ya, sigma, points_axis_last)
+    except (TypeError, ValueError):
+        return xdata, ydata
+    if keep.all():
+        return xdata, ydata
+    return np.compress(keep, xa, axis=pts_axis), ya[keep]
+
+
 def _finite_points(xdata: np.ndarray, points_axis_last: bool) -> np.ndarray:
     """Per-point finiteness mask of ``xdata`` (1-D, or 2-D in either layout)."""
     if xdata.ndim == 1:
@@ -305,12 +430,11 @@ def _determine_parameter_count(
                 error=str(e),
             )
             if any(
-                a.kind in (a.VAR_POSITIONAL, a.VAR_KEYWORD)
-                for a in signature(f).parameters.values()
+                a.kind == a.VAR_POSITIONAL for a in signature(f).parameters.values()
             ):
                 raise ValueError(
                     "p0='auto' failed and the number of parameters of a model "
-                    "with *args/**kwargs cannot be inferred; provide p0 explicitly."
+                    "with *args cannot be inferred; provide p0 explicitly."
                 ) from e
             p0 = None  # drop the "auto" sentinel so bounds-derived defaults apply
 
@@ -735,6 +859,8 @@ def _setup_data_mask_and_padding(
         data_mask = np.asarray(data_mask, dtype=bool)
         if len(data_mask) != m:
             raise ValueError("Data mask doesn't match data lengths.")
+        if m > 0 and not data_mask.any():
+            raise ValueError("data_mask excludes every data point; nothing to fit.")
 
     if ctx.flength is not None:
         len_diff = int(ctx.flength) - m
@@ -999,6 +1125,10 @@ def _apply_padding_if_needed(
     return xdata, ydata, len_diff
 
 
+# Frozen, so one shared default instance is safe (and satisfies ruff B008).
+_DEFAULT_CTX = PrepareContext()
+
+
 def prepare_problem(
     f: Callable,
     x: Any,
@@ -1013,7 +1143,7 @@ def prepare_problem(
     solver: str = "auto",
     batch_size: int | None = None,
     kwargs: dict | None = None,
-    ctx: PrepareContext = PrepareContext(),  # noqa: B008 (frozen, immutable default)
+    ctx: PrepareContext = _DEFAULT_CTX,
 ) -> PreparedProblem:
     """Prepare and validate inputs for curve fitting.
 
@@ -1039,12 +1169,15 @@ def prepare_problem(
             f"got {nan_policy!r}"
         )
     xdata, ydata = x, y
+    reject_complex_inputs(x, y, sigma)
 
     # Step 1: Determine parameter count and auto-estimate p0 if needed. The
-    # estimate runs before NaN removal (steps 5-7), so with nan_policy='omit'
-    # it must see only the finite rows or it returns NaN.
-    if nan_policy == "omit" and _is_auto_p0(p0):
-        x_est, y_est = finite_rows(xdata, ydata, ctx.x_points_axis_last)
+    # estimate runs before masking/NaN removal (steps 5-9), so it must see only
+    # the rows the fit will use (data_mask, and nan_policy='omit' non-finite rows).
+    if _is_auto_p0(p0):
+        x_est, y_est = rows_used_by_fit(
+            xdata, ydata, sigma, data_mask, nan_policy, ctx.x_points_axis_last
+        )
     else:
         x_est, y_est = xdata, ydata
     n, p0 = _determine_parameter_count(f, p0, x_est, y_est, ctx=ctx)
@@ -1101,9 +1234,12 @@ def prepare_problem(
     # A user-supplied data_mask is sized to the ORIGINAL data length; if
     # nan_policy='omit' dropped rows, realign it the same way so it isn't
     # rejected by _setup_data_mask_and_padding's length check below.
-    if data_mask is not None and omit_mask is not None:
-        if len(data_mask) == len(omit_mask) and len(data_mask) != m:
-            data_mask = np.asarray(data_mask)[omit_mask]
+    if data_mask is not None and omit_mask is not None and m != len(omit_mask):
+        # A mask the length of the already-shortened data would silently drop
+        # the wrong rows; the contract is the original length.
+        if len(data_mask) != len(omit_mask):
+            raise ValueError("Data mask doesn't match data lengths.")
+        data_mask = np.asarray(data_mask)[omit_mask]
 
     # Step 8: Select optimization method (on cleaned data)
     method = _select_optimization_method(
@@ -1112,7 +1248,7 @@ def prepare_problem(
         xdata,
         ydata,
         p0,
-        bounds,
+        (lb, ub),  # normalized: the caller's bounds may be a scipy Bounds object
         kwargs,
         ctx=ctx,
     )
@@ -1134,6 +1270,12 @@ def prepare_problem(
         should_pad,
         ctx=ctx,
     )
+
+    n_used = int(np.sum(data_mask))
+    if n_used > 0 and zero_weight_rows(sigma, data_mask) == n_used:
+        raise ValueError(_ALL_ZERO_WEIGHT_MSG)
+    if n_used > 0 and sigma is not None and np.ndim(sigma) == 0:  # scalar: every row
+        reject_all_zero_weight(sigma)
 
     return PreparedProblem(
         n=n,

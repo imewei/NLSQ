@@ -318,7 +318,6 @@ class FitPlotWidget(QWidget):
         Args:
             path: Output file path (PNG, JPG, SVG)
         """
-        from pyqtgraph.exporters import ImageExporter
+        from nlsq.gui_qt.plots import export_plot_image
 
-        exporter = ImageExporter(self._plot_widget.plotItem)
-        exporter.export(path)
+        export_plot_image(self._plot_widget.plotItem, path)

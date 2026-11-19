@@ -89,7 +89,13 @@ def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) ->
         if app is not None:
             # Try to save autosave before showing dialog
             try:
-                from nlsq.gui_qt.autosave import AUTOSAVE_FILE, _write_autosave
+                from nlsq.gui_qt import autosave
+
+                # Only this session's own file: before its first save there is
+                # none, and the shared name may belong to another running session.
+                target = autosave._active_target
+                if target is None or target.parent != autosave.AUTOSAVE_FILE.parent:
+                    raise LookupError("no snapshot owned by this session")
 
                 # Write crash marker
                 crash_info = {
@@ -99,10 +105,16 @@ def _exception_hook(exc_type: type, exc_value: BaseException, exc_tb: object) ->
                 }
                 import json
 
-                if AUTOSAVE_FILE.exists():
-                    data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
-                    data["crash_info"] = crash_info
-                    _write_autosave(data)
+                if target.exists():
+                    data = json.loads(target.read_text(encoding="utf-8"))
+                    owner = data.get("owner")
+                    # only a snapshot this session wrote (the path alone is not proof)
+                    if (
+                        isinstance(owner, dict)
+                        and owner.get("token") == autosave._active_token
+                    ):
+                        data["crash_info"] = crash_info
+                        autosave._write_autosave(data, target)
             except Exception:
                 pass
 

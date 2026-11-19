@@ -6,6 +6,7 @@ including generation counts, restart history, and convergence metrics.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -162,7 +163,8 @@ class CMAESDiagnostics:
         initial = self.fitness_history[0]
         final = self.fitness_history[-1]
 
-        if initial == 0:
+        # a non-finite end point (e.g. an all-failed first generation) has no ratio
+        if initial == 0 or not (math.isfinite(initial) and math.isfinite(final)):
             return None
 
         # Fitness is raw (positive) SSR -- evosax minimizes it directly, it is

@@ -14,9 +14,11 @@ def test_failed_crash_marker_write_preserves_recovery(tmp_path, monkeypatch):
     from nlsq.gui_qt import autosave
 
     recovery = tmp_path / "session.json"
-    original = '{"timestamp": "saved", "ydata": [1, 2]}'
+    original = '{"timestamp": "saved", "ydata": [1, 2], "owner": {"token": "tok"}}'
     recovery.write_text(original)
     monkeypatch.setattr(autosave, "AUTOSAVE_FILE", recovery)
+    monkeypatch.setattr(autosave, "_active_target", recovery)  # this session's file
+    monkeypatch.setattr(autosave, "_active_token", "tok")
     monkeypatch.setattr(
         QApplication, "instance", lambda: MagicMock(activeWindow=lambda: None)
     )
@@ -43,8 +45,12 @@ def test_crash_marker_keeps_saved_state(tmp_path, monkeypatch):
     from nlsq.gui_qt import autosave
 
     recovery = tmp_path / "session.json"
-    recovery.write_text('{"timestamp": "saved", "ydata": [1, 2]}')
+    recovery.write_text(
+        '{"timestamp": "saved", "ydata": [1, 2], "owner": {"token": "tok"}}'
+    )
     monkeypatch.setattr(autosave, "AUTOSAVE_FILE", recovery)
+    monkeypatch.setattr(autosave, "_active_target", recovery)  # this session's file
+    monkeypatch.setattr(autosave, "_active_token", "tok")
     monkeypatch.setattr(
         QApplication, "instance", lambda: MagicMock(activeWindow=lambda: None)
     )

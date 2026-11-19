@@ -274,6 +274,12 @@ DANGEROUS_PATTERNS: frozenset[str] = frozenset(
         "symlink_to",
         "hardlink_to",
         "mkdir",
+        # Python 3.14 pathlib mutation methods (``copy`` itself collides with
+        # ``np.copy``/``x.copy()`` and is judged in visit_Call)
+        "copy_into",
+        "move",
+        "move_into",
+        "lchmod",
         # matplotlib / Qt file writers and process spawners
         "savefig",
         "startDetached",
@@ -424,6 +430,16 @@ DANGEROUS_MODULES: frozenset[str] = frozenset(
         "sympy",  # sympify()/parse_expr() eval strings
         "numexpr",
         "h5py",
+        # Runtime dependencies that are not numeric libraries: evosax unpickles
+        # in-memory bytes (load_pkl_object), pytest imports and runs any file
+        # (numpy.test/scipy.test delegate to it), psutil can lift the loader's
+        # RLIMIT_AS and signal other processes, tqdm.contrib posts to remote
+        # services, jaxlib exposes the native XLA client.
+        "evosax",
+        "pytest",
+        "psutil",
+        "tqdm",
+        "jaxlib",
         "torch",  # torch.load unpickles
         "dask",
         "ray",
@@ -482,6 +498,8 @@ _DANGEROUS_STRING_SUBSTRINGS: tuple[str, ...] = (
     "__code__",
     "__import__",
     "__loader__",
+    # jax.jit(compiler_options={"xla_dump_to": DIR}) / XLA_FLAGS write files
+    "xla_dump",
     # PyYAML python tags (consumed by an unsafe loader)
     "!!python/",
 )
@@ -499,13 +517,103 @@ _COLLIDING_SYMBOLS: frozenset[str] = frozenset(
         "profile",
         "gc",
         "resource",
-        "logging",
         "readline",
         "wave",
         "pipes",
         "xml",
     }
 )
+
+# Numeric-package submodule paths the DEFAULT visitor rejects (strict mode
+# blocks these and more via ALLOWLIST_BLOCKED_ATTRS). Each hands out a code
+# string compiler (numpy.testing.measure), file/pickle I/O, native loaders or
+# interpreter hooks. Only paths whose root is in _NUMERIC_ROOTS are judged.
+_DEFAULT_BLOCKED_PATHS: frozenset[str] = frozenset(
+    {
+        "numpy.testing",
+        "numpy.ctypeslib",
+        "numpy.f2py",
+        "numpy.distutils",
+        "numpy.lib.format",
+        "numpy.lib.npyio",
+        "jax.debug",
+        "jax.export",
+        "jax.extend",
+        "jax.ffi",
+        "jax.interpreters",
+        "jax.lib",
+        "jax.profiler",
+        "jax.tools",
+    }
+)
+# jax.experimental is an allowlist: its submodules re-export stdlib modules
+# (mosaic.gpu.utils.logging) and jax._src modules (topologies.xb), so anything
+# not listed here is rejected.
+_JAX_EXPERIMENTAL_OK: frozenset[str] = frozenset(
+    {"ode", "sparse", "jet", "checkify", "shard_map", "enable_x64", "disable_x64"}
+)
+# stdlib pathlib names; Path.copy/move/... mutate files (Python 3.14)
+_PATHISH_ATTRS: frozenset[str] = frozenset(
+    {
+        "pathlib",
+        "Path",
+        "PurePath",
+        "PosixPath",
+        "WindowsPath",
+        "PurePosixPath",
+        "PureWindowsPath",
+    }
+)
+# Attribute names that reach a blocked numeric submodule or a private ``_src``
+# module through a public re-export. Rejected on ANY base, so value aliases of
+# the numeric modules (``m = [np][0]``) cannot hide them.
+_REEXPORT_ATTRS: frozenset[str] = frozenset(
+    {
+        "testing",
+        "ctypeslib",
+        "f2py",
+        "measure",
+        "xb",
+        "xla_bridge",
+        "jtu",
+        "test_util",
+        "register_plugin",
+        # public numeric modules re-export stdlib pathlib (jax.version.pathlib,
+        # numpy.conftest.Path) and codecs (numpy.f2py.crackfortran.codecs); their
+        # test packages re-export tempfile/shutil/multiprocessing/importlib
+        *_PATHISH_ATTRS,
+        "codecs",
+        "tests",
+        "conftest",
+        # numpy.test / scipy.test / np.linalg.test ... are PytestTester objects
+        # that call pytest.main(extra_argv, tests=[any .py file])
+        "test",
+    }
+)
+
+
+# The nlsq package re-exports its own model functions (``from nlsq.core.functions
+# import gaussian``); everything else under ``nlsq`` (cli.model_registry loads and
+# executes files, cli.result_exporter writes any path, curve_fit checkpoints) is
+# off limits to a model file.
+_NLSQ_ALLOWED: tuple[str, ...] = ("nlsq.core.functions", "nlsq.functions")
+
+
+def _nlsq_import_ok(dotted: str) -> bool:
+    return any(dotted == a or dotted.startswith(a + ".") for a in _NLSQ_ALLOWED)
+
+
+def _blocked_numeric_path(dotted: str) -> bool:
+    """True when ``dotted`` (rooted at numpy/scipy/jax) is a blocked submodule."""
+    parts = dotted.split(".")
+    if parts[0] not in _NUMERIC_ROOTS:
+        return False
+    if _under(dotted, _DEFAULT_BLOCKED_PATHS):
+        return True
+    if parts[:2] == ["jax", "experimental"] and len(parts) > 2:
+        if parts[2] not in _JAX_EXPERIMENTAL_OK:
+            return True
+    return any(p in _REEXPORT_ATTRS for p in parts[1:])
 
 
 # --- Strict allowlist mode (opt-in; see AllowlistVisitor) -------------------
@@ -539,6 +647,7 @@ ALLOWLIST_BLOCKED_ATTRS: frozenset[str] = frozenset(
         "numpy.ctypeslib",
         "numpy.f2py",
         "numpy.testing",
+        "numpy.test",  # PytestTester: pytest.main on an arbitrary file
         "numpy.distutils",
         "numpy.lib.format",
         "numpy.lib.npyio",
@@ -821,6 +930,20 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         # numpy.load(..., allow_pickle=...) executes pickle payloads
         if any(k.arg == "allow_pickle" for k in node.keywords):
             self.violations.append("Dangerous keyword argument: allow_pickle")
+        # jax.jit(..., compiler_options={"xla_dump_to": DIR}) writes files
+        if any(k.arg == "compiler_options" for k in node.keywords):
+            self.violations.append("Dangerous keyword argument: compiler_options")
+        # `jax.jit(f, **opts)`: the compiler_options keyword can be built at runtime
+        if (
+            isinstance(node.func, (ast.Name, ast.Attribute))
+            and (node.func.id if isinstance(node.func, ast.Name) else node.func.attr)
+            in ("jit", "pmap")
+            and any(k.arg is None for k in node.keywords)
+        ):
+            self.violations.append(
+                "Dangerous call: jit/pmap with ** keyword unpacking "
+                "(compiler_options can write files)"
+            )
         # np.load(file, mmap_mode, allow_pickle, ...): mmap_mode "r+"/"w+"
         # writes or truncates the file, allow_pickle unpickles. Fail closed on
         # any call shape that can supply either (or hide arguments); only a
@@ -863,6 +986,18 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             # Check for open() with write modes (e.g., builtins.open)
             if node.func.attr == "open":
                 self._check_open_call(node)
+            # Python 3.14 Path.copy(target=...): the receiver type is unknowable,
+            # so judge by argument shape. ndarray.copy takes only ``order``;
+            # accept no arguments or one literal order (positional or keyword).
+            if (
+                node.func.attr == "copy"
+                and not self._numeric_root(node.func)
+                and not self._is_array_copy_call(node)
+            ):
+                self.violations.append(
+                    "Dangerous method call: .copy(...) (pathlib.Path.copy risk; "
+                    "pass a literal order 'C'/'F'/'A'/'K' or use trusted: true)"
+                )
             # str.format()/str.format_map() can resolve dunder attribute
             # chains at runtime from a format-spec string, defeating the
             # literal-substring scan in visit_Constant when the string is
@@ -921,6 +1056,38 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                     )
         self.generic_visit(node)
 
+    def _numeric_root(self, node: ast.expr) -> bool:
+        """True for ``np.copy``-style chains: rooted at an imported numpy/scipy/jax
+        alias, with no pathlib re-export and no class (capitalised) segment, so a
+        re-exported ``Path`` can never inherit the numeric ``.copy`` exemption."""
+        parts = (self._resolve(node) or "").split(".")
+        return parts[0] in _NUMERIC_ROOTS and not any(
+            p in _REEXPORT_ATTRS or p[:1].isupper() for p in parts[1:-1]
+        )
+
+    @staticmethod
+    def _is_array_copy_call(node: ast.Call) -> bool:
+        """``x.copy()`` / ``x.copy('C')`` / ``x.copy(order='F')``, literal order only."""
+        args = [*node.args, *(k.value for k in node.keywords)]
+        if any(k.arg not in (None, "order") for k in node.keywords) or any(
+            k.arg is None for k in node.keywords
+        ):
+            return False
+        if len(args) > 1 or any(isinstance(a, ast.Starred) for a in args):
+            return False
+        return not args or (
+            isinstance(args[0], ast.Constant) and args[0].value in ("C", "F", "A", "K")
+        )
+
+    def _resolve(self, node: ast.expr) -> str | None:
+        """Dotted path of a Name/Attribute chain rooted at an import alias."""
+        if isinstance(node, ast.Name):
+            return self._aliases.get(node.id)
+        if isinstance(node, ast.Attribute):
+            base = self._resolve(node.value)
+            return f"{base}.{node.attr}" if base else None
+        return None
+
     def visit_Attribute(self, node: ast.Attribute) -> Any:
         """Check for dangerous attribute accesses, including uncalled dunder chains.
 
@@ -935,6 +1102,11 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                 self.violations.append(
                     f"Dangerous attribute access: .{node.attr} ({reason})"
                 )
+        chain = self._resolve(node)
+        if chain and _blocked_numeric_path(chain):
+            self.violations.append(
+                f"Dangerous attribute access: {chain} (blocked numeric submodule)"
+            )
         if node.attr == "io":
             root: ast.expr = node
             while isinstance(root, ast.Attribute):
@@ -957,6 +1129,12 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             )
         if node.attr == "open" and id(node) not in self._callees:
             self.violations.append("Dangerous attribute access: .open (aliased)")
+        if (
+            node.attr == "copy"
+            and id(node) not in self._callees
+            and not self._numeric_root(node)
+        ):  # `c = Path(p).copy; c(dst)` escapes the call-shape check
+            self.violations.append("Dangerous attribute access: .copy (aliased)")
         if node.attr == "load" and id(node) not in self._callees:
             self.violations.append("Dangerous attribute access: .load (aliased)")
         self.generic_visit(node)
@@ -975,6 +1153,8 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             return "private attribute"
         if attr in DANGEROUS_PATTERNS:
             return "dangerous name"
+        if attr in _REEXPORT_ATTRS:
+            return "reaches a blocked numeric submodule"
         if attr in DANGEROUS_MODULES and attr not in _COLLIDING_SYMBOLS:
             return "reaches a blocked module"
         return None
@@ -1021,6 +1201,8 @@ class DangerousPatternVisitor(ast.NodeVisitor):
             return True
         if parts[:3] == ["numpy", "ma", "mrecords"]:  # fromtextfile reads any file
             return True
+        if _blocked_numeric_path(dotted):
+            return True
         if any(p in DANGEROUS_PATTERNS for p in parts[1:]):
             return True
         return parts[0] in _NUMERIC_ROOTS and any(p.startswith("_") for p in parts[1:])
@@ -1029,6 +1211,15 @@ class DangerousPatternVisitor(ast.NodeVisitor):
         """Check for dangerous module imports."""
         for alias in node.names:
             module_root = alias.name.split(".")[0]
+            # `import nlsq` / `import nlsq.core.functions` bind the package root
+            if module_root == "nlsq" and not (
+                alias.asname and _nlsq_import_ok(alias.name)
+            ):
+                self.violations.append(
+                    f"Dangerous import: import {alias.name} (only "
+                    "`import nlsq.core.functions as name` or `nlsq.functions` is "
+                    "allowed from nlsq)"
+                )
             if alias.asname:
                 self._aliases[alias.asname] = alias.name
             else:
@@ -1071,9 +1262,23 @@ class DangerousPatternVisitor(ast.NodeVisitor):
                 f"Dangerous import: from {node.module} import ...",
             )
         for alias in node.names:
+            if module_root == "nlsq" and not node.level:
+                if alias.name == "*" or not _nlsq_import_ok(
+                    f"{node.module}.{alias.name}"
+                ):
+                    self.violations.append(
+                        f"Dangerous import: from {node.module} import {alias.name} "
+                        "(only nlsq.core.functions / nlsq.functions are allowed "
+                        "from nlsq)"
+                    )
             self._aliases[alias.asname or alias.name] = (
                 f"{node.module}.{alias.name}" if node.module else alias.name
             )
+            if node.module and _blocked_numeric_path(f"{node.module}.{alias.name}"):
+                self.violations.append(
+                    f"Dangerous import: from {node.module} import {alias.name} "
+                    "(blocked numeric submodule)"
+                )
             if module_root == "jax" and alias.name == "config":
                 self.violations.append("Dangerous import: from jax import config")
             if node.module == "jax" and alias.name == "*":  # binds bare `config`
@@ -1148,15 +1353,6 @@ class AllowlistVisitor(DangerousPatternVisitor):
         return path in ALLOWLIST_MODULES or any(
             m.startswith(path + ".") for m in ALLOWLIST_MODULES
         )
-
-    def _resolve(self, node: ast.expr) -> str | None:
-        """Dotted path of a Name/Attribute chain rooted at an import alias."""
-        if isinstance(node, ast.Name):
-            return self._aliases.get(node.id)
-        if isinstance(node, ast.Attribute):
-            base = self._resolve(node.value)
-            return f"{base}.{node.attr}" if base else None
-        return None
 
     def _check_import_path(self, dotted: str) -> None:
         problem = self._path_problem(dotted)
@@ -1325,6 +1521,9 @@ def validate_model(
         if source is None:
             source = path.read_bytes()
         tree = ast.parse(source, filename=str(path))
+        # ast.parse defers placement checks (top-level return/yield, ...) to the
+        # compiler; the registry executes the file, so reject what it cannot compile.
+        compile(tree, str(path), "exec", dont_inherit=True)
     except SyntaxError as e:
         return ModelValidationResult(
             path=path,
@@ -1334,6 +1533,7 @@ def validate_model(
         )
 
     violations.extend(_find_protocol_hook_violations(tree))
+    violations.extend(_find_module_machinery_violations(tree))
 
     # Visit all nodes to find violations
     visitor = AllowlistVisitor() if strict else DangerousPatternVisitor()
@@ -1409,9 +1609,39 @@ _PROTOCOL_HOOK_NAMES: frozenset[str] = frozenset(
 _PROTOCOL_HOOK_KEYWORDS: frozenset[str] = frozenset({"assigned", "updated"})
 
 
+def _local_hook_keyword_targets(tree: ast.AST) -> dict[str, set[str]]:
+    """Hook-keyword names (``updated``) that each file-local function declares as
+    its own parameter, for functions whose name is bound exactly once. A call
+    ``scale(x, updated=a)`` to such a function is an ordinary numeric argument."""
+    params: dict[str, set[str]] = {}
+    bindings: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            a = node.args
+            own = {x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs)}
+            params[node.name] = own & _PROTOCOL_HOOK_KEYWORDS
+            bindings[node.name] = bindings.get(node.name, 0) + 1
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            bindings[node.id] = bindings.get(node.id, 0) + 1
+        elif isinstance(node, (ast.ClassDef, ast.alias)):
+            n = (
+                node.name
+                if isinstance(node, ast.ClassDef)
+                else node.asname or node.name
+            )
+            bindings[n.split(".")[0]] = bindings.get(n.split(".")[0], 0) + 1
+    return {n: p for n, p in params.items() if p and bindings.get(n) == 1}
+
+
 def _find_protocol_hook_violations(tree: ast.AST) -> list[str]:
     """Flag names and keywords that fetch attributes by runtime string."""
     found: list[str] = []
+    local_ok = _local_hook_keyword_targets(tree)
+    exempt_kw: set[int] = set()  # id() of keyword nodes passed to a local function
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            allowed = local_ok.get(node.func.id, set())
+            exempt_kw.update(id(k) for k in node.keywords if k.arg in allowed)
     for node in ast.walk(tree):
         names: list[str] = []
         if isinstance(node, ast.Name):
@@ -1422,12 +1652,80 @@ def _find_protocol_hook_violations(tree: ast.AST) -> list[str]:
             names.append(node.name)
         elif isinstance(node, ast.alias):
             names.append(node.name.rsplit(".", 1)[-1])
-        elif isinstance(node, ast.keyword) and node.arg in _PROTOCOL_HOOK_KEYWORDS:
+        elif (
+            isinstance(node, ast.keyword)
+            and node.arg in _PROTOCOL_HOOK_KEYWORDS
+            and id(node) not in exempt_kw
+        ):
             found.append(f"Dangerous keyword argument: {node.arg}=")
         found.extend(
             f"Dangerous attribute-by-name hook: {n}"
             for n in names
             if n in _PROTOCOL_HOOK_NAMES
+        )
+    return found
+
+
+# Module-machinery dunders. Assigning ``__package__`` makes a relative import
+# resolve against any package (``__package__ = "os"; from . import system``), which
+# skips every module-name check, so none of these may be bound by a model file.
+_MODULE_MACHINERY_NAMES: frozenset[str] = frozenset(
+    {
+        "__package__",
+        "__spec__",
+        "__path__",
+        "__loader__",
+        "__builtins__",
+        "__name__",
+        "__file__",
+        "__cached__",
+        "__import__",
+    }
+)
+
+
+def _find_module_machinery_violations(tree: ast.AST) -> list[str]:
+    """Flag relative imports and any binding of module-machinery dunders.
+
+    A model file runs as a standalone module, so a relative import is never
+    legitimate; and rebinding ``__package__`` & co. would redirect one.
+    """
+    found: list[str] = []
+    for node in ast.walk(tree):
+        bound: list[str | None] = []
+        if isinstance(node, ast.ImportFrom) and node.level:
+            found.append(
+                f"Dangerous import: relative import (from {'.' * node.level}"
+                f"{node.module or ''} import ...)"
+            )
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            bound.append(node.id)
+        elif isinstance(node, ast.Attribute) and isinstance(
+            node.ctx, (ast.Store, ast.Del)
+        ):
+            bound.append(node.attr)
+        elif isinstance(node, ast.alias):
+            bound.append(node.asname)
+        elif isinstance(
+            node,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.ClassDef,
+                ast.ExceptHandler,
+                ast.MatchAs,
+                ast.MatchStar,
+            ),
+        ):
+            bound.append(node.name)
+        elif isinstance(node, ast.MatchMapping):
+            bound.append(node.rest)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            bound.extend(node.names)
+        found.extend(
+            f"Dangerous module attribute binding: {n}"
+            for n in bound
+            if n in _MODULE_MACHINERY_NAMES
         )
     return found
 
@@ -1455,6 +1753,23 @@ def _accelerator_backend_active() -> bool:
         # Any failure probing the backend -> conservatively report no
         # accelerator so the (safe) CPU memory cap path is taken.
         return False
+
+
+def _warm_jax_cpu_runtime() -> None:
+    """Compile one trivial op on an already-imported JAX before the AS baseline.
+
+    XLA's CPU runtime maps compiler arenas and worker-thread stacks on first
+    compile. Taking the VmSize baseline before that makes a module-level
+    ``jnp``/``jax.jit`` call in a model exceed the cap, and XLA aborts the whole
+    process (SIGABRT) instead of raising ``MemoryError``.
+    """
+    jax_mod = sys.modules.get("jax")
+    if jax_mod is None:
+        return
+    try:
+        jax_mod.jit(lambda v: v + 1)(1.0).block_until_ready()
+    except Exception:  # best effort: the cap is still applied from the old baseline
+        logger.debug("JAX CPU warm-up before RLIMIT_AS baseline failed", exc_info=True)
 
 
 def _current_virtual_memory_bytes() -> int | None:
@@ -1565,6 +1880,8 @@ def resource_limits(timeout: float = 10.0, memory_mb: int = 512):
     # it. So when a JAX accelerator backend is already active we skip the AS cap
     # and rely on the timeout alone.
     accelerator_active = _accelerator_backend_active()
+    if not accelerator_active:
+        _warm_jax_cpu_runtime()
     current_vsize = None if accelerator_active else _current_virtual_memory_bytes()
     enforce_mem = current_vsize is not None
     # Placeholders (ints) so mypy sees a concrete tuple type for setrlimit; they

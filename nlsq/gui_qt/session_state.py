@@ -9,10 +9,13 @@ fitting workflow, matching the fields from workflow_config_template.yaml.
 """
 
 import copy
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def n_points(xdata: Any) -> int:
@@ -439,6 +442,30 @@ def reset_state(state: SessionState, preserve_preferences: bool = False) -> None
     state.fit_aborted = defaults.fit_aborted
 
 
+def _bound_at(side: Any, i: int) -> Any:
+    """Bound ``i`` of one side; a length-1 side is broadcast, empty means unbounded."""
+    if not side:
+        return None
+    return side[i] if len(side) > 1 else side[0]
+
+
+def _model_param_names(state: SessionState) -> list[str]:
+    """Parameter names of the applied (or shipped, rebuildable) model, else []."""
+    try:
+        from nlsq.gui_qt.adapters.model_adapter import get_model, get_model_info
+
+        func = state.model_func
+        if (
+            func is None
+            and state.model_type in {"builtin", "polynomial"}
+            and state.model_config
+        ):
+            func = get_model(state.model_type, state.model_config)
+        return list(get_model_info(func)["param_names"])
+    except Exception:  # no model applied yet, or a model without names
+        return []
+
+
 def get_current_config(state: SessionState) -> dict[str, Any]:
     """Export the current session state as a workflow config dictionary.
 
@@ -544,20 +571,41 @@ def get_current_config(state: SessionState) -> dict[str, Any]:
     }
 
     # Add parameter configuration if present
+    model_names = _model_param_names(state) if state.transforms else []
     if state.p0 is not None:
         config["model"]["parameters"] = []
+        names = [f"param_{i}" for i in range(len(state.p0))]
+        if state.transforms:
+            # transforms are keyed by parameter name: export the model's own names
+            if len(model_names) == len(names):
+                names = model_names
+            else:
+                logger.warning(
+                    "YAML export dropped parameter transforms %s: the model's "
+                    "parameter names are unknown.",
+                    sorted(state.transforms),
+                )
         for i, val in enumerate(state.p0):
             param_config: dict[str, Any] = {
-                "name": f"param_{i}",
+                "name": names[i],
                 "initial": float(val),
             }
+            if names[i] in state.transforms:
+                param_config["transform"] = state.transforms[names[i]]
             if state.bounds is not None:
+                # a single (lower, upper) pair applies to every parameter
                 param_config["bounds"] = [
-                    state.bounds[0][i] if state.bounds[0] else None,
-                    state.bounds[1][i] if state.bounds[1] else None,
+                    _bound_at(state.bounds[0], i),
+                    _bound_at(state.bounds[1], i),
                 ]
             config["model"]["parameters"].append(param_config)
-    elif state.bounds is not None:
+    elif state.transforms:
+        logger.warning(
+            "YAML export dropped parameter transforms %s: no initial values "
+            "to attach them to.",
+            sorted(state.transforms),
+        )
+    if state.p0 is None and state.bounds is not None:
         # No parameters list to carry the bounds: use the flat fitting.bounds form.
         config["fitting"]["bounds"] = {
             "lower": [None if v is None else float(v) for v in state.bounds[0]],

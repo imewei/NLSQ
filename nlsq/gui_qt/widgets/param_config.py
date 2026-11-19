@@ -265,6 +265,15 @@ class ParamConfigWidget(QWidget):
             bounds = None
         return p0, bounds
 
+    def reset(self) -> None:
+        """Restore auto-estimated p0 and unbounded defaults on every row."""
+        for row in range(self._table.rowCount()):
+            for col, default in ((1, 1.0), (2, -math.inf), (3, math.inf)):
+                cell = self._table.cellWidget(row, col)
+                if isinstance(cell, _FloatEdit):
+                    cell.setValue(default)
+        self._auto_p0_check.setChecked(True)
+
     def is_auto_p0(self) -> bool:
         """Check if auto-estimate is enabled.
 

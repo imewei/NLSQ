@@ -11,6 +11,7 @@ patterns.
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
@@ -66,6 +67,10 @@ def _validate_fim(fim: np.ndarray) -> str | None:
     if not np.allclose(normalized, normalized.T, rtol=1e-8, atol=1e-10):
         return "FIM must be symmetric"
 
+    # The round-off tolerance is relative to the largest eigenvalue (documented
+    # limit): an indefinite block whose scale lies below that round-off floor is
+    # indistinguishable from noise, so callers mixing parameter units by many
+    # orders of magnitude should rescale the FIM to comparable units first.
     eigvals = np.linalg.eigvalsh(normalized)
     max_abs_eig = float(np.max(np.abs(eigvals))) if eigvals.size else 0.0
     tol = fim.shape[0] * eps * max_abs_eig
@@ -782,15 +787,35 @@ class DiagnosticsConfig:
             raise ValueError("vanishing_threshold must be positive")
         if not math.isfinite(self.exploding_threshold) or self.exploding_threshold <= 0:
             raise ValueError("exploding_threshold must be positive")
-        if not math.isfinite(self.sloppy_threshold) or self.sloppy_threshold <= 0:
-            raise ValueError("sloppy_threshold must be positive")
+        if not math.isfinite(self.sloppy_threshold) or not (
+            0 < self.sloppy_threshold <= 1
+        ):
+            # An eigenvalue ratio: above 1 every direction would count as sloppy.
+            raise ValueError("sloppy_threshold must be positive and at most 1")
         for name in ("gradient_window_size", "stagnation_window"):
             value = getattr(self, name)
             if not is_integral(value):
                 raise ValueError(f"{name} must be an integer, got {value!r}")
             if value <= 0:
                 raise ValueError(f"{name} must be positive")
+            if name == "stagnation_window" and value < 2:
+                # The spread of one sample is zero: it would flag GRAD-003 at once.
+                raise ValueError("stagnation_window must be at least 2")
             object.__setattr__(self, name, int(value))
+        # The monitor's norm history holds gradient_window_size samples: a larger
+        # stagnation window could never fill (GRAD-003 silently disabled).
+        if self.stagnation_window > self.gradient_window_size:
+            raise ValueError(
+                f"stagnation_window ({self.stagnation_window}) must not exceed "
+                f"gradient_window_size ({self.gradient_window_size})"
+            )
+        if self.gradient_window_size < 5:
+            warnings.warn(
+                "gradient_window_size < 5: vanishing-gradient detection (GRAD-001) "
+                "needs 5 samples and will never fire",
+                UserWarning,
+                stacklevel=3,
+            )
         if (
             not math.isfinite(self.stagnation_tolerance)
             or self.stagnation_tolerance <= 0
@@ -937,7 +962,7 @@ def _format_model_health_summary(
             )
             is_practical = (
                 is_structural
-                and report.identifiability.condition_number < condition_threshold
+                and report.identifiability.condition_number <= condition_threshold
             )
             lines.append(
                 f"Structurally identifiable: {'Yes' if is_structural else 'No'}",
@@ -1035,6 +1060,9 @@ def _format_model_health_summary(
 def _json_safe(obj: Any) -> Any:
     """Make ``obj`` strict-JSON serializable: non-finite floats become None,
     numpy/JAX arrays and scalars become lists/Python numbers."""
+    if isinstance(obj, np.generic) and obj.dtype.kind == "f":
+        # longdouble scalars: tolist()/item() return the same object (infinite loop)
+        return _json_safe(float(obj))
     if hasattr(obj, "tolist") and not isinstance(obj, (str, bytes)):
         # numpy / JAX arrays and scalars
         return _json_safe(obj.tolist())

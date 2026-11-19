@@ -226,7 +226,10 @@ class AlgorithmSelector:
             diff = np.diff(y_ordered)
             noise_estimate = np.median(np.abs(diff))
             signal_range = np.ptp(ydata)
-            results["snr_estimate"] = signal_range / (noise_estimate + 1e-10)
+            # Relative floor (not an absolute 1e-10): the SNR must not change when
+            # only the units of x or y change.
+            noise = max(noise_estimate, np.finfo(float).eps * np.max(np.abs(ydata)))
+            results["snr_estimate"] = signal_range / noise if noise > 0 else 0.0
             results["is_noisy"] = results["snr_estimate"] < 10
         else:
             results["snr_estimate"] = np.inf
@@ -257,7 +260,10 @@ class AlgorithmSelector:
         results["y_scale"] = np.log10(results["y_range"] + 1e-10)
 
         # Check for zeros or near-zeros
-        results["has_zeros"] = np.any(np.abs(ydata) < 1e-10)
+        # relative to the data magnitude, so a change of units does not create zeros
+        results["has_zeros"] = bool(
+            np.any(np.abs(ydata) <= 1e-10 * np.max(np.abs(ydata)))
+        )
 
         return results
 
@@ -293,7 +299,8 @@ class AlgorithmSelector:
 
         # Normalize to [0, 1]
         x_min, x_max = x_sample.min(), x_sample.max()
-        if x_max - x_min < 1e-10:
+        # no spread relative to the magnitude of x (unit-independent, unlike 1e-10)
+        if not x_max - x_min > np.finfo(float).eps * max(abs(x_min), abs(x_max)):
             return np.inf
 
         x_norm = (x_sample - x_min) / (x_max - x_min)

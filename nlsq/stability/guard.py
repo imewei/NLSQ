@@ -200,15 +200,14 @@ def solve_with_cholesky_fallback(
         A_u = A / s
         A_u = 0.5 * (A_u + A_u.T)
         eigvals, eigvecs = jnp.linalg.eigh(A_u)  # eigenvalues are lambda / s
-        # Regularize small/negative eigenvalues. Use an absolute floor of 1
-        # (in original units) in addition to the relative scale: for an all-zero
-        # (or near-zero) matrix, max|lambda| is 0, which would make eps 0 and
-        # divide-by-zero below, returning NaN instead of a damped solution.
-        # Genuinely negative eigenvalues keep their sign, so an indefinite
-        # nonsingular A is still solved exactly instead of returning a
-        # ~1/eps-sized (or wrong) vector. In scaled units eps*max(max|lambda|, 1)
-        # is finfo.eps * max(max|lambda_u|, 1/s) (s = 1 unless extreme).
-        eps = jnp.finfo(A.dtype).eps * jnp.maximum(jnp.max(jnp.abs(eigvals)), 1.0 / s)
+        # Regularize small/negative eigenvalues with a purely relative tolerance
+        # (eps * max|lambda|); 1/s stands in only for an all-zero matrix, where
+        # max|lambda| = 0 would make eps 0 and divide by zero (NaN instead of a
+        # damped solution). Genuinely negative eigenvalues keep their sign, so an
+        # indefinite nonsingular A is still solved exactly at any scale instead of
+        # returning a ~1/eps-sized (or wrong) vector.
+        lam_max = jnp.max(jnp.abs(eigvals))
+        eps = jnp.finfo(A.dtype).eps * jnp.where(lam_max > 0, lam_max, 1.0 / s)
         # Within n*eps*max (rank-style tolerance, as rounding noise of a
         # rank-deficient Gram matrix exceeds a bare eps) the HEAD clamp
         # max(lambda, eps) applies; only larger |lambda| keep their sign.
@@ -859,6 +858,9 @@ class NumericalStabilityGuard:
         has_outliers : bool
             Whether outliers were detected
         """
+        residuals = jnp.asarray(residuals)
+        if not jnp.issubdtype(residuals.dtype, jnp.floating):
+            residuals = residuals.astype(jnp.result_type(residuals, float))
         # Check for NaN/Inf
         if jnp.any(~jnp.isfinite(residuals)):
             warnings.warn("Residuals contain NaN or Inf values")
@@ -872,11 +874,10 @@ class NumericalStabilityGuard:
         robust_std = 1.4826 * mad
 
         deviation = jnp.abs(residuals - median_res)
-        if robust_std < jnp.finfo(residuals.dtype).eps:
-            outlier_mask = _zero_mad_outliers(
-                np.asarray(deviation, dtype=float),
-                float(jnp.finfo(residuals.dtype).eps),
-            )
+        # Relative to the residual scale: an absolute floor misreads tiny-unit data.
+        tiny = float(jnp.finfo(residuals.dtype).eps * jnp.max(jnp.abs(residuals)))
+        if robust_std <= tiny:
+            outlier_mask = _zero_mad_outliers(np.asarray(deviation, dtype=float), tiny)
         else:
             # Detect outliers (more than 5 robust std from median)
             outlier_mask = deviation > 5 * robust_std
@@ -906,6 +907,8 @@ class NumericalStabilityGuard:
         x = jnp.asarray(x)
         if not jnp.issubdtype(x.dtype, jnp.floating):
             x = x.astype(jnp.result_type(x, float))
+        if x.size == 0:
+            return 0.0  # the norm of an empty vector is zero (max() would raise)
         # Scale if needed to prevent overflow
         max_val = jnp.max(jnp.abs(x))
 
@@ -921,15 +924,28 @@ class NumericalStabilityGuard:
         finfo = jnp.finfo(x.dtype)
         hi = min(1e100, 0.1 * float(np.sqrt(finfo.max)))
         lo = max(1e-100, 10 * float(np.sqrt(finfo.tiny)))
-        if max_val > hi or (max_val < lo and max_val > 0):
+        if max_val == 0:
+            return 0.0
+        # Vector p-norms with p > 2 or p < 0 overflow/underflow in x**p long before
+        # |x| nears the L2 limits above, so they are always evaluated scaled.
+        numeric_ord = isinstance(ord, (int, float)) and not isinstance(ord, bool)
+        vector_p = numeric_ord and x.ndim == 1 and (ord < 0 or ord > 2)
+        if vector_p or max_val > hi or (max_val < lo and max_val > 0):
             # JIT path is the vector L2 norm only (for a matrix it would give the
             # Frobenius norm, not the spectral norm that ord=2 means).
             if ord == 2 and x.ndim == 1:
                 result = float(self._safe_norm_jit(x, max_val))
                 if np.isfinite(result):
                     return result
+            # Negative vector orders are dominated by the smallest entry: scaling by
+            # the max would overflow its reciprocal power, so scale by the min instead.
+            scale = max_val
+            if numeric_ord and ord < 0 and x.ndim == 1:
+                min_val = jnp.min(jnp.abs(x))
+                if min_val > 0:
+                    scale = min_val
             # Multiply in Python floats: the norm itself may exceed the dtype's max.
-            return float(jnp.linalg.norm(x / max_val, ord=ord)) * float(max_val)
+            return float(jnp.linalg.norm(x / scale, ord=ord)) * float(scale)
         return float(jnp.linalg.norm(x, ord=ord))
 
     def detect_numerical_issues(self, x: jnp.ndarray) -> dict:
@@ -1175,7 +1191,7 @@ def check_problem_stability(
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
     if p0 is not None:
-        p0 = np.asarray(p0)
+        p0 = np.atleast_1d(np.asarray(p0))
 
     issues = []
     recommendations = []

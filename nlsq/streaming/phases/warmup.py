@@ -19,8 +19,12 @@ import jax.numpy as jnp
 import numpy as np
 import optax  # type: ignore[import-not-found,import-untyped]
 
+from nlsq.streaming.phases.gauss_newton import project_to_bounds, validate_phase_data
 from nlsq.streaming.telemetry import get_defense_telemetry
-from nlsq.streaming.validators import validate_group_variance_bounds
+from nlsq.streaming.validators import (
+    validate_group_variance_bounds,
+    validate_residual_weighting_config,
+)
 from nlsq.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -30,6 +34,19 @@ if TYPE_CHECKING:
     from nlsq.streaming.hybrid_config import HybridStreamingConfig
 
 _logger = get_logger("warmup_phase")
+
+
+def coerce_residual_weights(weights: Any) -> jnp.ndarray:
+    """Validate per-group residual weights and return them as a float64 JAX array.
+
+    Raises ``ValueError`` for complex, non-1-D, empty, non-positive or non-finite
+    weights (a complex array would otherwise lose its imaginary part silently).
+    """
+    arr = np.asarray(weights)
+    if np.iscomplexobj(arr):
+        raise ValueError("residual weights must be real, got a complex array")
+    validate_residual_weighting_config(True, arr)
+    return jnp.asarray(arr, dtype=jnp.float64)
 
 
 def _validate_group_labels(x_data: Any, weights: Any) -> None:
@@ -492,6 +509,7 @@ class WarmupPhase:
         self,
         config: HybridStreamingConfig,
         normalized_model: NormalizedModelWrapper,
+        normalized_bounds: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     ) -> None:
         """Initialize WarmupPhase.
 
@@ -501,9 +519,12 @@ class WarmupPhase:
             Configuration for streaming optimization.
         normalized_model : NormalizedModelWrapper
             Model wrapper operating in normalized parameter space.
+        normalized_bounds : tuple of array_like or None
+            Parameter bounds in normalized space; L-BFGS updates are clipped to them.
         """
         self.config = config
         self.normalized_model = normalized_model
+        self.normalized_bounds = normalized_bounds
 
         # State for 4-layer defense strategy
         self._initial_loss: float | None = None
@@ -522,7 +543,9 @@ class WarmupPhase:
         weights : array_like or None
             Per-group weights for weighted MSE computation.
         """
-        self._residual_weights = weights
+        self._residual_weights = (
+            None if weights is None else coerce_residual_weights(weights)
+        )
 
     def run(
         self,
@@ -574,8 +597,10 @@ class WarmupPhase:
         x_data, y_data = data_source
         x_data = jnp.asarray(x_data, dtype=jnp.float64)
         y_data = jnp.asarray(y_data, dtype=jnp.float64)
+        validate_phase_data(x_data, y_data)
 
-        current_params = initial_params
+        # An infeasible start is projected before it is scored or tracked as best.
+        current_params = project_to_bounds(initial_params, self.normalized_bounds)
 
         if self.config.enable_residual_weighting and self._residual_weights is not None:
             _validate_group_labels(x_data, self._residual_weights)
@@ -642,6 +667,9 @@ class WarmupPhase:
                     f"(relative_loss={relative_loss:.4e})",
                 )
 
+            self._offer_to_tracker(
+                best_tracker, initial_loss, x_data.shape[0], current_params
+            )
             warmup_result = WarmupResult(
                 params=current_params,
                 cost=initial_loss,
@@ -705,6 +733,15 @@ class WarmupPhase:
 
             cost_history.append(loss_value)
 
+            # Deferred line-search-failure detection (optax flags it in the state,
+            # it does not raise): this loss is at the previous step's result.
+            if iteration > 0 and loss_value > prev_loss:
+                telemetry.record_lbfgs_line_search_failure(
+                    iteration - 1,
+                    f"step did not decrease loss: {prev_loss:.6e} -> {loss_value:.6e}",
+                    warmup=self._warmup_token,
+                )
+
             # Track best parameters
             if loss_value < best_loss:
                 best_loss = loss_value
@@ -729,7 +766,7 @@ class WarmupPhase:
                     return result
 
             # Check switch criteria after minimum warmup iterations
-            if iteration >= self.config.warmup_iterations:
+            if iteration + 1 >= self.config.warmup_iterations:
                 should_switch, reason = self._check_switch_criteria(
                     iteration=iteration,
                     current_loss=loss_value,
@@ -738,6 +775,17 @@ class WarmupPhase:
                 )
 
                 if should_switch:
+                    # loss_value is the loss BEFORE this step; evaluate the step's
+                    # result so best_params/final_loss do not lag it.
+                    loss_value, best_loss, best_params = self._evaluate_final(
+                        current_params,
+                        best_loss,
+                        best_params,
+                        loss_fn,
+                        x_data,
+                        y_data,
+                        best_tracker,
+                    )
                     phase_record = {
                         "phase": 1,
                         "name": "lbfgs_warmup",
@@ -774,6 +822,16 @@ class WarmupPhase:
             prev_loss = loss_value
 
         # Maximum iterations reached
+        # loss_value is the loss BEFORE the last step; evaluate the step's result.
+        loss_value, best_loss, best_params = self._evaluate_final(
+            current_params,
+            best_loss,
+            best_params,
+            loss_fn,
+            x_data,
+            y_data,
+            best_tracker,
+        )
         phase_record = {
             "phase": 1,
             "name": "lbfgs_warmup",
@@ -806,6 +864,47 @@ class WarmupPhase:
             "relative_loss": relative_loss,
             "warmup_result": warmup_result,
         }
+
+    def _offer_to_tracker(
+        self,
+        best_tracker: dict[str, Any],
+        loss: float,
+        n_rows: int,
+        params: jnp.ndarray,
+    ) -> None:
+        """Offer ``(loss, params)`` to the shared tracker on the SSR scale.
+
+        Skipped under residual weighting: the weighted loss is not convertible to the
+        unweighted SSR Phase 2 tracks by a batch-size scale.
+        """
+        if self.config.enable_residual_weighting and self._residual_weights is not None:
+            return
+        ssr = float(loss) * n_rows
+        if ssr < best_tracker.get("best_cost_global", float("inf")):
+            best_tracker["best_cost_global"] = ssr
+            best_tracker["best_params_global"] = params
+
+    def _evaluate_final(
+        self,
+        params: jnp.ndarray,
+        best_loss: float,
+        best_params: jnp.ndarray,
+        loss_fn: Callable,
+        x_data: jnp.ndarray,
+        y_data: jnp.ndarray,
+        best_tracker: dict[str, Any],
+    ) -> tuple[float, float, jnp.ndarray]:
+        """Loss at the final params, and best (loss, params) including that point.
+
+        Also offers the point to ``best_tracker`` on the SSR scale, as ``_lbfgs_step`` does.
+        """
+        final_loss = _chunked_loss(
+            loss_fn, params, x_data, y_data, self.config.chunk_size
+        )
+        self._offer_to_tracker(best_tracker, final_loss, x_data.shape[0], params)
+        if final_loss < best_loss:
+            return final_loss, final_loss, params
+        return final_loss, best_loss, best_params
 
     def _create_loss_fn(self) -> Callable:
         """Create loss function for warmup phase.
@@ -858,7 +957,7 @@ class WarmupPhase:
                 initial_step = self.config.lbfgs_refinement_step_size
                 lr_mode = "refinement"
             elif relative_loss < 1.0:
-                initial_step = 0.5
+                initial_step = self.config.lbfgs_careful_step_size
                 lr_mode = "careful"
             else:
                 initial_step = self.config.lbfgs_exploration_step_size
@@ -946,6 +1045,9 @@ class WarmupPhase:
         line_search_failed : bool
             True if line search failed.
         """
+        # Denominator of the per-iteration clip / line-search-failure rates.
+        get_defense_telemetry().record_lbfgs_iteration()
+
         # Validate input parameters
         if not self._validate_numerics(params, context="at L-BFGS step input"):
             if self.config.enable_fault_tolerance:
@@ -1012,6 +1114,8 @@ class WarmupPhase:
                 )
 
         new_params = optax.apply_updates(params, updates)
+        if self.normalized_bounds is not None:
+            new_params = jnp.clip(new_params, *self.normalized_bounds)
 
         # Validate updated parameters
         if not self._validate_numerics(new_params, context="after L-BFGS update"):
@@ -1032,13 +1136,7 @@ class WarmupPhase:
         # simple batch-size scale, and Phase 2 never applies residual
         # weighting, so a weighted Phase 1 loss isn't comparable to Phase
         # 2's cost at all.
-        if not (
-            self.config.enable_residual_weighting and self._residual_weights is not None
-        ):
-            ssr_equivalent = float(loss_value) * x_batch.shape[0]
-            if ssr_equivalent < best_tracker.get("best_cost_global", float("inf")):
-                best_tracker["best_cost_global"] = ssr_equivalent
-                best_tracker["best_params_global"] = params
+        self._offer_to_tracker(best_tracker, loss_value, x_batch.shape[0], params)
 
         # Record history buffer fill event
         if iteration == self.config.lbfgs_history_size:
@@ -1144,7 +1242,9 @@ class WarmupPhase:
             if grad_norm < self.config.gradient_norm_threshold:
                 return True, "Gradient norm below threshold"
 
-        if "plateau" in active_criteria:
+        # iteration 0 compares the initial loss with itself (change 0), as in
+        # the adaptive engine
+        if "plateau" in active_criteria and iteration > 0:
             eps = jnp.finfo(jnp.float64).eps
             relative_change = jnp.abs(current_loss - prev_loss) / (
                 jnp.abs(prev_loss) + eps

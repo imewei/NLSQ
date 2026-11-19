@@ -1344,7 +1344,7 @@ class TestPluginErrorHandling:
         sample_parameters: np.ndarray,
         sample_residuals: np.ndarray,
     ) -> None:
-        """Document that in-place input modification by a plugin is not isolated."""
+        """In-place input modification by a plugin is isolated (read-only views)."""
         from nlsq.diagnostics.plugin import PluginRegistry, run_plugins
 
         original_params = sample_parameters.copy()
@@ -1386,11 +1386,11 @@ class TestPluginErrorHandling:
         PluginRegistry.register(ModifyingPlugin())
         PluginRegistry.register(CheckingPlugin())
 
-        results = run_plugins(sample_jacobian, sample_parameters, sample_residuals)
+        with pytest.warns(UserWarning, match="modifier"):
+            results = run_plugins(sample_jacobian, sample_parameters, sample_residuals)
 
-        # Current contract: plugins receive the caller's arrays without a copy,
-        # so an in-place modification is visible to later plugins and the caller.
-        # Plugins must not modify inputs; this pins the behaviour, not an endorsement.
-        assert original_params[0] != 999.0
-        assert sample_parameters[0] == 999.0
-        assert results["checker"].data["first_param"] == 999.0
+        # Plugins get read-only views: the write fails inside the plugin (reported
+        # as unavailable), the caller's array and later plugins are unaffected.
+        assert not results["modifier"].available
+        np.testing.assert_array_equal(sample_parameters, original_params)
+        assert results["checker"].data["first_param"] == original_params[0]

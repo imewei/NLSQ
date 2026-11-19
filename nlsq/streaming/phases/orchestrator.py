@@ -27,7 +27,9 @@ _logger = get_logger("phase_orchestrator")
 
 @dataclass(frozen=True, slots=True)
 class PhaseOrchestratorResult:
-    """Complete result from phase orchestration.
+    """Typed result container; not returned by ``PhaseOrchestrator.run()``.
+
+    ``run()`` returns a plain ``dict`` (keys ``final_params``, ``best_cost``, ...).
 
     Attributes:
         params: Final optimized parameters in original space.
@@ -114,7 +116,15 @@ class PhaseOrchestrator:
         from nlsq.streaming.phases.gauss_newton import GaussNewtonPhase
         from nlsq.streaming.phases.warmup import WarmupPhase
 
-        self.warmup_phase = WarmupPhase(self.config, normalized_model)
+        self.warmup_phase = WarmupPhase(
+            self.config, normalized_model, normalized_bounds
+        )
+        if self.config.enable_residual_weighting and (
+            self.config.residual_weights is not None
+        ):
+            self.warmup_phase.set_residual_weights(
+                jnp.asarray(self.config.residual_weights, dtype=jnp.float64)
+            )
         self.gn_phase = GaussNewtonPhase(
             self.config,
             normalized_model,

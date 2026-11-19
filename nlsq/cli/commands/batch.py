@@ -246,8 +246,8 @@ def _warn_output_collisions(
         ):
             targets.append(export["results_file"])
             if not (
-                cfg_get(export, "stdout", False)
-                and cfg_get(export, "skip_file_on_stdout", False)
+                export.get("stdout") is True
+                and export.get("skip_file_on_stdout") is True
             ):
                 result_files.append(Path(export["results_file"]).resolve())
         try:
@@ -268,12 +268,12 @@ def _warn_output_collisions(
                         cfg_get(vis, "formats", ["pdf", "png"])
                     )
                 ]
-                targets.append(output_dir / f"{prefix}_combined")
+                targets.extend(vis_files)  # full file names, same as results_file
                 result_files.extend(vis_files)
         except (TypeError, ValueError, AttributeError, CLIError):
             pass  # malformed visualization block: the workflow run reports it
         for target in targets:
-            key = os.path.abspath(target)
+            key = str(Path(target).resolve())
             if key in owners and owners[key] != path:
                 logger.warning(
                     f"Output collision: {owners[key]} and {path} both write "
@@ -317,6 +317,13 @@ def _validate_summary_path(summary_file: str) -> None:
         )
 
 
+class BatchResults(list):
+    """Per-workflow result dicts; ``interrupted`` records a user interrupt even
+    when no workflow was left to mark ``cancelled`` (the only one had started)."""
+
+    interrupted: bool = False
+
+
 def _collect_batch_results(
     executor: ThreadPoolExecutor,
     workflow_paths: list[str],
@@ -344,7 +351,7 @@ def _collect_batch_results(
     list[dict]
         List of result dictionaries.
     """
-    results: list[dict[str, Any]] = []
+    results = BatchResults()
 
     # A worker sets this on failure (when not continuing) so queued workflows
     # are skipped without racing the main thread's future cancellation.
@@ -369,6 +376,7 @@ def _collect_batch_results(
         _drain_futures(futures, collected, results, verbose, logger)
     except KeyboardInterrupt:
         # In-flight fits finish (JAX cannot be interrupted mid-kernel); queued ones are dropped.
+        results.interrupted = True
         stop.set()
         executor.shutdown(wait=True, cancel_futures=True)
         for future, workflow_path in futures.items():
@@ -662,7 +670,7 @@ def run_batch(
 
     # Step 6: Print summary to console
     _print_batch_summary(summary, results)
-    if summary["cancelled"]:
+    if summary["cancelled"] or getattr(results, "interrupted", False):
         done = summary["succeeded"] + summary["failed"]
         print(
             f"Interrupted: {done} of {n_workflows} workflows completed",

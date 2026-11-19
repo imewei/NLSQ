@@ -407,6 +407,11 @@ def _safe_coords(xdata: jnp.ndarray, data_mask: jnp.ndarray) -> jnp.ndarray:
     valid coordinate there keeps every backward pass finite while the
     post-evaluation ``where(mask, r, 0)`` keeps the residual unchanged. With an
     all-True mask this is the identity.
+
+    Contract: the model must be pointwise in the observation axis (row ``i`` of
+    the output depends only on coordinate ``i``), as already required for padding
+    and for the streaming paths. A batch-dependent model (``x - mean(x)``) sees
+    the substituted coordinates of excluded rows.
     """
     if (
         not hasattr(xdata, "ndim")
@@ -446,6 +451,10 @@ def _closure_aware_changed(old_fn: Callable | None, new_fn: Callable) -> bool:
             return (
                 old_code.co_code != new_code.co_code
                 or old_code.co_consts != new_code.co_consts
+                # global/attribute names are bytecode operands, not part of co_code
+                or old_code.co_names != new_code.co_names
+                # same global names can resolve to different values in another namespace
+                or old_fn.__globals__ is not new_fn.__globals__
                 or old_closure != new_closure
                 # Same bytecode, different state: bound-method receiver and
                 # default arguments (compared by ==; arrays raise -> rewrap).
@@ -810,6 +819,12 @@ class LeastSquares:
     sigma configurations (no sigma, 1D sigma, 2D covariance matrix) to optimize
     compilation and execution performance.
 
+    Notes
+    -----
+    An instance is not thread-safe: each fit rebinds the residual and Jacobian
+    wrappers stored on ``self``, so concurrent fits must use one instance per
+    thread (``curve_fit`` already builds a fresh instance per call).
+
     Attributes
     ----------
     trf : TrustRegionReflective
@@ -866,6 +881,7 @@ class LeastSquares:
         # Cache key of the bound traced wrappers; None = built from self.f.
         self._wrapper_key: tuple | None = None
         self._wrapped_n: int | None = None  # n the uncached wrappers were built for
+        self._wrapped_mode: str | None = None  # AD mode of the uncached Jacobian
 
         # need a separate instance of the autodiff class for each of the
         # the different sigma/covariance cases
@@ -934,7 +950,7 @@ class LeastSquares:
             Parameter scaling
         """
         # Validate loss function
-        if loss not in self.ls.IMPLEMENTED_LOSSES and not callable(loss):
+        if not callable(loss) and loss not in self.ls.IMPLEMENTED_LOSSES:
             raise ValueError(
                 f"`loss` must be one of {self.ls.IMPLEMENTED_LOSSES.keys()} or a callable.",
             )
@@ -975,6 +991,8 @@ class LeastSquares:
 
         if x0.ndim > 1:
             raise ValueError("`x0` must have at most 1 dimension.")
+        if not np.all(np.isfinite(x0)):
+            raise ValueError("`x0` must be finite.")
 
         # Use prepared bounds if provided, otherwise prepare them
         if prepared_bounds is not None:
@@ -1014,6 +1032,7 @@ class LeastSquares:
         args: tuple,
         kwargs: dict,
         jacobian_mode_selected: str = "fwd",
+        data_mask: jnp.ndarray | None = None,
     ) -> tuple:
         """Setup residual and Jacobian functions.
 
@@ -1035,6 +1054,7 @@ class LeastSquares:
                 func_update = (
                     self._wrapper_key is not None
                     or self._wrapped_n != self.n  # autodiff Jacobian is sized by n
+                    or (jac is None and self._wrapped_mode != jacobian_mode_selected)
                     or _closure_aware_changed(self.f, fun)
                 )
                 self._wrapper_key = None
@@ -1043,6 +1063,7 @@ class LeastSquares:
                     self._wrapped_n = self.n
                     if jac is None:
                         self.autdiff_jac(jac, mode=jacobian_mode_selected)
+                        self._wrapped_mode = jacobian_mode_selected
 
                 # Handle analytical Jacobian
                 if jac is not None:
@@ -1063,6 +1084,12 @@ class LeastSquares:
                 jac_func = self.jac_2d
         else:
             # SciPy compatibility mode
+            if transform is not None:
+                raise ValueError(
+                    "`transform` is only supported with xdata/ydata; a direct "
+                    "residual function must apply its own weighting."
+                )
+
             def wrap_func(fargs, xdata, ydata, data_mask, atransform):
                 residuals = jnp.atleast_1d(fun(fargs, *args, **kwargs))
                 if data_mask is not None:
@@ -1074,11 +1101,15 @@ class LeastSquares:
             rfunc = wrap_func
             if jac is None:
                 adj = AutoDiffJacobian()
+                # An opaque residual cannot be pre-masked: under reverse mode a
+                # non-finite derivative of an excluded row leaks 0 * NaN into
+                # every column. Forward mode selects the tangent and is exact.
+                direct_mode = "fwd" if data_mask is not None else jacobian_mode_selected
                 jac_func = adj.create_ad_jacobian(
                     wrap_func,
                     x0.size,
                     masked=True,
-                    mode=jacobian_mode_selected,
+                    mode=direct_mode,
                 )
             else:
                 # Capture jac in closure with proper type narrowing
@@ -1175,6 +1206,7 @@ class LeastSquares:
         J0: jnp.ndarray,
         m: int,
         n: int,
+        f0: jnp.ndarray | None = None,
     ) -> jnp.ndarray:
         """Check and fix initial Jacobian if stability is enabled.
 
@@ -1186,6 +1218,9 @@ class LeastSquares:
             Number of residuals
         n : int
             Number of parameters
+        f0 : jnp.ndarray, optional
+            Initial residuals; with them a repaired Jacobian whose gradient
+            vanishes is rejected (as for repaired residuals).
 
         Returns
         -------
@@ -1225,6 +1260,13 @@ class LeastSquares:
                 # are replaced, as the guard does.
                 if issues.get("has_nan") or issues.get("has_inf"):
                     J0 = jnp.where(jnp.isfinite(J0), J0, 0.0)
+                    if f0 is not None and not np.any(np.asarray(J0.T @ f0) != 0):
+                        # Zeroing hides every informative column: gtol would
+                        # "converge" at x0 with success=True.
+                        raise ValueError(
+                            "The initial Jacobian is not finite (repairing it "
+                            "leaves a zero gradient, so no step can be taken)."
+                        )
 
         if J0 is not None and J0.shape != (m, n):
             raise ValueError(
@@ -1287,7 +1329,12 @@ class LeastSquares:
         else:
             initial_cost_jnp = self.trf.default_loss_func(f0)
 
-        return float(initial_cost_jnp)
+        initial_cost = float(initial_cost_jnp)
+        # Only a custom loss: an overflowed 0.5*sum(f**2) of a finite start is
+        # still a valid start for the built-in losses.
+        if callable(loss) and not np.isfinite(initial_cost):
+            raise ValueError("The initial cost is not finite.")
+        return initial_cost
 
     def _check_memory_and_adjust_solver(
         self,
@@ -1346,8 +1393,10 @@ class LeastSquares:
         Per-iteration Jacobian modification was found to cause optimization divergence
         due to accumulated numerical perturbations and expensive SVD computations.
 
-        The residual wrapper still checks for NaN/Inf at each evaluation since this
-        is a cheap O(n) check that can catch numerical explosions early.
+        Trial residuals are NOT repaired: clipping an infinite residual to a
+        finite value made an out-of-domain trial look like an improvement, so the
+        solver accepted a point whose original objective is infinite. The solver
+        rejects a non-finite trial and shrinks the trust region instead.
 
         Parameters
         ----------
@@ -1359,27 +1408,10 @@ class LeastSquares:
         Returns
         -------
         rfunc : Callable
-            Wrapped residual function (with NaN/Inf checking)
+            Residual function (unchanged)
         jac_func : Callable
-            Original Jacobian function (NOT wrapped - stability checked at init only)
+            Jacobian function (unchanged)
         """
-        if self.enable_stability:
-            original_rfunc = rfunc
-
-            def stable_rfunc(x, xd, yd, dm, tf):
-                result = original_rfunc(x, xd, yd, dm, tf)
-                result = jnp.where(
-                    jnp.isfinite(result),
-                    result,
-                    jnp.clip(result, -1e10, 1e10),
-                )
-                return result
-
-            # NOTE: Jacobian is NOT wrapped - stability checked only at initialization
-            # via _check_and_fix_initial_jacobian(). Per-iteration Jacobian modification
-            # causes optimization divergence due to SVD overhead and accumulated perturbations.
-            return stable_rfunc, jac_func
-
         return rfunc, jac_func
 
     def _run_trf_optimization(
@@ -1682,6 +1714,15 @@ class LeastSquares:
             data_mask = jnp.asarray(data_mask, dtype=bool)
             if data_mask.ndim != 1:
                 raise ValueError("Data mask must be one-dimensional.")
+            # Validate against the observations, not the broadcast residuals: a
+            # longer mask would otherwise turn one observation into several.
+            if ydata is not None and data_mask.shape[0] != len(ydata):
+                raise ValueError(
+                    f"`data_mask` has {data_mask.shape[0]} entries but there are "
+                    f"{len(ydata)} observations."
+                )
+            if data_mask.shape[0] > 0 and not bool(jnp.any(data_mask)):
+                raise ValueError("`data_mask` excludes every observation.")
 
         max_nfev = validate_max_nfev(max_nfev, allow_fractional=True)
 
@@ -1728,6 +1769,11 @@ class LeastSquares:
             from nlsq.config import get_jacobian_mode
 
             jacobian_mode_config, jacobian_mode_source = get_jacobian_mode()
+        if jacobian_mode_config not in ("auto", "fwd", "rev"):
+            raise ValueError(
+                f"Invalid jacobian_mode: {jacobian_mode_config}. "
+                "Must be 'auto', 'fwd', or 'rev'"
+            )
 
         # Step 3: Log optimization setup
         self.logger.info(
@@ -1802,6 +1848,7 @@ class LeastSquares:
             args,
             kwargs,
             jacobian_mode_selected,
+            data_mask,
         )
 
         # Step 5: Evaluate initial residuals and Jacobian
@@ -1831,7 +1878,12 @@ class LeastSquares:
                 )
 
         # Step 6: Check and fix initial Jacobian
-        J0 = self._check_and_fix_initial_jacobian(J0, m, n)
+        J0 = self._check_and_fix_initial_jacobian(J0, m, n, f0)
+
+        if data_mask is not None and data_mask.shape != (m,):
+            raise ValueError(
+                f"`data_mask` has shape {data_mask.shape} but there are {m} residuals."
+            )
 
         # Step 7: Setup data mask and loss function
         if data_mask is None:
@@ -2142,8 +2194,10 @@ class LeastSquares:
             # OPT-11: Inlined masked_residual_func for XLA fusion optimization
             # XLA can better fuse operations when they're in the same JIT scope
             func_eval = func(_safe_coords(xdata, data_mask), *args) - ydata
-            # Mask after weighting: sigma==0/NaN on a masked row must not give inf*0=NaN
-            return jnp.where(data_mask, atransform * func_eval, 0)
+            # Zero the weight of excluded rows too: reverse-mode AD otherwise
+            # propagates 0 * inf from a masked row with sigma == 0 (weight inf).
+            weight = jnp.where(data_mask, atransform, 0)
+            return jnp.where(data_mask, weight * func_eval, 0)
 
         @jit
         def func_2d_transform(
@@ -2256,6 +2310,14 @@ class LeastSquares:
                         f"(n_params, m) = ({n_par}, {m_rows}) or SciPy-style "
                         f"(m, n_params) = ({m_rows}, {n_par})."
                     )
+            elif Jt.ndim == 1 and args.size == 1:
+                if Jt.shape[0] != data_mask.shape[0]:
+                    # a length-one vector would otherwise broadcast to every point
+                    raise ValueError(
+                        f"`jac` returned shape {Jt.shape}; expected one derivative "
+                        f"per observation ({data_mask.shape[0]},)."
+                    )
+                Jt = Jt[None, :]  # SciPy-style (m,) column of a one-parameter model
             return jnp.where(data_mask, Jt, 0).T
 
         @jit

@@ -66,7 +66,8 @@ def phi_and_derivative_jax(
     p_norm = jnp.linalg.norm(suf / denom)
     phi = p_norm - Delta
     safe_p_norm = jnp.where(p_norm == 0.0, jnp.finfo(p_norm.dtype).tiny, p_norm)
-    phi_prime = -jnp.sum(suf**2 / denom**3) / safe_p_norm
+    # (suf/denom)**2 / denom: cubing denom first over/underflows at representable scales.
+    phi_prime = -jnp.sum((suf / denom) ** 2 / denom) / safe_p_norm
     return phi, phi_prime
 
 
@@ -94,6 +95,12 @@ def _solve_lsq_trust_region_jax_impl(
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Internal implementation for solve_lsq_trust_region_jax."""
     suf = s * uf
+    # Scalars (radius, initial alpha, rtol) follow the SVD dtype so every lax.cond
+    # branch and the loop carry have one type, whatever the caller passed
+    # (Python float, float64 JAX scalar).
+    Delta = jnp.asarray(Delta, dtype=suf.dtype)  # type: ignore[assignment]
+    initial_alpha = jnp.asarray(initial_alpha, dtype=suf.dtype)  # type: ignore[assignment]
+    rtol = jnp.asarray(rtol, dtype=suf.dtype)  # type: ignore[assignment]
 
     # Check if J has full rank
     threshold = EPS * m * s[0]
@@ -131,10 +138,11 @@ def _solve_lsq_trust_region_jax_impl(
         )
         return -phi_val / safe_phi_prime
 
+    # typed zero: a weak float64 literal would not match a float32 branch under x64
     alpha_lower = lax.cond(
         full_rank,
         compute_alpha_lower_full_rank,
-        lambda: 0.0,
+        lambda: jnp.zeros((), dtype=suf.dtype),
     )
 
     # Compute default alpha
@@ -151,6 +159,12 @@ def _solve_lsq_trust_region_jax_impl(
         lambda: initial_alpha,
         lambda: default_alpha,
     )
+
+    # The carry keeps the SVD dtype whatever the type of the Python-scalar inputs.
+    dt = suf.dtype
+    alpha_start = jnp.asarray(alpha_start, dtype=dt)
+    alpha_lower = jnp.asarray(alpha_lower, dtype=dt)
+    alpha_upper = jnp.asarray(alpha_upper, dtype=dt)
 
     # State for while_loop: (alpha, alpha_lower, alpha_upper, iteration, converged)
     def loop_cond(state):
@@ -192,7 +206,13 @@ def _solve_lsq_trust_region_jax_impl(
         # Check convergence
         converged = jnp.abs(phi_val) < rtol * Delta
 
-        return (alpha_new, alpha_lower_new, alpha_upper_new, iteration + 1, converged)
+        return (
+            alpha_new.astype(dt),
+            alpha_lower_new.astype(dt),
+            alpha_upper_new.astype(dt),
+            iteration + 1,
+            converged,
+        )
 
     # Run the while loop
     init_state = (alpha_start, alpha_lower, alpha_upper, jnp.array(0), jnp.array(False))
@@ -256,19 +276,19 @@ def _solve_lsq_trust_region_jax_impl(
 
     alpha_final = lax.cond(
         use_gauss_newton,
-        lambda: jnp.array(0.0),
+        lambda: jnp.zeros((), dtype=final_alpha.dtype),
         lambda: final_alpha,
     )
 
     n_iter_out = lax.cond(
         use_gauss_newton,
-        lambda: jnp.array(0),
+        lambda: jnp.zeros_like(n_iter_final),
         lambda: n_iter_final,
     )
 
     # Override the degenerate zero-Jacobian case with a finite zero step.
     p_final = jnp.where(jac_is_zero, jnp.zeros_like(p_final), p_final)
-    alpha_final = jnp.where(jac_is_zero, jnp.array(0.0), alpha_final)
+    alpha_final = jnp.where(jac_is_zero, jnp.zeros_like(alpha_final), alpha_final)
 
     # Last resort (non-finite inputs or extreme magnitudes): the zero step is
     # always feasible, never NaN.
@@ -590,8 +610,9 @@ class CommonJIT:
 
         Parameters
         ----------
-        J : ndarray, sparse matrix or LinearOperator, shape (m, n)
-            Jacobian matrix, affects the quadratic term.
+        J : jnp.ndarray, shape (m, n)
+            Dense Jacobian matrix, affects the quadratic term (SciPy sparse
+            matrices and LinearOperators are not accepted).
         g : ndarray, shape (n,)
             Gradient, defines the linear term.
         s : ndarray, shape (n,)
@@ -692,8 +713,9 @@ class CommonJIT:
 
         Parameters
         ----------
-        J : ndarray, sparse matrix or LinearOperator, shape (m, n)
-            Jacobian matrix, affects the quadratic term.
+        J : jnp.ndarray, shape (m, n)
+            Dense Jacobian matrix, affects the quadratic term (SciPy sparse
+            matrices and LinearOperators are not accepted).
         g : ndarray, shape (n,)
             Gradient, defines the linear term.
         s : ndarray, shape (k, n) or (n,)
@@ -959,7 +981,10 @@ def step_size_to_bound_jax(
     # For each component, the relevant bound step is the positive one
     steps = jnp.maximum(steps_lb, steps_ub)
     min_step = jnp.min(steps)
-    hits = jnp.where(steps == min_step, jnp.sign(s).astype(jnp.int32), 0)
+    # no bound is reachable when min_step is inf: nothing is hit
+    hits = jnp.where(
+        (steps == min_step) & jnp.isfinite(min_step), jnp.sign(s).astype(jnp.int32), 0
+    )
     return min_step, hits
 
 
@@ -997,6 +1022,17 @@ def intersect_trust_region_jax(
     t_pos : jnp.ndarray
         Positive root.
     """
+    # Exact power-of-two scaling keeps a, b, c and the discriminant finite for
+    # large |s|, |x|, Delta (a * c would overflow near 1e100); the roots in the
+    # scaled variable tau map back as t = tau * (xs / ss).
+    one = jnp.ones((), dtype=jnp.result_type(s, x))
+    smax = jnp.max(jnp.abs(s))
+    ss = jnp.where(smax > 0, jnp.ldexp(one, jnp.frexp(smax)[1] - 1), one)
+    xs = jnp.where(Delta > 0, jnp.ldexp(one, jnp.frexp(Delta)[1] - 1), one)
+    s = s / ss
+    x = x / xs
+    Delta = Delta / xs  # type: ignore[assignment]
+
     a = jnp.dot(s, s)
     b = jnp.dot(x, s)
     c = jnp.dot(x, x) - Delta**2
@@ -1009,6 +1045,7 @@ def intersect_trust_region_jax(
     t1 = jnp.where(a != 0, q / jnp.where(a != 0, a, 1.0), 0.0)
     t2 = jnp.where(q != 0, c / jnp.where(q != 0, q, 1.0), 0.0)
 
+    t1, t2 = t1 * (xs / ss), t2 * (xs / ss)
     t_neg = jnp.minimum(t1, t2)
     t_pos = jnp.maximum(t1, t2)
     return t_neg, t_pos
@@ -1047,12 +1084,14 @@ def minimize_quadratic_1d_jax(
         Minimum value.
     """
     # Evaluate at endpoints
-    y_lb = lb * (a * lb + b) + c
-    y_ub = ub * (a * ub + b) + c
+    # Compare candidates without the constant (a large c would round them to ties);
+    # it is added to the reported value only.
+    y_lb = lb * (a * lb + b)
+    y_ub = ub * (a * ub + b)
 
     # Check if extremum is in bounds
     extremum = -0.5 * b / jnp.where(a != 0, a, 1.0)
-    y_ext = extremum * (a * extremum + b) + c
+    y_ext = extremum * (a * extremum + b)
     ext_valid = (a != 0) & (lb < extremum) & (extremum < ub)
 
     # Select minimum among valid candidates
@@ -1064,4 +1103,4 @@ def minimize_quadratic_1d_jax(
     t_min = jnp.where(ext_valid & (y_ext < y_min), extremum, t_min)
     y_min = jnp.where(ext_valid & (y_ext < y_min), y_ext, y_min)
 
-    return t_min, y_min
+    return t_min, y_min + c

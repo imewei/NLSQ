@@ -13,6 +13,8 @@ The adapter handles:
 - Basic data statistics computation
 """
 
+import csv
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -114,7 +116,10 @@ def load_from_file(
 
         # Get the filename if available (file-like objects often have .name)
         filename = getattr(file_obj, "name", "uploaded_data.txt")
-        suffix = Path(filename).suffix
+        # TemporaryFile() exposes an integer file descriptor as its name
+        suffix = (
+            Path(filename).suffix if isinstance(filename, (str, os.PathLike)) else ""
+        )
 
         # Detect format from extension if not specified
         if (
@@ -245,6 +250,15 @@ def load_from_clipboard(
     return xdata, ydata, sigma
 
 
+def _split_cells(line: str, delimiter: str | None) -> list[str]:
+    """Split one line into cells; a delimiter honours CSV quoting (``"1","2"``)."""
+    if delimiter is None:
+        return line.split()
+    if len(delimiter) != 1:  # csv.reader needs one character; no quote handling
+        return line.strip("\r\n").split(delimiter)
+    return next(csv.reader([line.strip("\r\n")], delimiter=delimiter), [])
+
+
 def _to_float(cell: str, decimal_comma: bool) -> float:
     cell = cell.strip()
     if not cell:
@@ -287,11 +301,7 @@ def parse_numeric_rows(
 
         # Only strip the line terminator for an explicit delimiter: a trailing
         # tab/comma is a real (empty) last cell.
-        parts = (
-            stripped_line.split()
-            if delimiter is None
-            else line.strip("\r\n").split(delimiter)
-        )
+        parts = _split_cells(line if delimiter else stripped_line, delimiter)
         try:
             rows.append([_to_float(p, decimal_comma=delimiter == ";") for p in parts])
         except ValueError as e:
@@ -301,12 +311,28 @@ def parse_numeric_rows(
     return rows
 
 
+def _unquoted(line: str) -> str:
+    """``line`` with the contents of double-quoted fields blanked out."""
+    out, quoted = [], False
+    for ch in line:
+        if ch == '"':
+            quoted = not quoted
+        out.append(" " if quoted else ch)
+    return "".join(out)
+
+
+def _strip_comment(line: str) -> str:
+    """Drop a ``#`` comment, ignoring ``#`` inside a quoted field."""
+    pos = _unquoted(line).find("#")
+    return line if pos < 0 else line[:pos]
+
+
 def _clean_table_lines(text: str) -> list[str]:
     """Lines of ``text`` without a leading BOM, ``#`` comments and blank lines.
 
     A trailing tab/comma is kept: it is a real (empty) last cell.
     """
-    lines = [ln.split("#")[0] for ln in text.lstrip("﻿").splitlines()]
+    lines = [_strip_comment(ln) for ln in text.lstrip("﻿").splitlines()]
     return [ln for ln in lines if ln.strip()]
 
 
@@ -335,10 +361,7 @@ def parse_table_text(text: str) -> tuple[list[list[float]], list[str] | None]:
         return [], None
     delimiter = detect_delimiter("\n".join(lines))
     header = None
-    first = [
-        c.strip()
-        for c in (lines[0].split(delimiter) if delimiter else lines[0].split())
-    ]
+    first = [c.strip() for c in _split_cells(lines[0], delimiter)]
     if not any(_is_number(c, delimiter == ";") for c in first if c):
         try:
             parse_numeric_rows(lines[:1], delimiter)
@@ -372,6 +395,7 @@ def detect_delimiter(text: str) -> str | None:
     comma_count = 0
     semicolon_count = 0
 
+    lines = [_unquoted(ln) for ln in lines]  # separators inside quotes are text
     for line in lines:
         tab_count += line.count("\t")
         comma_count += line.count(",")

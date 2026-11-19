@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -123,8 +123,9 @@ class AdvancedOptionsWidget(QWidget):
         self._abs_sigma_check.setToolTip(
             "Checked: sigma holds true measurement errors and the covariance is "
             "used as is. Unchecked (default): sigma is relative and the "
-            "covariance is rescaled by the reduced chi-square. Only matters "
-            "when a sigma column is loaded.",
+            "covariance is rescaled by the reduced chi-square. Without a sigma "
+            "column, unit sigma (sigma = 1) is assumed, and checking this keeps "
+            "the covariance unscaled.",
         )
         layout.addRow("", self._abs_sigma_check)
 
@@ -156,7 +157,7 @@ class AdvancedOptionsWidget(QWidget):
 
         # sampler
         self._sampler_combo = QComboBox()
-        self._sampler_combo.addItems(["lhs", "sobol", "halton", "random"])
+        self._sampler_combo.addItems(["lhs", "sobol", "halton"])
         self._sampler_combo.setToolTip("Sampling method for starting points")
         group_layout.addRow("Sampler:", self._sampler_combo)
 
@@ -171,6 +172,13 @@ class AdvancedOptionsWidget(QWidget):
         self._scale_spin.setValue(1.0)
         self._scale_spin.setDecimals(6)
         self._scale_spin.setToolTip("Scale factor for sampling region")
+        # Exact value set by set_options: the spin box rounds to 6 decimals
+        self._scale_exact: float | None = None
+        self._scale_programmatic = False
+        # connected before _emit_options so listeners never see a stale exact value
+        self._scale_spin.valueChanged.connect(self._on_scale_edited)
+        # typing/pasting the displayed number leaves valueChanged silent
+        self._scale_spin.lineEdit().textEdited.connect(self._on_scale_edited)
         group_layout.addRow("Scale Factor:", self._scale_spin)
 
         layout.addWidget(self._multistart_group)
@@ -304,6 +312,21 @@ class AdvancedOptionsWidget(QWidget):
         """Emit the current options."""
         self.options_changed.emit(self.get_options())
 
+    def _on_scale_edited(self, _value: object = None) -> None:
+        """A user edit retires the exact imported value for good."""
+        if not self._scale_programmatic:
+            self._scale_exact = None
+
+    def _scale_value(self) -> float:
+        """Scale factor; the imported exact value until the user edits the box."""
+        shown = self._scale_spin.value()
+        exact = self._scale_exact
+        if exact is not None and shown == float(
+            f"{exact:.{self._scale_spin.decimals()}f}"
+        ):
+            return exact
+        return shown
+
     def get_options(self) -> dict[str, Any]:
         """Get the current options.
 
@@ -323,7 +346,7 @@ class AdvancedOptionsWidget(QWidget):
             "n_starts": self._n_starts_spin.value(),
             "sampler": self._sampler_combo.currentText(),
             "center_on_p0": self._center_check.isChecked(),
-            "scale_factor": self._scale_spin.value(),
+            "scale_factor": self._scale_value(),
             # Streaming
             "chunk_size": self._chunk_spin.value(),
             "normalize": self._normalize_check.isChecked(),
@@ -361,14 +384,25 @@ class AdvancedOptionsWidget(QWidget):
         }
         for key, spinbox in spinbox_mapping.items():
             if key in options:
-                spinbox.setValue(options[key])
-                if spinbox.value() != options[key]:
+                if spinbox is self._scale_spin:
+                    self._scale_exact = float(options[key])
+                    self._scale_programmatic = True
+                try:
+                    spinbox.setValue(options[key])
+                finally:
+                    self._scale_programmatic = False
+                kept = (
+                    self._scale_value()
+                    if spinbox is self._scale_spin
+                    else spinbox.value()
+                )
+                if kept != options[key]:
                     logger.warning(
                         "Advanced option %s=%r is outside the control's range; "
                         "adjusted to %r",
                         key,
                         options[key],
-                        spinbox.value(),
+                        kept,
                     )
 
     def _set_checkbox_options(self, options: dict[str, Any]) -> None:
@@ -403,9 +437,17 @@ class AdvancedOptionsWidget(QWidget):
         }
         for key, combo in combo_mapping.items():
             if key in options:
-                idx = combo.findText(options[key])
+                # the optimizer accepts any case ("SOBOL"); the items are lowercase
+                idx = combo.findText(str(options[key]), Qt.MatchFlag.MatchFixedString)
                 if idx >= 0:
                     combo.setCurrentIndex(idx)
+                else:
+                    logger.warning(
+                        "Advanced option %s=%r is not available; keeping %r",
+                        key,
+                        options[key],
+                        combo.currentText(),
+                    )
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this widget.

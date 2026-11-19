@@ -94,20 +94,36 @@ def _sorted_by_x(xdata, ydata):
 
 
 def _finite_points(xdata, ydata):
-    """Drop points with a non-finite x or y so NaN cannot leak into p0."""
+    """Drop points with a non-finite x or y so NaN cannot leak into p0.
+
+    Multi-dimensional ``xdata`` may hold the points on the last axis ``(k, n)`` (the
+    SciPy layout, preferred when square) or on the first axis ``(n, k)``.
+    """
     xdata = _as_float64(xdata)
     ydata = _as_float64(ydata)
-    if xdata.shape[-1:] != ydata.shape[-1:]:
+    if ydata.ndim != 1 or xdata.ndim == 0:
+        return xdata, ydata
+    n = ydata.shape[0]
+    if xdata.shape[-1] == n:
+        axis = -1
+    elif xdata.shape[0] == n:
+        axis = 0
+    else:
         return xdata, ydata
     try:
-        mask = np.isfinite(ydata) & (
-            np.isfinite(xdata) if xdata.ndim == 1 else np.isfinite(xdata).all(axis=0)
-        )
+        finite_x = np.isfinite(xdata)
+        if xdata.ndim > 1:
+            finite_x = finite_x.all(
+                axis=tuple(a for a in range(xdata.ndim) if a != axis % xdata.ndim)
+            )
+        mask = np.isfinite(ydata) & finite_x
     except (TypeError, ValueError):
         return xdata, ydata
-    if mask.all() or not mask.any() or ydata.ndim != 1:
+    if not mask.any():
+        raise ValueError("Cannot estimate p0: no observation has finite x and y")
+    if mask.all():
         return xdata, ydata
-    return (xdata[mask] if xdata.ndim == 1 else xdata[..., mask]), ydata[mask]
+    return np.compress(mask, xdata, axis=axis), ydata[mask]
 
 
 def estimate_initial_parameters(
@@ -197,6 +213,9 @@ def estimate_initial_parameters(
         if not (isinstance(p0, str) and p0 == "auto"):
             return np.asarray(p0)
 
+    # Only observations with finite x and y inform p0 (also for custom estimators)
+    xdata, ydata = _finite_points(xdata, ydata)
+
     # Check if function has custom estimation method (for library functions)
     if hasattr(f, "estimate_p0"):
         try:
@@ -209,9 +228,6 @@ def estimate_initial_parameters(
                 f"estimate_p0 of {f!r} failed ({type(exc).__name__}: {exc}); "
                 "using generic heuristics"
             )
-
-    # Convert to numpy arrays
-    xdata, ydata = _finite_points(xdata, ydata)
 
     # Get number of parameters from function signature
     try:
@@ -236,22 +252,16 @@ def estimate_initial_parameters(
             "Please provide p0 explicitly.",
         ) from None
 
-    # If we have VAR_POSITIONAL or VAR_KEYWORD, we can't determine n_params
-    # Check this AFTER try/except to avoid catching our own ValueError
-    try:
-        if any(
-            param.kind
-            in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-            for param in sig.parameters.values()
-        ):
-            raise ValueError(
-                "Cannot automatically determine number of parameters "
-                "for functions with *args or **kwargs. "
-                "Please provide p0 explicitly.",
-            )
-    except NameError:
-        # sig doesn't exist (caught above already)
-        pass
+    # *args hides the parameter count; **kwargs does not add positional fit
+    # parameters (SciPy semantics), so it must not block estimation.
+    if any(
+        param.kind == inspect.Parameter.VAR_POSITIONAL
+        for param in sig.parameters.values()
+    ):
+        raise ValueError(
+            "Cannot automatically determine number of parameters "
+            "for functions with *args. Please provide p0 explicitly.",
+        )
 
     if n_params <= 0:
         raise ValueError(
@@ -350,7 +360,8 @@ def detect_function_pattern(ydata: np.ndarray, xdata: np.ndarray) -> str:
     --------
     estimate_p0_for_pattern : Estimate parameters based on detected pattern
     """
-    if len(ydata) < 3:
+    if len(ydata) < 3 or np.ndim(xdata) > 1:
+        # multi-feature predictors have no single x order/correlation to read
         return "unknown"
 
     # Heuristics below read array order as x order
@@ -485,9 +496,12 @@ def estimate_p0_for_pattern(
     estimate_initial_parameters : Main parameter estimation function
     """
     xdata, ydata = _sorted_by_x(*_finite_points(xdata, ydata))
+    if xdata.ndim > 1:  # the 1-D pattern heuristics index x by observation
+        pattern = "unknown"
     if pattern == "linear":
         # Linear: y = a*x + b
-        if n_params >= 2:
+        # multi-dimensional x has no single slope: use the generic fallback below
+        if n_params >= 2 and xdata.ndim == 1 and xdata.shape == ydata.shape:
             # Simple linear regression
             A = np.vstack([xdata, np.ones(len(xdata))]).T
             try:
@@ -529,11 +543,12 @@ def estimate_p0_for_pattern(
         # Estimate sigma from FWHM
         half_max = (np.max(ydata) + np.min(ydata)) / 2
         indices = np.where(ydata > half_max)[0]
+        sigma = 0.0
         if len(indices) > 1:
             fwhm = xdata[indices[-1]] - xdata[indices[0]]
             sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
-        else:
-            sigma = (np.max(xdata) - np.min(xdata)) / 4
+        if not sigma > 0:  # one point, or all above-half points share one x
+            sigma = (np.max(xdata) - np.min(xdata)) / 4 or 1.0  # 0 width: undefined
 
         p0 = [amp, mu, sigma][:n_params]
         p0.extend([1.0] * (n_params - len(p0)))

@@ -108,7 +108,11 @@ def validate_max_nfev(
         return None
     if isinstance(value, (bool, np.bool_)):
         raise ValueError("`max_nfev` must be None or positive integer, not bool.")
-    if allow_fractional and isinstance(value, numbers.Real):
+    if allow_fractional and isinstance(value, numbers.Integral):
+        # float() would round above 2**53 and overflow for huge ints
+        if int(value) > 0:
+            return int(value)
+    elif allow_fractional and isinstance(value, numbers.Real):
         num = float(value)
         if math.isfinite(num) and num > 0:
             return num if num != int(num) else int(num)
@@ -117,9 +121,34 @@ def validate_max_nfev(
     raise ValueError(f"`max_nfev` must be None or positive integer, got {value!r}.")
 
 
+def has_complex(a: Any) -> bool:
+    """True when ``a`` is complex, including an object array that boxes a complex scalar.
+
+    ``np.iscomplexobj`` looks only at the dtype, so ``dtype=object`` holding
+    ``1+2j`` slips through and the later float cast drops the imaginary part.
+    Not array-like input is False; an out-of-core source keeps its own dtype test.
+    """
+    if a is None:
+        return False
+    try:
+        if np.iscomplexobj(a):
+            return True
+        if getattr(a, "dtype", None) is not None and a.dtype != object:
+            return False
+        arr = np.asarray(a)
+        if arr.dtype != object:
+            return False
+        return any(isinstance(v, complex | np.complexfloating) for v in arr.ravel())
+    except (TypeError, ValueError):
+        return False
+
+
 def check_not_nan(name: str, tol: Any) -> float:
     """Return ``tol`` as ``float``; NaN (also as a 0-d array) raises ``ValueError``."""
-    value = float(np.asarray(tol, dtype=float))
+    arr = np.asarray(tol)
+    if has_complex(arr):  # the float cast would drop the imaginary part silently
+        raise ValueError(f"`{name}` must be real, got {tol!r}.")
+    value = float(arr.astype(float))
     if math.isnan(value):
         raise ValueError(f"`{name}` must not be NaN.")
     return value

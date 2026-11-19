@@ -107,8 +107,9 @@ class MethodSelector:
         float
             Scale ratio (>= 1.0). Higher values indicate more diverse scales.
         """
-        lower = np.asarray(lower_bounds)
-        upper = np.asarray(upper_bounds)
+        # float64 so integer bounds cannot wrap in their own dtype
+        lower = np.asarray(lower_bounds, dtype=float)
+        upper = np.asarray(upper_bounds, dtype=float)
 
         # Compute ranges
         ranges = upper - lower

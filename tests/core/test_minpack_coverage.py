@@ -637,29 +637,10 @@ class TestBugFixRegressions(unittest.TestCase):
         assert any("workflow='auto_global'" in m for m in messages), messages
         assert not any("workflow='hpc'" in m for m in messages), messages
 
-        # Chunked + sigma NotImplementedError: must name the actual workflow,
-        # not a fixed 'auto_global'.
-        with self.assertRaises(NotImplementedError) as excinfo:
-            _fit_global_multistart(
-                f=lambda x, a, b: a * x + b,
-                xdata=x,
-                ydata=y,
-                p0=[1.5, 0.5],
-                sigma=np.ones_like(y),
-                absolute_sigma=False,
-                check_finite=True,
-                bounds=bounds,
-                strategy="chunked",
-                n_starts=5,
-                workflow_name="hpc",
-            )
-        self.assertIn("workflow='hpc'", str(excinfo.exception))
-        self.assertNotIn("workflow='auto_global'", str(excinfo.exception))
-
         # Chunked-fit-failed RuntimeError: must also name the actual
-        # workflow -- this is a third, independent interpolation site from
-        # the NotImplementedError above (only reached when sigma is None
-        # and LargeDatasetFitter itself reports failure).
+        # workflow (reached when LargeDatasetFitter itself reports failure).
+        # The chunked route used to raise NotImplementedError for sigma; it now
+        # forwards sigma to the chunk engine, so pass one here too.
         with patch(
             "nlsq.streaming.large_dataset.LargeDatasetFitter"
         ) as mock_fitter_cls:
@@ -673,7 +654,7 @@ class TestBugFixRegressions(unittest.TestCase):
                     xdata=x,
                     ydata=y,
                     p0=[1.5, 0.5],
-                    sigma=None,
+                    sigma=np.ones_like(y),
                     absolute_sigma=False,
                     check_finite=True,
                     bounds=bounds,

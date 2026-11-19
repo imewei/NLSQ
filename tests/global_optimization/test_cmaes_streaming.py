@@ -399,3 +399,57 @@ class TestDenseSigmaMemory:
     def test_warning_names_the_covariance_sigma(self):
         with pytest.warns(UserWarning, match="covariance sigma"):
             auto_configure_cmaes_memory(1_000_000, 16, 1.0, fixed_bytes=2 * 1024**3)
+
+
+def test_data_chunk_size_rejects_batch_dependent_model():
+    """A model using a batch statistic would minimise a different objective per chunk."""
+    import jax.numpy as jnp
+
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
+    from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+    def model(x, a):
+        return a * jnp.mean(x) + jnp.zeros_like(x)
+
+    x = np.concatenate([np.zeros(1024), 2 * np.ones(1024)])
+    config = CMAESConfig(
+        max_generations=5,
+        restart_strategy="none",
+        refine_with_nlsq=False,
+        data_chunk_size=1024,
+    )
+    with pytest.raises(ValueError, match="data_chunk_size"):
+        CMAESOptimizer(config).fit(model, x, 2 * np.ones(2048), bounds=(0, 3))
+
+
+def test_data_mask_with_short_ydata_is_rejected_not_truncated():
+    from nlsq.global_optimization.cmaes_config import CMAESConfig
+    from nlsq.global_optimization.cmaes_optimizer import CMAESOptimizer
+
+    config = CMAESConfig(max_generations=3, restart_strategy="none")
+    with pytest.raises(ValueError, match="data_mask"):
+        CMAESOptimizer(config).fit(
+            lambda x, a: a * x,
+            np.array([1.0, 2.0, 3.0]),
+            np.array([2.0, 9.0]),
+            bounds=(0, 3),
+            data_mask=[True, False],
+        )
+
+
+def test_chunk_guard_catches_parameter_dependent_batching():
+    """f = a*(x - mean(x)) is batch-independent at the bounds midpoint (a=0) only."""
+    import jax.numpy as jnp
+
+    from nlsq.global_optimization.cmaes_optimizer import _create_fitness_function
+
+    x = jnp.array([1.0, 2.0, 3.0, 4.0])
+    with pytest.raises(ValueError, match="data_chunk_size"):
+        _create_fitness_function(
+            lambda x, a: a * (x - jnp.mean(x)),
+            x,
+            jnp.zeros(4),
+            jnp.array([-2.0]),
+            jnp.array([2.0]),
+            data_chunk_size=2,
+        )

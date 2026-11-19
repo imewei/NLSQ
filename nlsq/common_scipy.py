@@ -27,10 +27,22 @@ def intersect_trust_region(x, s, Delta):
         If `s` is zero or `x` is not within the trust region.
 
     """
-    a = np.dot(s, s)
-    if a == 0:
+    s = np.asarray(s, dtype=float)
+    x = np.asarray(x, dtype=float)
+    smax = np.max(np.abs(s))
+    if smax == 0:
         raise ValueError("`s` is zero.")
 
+    # Exact power-of-two scaling keeps a, b, c and the discriminant finite for
+    # large |s|, |x|, Delta (a * c would overflow near 1e100); the roots in the
+    # scaled variable tau map back as t = tau * (xs / ss).
+    ss = float(np.ldexp(1.0, int(np.frexp(smax)[1]) - 1))
+    xs = float(np.ldexp(1.0, int(np.frexp(Delta)[1]) - 1)) if Delta > 0 else 1.0
+    s = s / ss
+    x = x / xs
+    Delta = Delta / xs
+
+    a = np.dot(s, s)
     b = np.dot(x, s)
 
     c = np.dot(x, x) - Delta**2
@@ -46,8 +58,10 @@ def intersect_trust_region(x, s, Delta):
     # Computations below avoid loss of significance, see "Numerical Recipes".
     q = -(b + copysign(d, b))
     t1 = q / a
-    t2 = c / q
+    # q == 0 only for b == d == 0 (a tangent line): a double root at t1 == 0
+    t2 = c / q if q != 0 else t1
 
+    t1, t2 = t1 * (xs / ss), t2 * (xs / ss)
     if t1 < t2:
         return t1, t2
     return t2, t1
@@ -121,21 +135,26 @@ def solve_lsq_trust_region(
         p_norm = norm(suf / denom)
         phi = p_norm - Delta
         safe_p_norm = p_norm if p_norm != 0 else np.finfo(float).tiny
-        phi_prime = -np.sum(suf**2 / denom**3) / safe_p_norm
+        # (suf/denom)**2 / denom: cubing denom first over/underflows at representable scales.
+        phi_prime = -np.sum((suf / denom) ** 2 / denom) / safe_p_norm
         return phi, phi_prime
 
     suf = s * uf
 
-    # Check if J has full rank and try Gauss-Newton step.
+    # Check if J has full rank (it selects the alpha lower bound below).
     if m >= n:
         threshold = EPS * m * s[0]
         full_rank = s[-1] > threshold
     else:
         full_rank = False
 
-    if full_rank:
-        p = -V.dot(uf / s)
-        if norm(p) <= Delta:
+    # Gauss-Newton step over the positive singular values (zero ones never change
+    # the model: minimum-norm step). When it fits in the ball it is the exact model
+    # minimizer, also for a rank-deficient J; same as the JAX twin.
+    positive = s > 0
+    with np.errstate(all="ignore"):
+        p = -V.dot(uf * np.where(positive, 1.0 / np.where(positive, s, 1.0), 0.0))
+        if np.all(np.isfinite(p)) and norm(p) <= Delta:
             return p, 0.0, 0
 
     alpha_upper = norm(suf) / Delta
@@ -223,6 +242,9 @@ def solve_trust_region_2d(B, g, Delta):
     t = np.real(t[np.isreal(t)])
 
     p = Delta * np.vstack((2 * t / (1 + t**2), (1 - t**2) / (1 + t**2)))
+    # t -> +-infinity is the boundary point (0, -Delta); the rational
+    # parameterization never reaches it, so add it as a candidate.
+    p = np.hstack((p, np.array([[0.0], [-Delta]])))
     value = 0.5 * np.sum(p * B.dot(p), axis=0) + np.dot(g, p)
     i = np.argmin(value)
     p = p[:, i]
@@ -283,9 +305,10 @@ def minimize_quadratic_1d(a, b, lb, ub, c=0):
         if lb < extremum < ub:
             t.append(extremum)
     t = np.asarray(t)
-    y = t * (a * t + b) + c
+    # Compare without `c` (a large constant would round candidates to ties).
+    y = t * (a * t + b)
     min_index = np.argmin(y)
-    return t[min_index], y[min_index]
+    return t[min_index], y[min_index] + c
 
 
 def evaluate_quadratic(J, g, s, diag=None):
@@ -363,7 +386,9 @@ def step_size_to_bound(x, s, lb, ub):
             (ub - x)[non_zero] / s_non_zero,
         )
     min_step = np.min(steps)
-    return min_step, np.equal(steps, min_step) * np.sign(s).astype(int)
+    # no bound is reachable when min_step is inf: nothing is hit
+    hit = np.equal(steps, min_step) & np.isfinite(min_step)
+    return min_step, hit * np.sign(s).astype(int)
 
 
 def find_active_constraints(x, lb, ub, rtol=1e-10):
@@ -498,6 +523,7 @@ def reflective_transformation(y, lb, ub):
     if in_bounds(y, lb, ub):
         return y, np.ones_like(y)
 
+    feasible = (y >= lb) & (y <= ub)
     lb_finite = np.isfinite(lb)
     ub_finite = np.isfinite(ub)
 
@@ -518,6 +544,7 @@ def reflective_transformation(y, lb, ub):
     x[mask] = lb[mask] + np.minimum(t, 2 * d[mask] - t)
     g_negative[mask] = t > d[mask]
 
+    x[feasible] = y[feasible]  # untouched coordinates must not pick up rounding
     g = np.ones_like(y)
     g[g_negative] = -1
 

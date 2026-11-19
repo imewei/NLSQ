@@ -9,9 +9,9 @@ the process is killed.
 .. note::
 
    As of this writing, checkpoint **saving** is implemented, but automatic
-   **resuming** from a saved checkpoint is not. Setting
-   ``resume_from_checkpoint`` on the config raises ``NotImplementedError``
-   when you call ``fit()``. See `Resuming from Checkpoint`_ below.
+   **resuming** from a saved checkpoint is not. ``HybridStreamingConfig`` has
+   no ``resume_from_checkpoint`` field (passing one raises ``TypeError``), and
+   ``fit()`` always starts from ``p0``. See `Resuming from Checkpoint`_ below.
 
 When to Use Checkpoints
 ------------------------
@@ -80,10 +80,9 @@ Checkpoints are not pruned automatically; old files accumulate in
 Resuming from Checkpoint
 --------------------------
 
-``HybridStreamingConfig`` has a ``resume_from_checkpoint`` field, but
-``fit()`` does not currently act on it — passing it raises
-``NotImplementedError`` with guidance to either unset it or load state
-manually. There is no supported ``resume=True`` argument to ``fit()``.
+``HybridStreamingConfig`` has no ``resume_from_checkpoint`` field (passing one
+raises ``TypeError``), and ``fit()`` has no ``resume=True`` argument: it always
+starts from ``p0``.
 
 If you need the saved state for inspection or a custom recovery path, load
 it directly with ``CheckpointManager``:

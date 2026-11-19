@@ -666,8 +666,11 @@ def test_hybrid_perfect_fit_degenerate_stays_inf(hybrid_wc):
 def test_gls_golden():
     fit = _gls_fitter(absolute_sigma=False)
     _assert_golden(fit._accum_information, GLS_INFO)
+    # The pooled variance is evaluated at the returned estimate, which for an unbounded
+    # fit is the GLS combination of the chunk fits (not an arbitrary vector).
+    gls_estimate = np.linalg.solve(fit._accum_information, fit._accum_info_vector)
     pcov, caught = _record(
-        fit._compute_covariance_from_history, [np.array([2.0, 1.3])], GLS_THETAS[-1]
+        fit._compute_covariance_from_history, [np.array([2.0, 1.3])], gls_estimate
     )
     _assert_no_warnings(caught)
     _assert_golden(pcov, GLS_REL)

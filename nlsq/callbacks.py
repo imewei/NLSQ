@@ -70,6 +70,21 @@ def call_user_callback(
     try:
         sig.bind(iteration=iteration, cost=cost, params=params, info=info)
     except TypeError:
+        # positional-only parameters take the leading values positionally and
+        # the rest by name: ``(iteration, /, *, cost, params, info)``
+        n_pos = sum(p.kind == p.POSITIONAL_ONLY for p in sig.parameters.values())
+        if 0 < n_pos < len(_CALLBACK_ARGS):
+            values = dict(
+                zip(_CALLBACK_ARGS, (iteration, cost, params, info), strict=True)
+            )
+            args = [values[n] for n in _CALLBACK_ARGS[:n_pos]]
+            kwargs = {n: values[n] for n in _CALLBACK_ARGS[n_pos:]}
+            try:
+                sig.bind(*args, **kwargs)
+            except TypeError:
+                pass
+            else:
+                return callback(*args, **kwargs)
         return callback(iteration, cost, params, info)
     try:
         sig.bind(iteration, cost, params, info)
@@ -378,18 +393,29 @@ class IterationLogger(CallbackBase):
 
     def close(self):
         """Close log file."""
-        if self._file is not None:
-            elapsed = time.time() - self._start_time if self._start_time else 0
-            footer = "=" * 80 + "\n"
-            footer += f"Optimization completed in {elapsed:.2f}s\n"
-            footer += "=" * 80 + "\n"
-            self._write(footer)
-            # Only close file if we opened it (not if it was provided externally)
-            if not self._file_provided:
-                self._file.close()
-                self._file = None
-        self._start_time = None
-        self._last_iter = 0
+        try:
+            if self._file is not None:
+                # A caller-provided file stays open across close() calls: write the
+                # footer once per run (_start_time is reset below) and never to a
+                # closed file.
+                if not getattr(self._file, "closed", False) and (
+                    not self._file_provided or self._start_time is not None
+                ):
+                    elapsed = time.time() - self._start_time if self._start_time else 0
+                    footer = "=" * 80 + "\n"
+                    footer += f"Optimization completed in {elapsed:.2f}s\n"
+                    footer += "=" * 80 + "\n"
+                    self._write(footer)
+        finally:
+            # Only close file if we opened it (not if it was provided externally),
+            # even when the footer write failed (the write error still propagates).
+            if self._file is not None and not self._file_provided:
+                try:
+                    self._file.close()
+                finally:
+                    self._file = None
+            self._start_time = None
+            self._last_iter = 0
 
     def __del__(self):
         """Ensure file is closed on deletion."""
@@ -542,9 +568,18 @@ class CallbackChain(CallbackBase):
 
     def close(self):
         """Close all callbacks that have a close method."""
+        # One failing close must not leave the later callbacks open; the first
+        # error is re-raised once every callback has been closed.
+        first_error: Exception | None = None
         for callback in self.callbacks:
             if hasattr(callback, "close"):
-                callback.close()
+                try:
+                    callback.close()
+                except Exception as e:
+                    if first_error is None:
+                        first_error = e
+        if first_error is not None:
+            raise first_error
 
     def __del__(self):
         """Ensure all callbacks are closed."""

@@ -234,33 +234,36 @@ class TestSVDPseudoInverseNullSpaceHandling:
 
     def test_step_norm_stays_bounded_as_singular_value_approaches_zero(self):
         optimizer = AdaptiveHybridStreamingOptimizer(HybridStreamingConfig())
-        base = jnp.array([[1.0, 1.0], [1.0, 1.0]])
-        jtr = jnp.array([1.0, -1.0])
+        jtr = jnp.array([1.0, -1.0])  # entirely along the small direction
 
-        # s_threshold = max(s) * 1e-10 = 2 * 1e-10 = 2e-10 for this JTJ, so
-        # every eps below stays in the "treat as null-space, zero it"
-        # regime the fix targets. (An eps ABOVE the threshold, e.g. 1e-8,
-        # is legitimately a small-but-resolvable direction and correctly
-        # gets a large step -- that's not the bug this test targets, see
-        # test_rank_deficient_jtj_step_has_no_amplified_null_space_component
-        # for the eps=0 case and TestSVDPseudoInverseNullSpaceHandling's
-        # class docstring for the threshold-crossing behavior generally.)
-        step_norms = []
-        for eps in (1e-11, 1e-12, 1e-13, 1e-15, 0.0):
-            jtj = base + eps * jnp.eye(2)
+        # H = [[1, c], [c, 1]] with c = 1 - k * 2**-53 is exactly representable and
+        # has singular values 1 + c and 1 - c = k * 2**-53 (> 0). The solver's
+        # cutoff is max(s) * n * machine-eps ~ 8.9e-16 (it was 1e-10 before the
+        # 2026-11-18 review, which froze resolvable ill-conditioned directions).
+        # NB: perturbing 1.0 by < 1e-16 would round away to the same singular matrix.
+        def step_norm(k):
+            c = 1.0 - k * 2.0**-53
+            h = jnp.array([[1.0, c], [c, 1.0]])
+            s_min = float(np.linalg.svd(np.asarray(h), compute_uv=False)[-1])
             step, _ = optimizer._solve_gauss_newton_step(
-                jtj,
-                jtr,
-                trust_radius=1e6,
-                regularization=0.0,
+                h, jtr, trust_radius=1e6, regularization=0.0
             )
             assert jnp.all(jnp.isfinite(step))
-            step_norms.append(float(jnp.linalg.norm(step)))
+            return s_min, float(jnp.linalg.norm(step))
 
-        # None of these should approach the trust radius -- the whole point
-        # of the fix is that below-threshold singular values don't blow the
-        # step up regardless of exactly how close to zero they are.
-        assert all(n < 10.0 for n in step_norms), step_norms
+        # Nonzero but below-cutoff singular values are treated as null space: the
+        # step must not blow up to the trust radius however close to zero they are.
+        for k in (1, 2, 4):
+            s_min, norm = step_norm(k)
+            assert 0.0 < s_min < 8.0e-16, (k, s_min)
+            assert norm < 10.0, (k, s_min, norm)
+
+        # Just above the cutoff the direction is resolvable and is inverted (clipped
+        # by the trust radius), which is what distinguishes the new cutoff from 1e-10.
+        for k in (16, 32):
+            s_min, norm = step_norm(k)
+            assert s_min > 1.0e-15, (k, s_min)
+            assert norm > 1e3, (k, s_min, norm)
 
 
 class TestChunkedFitCovarianceUsesAccumulatedInformation:

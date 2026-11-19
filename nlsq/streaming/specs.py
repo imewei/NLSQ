@@ -92,7 +92,9 @@ def reject_owned_kwargs(strategy: Any, kwargs: Mapping[str, Any]) -> None:
         reserved = frozenset(f.name for f in fields(strategy))
     else:
         return
-    clash = sorted(set(kwargs) & reserved)
+    # options is checked again here: the frozen spec exposes its private dict, so it can
+    # be mutated after construction
+    clash = sorted((set(kwargs) | set(getattr(strategy, "options", ()))) & reserved)
     if clash:
         raise TypeError(
             f"fit_with_strategy keyword(s) {clash} are owned by "

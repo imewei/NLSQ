@@ -48,6 +48,16 @@ from typing import Any
 
 import numpy as np
 
+_MISSING = object()  # marks an absent history field
+
+
+def _format_range(a: Any, spec: str) -> str:
+    """``[min, max]`` of ``a`` (``empty`` for no elements) in format ``spec``."""
+    a = np.asarray(a)
+    if a.size == 0:
+        return "empty"
+    return f"[{np.min(a):{spec}}, {np.max(a):{spec}}]"
+
 
 class LogLevel(IntEnum):
     """Custom log levels for NLSQ."""
@@ -618,7 +628,9 @@ class NLSQLogger:
             metrics["time"] = f"{compilation_time:.3f}s"
 
         metrics.update(kwargs)
-        self.debug("JAX compilation", **metrics)
+        # PERFORMANCE (not DEBUG): enable_performance_tracking() raises the
+        # threshold to PERFORMANCE, which would drop a DEBUG record.
+        self.performance("JAX compilation", **metrics)
 
     @contextmanager
     def timer(self, name: str, log_result: bool = True):
@@ -668,7 +680,7 @@ class NLSQLogger:
         info: dict[str, Any] = {
             "shape": matrix.shape,
             "dtype": str(matrix.dtype),
-            "range": f"[{np.min(matrix):.2e}, {np.max(matrix):.2e}]",
+            "range": _format_range(matrix, ".2e"),
         }
 
         if compute_condition and matrix.ndim == 2:
@@ -704,9 +716,9 @@ class NLSQLogger:
             Uncertainty/weights
         """
         info = {
-            "n_points": len(x),
-            "x_range": f"[{np.min(x):.4g}, {np.max(x):.4g}]",
-            "y_range": f"[{np.min(y):.4g}, {np.max(y):.4g}]",
+            "n_points": len(x) if np.ndim(x) else 1,
+            "x_range": _format_range(x, ".4g"),
+            "y_range": _format_range(y, ".4g"),
         }
 
         # Check for potential issues
@@ -716,7 +728,7 @@ class NLSQLogger:
             self.warning("Input y contains non-finite values")
 
         if sigma is not None:
-            info["sigma_range"] = f"[{np.min(sigma):.4g}, {np.max(sigma):.4g}]"
+            info["sigma_range"] = _format_range(sigma, ".4g")
             if np.any(sigma <= 0):
                 self.warning("Sigma contains non-positive values")
 
@@ -738,7 +750,11 @@ class NLSQLogger:
         """
         if param_names and len(param_names) == len(params):
             param_dict = dict(zip(param_names, params, strict=True))
-            self.debug("Parameters", **param_dict)
+            if {"self", "message"} & set(param_dict):
+                # Those names collide with debug()'s own arguments.
+                self.debug("Parameters", values=param_dict)
+            else:
+                self.debug("Parameters", **param_dict)
         else:
             self.debug("Parameters", values=params.tolist())
 
@@ -760,7 +776,7 @@ class NLSQLogger:
         if not save_dir:
             return
         # A boolean flag (as set by enable_performance_tracking) is not a path.
-        if save_dir.lower() in ("1", "true", "yes"):
+        if save_dir.strip().lower() in ("1", "true", "yes", "on"):
             save_dir = os.getenv("NLSQ_LOG_DIR", ".")
 
         save_path = Path(save_dir)
@@ -776,17 +792,22 @@ class NLSQLogger:
         # first entry alone would drop that column for the whole fit.
         columns = dict.fromkeys(k for entry in self.optimization_history for k in entry)
         for key in columns:
-            values: list[float] = []
-            for entry in self.optimization_history:
-                val = entry.get(key, np.nan)
-                # Handle string values
+            raw = [entry.get(key, _MISSING) for entry in self.optimization_history]
+            values: list[Any] = []
+            labels = False  # a column holding a non-numeric string is kept as text
+            for item in raw:
+                val = np.nan if item is _MISSING else item
                 if isinstance(val, str):
                     try:
                         val = float(val.replace("e", "E"))
-                    except (ValueError, AttributeError):
-                        val = np.nan
+                    except ValueError:
+                        labels = True
                 values.append(val)
-            data[key] = np.array(values)
+            if labels:
+                # Original strings (no float round trip); only missing rows are "".
+                data[key] = np.array(["" if v is _MISSING else str(v) for v in raw])
+            else:
+                data[key] = np.array(values)
 
         np.savez(str(filename), **data)  # type: ignore[arg-type]
         self.info(f"Saved optimization history to {filename}")
@@ -825,8 +846,9 @@ def get_logger(name: str, level: int | LogLevel | None = None) -> NLSQLogger:
     >>> logger = get_logger("my_module")
     >>> logger.info("Processing started", n_items=100)
     """
-    if name in _loggers:  # Fast path (no lock)
-        return _loggers[name]
+    logger = _loggers.get(name)  # Fast path (no lock); single lookup survives clear()
+    if logger is not None:
+        return logger
     with _loggers_lock:
         if name not in _loggers:  # Double-check under lock
             if len(_loggers) >= 1000:

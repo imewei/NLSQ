@@ -42,6 +42,7 @@ import math
 import numbers
 import os
 import zipfile
+from collections.abc import Iterable, Iterator
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -158,15 +159,56 @@ def _is_number(text: str) -> bool:
     return True
 
 
-def _strip_unquoted_comment(line: str) -> str:
-    """Cut ``line`` at the first ``#`` that is not inside double quotes."""
-    in_quotes = False
+def _scan_line(line: str, delimiter: str, state: int = 0) -> tuple[str, int]:
+    """Cut ``line`` at the first ``#`` outside a quoted field, following the
+    ``csv`` module's quoting rule: a quote opens a field only at its start, so a
+    quote inside an unquoted field (``5" tube``) is literal.
+
+    States: 0 start of field, 1 inside an unquoted field, 2 inside a quoted
+    field, 3 a quote seen inside a quoted field. Returns ``(kept, end_state)``.
+    """
     for i, ch in enumerate(line):
-        if ch == '"':
-            in_quotes = not in_quotes
-        elif ch == "#" and not in_quotes:
-            return line[:i]
-    return line
+        if state == 2:
+            if ch == '"':
+                state = 3
+            continue
+        if ch == "#":
+            return line[:i], 0
+        if ch == delimiter:
+            state = 0
+        elif (state == 0 and ch == '"') or (state == 3 and ch == '"'):
+            state = 2
+        else:
+            state = 1
+    return line, state
+
+
+def _strip_unquoted_comment(line: str, delimiter: str = ",") -> str:
+    """Cut ``line`` at the first ``#`` that is not inside a quoted field."""
+    return _scan_line(line, delimiter)[0]
+
+
+def _logical_records(lines: Iterable[str], delimiter: str = ",") -> Iterator[str]:
+    """Yield comment-stripped CSV records; quoted fields may span lines.
+
+    This is the one record parser for header detection and data rows. If a
+    quoted field is still open at EOF, the pending physical lines are yielded one
+    by one (each scanned on its own), so an unbalanced quote cannot swallow the
+    following rows.
+    """
+    pending: list[str] = []
+    raws: list[str] = []
+    state = 0
+    for raw in lines:
+        line = raw.rstrip("\r\n")
+        raws.append(line)
+        kept, state = _scan_line(line, delimiter, 0 if state in (0, 1, 3) else state)
+        pending.append(kept)
+        if state != 2:
+            yield "\n".join(pending)
+            pending, raws, state = [], [], 0
+    for line in raws:  # quote still open at EOF
+        yield _strip_unquoted_comment(line, delimiter)
 
 
 # Declared element count above which unallocated HDF5 chunks are rejected.
@@ -434,8 +476,17 @@ class DataLoader:
 
         try:
             narrow_float = np.dtype(dtype).kind == "f" and np.dtype(dtype).itemsize < 8
+            is_complex = np.dtype(dtype).kind == "c"
         except TypeError:
-            narrow_float = False  # loadtxt reports the invalid dtype below
+            narrow_float = is_complex = False  # loadtxt reports the invalid dtype below
+        if is_complex:
+            # the float64 cast below would silently drop the imaginary parts
+            raise DataLoadError(
+                f"ascii.dtype {dtype!r} is complex; observations must be real",
+                file_path=file_path,
+                file_format="ascii",
+                suggestion="Use ascii.dtype: float64 (the default).",
+            )
         if narrow_float:
             # float32/float16 would silently round the data before the float64 cast
             raise DataLoadError(
@@ -600,33 +651,43 @@ class DataLoader:
         n_preamble = 0  # blank / comment-only lines between skip_header and header
         if has_header:
             try:
-                with open(file_path, encoding=encoding) as f:
+                with open(file_path, encoding=encoding, newline="") as f:
                     # Skip additional header lines if specified
                     for _ in range(skip_header):
                         f.readline()
-                    line = f.readline()
-                    while line and not _strip_unquoted_comment(line).strip():
-                        n_preamble += 1
-                        line = f.readline()
-                    if not line:
-                        raise DataLoadError(
-                            "CSV file contains no data rows (empty or only "
-                            "comment lines)",
-                            file_path=file_path,
-                            file_format="csv",
-                        )
-                    # csv.reader honours quoted fields containing the delimiter,
-                    # matching how the data rows are split below
-                    # same quote-aware "#" comment removal as the data rows
-                    line = _strip_unquoted_comment(line.rstrip("\r\n"))
                     if len(delimiter) == 1:
+                        # same record parser as the data rows (quoted fields
+                        # may span lines; the header may too)
+                        record = next(
+                            (r for r in _logical_records(f, delimiter) if r.strip()),
+                            None,
+                        )
+                        if record is None:
+                            raise DataLoadError(
+                                "CSV file contains no data rows (empty or only "
+                                "comment lines)",
+                                file_path=file_path,
+                                file_format="csv",
+                            )
                         header_cells = next(
-                            csv.reader(itertools.chain([line], f), delimiter=delimiter),
-                            [],
+                            csv.reader([record], delimiter=delimiter), []
                         )
                     else:  # csv.reader needs 1 char; split like the data rows
+                        line = f.readline()
+                        while line and not _strip_unquoted_comment(line).strip():
+                            n_preamble += 1
+                            line = f.readline()
+                        if not line:
+                            raise DataLoadError(
+                                "CSV file contains no data rows (empty or only "
+                                "comment lines)",
+                                file_path=file_path,
+                                file_format="csv",
+                            )
                         header_cells = (
-                            line.rstrip("\r\n").replace('"', "").split(delimiter)
+                            _strip_unquoted_comment(line.rstrip("\r\n"))
+                            .replace('"', "")
+                            .split(delimiter)
                         )
                     header_names = [col.strip() for col in header_cells]
             except UnicodeDecodeError as e:
@@ -636,12 +697,29 @@ class DataLoader:
                     file_format="csv",
                     suggestion="Set csv.encoding (e.g. latin-1) to match the file.",
                 ) from e
-            if header_names and all(_is_number(c) for c in header_names):
+            missing_markers = {
+                str(m)
+                for m in (
+                    [missing_values]
+                    if isinstance(missing_values, str)
+                    else missing_values or []
+                )
+            }
+            if (
+                header_names
+                and csv_config.get("header") is None  # an explicit header: true wins
+                # a missing-value marker ("NA") is a data cell, not a column name;
+                # an all-marker row is data too, so require_finite reports it
+                # instead of the row vanishing as a "header"
+                and all(_is_number(c) or c in missing_markers for c in header_names)
+            ):
                 # A header-less file read with the default has_header=True would
                 # silently lose its first data row.
                 logger.warning(
-                    "CSV 'header' row %r is entirely numeric; treating it as data "
-                    "(set csv.header: false to silence this).",
+                    "CSV 'header' row %r has only numbers/missing markers; "
+                    "treating it as data "
+                    "(set csv.header: false to silence this, or csv.header: true "
+                    "explicitly to keep it as the header).",
                     header_names,
                 )
                 has_header = False
@@ -660,25 +738,31 @@ class DataLoader:
                 if len(delimiter) != 1:
                     yield from (line.replace('"', "") for line in fh)
                     return
-                # preamble/header lines are physical lines (a stray quote there
-                # must not swallow the data rows)
-                for _ in range(total_skip):
-                    yield fh.readline().rstrip("\r\n")
-                # Tokenise each physical line on its own so an unbalanced quote
-                # can never swallow the following lines; "#" comments are
-                # removed here (quote-aware), genfromtxt's own handling is off.
-                for line in fh:
-                    s = _strip_unquoted_comment(line.rstrip("\r\n"))
-                    if not s.strip():
+                # "skip_header" lines are physical; everything after is parsed by
+                # the same logical-record parser as the header (blank/comment
+                # records are dropped, then the accepted header record).
+                for _ in range(skip_header):
+                    fh.readline()
+                header_pending = has_header
+                for record in _logical_records(fh, delimiter):
+                    if not record.strip():
                         continue  # blank or comment-only line
-                    row = next(csv.reader([s], delimiter=delimiter), [])
-                    yield delimiter.join(c.replace(delimiter, " ") for c in row)
+                    if header_pending:
+                        header_pending = False
+                        continue
+                    row = next(csv.reader([record], delimiter=delimiter), [])
+                    yield delimiter.join(
+                        " ".join(c.replace(delimiter, " ").split("\n")).replace(
+                            "\r", " "
+                        )
+                        for c in row
+                    )
 
             with open(file_path, encoding=encoding, newline="") as fh:
                 data = np.genfromtxt(  # type: ignore[call-overload]  # numpy stubs lack the generator + encoding overload
                     _unquoted_rows(fh),
                     delimiter=delimiter,
-                    skip_header=total_skip,
+                    skip_header=total_skip if len(delimiter) != 1 else 0,
                     comments="#" if len(delimiter) != 1 else None,  # type: ignore[arg-type]
                     missing_values=missing_values,
                     filling_values=np.nan,
@@ -805,6 +889,15 @@ class DataLoader:
                 'header row: write it with comments="" or use column indices.',
             )
 
+        if header_names.count(str(col)) > 1:
+            raise DataLoadError(
+                f"Column name '{col}' appears {header_names.count(str(col))} times "
+                "in the CSV header",
+                file_path=file_path,
+                file_format="csv",
+                context={"available_columns": header_names},
+                suggestion="Select the column by its integer index instead of its name.",
+            )
         try:
             return header_names.index(str(col))
         except ValueError:
@@ -1049,6 +1142,12 @@ class DataLoader:
                     raise DataLoadError(
                         f"Dataset '{path}' has unsupported dtype {dset.dtype}; "
                         "only real numeric datasets can be fitted",
+                        file_path=file_path,
+                        file_format="hdf5",
+                    )
+                if dset.shape is None:  # h5py.Empty: null dataspace
+                    raise DataLoadError(
+                        f"Dataset '{path}' is empty (null dataspace)",
                         file_path=file_path,
                         file_format="hdf5",
                     )

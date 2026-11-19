@@ -213,6 +213,26 @@ def exponential_decay(x: ArrayLike, a: float, b: float, c: float) -> ArrayReturn
     return a * jnp.exp(-b * x) + c
 
 
+def _amplitude_at_origin(amplitude: float, exponent: float) -> float:
+    """``amplitude * exp(exponent)``; raise instead of returning an overflowed guess."""
+    # Log space: exp(exponent) alone can over/underflow while the product is
+    # representable (e.g. 1e100 * exp(-750)); exponentiate once, with the sign.
+    amplitude = float(amplitude)
+    with np.errstate(over="ignore", divide="ignore"):
+        value = (
+            float(np.copysign(np.exp(np.log(abs(amplitude)) + exponent), amplitude))
+            if amplitude != 0.0
+            else 0.0
+        )
+    # A nonzero amplitude that underflows to 0 is as unrepresentable as an overflow.
+    if not np.isfinite(value) or (value == 0.0 and amplitude != 0.0):
+        raise ValueError(
+            "estimate_p0: the exponential amplitude at x = 0 is not representable in "
+            "float64 for this x range; shift xdata towards 0 or pass p0 explicitly."
+        )
+    return value
+
+
 def estimate_p0_exponential_decay(
     xdata: np.ndarray,
     ydata: np.ndarray,
@@ -236,8 +256,9 @@ def estimate_p0_exponential_decay(
     p0 : list
         [amplitude, rate, offset]
     """
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    # float64: signed amplitude/midpoint arithmetic wraps for unsigned/int inputs
+    xdata = np.asarray(xdata, dtype=np.float64)
+    ydata = np.asarray(ydata, dtype=np.float64)
 
     y_max = np.max(ydata)
     y_min = np.min(ydata)
@@ -275,7 +296,7 @@ def estimate_p0_exponential_decay(
     b = max(b, 0.1 / x_span if x_span > 0 else 0.01)
 
     # The model's amplitude is its value at x = 0, not at the start of the data.
-    a = a * float(np.exp(np.clip(b * float(xdata[start_idx]), -50.0, 50.0)))
+    a = _amplitude_at_origin(a, b * float(xdata[start_idx]))
 
     return [float(a), float(b), float(c)]
 
@@ -360,28 +381,27 @@ def estimate_p0_exponential_growth(
     p0 : list
         [amplitude, rate, offset]
     """
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    xdata = np.asarray(xdata, dtype=np.float64)
+    ydata = np.asarray(ydata, dtype=np.float64)
 
     y_min = np.min(ydata)
     y_max = np.max(ydata)
-
     y_range = y_max - y_min
-    x_range = np.max(xdata) - np.min(xdata)
 
-    if y_min > 0:
-        a = y_min  # Initial value
-        c = 0.0  # Offset
-    else:
-        # bounds() require a >= 0: put the offset just below the data instead
-        c = y_min - (0.1 * y_range if y_range > 0 else 1.0)
-        a = y_min - c
+    # Offset just below the data (bounds() require a >= 0), so that
+    # b is fitted to y - c rather than to y itself.
+    c = y_min - (0.1 * y_range if y_range > 0 else 1.0)
 
-    # Estimate growth rate: b ≈ ln((y_max - c) / a) / x_range
-    if x_range > 0 and y_range > 0:
-        b = np.log((y_max - c) / a) / x_range
+    # Growth rate from the extreme points: b = ln((y_max - c) / (y_min - c)) / dx
+    x_lo = xdata[np.argmin(ydata)]
+    dx = xdata[np.argmax(ydata)] - x_lo
+    if dx > 0 and y_range > 0:
+        b = np.log((y_max - c) / (y_min - c)) / dx
     else:
         b = 0.1
+
+    # The model's amplitude is its value at x = 0, not at the start of the data.
+    a = _amplitude_at_origin(y_min - c, -b * float(x_lo))
 
     return [float(a), float(b), float(c)]
 
@@ -461,8 +481,8 @@ def estimate_p0_gaussian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     p0 : list
         [amplitude, mean, sigma]
     """
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    xdata = np.asarray(xdata, dtype=np.float64)
+    ydata = np.asarray(ydata, dtype=np.float64)
 
     # No baseline term: a dip has |min| > |max| (negative amplitude). Estimate on
     # the mirrored data so the peak location/width are those of the dip.
@@ -572,8 +592,8 @@ def estimate_p0_lorentzian(xdata: np.ndarray, ydata: np.ndarray) -> ParameterLis
     p0 : list
         [amplitude, x0, gamma]
     """
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    xdata = np.asarray(xdata, dtype=np.float64)
+    ydata = np.asarray(ydata, dtype=np.float64)
 
     # No baseline term: a dip has |min| > |max| (negative amplitude). Estimate on
     # the mirrored data so the peak location/width are those of the dip.
@@ -685,8 +705,8 @@ def estimate_p0_sigmoid(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList:
     p0 : list
         [L, x0, k, b]
     """
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
+    xdata = np.asarray(xdata, dtype=np.float64)
+    ydata = np.asarray(ydata, dtype=np.float64)
 
     y_min = np.min(ydata)
     y_max = np.max(ydata)
@@ -799,7 +819,8 @@ def estimate_p0_power_law(xdata: np.ndarray, ydata: np.ndarray) -> ParameterList
         A = np.vstack([log_x, np.ones(len(log_x))]).T
         b, log_a = np.linalg.lstsq(A, log_y, rcond=None)[0]
         a = np.exp(log_a)
-        if not (np.isfinite(a) and np.isfinite(b)):  # exp overflow on steep data
+        # exp overflow/underflow on steep data (y_pos > 0, so a true a is > 0)
+        if not (np.isfinite(a) and a > 0 and np.isfinite(b)):
             return [1.0, 1.0]
 
         return [float(a), float(b)]

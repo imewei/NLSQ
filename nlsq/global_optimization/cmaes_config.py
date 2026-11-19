@@ -127,7 +127,12 @@ class CMAESConfig:
     data_chunk_size : int | None
         Chunk size for data streaming. If None, processes full dataset at once.
         Set to smaller values (e.g., 50000) for datasets >10M points to avoid OOM.
-        Must be >= 1024 for numerical stability.
+        Must be >= 1024 for numerical stability. The model must be per-sample
+        (prediction ``i`` depends only on ``x[i]``): a batch statistic such as
+        ``mean(x)`` would change the objective. A best-effort probe at several
+        in-bounds parameter points raises ``ValueError`` for visible batch
+        dependence; it cannot certify a model (dependence that vanishes at the probe
+        points or appears only in unprobed chunks goes undetected).
     refine_with_nlsq : bool
         Whether to refine best solution with NLSQ TRF. Default: True.
     seed : int | None
@@ -226,6 +231,10 @@ class CMAESConfig:
             If any parameter is invalid.
         """
         self._validate_integral_fields()
+
+        # NumPy SeedSequence (BIPOP) rejects negatives; JAX PRNG keys overflow int64.
+        if self.seed is not None and not 0 <= self.seed < 2**63:
+            raise ValueError(f"seed must be in [0, 2**63), got {self.seed}")
 
         # NaN passes every `<= 0` comparison, so require finiteness explicitly.
         for name in ("sigma", "tol_fun", "tol_x"):
@@ -401,13 +410,13 @@ def estimate_cmaes_memory_gb(
     Examples
     --------
     >>> estimate_cmaes_memory_gb(10_000_000, popsize=16)
-    1.1920928955078125
+    3.725290298461914
 
     >>> estimate_cmaes_memory_gb(10_000_000, popsize=16, population_batch_size=4)
-    0.298023223876953
+    1.043081283569336
 
     >>> estimate_cmaes_memory_gb(10_000_000, popsize=16, data_chunk_size=50000)
-    0.005960464477539062
+    0.16689300537109375
     """
     eff_pop = population_batch_size if population_batch_size is not None else popsize
     eff_data = data_chunk_size if data_chunk_size is not None else n_data
@@ -419,11 +428,9 @@ def estimate_cmaes_memory_gb(
     bytes_per_candidate = eff_data * 8 * 3  # 3 arrays
     peak_bytes = eff_pop * bytes_per_candidate
 
-    # Add overhead for input data (xdata, ydata)
-    # When data_chunk_size is set, chunks are read via reshape + indexing
-    # (not a copying operation) instead of holding xdata/ydata in full
-    if data_chunk_size is None:
-        peak_bytes += n_data * 8 * 2  # xdata + ydata
+    # The full xdata + ydata stay resident even when the fitness is chunked
+    # (the chunked fitness builds reshaped/padded copies of the whole dataset).
+    peak_bytes += n_data * 8 * 2
 
     return peak_bytes / (1024**3)
 

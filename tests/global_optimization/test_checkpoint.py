@@ -321,3 +321,150 @@ def test_load_falls_back_to_bak_when_primary_is_entirely_missing(tmp_path):
 
     restored = manager.load(path, fp)
     assert restored.generation_counter == 5  # recovered from .bak
+
+
+def test_save_after_backup_recovery_keeps_the_good_backup(tmp_path, monkeypatch):
+    """A save after a backup recovery must not rotate the corrupt primary over the
+    only good copy: an interrupted replace would then lose both generations."""
+    import os
+
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    state1, state2, state3 = _sample_state(), _sample_state(), _sample_state()
+    state2.generation_counter, state3.generation_counter = 10, 15
+    manager.save(path, state1, fp)
+    manager.save(path, state2, fp)
+    path.write_bytes(b"not a valid hdf5 file")
+    assert manager.load(path, fp).generation_counter == 5  # recovered from .bak
+
+    real_replace = os.replace
+
+    def failing_replace(src, dst):
+        if str(dst) == str(path):
+            raise OSError("interrupted")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    with pytest.raises(OSError, match="interrupted"):
+        manager.save(path, state3, fp)
+    monkeypatch.undo()
+    assert manager.load(path, fp).generation_counter == 5
+
+
+def test_save_does_not_rotate_primary_that_load_would_reject(tmp_path):
+    """Marker and version intact but a dataset missing: load() falls back to .bak, so
+    save() must not rotate that primary over the good backup."""
+    import h5py
+
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    state1, state2 = _sample_state(), _sample_state()
+    state2.generation_counter = 10
+    manager.save(path, state1, fp)
+    manager.save(path, state2, fp)
+    with h5py.File(path, "r+") as f:
+        del f["state/mean"]
+    manager.save(path, state2, fp)
+    assert manager.load(tmp_path / "run1.h5.bak", fp).generation_counter == 5
+
+
+def _two_saves_then_damage(tmp_path, damage):
+    import h5py
+
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    state1, state2, state3 = _sample_state(), _sample_state(), _sample_state()
+    state2.generation_counter, state3.generation_counter = 10, 15
+    manager.save(path, state1, fp)
+    manager.save(path, state2, fp)
+    with h5py.File(path, "r+") as f:
+        damage(f)
+    manager.save(path, state3, fp)  # must not raise
+    return manager, fp, path
+
+
+def test_save_does_not_rotate_primary_missing_fingerprint_attribute(tmp_path):
+    manager, fp, path = _two_saves_then_damage(
+        tmp_path, lambda f: f["fingerprint"].attrs.__delitem__("data_hash")
+    )
+    assert manager.load(tmp_path / "run1.h5.bak", fp).generation_counter == 5
+    assert manager.load(path, fp).generation_counter == 15
+
+
+def test_save_succeeds_when_primary_dataset_is_replaced_by_group(tmp_path):
+    def damage(f):
+        del f["state/mean"]
+        f.create_group("state/mean")
+
+    manager, fp, path = _two_saves_then_damage(tmp_path, damage)
+    assert manager.load(tmp_path / "run1.h5.bak", fp).generation_counter == 5
+    assert manager.load(path, fp).generation_counter == 15
+
+
+def test_save_does_not_rotate_primary_with_other_fingerprint_and_broken_payload(
+    tmp_path,
+):
+    """A fingerprint mismatch must not hide a malformed payload: only a well-formed
+    checkpoint of another run may be rotated over the backup."""
+
+    def damage(f):
+        f["fingerprint"].attrs["data_hash"] = "deadbeef" * 8
+        del f["state/mean"]
+
+    manager, fp, path = _two_saves_then_damage(tmp_path, damage)
+    assert manager.load(tmp_path / "run1.h5.bak", fp).generation_counter == 5
+    assert manager.load(path, fp).generation_counter == 15
+
+
+def test_save_still_rotates_well_formed_checkpoint_of_another_run(tmp_path):
+    def damage(f):
+        f["fingerprint"].attrs["data_hash"] = "deadbeef" * 8
+
+    manager, fp, path = _two_saves_then_damage(tmp_path, damage)
+    # the other run's (well-formed) file was rotated into .bak, as before
+    with pytest.raises(CheckpointFingerprintMismatch):
+        manager.load(tmp_path / "run1.h5.bak", fp)
+    assert manager.load(path, fp).generation_counter == 15
+
+
+def test_load_falls_back_to_bak_when_primary_dataset_is_a_group(tmp_path):
+    import h5py
+
+    manager = HPCCheckpointManager()
+    fp = _sample_fingerprint()
+    path = tmp_path / "run1.h5"
+    state2 = _sample_state()
+    state2.generation_counter = 10
+    manager.save(path, _sample_state(), fp)
+    manager.save(path, state2, fp)
+    with h5py.File(path, "r+") as f:
+        del f["state/mean"]
+        f.create_group("state/mean")
+    assert manager.load(path, fp).generation_counter == 5
+
+
+_FP_FIELDS = ["model_id", "data_hash", "n_params", "bounds_hash", "config_hash"]
+
+
+@pytest.mark.parametrize(
+    ("removed", "also_mismatch"),
+    [(r, None) for r in _FP_FIELDS]
+    + [(r, m) for r in _FP_FIELDS for m in ("data_hash", "model_id") if m != r],
+)
+def test_save_does_not_rotate_primary_missing_any_required_fingerprint_field(
+    tmp_path, removed, also_mismatch
+):
+    """Presence of every field is checked before any value, whatever mismatches."""
+
+    def damage(f):
+        attrs = f["fingerprint"].attrs
+        if also_mismatch:
+            attrs[also_mismatch] = "deadbeef" * 8
+        del attrs[removed]
+
+    manager, fp, path = _two_saves_then_damage(tmp_path, damage)
+    assert manager.load(tmp_path / "run1.h5.bak", fp).generation_counter == 5
+    assert manager.load(path, fp).generation_counter == 15

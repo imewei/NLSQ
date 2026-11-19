@@ -132,8 +132,8 @@ class TestGPUMemoryDetection:
                 f"Expected 0 GB for CPU-only, got {available_gb}"
             )
 
-    def test_multiple_gpus_aggregate_memory(self):
-        """Test that multiple GPUs aggregate available memory."""
+    def test_multiple_gpus_report_the_smallest_device(self):
+        """A fit keeps its arrays on one device, so the budget is per device, not summed."""
         # Create mock GPU devices
         mock_gpu1 = MagicMock()
         mock_gpu1.platform = "gpu"
@@ -160,8 +160,8 @@ class TestGPUMemoryDetection:
             estimator = GPUMemoryEstimator()
             available_gb = estimator.get_available_gpu_memory_gb()
 
-            # Should aggregate: (16-4) + (16-2) = 12 + 14 = 26 GB
-            assert 25.9 <= available_gb <= 26.1, f"Expected ~26 GB, got {available_gb}"
+            # min((16-4), (16-2)) = 12 GB; the old sum (26 GB) overflowed one device
+            assert 11.9 <= available_gb <= 12.1, f"Expected ~12 GB, got {available_gb}"
 
 
 class TestCombinedMemoryEstimation:

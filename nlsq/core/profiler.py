@@ -93,9 +93,9 @@ class TRFProfiler:
         result
             The synchronized result (same as input)
         """
-        st = time.time()
+        st = time.perf_counter()
         result = jax_result.block_until_ready()
-        elapsed = time.time() - st
+        elapsed = time.perf_counter() - st
 
         # Record timing
         if operation == "fun":
@@ -123,9 +123,9 @@ class TRFProfiler:
         operation : str
             Conversion operation ('svd_convert', 'grad_convert', 'cost_convert', 'param_convert')
         start_time : float
-            Start time from time.time()
+            Start time from ``time.perf_counter()`` (monotonic: never negative)
         """
-        elapsed = time.time() - start_time
+        elapsed = time.perf_counter() - start_time
 
         if operation == "svd_convert":
             self.svd_ctimes.append(elapsed)

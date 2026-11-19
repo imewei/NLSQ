@@ -180,19 +180,26 @@ class ConvergenceMonitor:
         if not np.all(np.isfinite(recent_costs)):
             # A NaN/Inf cost is divergence (see detect_divergence), not stagnation.
             return False, 0.0
-        cost_variance = float(np.var(recent_costs))
         cost_mean = float(np.mean(recent_costs))
 
         if cost_mean == 0:
-            relative_variance = cost_variance
+            relative_variance = float(np.var(recent_costs))
         else:
-            relative_variance = cost_variance / cost_mean**2  # scale-free (CV squared)
+            # Scale-free (CV squared); normalising first avoids mean**2 under/overflow.
+            relative_variance = float(np.var(np.asarray(recent_costs) / cost_mean))
 
         # Check gradient stagnation
         if len(self.gradient_history) >= 3:
             recent_grads = list(self.gradient_history)[-3:]
+            # A vanishing gradient is stagnation only while the cost has stopped
+            # falling (scale-free test): a cost still halving per step at a tiny
+            # scale is convergence, not a stall.
+            cost_drop = (recent_costs[0] - recent_costs[-1]) / (
+                abs(cost_mean) if cost_mean != 0 else 1.0
+            )
             grad_stagnation = (
                 float(np.mean(recent_grads)) < self.stagnation_threshold * 10
+                and cost_drop < 1e-2
             )
         else:
             grad_stagnation = False
@@ -271,8 +278,12 @@ class ConvergenceMonitor:
 
         # Use log-linear regression for stability
         with np.errstate(divide="ignore", invalid="ignore"):
-            log_costs = np.log(np.abs(costs) + 1e-10)
-            if np.all(np.isfinite(log_costs)):
+            abs_costs = np.abs(costs)
+            # Floor relative to the largest cost (not an absolute 1e-10) so that a
+            # zero cost stays finite without distorting tiny-scale problems.
+            floor = np.finfo(float).eps * np.max(abs_costs)
+            log_costs = np.log(np.maximum(abs_costs, floor)) if floor > 0 else None
+            if log_costs is not None and np.all(np.isfinite(log_costs)):
                 # Simple linear regression
                 A = np.vstack([iterations, np.ones(len(iterations))]).T
                 rate, _ = np.linalg.lstsq(A, log_costs, rcond=None)[0]
@@ -418,6 +429,8 @@ class OptimizationDiagnostics:
         jacobian: np.ndarray | None = None,
         step_size: float | None = None,
         method_info: dict | None = None,
+        nfev: int | None = None,
+        njev: int | None = None,
     ):
         """Record data for current iteration.
 
@@ -437,6 +450,10 @@ class OptimizationDiagnostics:
             Step size taken
         method_info : dict, optional
             Algorithm-specific information
+        nfev, njev : int, optional
+            The optimizer's cumulative function/Jacobian evaluation counters.
+            When given they replace the per-call estimates (one function
+            evaluation per recorded iteration, one Jacobian per matrix passed).
         """
         current_time = time.time()
         elapsed = current_time - self.start_time if self.start_time else 0
@@ -469,7 +486,8 @@ class OptimizationDiagnostics:
 
         # Jacobian information
         if jacobian is not None:
-            self.jacobian_eval_count += 1
+            if njev is None:
+                self.jacobian_eval_count += 1
             # Only compute condition number if verbosity > 0
             if self.verbosity > 0:
                 try:
@@ -501,7 +519,12 @@ class OptimizationDiagnostics:
 
         self.iteration_data.append(data)
         self._track_totals(data)
-        self.function_eval_count += 1
+        if nfev is None:
+            self.function_eval_count += 1
+        else:
+            self.function_eval_count = int(nfev)
+        if njev is not None:
+            self.jacobian_eval_count = int(njev)
 
         # Update convergence monitor
         self.convergence_monitor.update(cost, x, gradient, step_size)
@@ -618,8 +641,10 @@ class OptimizationDiagnostics:
             "initial_cost": first_cost,
             "final_cost": costs[-1],
             "cost_reduction": first_cost - costs[-1],
-            "relative_cost_reduction": (first_cost - costs[-1])
-            / (abs(first_cost) + 1e-10),
+            # Scale-free: an absolute floor would swamp costs far below 1e-10.
+            "relative_cost_reduction": (
+                (first_cost - costs[-1]) / abs(first_cost) if first_cost != 0 else 0.0
+            ),
             "min_cost": self._min_cost if tracked else min(costs),
             "max_cost": self._max_cost if tracked else max(costs),
             "history_truncated": truncated,

@@ -123,7 +123,8 @@ class ExportPage(QWidget):
 
         bundle_desc = QLabel(
             "Export complete session including data, configuration, "
-            "fit results, and plots as a ZIP archive.",
+            "fit results (with covariance matrix), and a reproducible "
+            "script as a ZIP archive.",
         )
         bundle_desc.setWordWrap(True)
         bundle_desc.setStyleSheet("color: gray; font-size: 11px;")
@@ -497,9 +498,11 @@ class ExportPage(QWidget):
 
         y = np.asarray(state.ydata)
         y_fit = self._compute_y_fit()
-        fit_cols = (
-            [y_fit, y - np.asarray(y_fit)] if y_fit is not None else [[""] * len(y)] * 2
-        )
+        if (
+            y_fit is not None
+        ):  # model output may be a JAX array: str() per element is slow
+            y_fit = np.asarray(y_fit)
+        fit_cols = [y_fit, y - y_fit] if y_fit is not None else [[""] * len(y)] * 2
         lines = [",".join([*x_head, "y", "y_fit", "residuals", *sig_head])]
         lines.extend(
             ",".join(map(str, row))
@@ -573,9 +576,9 @@ class ExportPage(QWidget):
         if state.method and state.method != "auto":
             extra.append(f"    method={state.method!r},")
         extra.append(
-            f"    max_nfev={min(state.max_function_evals, state.max_iterations)},"
+            f"    max_nfev={min(state.max_function_evals, state.max_iterations + 1)},"
         )
-        if (workflow == "auto_global" or multistart) and state.n_starts > 0:
+        if (workflow in ("auto_global", "hpc") or multistart) and state.n_starts > 0:
             if multistart:
                 extra.append("    multistart=True,")
             extra += [
@@ -584,15 +587,42 @@ class ExportPage(QWidget):
                 f"    center_on_p0={state.center_on_p0!r},",
                 f"    scale_factor={state.scale_factor!r},",
             ]
+            # same condition as the GUI fit (_global_search_kwargs)
+            if (
+                workflow in ("auto_global", "hpc")
+                and state.enable_checkpoints
+                and state.checkpoint_dir
+            ):
+                extra.append(f"    checkpoint_dir={state.checkpoint_dir!r},")
         if state.sigma is not None:
             extra.insert(0, "    sigma=sigma,")
-            if state.absolute_sigma:  # fit()'s default is False
-                extra.insert(1, "    absolute_sigma=True,")
+        if state.absolute_sigma:  # fit()'s default is False; applies without sigma too
+            extra.insert(
+                1 if state.sigma is not None else 0, "    absolute_sigma=True,"
+            )
         if not state.check_finite:  # fit()'s default is True
             extra.append("    check_finite=False,")
         if getattr(state, "auto_bounds", False):  # fit()'s default is False
             extra.append("    auto_bounds=True,")
         return extra
+
+    @staticmethod
+    def _script_bounds_line(bounds: Any) -> str:
+        """``bounds = ...`` script line; GUI ``None`` (unbounded) becomes +/-np.inf."""
+        if not bounds:
+            return "bounds = (-np.inf, np.inf)"
+
+        def _bound(v: Any, inf: str) -> str:
+            if v is None or not np.isfinite(float(v)):
+                return inf
+            return repr(float(v))
+
+        lo = ", ".join(_bound(v, "-np.inf") for v in bounds[0])
+        hi = ", ".join(_bound(v, "np.inf") for v in bounds[1])
+        if len(bounds[0]) == 1 and len(bounds[1]) == 1:
+            # one bound applies to every parameter; fit() broadcasts scalars only
+            return f"bounds = ({lo}, {hi})"
+        return f"bounds = ([{lo}], [{hi}])"
 
     def generate_python_code(self, for_bundle: bool = False) -> str:
         """Generate Python code for reproducibility.
@@ -635,7 +665,7 @@ class ExportPage(QWidget):
                 if nonfinite
                 else []
             ),
-            "from nlsq import fit",
+            "from nlsq import fit as nlsq_fit  # a model named fit cannot shadow it",
             "",
         ]
 
@@ -729,22 +759,13 @@ class ExportPage(QWidget):
         elif state.model_type == "polynomial" and state.model_config:
             # polynomial(x, *coeffs) has no fixed arity: p0 sets the parameter count
             degree = int(state.model_config.get("degree", 2))
-            lines.append(f"p0 = [1.0] * {degree + 1}  # degree + 1 coefficients")
+            # same initial guess as the GUI model (nlsq.core.functions.polynomial)
+            lines.append("from nlsq.core.functions import polynomial as _poly")
+            lines.append(f"p0 = _poly({degree}).estimate_p0(xdata, ydata)")
         else:
             lines.append("p0 = None  # Auto-detect initial parameters")
 
-        if state.bounds:
-            # GUI bounds use None for "unbounded"; the script needs +/-np.inf
-            def _bound(v: Any, inf: str) -> str:
-                if v is None or not np.isfinite(float(v)):
-                    return inf
-                return repr(float(v))
-
-            lo = ", ".join(_bound(v, "-np.inf") for v in state.bounds[0])
-            hi = ", ".join(_bound(v, "np.inf") for v in state.bounds[1])
-            lines.append(f"bounds = ([{lo}], [{hi}])")
-        else:
-            lines.append("bounds = (-np.inf, np.inf)")
+        lines.append(self._script_bounds_line(state.bounds))
 
         lines.append(f"workflow = {workflow!r}  # Options: auto, auto_global, hpc")
 
@@ -754,7 +775,7 @@ class ExportPage(QWidget):
             [
                 "",
                 "# Run curve fitting using workflow preset",
-                "result = fit(",
+                "result = nlsq_fit(",
                 "    model,",
                 "    xdata,",
                 "    ydata,",
@@ -833,6 +854,12 @@ class ExportPage(QWidget):
                         "ci_upper": ci_upper if np.isfinite(ci_upper) else None,
                     }
                 data["parameters"] = params
+                if pcov is not None:
+                    with contextlib.suppress(TypeError, ValueError):
+                        data["covariance"] = [
+                            [float(v) if np.isfinite(v) else None for v in row]
+                            for row in np.asarray(pcov, dtype=float)
+                        ]
 
             # Statistics
             data["statistics"] = {

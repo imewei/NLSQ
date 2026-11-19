@@ -306,6 +306,19 @@ def validate_lbfgs_config(
     validate_positive(exploration_step_size, "lbfgs_exploration_step_size")
     validate_positive(refinement_step_size, "lbfgs_refinement_step_size")
     validate_positive(careful_step_size, "lbfgs_careful_step_size")
+    # documented hierarchy (HybridStreamingConfig): exploration <= careful <= refinement
+    validate_less_than_or_equal(
+        exploration_step_size,
+        careful_step_size,
+        "lbfgs_exploration_step_size",
+        "lbfgs_careful_step_size",
+    )
+    validate_less_than_or_equal(
+        careful_step_size,
+        refinement_step_size,
+        "lbfgs_careful_step_size",
+        "lbfgs_refinement_step_size",
+    )
 
 
 def validate_gauss_newton_config(
@@ -433,14 +446,14 @@ def validate_group_variance_bounds(config: Any, n_params: int) -> None:
 
     Raises
     ------
-    ValueError
+    ConfigValidationError
         If any ``(start, end)`` has ``end > n_params``.
     """
     if not config.enable_group_variance_regularization:
         return
     for idx, (_start, end) in enumerate(config.group_variance_indices or ()):
         if end > n_params:
-            raise ValueError(
+            raise ConfigValidationError(
                 f"group_variance_indices[{idx}] end ({end}) exceeds the number "
                 f"of parameters ({n_params})",
             )
@@ -518,7 +531,7 @@ def validate_lr_schedule_config(
         return
 
     validate_non_negative_int(warmup_steps, "lr_schedule_warmup_steps")
-    validate_positive(decay_steps, "lr_schedule_decay_steps")
+    validate_positive_int(decay_steps, "lr_schedule_decay_steps")
     validate_positive(end_value, "lr_schedule_end_value")
 
 
@@ -676,6 +689,16 @@ def validate_residual_weighting_config(
 
     if len(weights_arr) == 0:
         raise ConfigValidationError("residual_weights must not be empty")
+
+    # the optimizer casts to float64 and would silently keep only the real part
+    if np.iscomplexobj(weights_arr):
+        raise ConfigValidationError("residual_weights must be real, got complex values")
+
+    # strings/objects fail the comparisons below with a bare TypeError; bool is not a weight
+    if not np.issubdtype(weights_arr.dtype, np.number):
+        raise ConfigValidationError(
+            f"residual_weights must be numeric, got dtype {weights_arr.dtype}",
+        )
 
     if not np.all(np.isfinite(weights_arr)) or np.any(weights_arr <= 0):
         raise ConfigValidationError("residual_weights must all be positive and finite")

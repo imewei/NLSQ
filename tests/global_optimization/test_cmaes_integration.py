@@ -352,6 +352,9 @@ class TestAutoGlobalCMAESKwargsLeak:
                 timeit=True,
             )
 
+        # timeit=True is honoured on this route too: (popt, pcov, result, post, ctime)
+        assert isinstance(result, tuple) and len(result) == 5
+        result = result[2]
         assert type(result).__name__ == "CurveFitResult"
         assert result.popt is not None
         # The bug's failure signature: refinement silently falls back to

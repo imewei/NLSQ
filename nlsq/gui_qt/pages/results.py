@@ -437,7 +437,15 @@ class ResultsPage(QWidget):
 
         self._set_status(status_text, status_color)
 
-        self._export_btn.setEnabled(True)
+        # The visualizer only draws a 1-D independent variable
+        surface = xdata is not None and np.ndim(xdata) > 1
+        self._export_btn.setEnabled(not surface)
+        self._export_btn.setToolTip(
+            "Figure export supports 1-D fits only (this fit has multiple "
+            "independent variables)"
+            if surface
+            else ""
+        )
 
     def _on_export_clicked(self) -> None:
         """Handle export button click."""
@@ -478,6 +486,27 @@ class ResultsPage(QWidget):
         ext = path_obj.suffix.lower().lstrip(".")
         formats = [ext] if ext in ["png", "pdf", "svg", "eps"] else ["pdf", "png"]
 
+        # The visualizer writes <prefix>_combined.<fmt> and <prefix>_histogram.<fmt>,
+        # not the path picked in the dialog: confirm those before replacing them.
+        targets = [
+            output_dir / f"{filename_prefix}_{kind}.{fmt}"
+            for kind in ("combined", "histogram")
+            for fmt in formats
+        ]
+        existing = [t.name for t in targets if t.exists()]
+        if existing and (
+            QMessageBox.question(
+                self,
+                "Overwrite Files?",
+                "These files already exist and will be replaced:\n\n"
+                + "\n".join(existing),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
         # Prepare visualizer arguments
         state = self._app_state.state
         xdata = state.xdata
@@ -498,6 +527,8 @@ class ResultsPage(QWidget):
             "pcov": getattr(last, "pcov", None),
             "fun": getattr(last, "fun", None),
             "statistics": dict(self._last_statistics),
+            # the fit's own quantile rule (normal vs Student-t) for the band
+            "absolute_sigma": bool(self._app_state.fit_settings.absolute_sigma),
         }
 
         # Config dict
@@ -674,13 +705,14 @@ class ResultsPage(QWidget):
 
         # Compute fitted curve on dense grid
         x_dense = _dense_grid(xdata)
+        order = None  # set when the curve is drawn at the observed points
         try:
             y_dense = state.model_func(x_dense, *popt)
         except Exception:
             # e.g. a model tied to the data length: draw the curve through the
             # data points instead of discarding the whole results page
             logger.warning("Model evaluation on the dense grid failed", exc_info=True)
-            order = np.argsort(xdata)
+            order = np.argsort(xdata, kind="stable")
             x_dense, y_dense = xdata[order], y_fit[order]
 
         # Compute residuals
@@ -691,9 +723,17 @@ class ResultsPage(QWidget):
         # of a 500K-point fit would block the GUI thread for seconds.
         conf_lower = None
         conf_upper = None
-        band = confidence_band(result, x_dense)
+        # At the observed points the model is evaluated in observation order (it
+        # may be tied to it, like the curve above) and sorted with the same
+        # permutation as the curve.
+        band = confidence_band(result, xdata if order is not None else x_dense)
         if band is not None:
             conf_lower, conf_upper = band
+            if order is not None:
+                # row-wise half-widths at the observations: duplicate x must not
+                # share one interpolated value on the Residuals tab
+                rowwise_half_width = (conf_upper - conf_lower) / 2
+                conf_lower, conf_upper = conf_lower[order], conf_upper[order]
 
         # Update fit plot
         self._fit_plot.set_data(xdata, ydata)
@@ -705,8 +745,10 @@ class ResultsPage(QWidget):
         # is smoothed out (the dense curve has the same resolution).
         conf_interval_resid = None
         if band is not None:
-            conf_interval_resid = np.interp(
-                xdata, x_dense, (conf_upper - conf_lower) / 2
+            conf_interval_resid = (
+                rowwise_half_width
+                if order is not None
+                else np.interp(xdata, x_dense, (conf_upper - conf_lower) / 2)
             )
 
         # Update residuals plot

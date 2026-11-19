@@ -51,7 +51,9 @@ def _stack_rhos(rho0, rho1, rho2):
 def _huber1(z):
     mask = z <= 1
 
-    return jnp.where(mask, z, 2 * z**0.5 - 1), mask
+    # sqrt of a masked-safe z: sqrt'(0) = inf would turn the unused branch's 0 * inf
+    # into NaN under jax.grad
+    return jnp.where(mask, z, 2 * jnp.where(mask, 1.0, z) ** 0.5 - 1), mask
 
 
 @jit
@@ -96,7 +98,7 @@ def _arctan1(z):
 @jit
 def _arctan2(z):
     t = 1 + z**2
-    return 1 / t, -2 * z / t**2
+    return 1 / t, -2 * (z / t) / t  # z / t first: t**2 overflows for huge z
 
 
 @jit
@@ -178,7 +180,7 @@ class LossFunctionsJIT:
 
     The derivatives are used in the optimization algorithm:
     - Gradient: g = J^T (rho'(z) ⊙ f)
-    - Hessian: H ≈ J^T diag(rho'(z)) J + J^T diag(rho''(z) ⊙ f²) J
+    - Hessian: H ≈ J^T diag(rho'(z) + 2 rho''(z) ⊙ f²) J
 
     Performance Characteristics
     ----------------------------
@@ -358,6 +360,9 @@ class LossFunctionsJIT:
 
     def construct_single_loss_function(self, loss):
         def loss_function(f, f_scale, data_mask=None, cost_only=False):
+            if cost_only and data_mask is not None:
+                # excluded rows must not enter the nonlinear ops (0 * NaN in grad)
+                f = jnp.where(data_mask, f, 0)
             z = self.zscale(f, f_scale)
             rho = loss(z, cost_only=cost_only)
             if cost_only:
@@ -383,6 +388,8 @@ class LossFunctionsJIT:
             return self.loss_funcs[loss]
 
         def loss_function(f, f_scale, data_mask=None, cost_only=False):
+            if cost_only and data_mask is not None:
+                f = jnp.where(data_mask, f, 0)
             z = self.zscale(f, f_scale)
             rho = loss(z)
             if cost_only:

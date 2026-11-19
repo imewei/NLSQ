@@ -7,6 +7,7 @@ normal distribution overlay using pyqtgraph.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from nlsq.gui_qt.plots import _configure_pyqtgraph
+from nlsq.gui_qt.plots import _configure_pyqtgraph, _unit_spread, population_std
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -29,25 +30,44 @@ if TYPE_CHECKING:
 
 __all__ = ["HistogramPlotWidget"]
 
+logger = logging.getLogger(__name__)
+
+# scipy.stats.shapiro's p-value is only accurate up to this many samples
+_SHAPIRO_MAX_N = 5000
+
 
 def _histogram(finite_data: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray]:
-    """``np.histogram``, falling back to one bar when no finite bin width exists.
+    """``np.histogram``, degrading gracefully when no finite bin width exists.
 
-    A subnormal spread, or ``max - min`` overflowing to inf, makes numpy raise
-    "Too many bins for data range"; the Results page would crash on it.
+    A subnormal spread, ``max - min`` overflowing to inf, or a spread below the
+    float spacing at a large offset makes numpy raise "Too many bins for data
+    range"; the Results page would crash on it. Counts always cover all data:
+    the bin count is halved until the edges are resolvable.
     """
-    try:
-        return np.histogram(finite_data, bins=bins)
-    except ValueError:
-        pass
-    try:
-        # max - min overflowed: bin at half scale (exact counts), edges back at full scale.
-        counts, edges = np.histogram(finite_data / 2, bins=bins)
-        return counts, edges * 2
-    except ValueError:
-        # Subnormal spread: every value is effectively one point.
-        centre = finite_data.min() / 2 + finite_data.max() / 2
-        return np.array([finite_data.size]), np.array([centre - 0.5, centre + 0.5])
+    n = max(1, int(bins))
+    while True:
+        try:
+            return np.histogram(finite_data, bins=n)
+        except ValueError:
+            pass
+        try:
+            # max - min overflowed: bin at half scale (exact counts), edges back at full scale.
+            counts, edges = np.histogram(finite_data / 2, bins=n)
+            return counts, edges * 2
+        except ValueError:
+            pass
+        if n == 1:
+            break
+        n //= 2
+    # Subnormal spread: every value is effectively one point.
+    lo, hi = float(finite_data.min()), float(finite_data.max())
+    centre = lo / 2 + hi / 2
+    # +-0.5 vanishes next to a large centre (ulp(1e16) = 2): scale with it
+    half = max(0.5, 2 * float(np.spacing(abs(centre))))
+    # the single bar must still contain both extrema
+    return np.array([finite_data.size]), np.array(
+        [min(centre - half, lo), max(centre + half, hi)]
+    )
 
 
 class HistogramPlotWidget(QWidget):
@@ -153,7 +173,7 @@ class HistogramPlotWidget(QWidget):
         # Compute histogram
         counts, bin_edges = _histogram(finite_data, self._n_bins)
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-        bin_width = bin_edges[1] - bin_edges[0]
+        bin_widths = np.diff(bin_edges)  # may differ when edges round at large offsets
 
         # Create bar graph — color from theme data_marker
         bar_fill = pg.mkColor(self._theme.data_marker)
@@ -163,7 +183,7 @@ class HistogramPlotWidget(QWidget):
         self._bar_graph = pg.BarGraphItem(
             x=bin_centers,
             height=counts,
-            width=bin_width * 0.9,
+            width=bin_widths * 0.9,
             brush=pg.mkBrush(bar_fill),
             pen=pg.mkPen(bar_border),
         )
@@ -196,7 +216,7 @@ class HistogramPlotWidget(QWidget):
 
         # Compute mean and std
         mean = np.mean(finite_data)
-        std = np.std(finite_data)
+        std = population_std(finite_data)
 
         if std <= 0:
             return
@@ -213,7 +233,7 @@ class HistogramPlotWidget(QWidget):
         # Scale to match histogram — must use the same sample count as the
         # bars (finite_data), not the raw (possibly non-finite-containing)
         # self._data, or the overlay is inflated relative to the bars.
-        bin_width = bin_edges[1] - bin_edges[0]
+        bin_width = float(np.mean(np.diff(bin_edges)))
         n_samples = finite_data.size
         y_scaled = y * n_samples * bin_width
 
@@ -240,19 +260,30 @@ class HistogramPlotWidget(QWidget):
         if finite_data.size == 0:
             return {}
 
+        # skew/kurtosis are affine-invariant: use the unit-spread form so tiny
+        # spreads do not underflow in the central moments.
+        z, spread, _ = _unit_spread(finite_data)
+        shape_data = z if spread > 0 else finite_data
         # Normality test
-        try:
-            _, p_value = stats.shapiro(
-                finite_data[:5000] if len(finite_data) > 5000 else finite_data,
+        sample = shape_data
+        if len(finite_data) > _SHAPIRO_MAX_N:
+            logger.warning(
+                "Normality test uses only the first %d of %d finite residuals "
+                "(Shapiro-Wilk limit); the p-value is not for the full data",
+                _SHAPIRO_MAX_N,
+                len(finite_data),
             )
+            sample = shape_data[:_SHAPIRO_MAX_N]
+        try:
+            _, p_value = stats.shapiro(sample)
         except Exception:
             p_value = None
 
         return {
             "mean": float(np.mean(finite_data)),
-            "std": float(np.std(finite_data)),
-            "skewness": float(stats.skew(finite_data)),
-            "kurtosis": float(stats.kurtosis(finite_data)),
+            "std": population_std(finite_data),
+            "skewness": float(stats.skew(shape_data)),
+            "kurtosis": float(stats.kurtosis(shape_data)),
             "normality_p": float(p_value) if p_value is not None else None,
         }
 
@@ -289,7 +320,6 @@ class HistogramPlotWidget(QWidget):
         Args:
             path: Output file path
         """
-        from pyqtgraph.exporters import ImageExporter
+        from nlsq.gui_qt.plots import export_plot_image
 
-        exporter = ImageExporter(self._plot_widget.plotItem)
-        exporter.export(path)
+        export_plot_image(self._plot_widget.plotItem, path)

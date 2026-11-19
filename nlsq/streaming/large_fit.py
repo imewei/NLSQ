@@ -60,9 +60,12 @@ def _multistart_kwargs(ms: Multistart) -> dict[str, Any]:
     }
 
 
+_OUTPUT_FLAGS = ("full_output", "return_eval", "timeit")
+
+
 def _reject_output_flags(opts: Mapping[str, Any]) -> None:
     """The chunked engine returns ``(popt, pcov)`` only; fail before any chunk is fit."""
-    for key in ("full_output", "return_eval"):
+    for key in _OUTPUT_FLAGS:
         if opts.get(key):
             raise TypeError(
                 f"curve_fit_large: {key}=True is not supported on the chunked/large "
@@ -71,8 +74,50 @@ def _reject_output_flags(opts: Mapping[str, Any]) -> None:
             )
 
 
+def _all_finite(a: Any, block: int = 1_000_000) -> bool:
+    """``np.isfinite(a).all()``, reading a 1-D (or scalar) sliceable source by blocks."""
+    if not getattr(a, "shape", None):
+        return bool(np.isfinite(np.asarray(a)).all())
+    return all(
+        bool(np.isfinite(np.asarray(a[s : s + block])).all())
+        for s in range(0, a.shape[0], block)
+    )
+
+
 def _is_unbounded(lb: Any, ub: Any) -> bool:
     return bool(np.all(np.isneginf(lb)) and np.all(np.isposinf(ub)))
+
+
+def _validated_sources(
+    strategy: LargeStrategy, xdata: Any, ydata: Any
+) -> tuple[Any, Any, int]:
+    """Check the sources from their shapes and return ``(xdata, ydata, n_points)``.
+
+    A sliceable source (h5py, zarr, memmap) is not read whole before the strategy is
+    known: only the exact path streams its sources; every other path gets arrays.
+    """
+    xdata = xdata if hasattr(xdata, "shape") else np.asarray(xdata)
+    ydata = ydata if hasattr(ydata, "shape") else np.asarray(ydata)
+
+    # Check for edge cases (scipy convention: 2-D xdata is (k, M), points on last axis)
+    x_shape, y_shape = tuple(xdata.shape), tuple(ydata.shape)
+    if not x_shape or not y_shape:
+        raise TypeError("`xdata` and `ydata` must be arrays, not scalars.")
+    n_x = x_shape[-1] if len(x_shape) > 1 else x_shape[0]
+    n_y = y_shape[0]
+    if n_x == 0:
+        raise ValueError("`xdata` cannot be empty.")
+    if n_y == 0:
+        raise ValueError("`ydata` cannot be empty.")
+    if n_x != n_y:
+        raise ValueError(
+            f"`xdata` and `ydata` must have the same length: {n_x} vs {n_y}.",
+        )
+    if n_x < 2:
+        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
+    if not (isinstance(strategy, Auto) and isinstance(strategy.resolve(n_x), Exact)):
+        xdata, ydata = np.asarray(xdata), np.asarray(ydata)
+    return xdata, ydata, n_x
 
 
 def fit_with_strategy(
@@ -145,25 +190,11 @@ def fit_with_strategy(
     if is_chunk_factory(xdata) or ydata is None:
         raise ValueError(
             "a chunk factory (callable xdata, ydata=None) requires "
-            "method='exact_streaming'; pass xdata and ydata arrays otherwise"
+            "method='exact_streaming' (curve_fit_large) or strategy=Exact(); "
+            "pass xdata and ydata arrays otherwise"
         )
 
-    # Input validation
-    xdata = np.asarray(xdata)
-    ydata = np.asarray(ydata)
-
-    # Check for edge cases (scipy convention: 2-D xdata is (k, M), points on last axis)
-    n_x = xdata.shape[-1] if xdata.ndim > 1 else len(xdata)
-    if n_x == 0:
-        raise ValueError("`xdata` cannot be empty.")
-    if len(ydata) == 0:
-        raise ValueError("`ydata` cannot be empty.")
-    if n_x != len(ydata):
-        raise ValueError(
-            f"`xdata` and `ydata` must have the same length: {n_x} vs {len(ydata)}.",
-        )
-    if n_x < 2:
-        raise ValueError(f"Need at least 2 data points for fitting, got {n_x}.")
+    xdata, ydata, n_x = _validated_sources(strategy, xdata, ydata)
 
     n_points = n_x
 
@@ -181,12 +212,24 @@ def fit_with_strategy(
             reject_owned_kwargs(auto.chunked, kwargs)
             opts = {**auto.chunked.options, **kwargs}  # what chunked would have used
             _reject_output_flags(opts)
+            exact = _effective_exact(strategy, auto, opts)
             hit = _exact_ineligible(
-                auto, opts, f, xdata, ydata, n_points, sigma, p0, bounds, check_finite
+                auto,
+                opts,
+                f,
+                xdata,
+                ydata,
+                n_points,
+                sigma,
+                p0,
+                bounds,
+                check_finite,
+                exact.chunk_size,
+                memory_limit_gb,
             )
             if hit is None:
                 return _fit_exact(
-                    _effective_exact(strategy, auto, opts),
+                    exact,
                     f,
                     xdata,
                     ydata,
@@ -363,6 +406,8 @@ def _exact_ineligible(
     p0: Any,
     bounds: Any,
     check_finite: bool,
+    chunk_size: int | None = None,
+    memory_limit_gb: float | None = None,
 ) -> tuple[Literal["engine", "data", "sigma"], str] | None:
     """Why the ``Auto`` default cannot use exact, or None.
 
@@ -373,7 +418,11 @@ def _exact_ineligible(
     Scalar and signed ``sigma`` are not reasons. Non-finite ``xdata``/``ydata`` under
     ``check_finite=False`` is a data reason (chunked would absorb the NaN silently).
     """
-    from nlsq.streaming.exact_lm import check_model_contract
+    from nlsq.streaming.exact_lm import (
+        check_bounds,
+        check_model_contract,
+        derive_chunk_size,
+    )
     from nlsq.streaming.strategy import normalize_p0_bounds
 
     chunked = auto.chunked
@@ -381,29 +430,52 @@ def _exact_ineligible(
         return "engine", "Auto.chunked sets method"
     if chunked.multistart.enabled:
         return "engine", "Auto.chunked enables multistart"
-    extra = sorted(set(opts) - _EXACT_OPTION_KEYS)
+    # a False output flag is the default, not a chunked-engine request
+    extra = sorted(
+        k
+        for k in set(opts) - _EXACT_OPTION_KEYS
+        if not (k in _OUTPUT_FLAGS and not opts[k])
+    )
     if extra:
         return (
             "engine",
             f"Auto.chunked option(s) {extra} are not supported by exact",
         )
-    if xdata.ndim != 1:
+    if len(xdata.shape) != 1:
         return "data", "multi-feature xdata"
-    if sigma is not None and np.ndim(sigma) > 1:
-        return "sigma", f"sigma must be 1-D (or a scalar), got shape {np.shape(sigma)}"
-    if (
-        sigma is not None
-        and not check_finite
-        and not np.isfinite(np.asarray(sigma)).all()
-    ):
+    # shape, not np.ndim: np.ndim would read a lazy source whole
+    sigma_shape = tuple(sigma.shape) if hasattr(sigma, "shape") else np.shape(sigma)
+    if sigma is not None and len(sigma_shape) > 1:
+        return "sigma", f"sigma must be 1-D (or a scalar), got shape {sigma_shape}"
+    if sigma is not None and not check_finite and not _all_finite(sigma):
         return "data", "sigma has non-finite values (check_finite=False)"
-    if not check_finite and not (np.isfinite(xdata).all() and np.isfinite(ydata).all()):
+    if not check_finite and not (_all_finite(xdata) and _all_finite(ydata)):
         return "data", "xdata or ydata has non-finite values (check_finite=False)"
     if p0 is not None:
         p0 = np.asarray(p0, dtype=float)
-    p0_arr, _ = normalize_p0_bounds(f, p0, bounds)
+    p0_arr, probe_bounds = normalize_p0_bounds(f, p0, bounds)
+    # the exact solver probes the model at p0 clipped into the box, so must this
+    lo, hi = check_bounds(probe_bounds, len(p0_arr))
+    p0_arr = np.clip(p0_arr, lo, hi)
+    if memory_limit_gb is None:
+        from nlsq.config import get_memory_config
+
+        memory_limit_gb = get_memory_config().memory_limit_gb
+    # never probe with more rows than one exact chunk: a model may only support
+    # batches up to the chunk size
+    # (an explicit chunk_size skips the memory arg: the fit itself warns about it)
+    chunk = derive_chunk_size(
+        n_points,
+        len(p0_arr),
+        memory_limit_gb if chunk_size is None else None,
+        chunk_size,
+    )
     try:
-        check_model_contract(f, p0_arr, xdata[: min(n_points, _PROBE_POINTS)])
+        check_model_contract(
+            f,
+            p0_arr,
+            np.asarray(xdata[: min(n_points, _PROBE_POINTS, max(chunk, 2))]),
+        )
     except ValueError as err:
         if not str(err).startswith("model is not pointwise"):
             raise
@@ -508,7 +580,13 @@ def _fit_in_memory(
     _lb, _ub = bounds
     _lb = np.atleast_1d(np.asarray(_lb, dtype=float))
     _ub = np.atleast_1d(np.asarray(_ub, dtype=float))
-    if not _is_unbounded(_lb, _ub):
+    n_p = None if p0 is None else np.size(p0)
+    # a malformed all-infinite pair is forwarded so curve_fit rejects it; only the
+    # canonical scalar default (or one entry per parameter) is elided
+    well_formed = _lb.shape == _ub.shape and (
+        _lb.size == 1 or n_p is None or _lb.size == n_p
+    )
+    if not (well_formed and _is_unbounded(_lb, _ub)):
         fit_kwargs["bounds"] = bounds
     if strategy.method is not None:
         fit_kwargs["method"] = strategy.method
@@ -619,8 +697,17 @@ def _fit_chunked(
         fit_kwargs["absolute_sigma"] = absolute_sigma
         fit_kwargs["check_finite"] = check_finite
 
-        # Add multi-start parameters to kwargs (inert in the chunk fits; pinned)
+        # Forwarded exactly as before (pinned by the routing tests) but inert in the chunk
+        # fits, so an enabled multistart is announced instead of silently dropped
         fit_kwargs.update(_multistart_kwargs(strategy.multistart))
+        if strategy.multistart.enabled:
+            warnings.warn(
+                "Chunked(multistart=...) is not applied: each chunk is fit once from p0. "
+                "Use InMemory(multistart=...) or a global-search workflow for a "
+                "multi-start fit.",
+                UserWarning,
+                stacklevel=3,
+            )
 
         # Convert p0 to appropriate type for LargeDatasetFitter
         # LargeDatasetFitter expects np.ndarray | list | None (no tuple or jnp.ndarray)

@@ -25,6 +25,12 @@ __all__ = [
 ]
 
 
+def _as_float(a: Array) -> Array:
+    """Promote integer/bool input so ``ub - lb`` cannot wrap in the integer dtype."""
+    a = jnp.asarray(a)
+    return a if jnp.issubdtype(a.dtype, jnp.floating) else a.astype(float)
+
+
 def transform_to_bounds(
     x_unbounded: Array,
     lower_bounds: Array,
@@ -67,6 +73,7 @@ def transform_to_bounds(
     sigmoid_x = jax.nn.sigmoid(x_unbounded)
 
     # Map to bounds: lb + (ub - lb) * sigmoid(x)
+    lower_bounds, upper_bounds = _as_float(lower_bounds), _as_float(upper_bounds)
     return lower_bounds + (upper_bounds - lower_bounds) * sigmoid_x
 
 
@@ -107,6 +114,8 @@ def transform_from_bounds(
     Array([0., 0., 0.], dtype=float32)
     """
     # Normalize to [0, 1]
+    x_bounded = _as_float(x_bounded)
+    lower_bounds, upper_bounds = _as_float(lower_bounds), _as_float(upper_bounds)
     range_val = upper_bounds - lower_bounds
     safe_range = jnp.where(range_val == 0, 1.0, range_val)
     ratio = (x_bounded - lower_bounds) / safe_range

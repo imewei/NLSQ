@@ -3,6 +3,17 @@ NLSQ Qt GUI Autosave Manager
 
 This module provides automatic session state saving and crash recovery
 functionality for the Qt GUI application.
+
+Recovery safety: a snapshot chosen for recovery is identified by (inode,
+mtime_ns, size) and owner token, and is removed by an atomic rename to a unique
+``*.rm`` tombstone that is verified before deletion (a mismatching file is moved
+back with ``os.link`` only if the path is still free, or an existence-checked
+``os.rename`` on filesystems without hard links; leftover tombstones are adopted
+at the next discovery when their canonical file is absent). Residual limit without a
+lock file: for the microseconds between that rename and the restore, a live
+instance's newer snapshot is absent from its path; if it autosaves in that
+window its newer file wins and the older one stays as an ignored ``*.rm`` file,
+and a crash of that instance inside the window loses its snapshot.
 """
 
 from __future__ import annotations
@@ -13,6 +24,7 @@ import logging
 import os
 import stat
 import tempfile
+import uuid
 from dataclasses import fields
 from datetime import datetime
 from pathlib import Path
@@ -117,19 +129,127 @@ def _ensure_private_dir(path: Path) -> None:
         path.chmod(0o700)
 
 
-def _write_autosave(data: dict[str, Any]) -> None:
-    """Atomically replace the recovery file with a private temporary file."""
+# File the running session writes; the crash hook updates this one, not the shared name.
+_active_target: Path | None = None
+_active_token: str | None = None  # owner token this session wrote into that file
+
+
+class _ExclusiveUnsupported(OSError):
+    """The filesystem cannot publish a file without replacing an existing one."""
+
+
+def _write_autosave(
+    data: dict[str, Any], path: Path | None = None, *, exclusive: bool = False
+) -> None:
+    """Atomically replace the recovery file with a private temporary file.
+
+    ``exclusive`` publishes with a hard link, which fails with FileExistsError
+    instead of replacing a file another session published meanwhile. Where hard
+    links are unsupported it raises ``_ExclusiveUnsupported`` (nothing is
+    written): the caller must then use a name no other session can choose.
+    """
+    path = path or AUTOSAVE_FILE
     fd, tmp_name = tempfile.mkstemp(
-        dir=AUTOSAVE_FILE.parent, prefix=AUTOSAVE_FILE.stem + ".", suffix=".tmp"
+        dir=path.parent, prefix=AUTOSAVE_FILE.stem + ".", suffix=".tmp"
     )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp_name, AUTOSAVE_FILE)
+            # dumps() without indent uses the C encoder; dump() streams in pure
+            # Python (~4x slower on a 100k-point snapshot, on the GUI thread)
+            f.write(json.dumps(data))
+            f.flush()
+            os.fsync(f.fileno())  # data must reach disk before the rename does
+        if exclusive:
+            try:
+                os.link(tmp_name, path)
+            except FileExistsError:
+                raise
+            except OSError as exc:  # no hard links on this filesystem
+                raise _ExclusiveUnsupported(str(exc)) from exc
+            else:
+                os.unlink(tmp_name)
+        else:
+            os.replace(tmp_name, path)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp_name)
         raise
+
+
+def _read_snapshot(path: Path) -> dict[str, Any] | None:
+    """The snapshot dict in ``path``, or None if absent, unreadable or malformed."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, RecursionError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _file_identity(path: Path) -> tuple[int, int, int] | None:
+    """(inode, mtime_ns, size) of ``path``; changes whenever it is rewritten."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_ino, st.st_mtime_ns, st.st_size)
+
+
+def _owned_by_live_session(data: dict[str, Any] | None, token: str) -> bool:
+    """True if ``data`` was written by another still-running session.
+
+    Total: a malformed owner/pid is "not alive" and never raises.
+
+    A file from this very process is never "another session": one process owns
+    one window, so a different token here means an earlier manager of ours.
+
+    shortcut: pid liveness only (a recycled pid looks alive, which merely makes
+    a stale snapshot ignored); upgrade to a lock file if that ever matters.
+    """
+    owner = (data or {}).get("owner")
+    if not isinstance(owner, dict) or owner.get("token") == token:
+        return False
+    pid = owner.get("pid")
+    # type() rejects bool/float/str; the range keeps psutil's C call from overflowing
+    if type(pid) is not int or not 1 <= pid < 2**31 or pid == os.getpid():
+        return False
+    import psutil
+
+    try:
+        return psutil.pid_exists(pid)
+    except (OverflowError, ValueError, OSError, psutil.Error):
+        return False  # an unusable pid cannot be a live session
+
+
+def _restore_tombstone(tomb: Path, path: Path) -> bool:
+    """Put ``tomb`` back at ``path`` unless ``path`` is taken; never deletes ``tomb`` on failure.
+
+    Uses a hard link (fails atomically if ``path`` exists). Filesystems without
+    hard links (exFAT, some network mounts) fall back to a rename guarded by an
+    existence check: that check-then-rename window is tiny but not atomic.
+    """
+    try:
+        os.link(tomb, path)
+    except FileExistsError:
+        logger.warning(
+            "Snapshot %s was replaced during recovery cleanup; its previous "
+            "version stays as %s until its owner writes again.",
+            path,
+            tomb,
+        )
+        return False
+    except OSError:  # no hard links here (EOPNOTSUPP, EPERM, EXDEV, ENOSYS, ...)
+        if path.exists():
+            logger.warning("Snapshot %s was replaced; %s kept.", path, tomb)
+            return False
+        try:
+            os.rename(tomb, path)
+        except OSError:
+            logger.warning("Could not restore snapshot %s from %s.", path, tomb)
+            return False
+        return True
+    with contextlib.suppress(OSError):
+        tomb.unlink()
+    return True
 
 
 class AutosaveManager(QObject):
@@ -146,6 +266,15 @@ class AutosaveManager(QObject):
     recovery_available = Signal(str)  # timestamp of recovery file
 
     _autosave_warned: bool = False  # warn once per manager when autosave fails
+    # Single-owner contract: one manager per session. Class-level defaults keep
+    # these valid for tests that build a manager without __init__.
+    _token: str = ""  # identifies this session inside the files it writes
+    _own_file: Path | None = None  # file this session writes (see _target_file)
+    _own_file_base: Path | None = None  # AUTOSAVE_FILE the choice was made for
+    _claimed_base: Path | None = None  # AUTOSAVE_FILE this session already published to
+    _recovery_file: Path | None = None  # snapshot offered/adopted on startup
+    _recovery_identity: tuple[int, int, int] | None = None  # its identity when chosen
+    _recovery_token: Any = None  # owner token inside it when chosen
 
     def __init__(self, app_state: AppState, parent: QObject | None = None) -> None:
         """Initialize the autosave manager.
@@ -182,41 +311,172 @@ class AutosaveManager(QObject):
         """Stop the autosave timer."""
         self._timer.stop()
 
+    def _session_token(self) -> str:
+        if not self._token:
+            self._token = uuid.uuid4().hex
+        return self._token
+
+    def _target_file(self) -> Path:
+        """File this session writes: the shared one, or a private sibling.
+
+        A second running instance must not overwrite (or, on close, delete) the
+        first one's snapshot, so it writes ``<stem>.<token><suffix>`` instead.
+        """
+        if self._own_file is None or self._own_file_base != AUTOSAVE_FILE:
+            token = self._session_token()
+            held = _owned_by_live_session(_read_snapshot(AUTOSAVE_FILE), token)
+            self._own_file_base = AUTOSAVE_FILE
+            self._own_file = (
+                AUTOSAVE_FILE.with_name(
+                    f"{AUTOSAVE_FILE.stem}.{token}{AUTOSAVE_FILE.suffix}"
+                )
+                if held
+                else AUTOSAVE_FILE
+            )
+        return self._own_file
+
+    def _adopt_orphan_tombstones(self) -> None:
+        """Move leftover ``*.rm`` tombstones back to their canonical name.
+
+        A failed restore (or a crash between rename and restore) must not make a
+        snapshot permanently undiscoverable. Only when the canonical file is
+        absent; a tombstone of ours is never touched.
+        """
+        token = self._session_token()
+        for tomb in AUTOSAVE_FILE.parent.glob(f"{AUTOSAVE_FILE.stem}.*.rm"):
+            canonical = tomb.with_name(tomb.name.rsplit(".", 2)[0])
+            data = _read_snapshot(tomb)
+            owner = (data or {}).get("owner")
+            if data is None or (
+                isinstance(owner, dict) and owner.get("token") == token
+            ):
+                continue
+            if not canonical.exists():
+                _restore_tombstone(tomb, canonical)
+
+    def _recovery_candidates(self) -> list[Path]:
+        """Snapshots of sessions that are no longer running, newest first."""
+        self._adopt_orphan_tombstones()
+        token = self._session_token()
+        paths = [
+            AUTOSAVE_FILE,
+            *AUTOSAVE_FILE.parent.glob(f"{AUTOSAVE_FILE.stem}.*{AUTOSAVE_FILE.suffix}"),
+        ]
+        found = []
+        for path in paths:
+            data = _read_snapshot(path)
+            if data is None or _owned_by_live_session(data, token):
+                continue
+            owner = data.get("owner")  # a malformed owner counts as absent
+            if isinstance(owner, dict) and owner.get("token") == token:
+                continue  # our own file is not a crash to recover from
+            found.append((str(data.get("timestamp") or ""), path))
+        return [path for _, path in sorted(found, reverse=True)]
+
+    def _select_recovery(self, path: Path | None) -> None:
+        self._recovery_file = path
+        self._recovery_identity = None if path is None else _file_identity(path)
+        owner = None if path is None else (_read_snapshot(path) or {}).get("owner")
+        self._recovery_token = owner.get("token") if isinstance(owner, dict) else None
+
+    def _remove_selected_recovery(self) -> None:
+        """Delete the selected snapshot only if it is still the file selected.
+
+        The rename is atomic, so exactly the file at the path at that instant is
+        taken; it is deleted only when its identity and owner match the
+        selection, otherwise (a live instance replaced it) it is put back.
+        """
+        path = self._recovery_file
+        if path is None:
+            return
+        tomb = path.with_name(f"{path.name}.{uuid.uuid4().hex}.rm")
+        try:
+            os.rename(path, tomb)
+        except OSError:
+            return  # already gone
+        data = _read_snapshot(tomb)
+        owner = (data or {}).get("owner")
+        token = owner.get("token") if isinstance(owner, dict) else None
+        if (
+            _file_identity(tomb) == self._recovery_identity
+            and token == self._recovery_token
+            and not _owned_by_live_session(data, self._session_token())
+        ):
+            with contextlib.suppress(OSError):
+                tomb.unlink()
+            return
+        _restore_tombstone(tomb, path)
+
+    def _remove_if_owned(self, path: Path) -> None:
+        """Delete ``path`` only if it carries this session's owner token.
+
+        The file is first renamed away (atomic), checked, and then deleted or
+        put back, so a snapshot another session published at that path is
+        never removed.
+        """
+        tomb = path.with_name(f"{path.name}.{uuid.uuid4().hex}.rm")
+        try:
+            os.rename(path, tomb)
+        except OSError:
+            return  # already gone
+        owner = (_read_snapshot(tomb) or {}).get("owner")
+        if isinstance(owner, dict) and owner.get("token") == self._session_token():
+            with contextlib.suppress(OSError):
+                tomb.unlink()
+        else:
+            _restore_tombstone(tomb, path)
+
+    def _recovery_still_selected(self) -> bool:
+        """True if the chosen snapshot is the very file chosen and still unowned.
+
+        Another instance may have replaced it (new inode/mtime) since the prompt
+        opened; acting on the path alone would then touch ITS snapshot.
+        """
+        path = self._recovery_file
+        if path is None or _file_identity(path) != self._recovery_identity:
+            return False
+        return not _owned_by_live_session(_read_snapshot(path), self._session_token())
+
     def check_recovery(self) -> bool:
         """Check if a recovery file exists.
 
         Returns:
-            True if recovery file exists and is recent
+            True if a snapshot of an ended session exists
         """
-        if not AUTOSAVE_FILE.exists():
-            return False
-
-        try:
-            data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                return False
-            timestamp = data.get("timestamp")
+        for path in self._recovery_candidates():
+            timestamp = (_read_snapshot(path) or {}).get("timestamp")
             if timestamp:
+                self._select_recovery(path)
                 self.recovery_available.emit(timestamp)
                 return True
-        except (OSError, json.JSONDecodeError, ValueError, KeyError, RecursionError):
-            pass
-
         return False
 
     def recover(self) -> bool:
         """Attempt to recover session from autosave.
 
+        The snapshot stays on disk until this session's first autosave has
+        replaced it (see ``_do_autosave``), so a second crash right after
+        recovery does not lose it.
+
         Returns:
             True if recovery was successful
         """
-        if not AUTOSAVE_FILE.exists():
+        if self._recovery_file is None:
+            candidates = self._recovery_candidates()
+            self._select_recovery(candidates[0] if candidates else None)
+        elif not self._recovery_still_selected():
+            logger.warning("Recovery snapshot changed since it was offered; skipped.")
+            self._select_recovery(None)
+        path = self._recovery_file
+        if path is None:
             return False
 
         try:
-            data = json.loads(AUTOSAVE_FILE.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 return False
+            if _file_identity(path) != self._recovery_identity:
+                return False  # replaced while we read it: do not adopt
             self._restore_state(data)
             return True
         except (
@@ -231,9 +491,16 @@ class AutosaveManager(QObject):
             return False
 
     def clear_recovery(self) -> None:
-        """Clear the recovery file."""
-        if AUTOSAVE_FILE.exists():
-            AUTOSAVE_FILE.unlink()
+        """Remove this session's own snapshot and any snapshot it adopted.
+
+        Another running session's file is never touched.
+        """
+        own = self._own_file if self._own_file_base == AUTOSAVE_FILE else None
+        if own is not None:
+            self._remove_if_owned(own)
+        if self._recovery_file != own:
+            self._remove_selected_recovery()
+        self._select_recovery(None)
 
     def save_now(self) -> None:
         """Perform an immediate save."""
@@ -243,7 +510,32 @@ class AutosaveManager(QObject):
         """Perform the autosave operation."""
         try:
             data = self._serialize_state()
-            _write_autosave(data)
+            data["owner"] = {"pid": os.getpid(), "token": self._session_token()}
+            target = self._target_file()
+            if target == AUTOSAVE_FILE and self._claimed_base != AUTOSAVE_FILE:
+                # First publish to the shared name: claim it atomically so two
+                # sessions starting together cannot both think they own it.
+                try:
+                    _write_autosave(data, target, exclusive=True)
+                except (FileExistsError, _ExclusiveUnsupported):
+                    # Never replace a file this session did not create (it may
+                    # be another session's, live or stale): use the private
+                    # name; a stale snapshot is cleaned up identity-aware via
+                    # the recovery selection below.
+                    target = self._own_file = AUTOSAVE_FILE.with_name(
+                        f"{AUTOSAVE_FILE.stem}.{self._session_token()}"
+                        f"{AUTOSAVE_FILE.suffix}"
+                    )
+                    _write_autosave(data, target)
+                self._claimed_base = AUTOSAVE_FILE if target == AUTOSAVE_FILE else None
+            else:
+                _write_autosave(data, target)
+            global _active_target, _active_token
+            _active_target, _active_token = target, self._session_token()
+            # The recovered snapshot is superseded only once this one is on disk.
+            if self._recovery_file != target:
+                self._remove_selected_recovery()
+            self._select_recovery(None)
             self.autosave_completed.emit()
         except (OSError, ValueError, TypeError, RecursionError) as exc:
             # Best-effort: never interrupt the user, but say so once per manager.
@@ -395,6 +687,28 @@ class AutosaveManager(QObject):
         """
         state = self._app_state.state
 
+        # Convert the fit options first: a malformed value must not leave the
+        # session half-restored (data replaced, result cleared, then an error).
+        p0 = data.get("p0")
+        restored_p0 = None
+        if isinstance(p0, list) and all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in p0
+        ):
+            try:
+                restored_p0 = [float(v) for v in p0]
+            except OverflowError:  # an int too large for float64
+                logger.warning("Autosave recovery ignored an out-of-range p0.")
+        restored_bounds = None
+        if "bounds" in data:
+            try:
+                lb, ub = data["bounds"]
+                restored_bounds = (
+                    [None if v is None else float(v) for v in lb],
+                    [None if v is None else float(v) for v in ub],
+                )
+            except (TypeError, ValueError, IndexError, OverflowError):
+                pass
+
         # Restoring session state mutates `state` directly rather than going
         # through set_data()/set_model(), so it must invalidate any existing
         # fit result itself -- otherwise a fit_result from before recovery
@@ -411,20 +725,10 @@ class AutosaveManager(QObject):
             state.model_config = data["model_config"]
 
         # Restore fitting options
-        p0 = data.get("p0")
-        if isinstance(p0, list) and all(
-            isinstance(v, (int, float)) and not isinstance(v, bool) for v in p0
-        ):
-            state.p0 = [float(v) for v in p0]
-        if "bounds" in data:
-            try:
-                lb, ub = data["bounds"]
-                state.bounds = (
-                    [None if v is None else float(v) for v in lb],
-                    [None if v is None else float(v) for v in ub],
-                )
-            except (TypeError, ValueError, IndexError):
-                pass
+        if restored_p0 is not None:
+            state.p0 = restored_p0
+        if restored_bounds is not None:
+            state.bounds = restored_bounds
 
         # Restore other attributes
         if isinstance(data.get("auto_p0"), bool):
