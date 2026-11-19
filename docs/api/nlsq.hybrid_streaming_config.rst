@@ -85,8 +85,9 @@ Minimizes memory footprint:
 
     config = HybridStreamingConfig.memory_optimized()
     # Smaller chunks: 5000
-    # float32 precision
+    # Fewer warmup iterations: 40
     # Frequent checkpoints: every 50 iterations
+    # cg_param_threshold stays at its default (the CG solver is not wired into Phase 2)
 
 Defense Layer Sensitivity Presets
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
