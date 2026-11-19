@@ -549,7 +549,8 @@ def analyze_bounds_quality(
 
         - is_feasible: bool, whether p0 is within bounds
         - bound_ratios: ndarray, upper/lower ratios for each parameter
-          (lower < 0: bound width divided by ``abs(p0)``)
+          (lower < 0: bound width divided by ``abs(p0)``, or by the larger
+          bound magnitude where ``p0`` is 0)
         - avg_bound_ratio: float, geometric mean of bound ratios
         - tight_parameters: list, indices of tightly constrained parameters
         - loose_parameters: list, indices of loosely constrained parameters
