@@ -5353,12 +5353,14 @@ class CurveFit:
             Mask of length ``len(ydata)``; rows where it is False are excluded from
             the fit. Default is None (all rows used).
         timeit : bool, optional
-            Record the execution time of each residual and Jacobian evaluation in
-            ``result.all_times`` (unbounded fits only). Adds a device sync per
-            evaluation. Default is False.
+            Return ``(popt, pcov, res, post_time, ctime)`` instead of a
+            ``CurveFitResult``; the per-evaluation residual and Jacobian times are
+            in ``res.all_times`` (unbounded fits only; bounded fits give ``{}``).
+            Adds a device sync per evaluation. Default is False.
         return_eval : bool, optional
-            Return ``(popt, pcov, f(xdata, *popt))``, evaluated at the rows kept by
-            ``data_mask``. Default is False.
+            Return ``(popt, pcov, f(xdata, *popt))`` with one model value per input
+            row (padding removed; rows excluded by ``data_mask`` are still
+            evaluated). Default is False.
         full_output : bool, optional
             Return the SciPy-style ``(popt, pcov, infodict, mesg, ier)`` tuple.
             Default is False.

@@ -416,9 +416,11 @@ class HPCCheckpointManager:
             tried in that case.
         FileNotFoundError
             If neither the primary nor a backup exists.
-        ValueError
+        ValueError, OSError, KeyError
             If the primary is unreadable or malformed (torn write, wrong version,
-            invalid shapes) and no readable backup exists.
+            invalid shapes, not an HDF5 file, missing group) and no readable
+            backup exists; the backup's own error propagates unchanged. A backup
+            from a different problem raises ``CheckpointFingerprintMismatch``.
         """
         path = Path(path)
         bak_path = self.bak_path(path)
