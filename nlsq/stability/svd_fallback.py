@@ -55,8 +55,9 @@ def is_gpu_error(error: Exception | str) -> bool:
     Returns
     -------
     bool
-        True if ``error`` is a JAX runtime error type or its message matches one
-        of the GPU failure patterns above.
+        True if ``error`` is a JAX runtime error type or its message contains
+        ``cusolver`` or ``cublas``, mentions both ``ffi`` and ``cuda``, or starts
+        with ``INTERNAL:``.
     """
     # Type-based check: robust against JAX error message format changes
     if not isinstance(error, str):
@@ -115,6 +116,7 @@ def compute_svd_with_fallback(
     FloatingPointError
         If the final NumPy SVD also returns non-finite factors.
     numpy.linalg.LinAlgError
+        Also raised by the NumPy tier if its SVD does not converge.
         If the first SVD attempt fails with a GPU error or non-finite factors and
         ``J_h`` itself contains non-finite values. Any other exception from the
         first attempt is re-raised unchanged.

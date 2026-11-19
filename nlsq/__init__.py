@@ -1117,9 +1117,14 @@ def curve_fit_large(
     ------
     TypeError
         If a removed sampling keyword (``enable_sampling``,
-        ``sampling_threshold``, ``max_sampled_size``) is passed, or if
+        ``sampling_threshold``, ``max_sampled_size``) is passed, if
         ``strategy`` is combined with a non-default path option or with extra
-        keyword arguments.
+        keyword arguments, or if keyword arguments not accepted by the
+        ``exact_streaming``/``hybrid_streaming`` path are passed.
+    ValueError
+        If ``method`` is unknown, if ``method='exact_streaming'`` is combined
+        with an option it does not support (or with multistart), or if every
+        used row has infinite ``sigma``.
 
     Notes
     -----

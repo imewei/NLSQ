@@ -341,6 +341,9 @@ class CurveFitResult(OptimizeResult):
         AttributeError
             If neither ``model`` and ``xdata`` nor ``ydata`` and ``fun`` are
             available on the result.
+        ValueError
+            If only ``ydata`` and ``fun`` are available and ``sigma``'s shape
+            does not match ``fun``.
         """
 
         def compute():
@@ -370,6 +373,9 @@ class CurveFitResult(OptimizeResult):
         AttributeError
             If neither ``model``, ``xdata`` and ``ydata`` nor ``ydata`` and ``fun``
             are available on the result.
+        ValueError
+            If only ``ydata`` and ``fun`` are available and ``sigma``'s shape
+            does not match ``fun``.
 
         Notes
         -----
@@ -665,6 +671,8 @@ class CurveFitResult(OptimizeResult):
         AttributeError
             If ``pcov`` is ``None`` (the fit was run with
             ``compute_covariance=False``).
+        ValueError
+            If ``alpha`` is not finite and strictly between 0 and 1.
 
         Examples
         --------
@@ -969,6 +977,8 @@ class CurveFitResult(OptimizeResult):
             If ``model`` is not available, if ``pcov`` is ``None`` (the fit was
             run with ``compute_covariance=False``), or if ``x`` is None and
             ``xdata`` is not stored on the result.
+        ValueError
+            If ``alpha`` is not finite and strictly between 0 and 1.
 
         Examples
         --------
@@ -1135,6 +1145,8 @@ class CurveFitResult(OptimizeResult):
             If ``model`` is not available, if ``pcov`` is missing or ``None`` (the
             fit was run with ``compute_covariance=False``), or if ``x`` is None
             and ``xdata`` is not stored on the result.
+        ValueError
+            If ``alpha`` is not finite and strictly between 0 and 1.
 
         Notes
         -----

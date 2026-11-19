@@ -337,7 +337,7 @@ def infer_bounds_for_multistart(
     Raises
     ------
     ValueError
-        If ``xdata``, ``ydata`` or ``p0`` is rejected by
+        If ``xdata``, ``ydata``, ``p0`` or ``safety_factor`` is rejected by
         :func:`infer_bounds`, if ``user_bounds`` is rejected by
         :func:`merge_bounds`, or if no finite interval with ``lower < upper``
         can be formed for some parameter.

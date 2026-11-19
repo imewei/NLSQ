@@ -250,7 +250,8 @@ class FitVisualizer:
         ValueError
             If ``data["xdata"]`` has more than one dimension.
         ConfigError
-            If ``visualization.filename_prefix`` is not a plain file name.
+            If ``visualization.filename_prefix`` is not a plain file name, or if
+            ``visualization.formats`` is not a string, list or tuple.
         """
         vis_config = config.get("visualization") or {}
 

@@ -257,7 +257,7 @@ def newton_certificate(
     ftol : float
         Relative cost-decrease tolerance.
     bounds_active : bool, optional
-        If True, no certificate is given.
+        If True, no certificate is given unless ``F == 0``.
 
     Returns
     -------
@@ -846,7 +846,8 @@ def tsqr_r_factor(
     Raises
     ------
     ValueError
-        If ``n`` is given and the pass saw a different number of points.
+        If ``n`` is given and the pass saw a different number of points, or a
+        factory source yields a different count from its expected ``n``.
     """
     th = jnp.asarray(theta, dtype=jnp.float64)
     if (
@@ -1093,8 +1094,9 @@ def exact_lm_fit(  # noqa: C901 - ported LM loop kept intact from the prototype
     ------
     ValueError
         As described above; also for a ``p0`` that is not a finite 1-D vector,
-        an invalid ``memory_limit_gb`` or ``chunk_size``, a model that is not
-        pointwise, and a source whose length changes between passes.
+        an invalid ``memory_limit_gb`` or ``chunk_size``, invalid tolerances or
+        ``max_nfev``, a model that is not pointwise, and a source whose length
+        changes between passes.
     """
     if not 0 < LAM0 <= LAMBDA_MAX:
         raise ValueError(f"LAM0 must satisfy 0 < LAM0 <= {LAMBDA_MAX:g}")

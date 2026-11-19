@@ -232,10 +232,12 @@ def pcov_from_jacobian(
     Returns
     -------
     pcov : ndarray, shape (p, p)
-        Parameter covariance; all ``inf`` when it cannot be estimated.
+        Parameter covariance; all ``inf`` when it cannot be estimated. Exception:
+        with ``absolute_sigma=False`` and a non-finite ``cost``, the scaled
+        NaN/inf result is returned as is, without a warning.
     warn_cov : bool
-        ``True`` if the covariance could not be estimated (the all-``inf``
-        fallback was used and an ``OptimizeWarning`` was emitted).
+        ``True`` if the all-``inf`` fallback was used (an ``OptimizeWarning``
+        was emitted).
     """
     # Equilibrate columns to unit norm before the SVD so the rank cutoff sees
     # identifiability, not parameter units (x in 1e8 units made one direction look

@@ -303,6 +303,8 @@ def validate_f_scale(f_scale: Any) -> None:
     ------
     ValueError
         If ``f_scale`` is not finite or is not greater than zero.
+    TypeError
+        If ``f_scale`` is not numeric.
     """
     if not (np.isfinite(f_scale) and f_scale > 0):
         raise ValueError(f"`f_scale` must be positive and finite, got {f_scale!r}.")
