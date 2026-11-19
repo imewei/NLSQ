@@ -210,8 +210,9 @@ def check_tolerance(
     This function checks the tolerance values for the optimization and
     prepares them for use. If any of the tolerances is `None`, it is set to
     0. If any of the tolerances is lower than the machine epsilon, a warning
-    is issued and the tolerance is set to the machine epsilon. If all
-    tolerances are lower than the machine epsilon, a `ValueError` is raised.
+    is issued and the tolerance is left as given; with ``method="lm"`` a
+    `ValueError` is raised instead. If all tolerances are lower than the
+    machine epsilon, a `ValueError` is raised.
 
     Parameters
     ----------

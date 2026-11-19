@@ -4542,8 +4542,11 @@ class AdaptiveHybridStreamingOptimizer:
         ------
         ValueError
             If ``data_source`` does not hold non-empty ``x_data`` and one-dimensional
-            ``y_data`` with the same number of observations, or if ``x_data`` or
-            ``y_data`` contains NaN or inf.
+            (or ``(n, 1)``) ``y_data`` with the same number of observations, if
+            ``x_data`` or ``y_data`` contains NaN or inf, or if the config fails
+            re-validation (``ConfigValidationError``).
+        TypeError
+            If ``callback`` does not accept ``(iteration, cost, params, info)``.
         NotImplementedError
             If ``data_source`` is not a 2-tuple, ``sigma`` is not ``None``, the
             number of parameters is at least ``config.cg_param_threshold``, or

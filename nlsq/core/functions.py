@@ -877,6 +877,8 @@ def polynomial(degree: int) -> Callable:
     ValueError
         If ``degree`` is not a finite, non-negative integer (``bool`` and
         ``str`` are rejected).
+    TypeError
+        If ``degree`` is ``None`` or otherwise not numeric.
 
     Examples
     --------

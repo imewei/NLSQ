@@ -296,7 +296,7 @@ def iter_blocks(
     ------
     ValueError
         If ``y`` or ``sigma`` has a different length from ``x``, or a slice
-        returns fewer rows than requested.
+        returns a different number of rows than requested.
     """
     n = _source_len(source_x)
     for name, a in (("y", source_y), ("sigma", source_sigma)):

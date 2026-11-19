@@ -616,8 +616,9 @@ def run_batch(
     CLIError
         If ``max_workers`` is less than 1, if the batch inputs are invalid
         (no workflow files given, or missing files with
-        ``continue_on_error=False``), or if the summary file cannot be
-        written.
+        ``continue_on_error=False``), if a workflow's result or figure file or
+        the summary file would overwrite a workflow input or result file, or if
+        the summary file cannot be written.
     """
     # Set up logging
     logger = setup_logging(

@@ -262,7 +262,8 @@ class HistogramPlotWidget(QWidget):
         dict
             Statistics of the finite data values with keys ``"mean"``,
             ``"std"``, ``"skewness"``, ``"kurtosis"`` and ``"normality_p"``
-            (the Shapiro-Wilk p-value, ``None`` if the test failed). Empty when
+            (the Shapiro-Wilk p-value, computed on at most the first
+            ``_SHAPIRO_MAX_N`` finite values; ``None`` if the test failed). Empty when
             no data is set or none of it is finite.
         """
         if self._data is None:

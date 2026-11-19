@@ -1260,9 +1260,10 @@ def _fit_global_cmaes(
     check_finite : bool, default=True
         Check for finite input values.
     **kwargs : Any
-        Optional ``seed``, ``data_mask``, ``nan_policy``, ``compute_covariance``
-        and the internal ``_hpc_checkpoint_dir`` / ``_hpc_checkpoint_interval`` /
-        ``_hpc_run_id`` / ``_hpc_model_id`` markers are consumed here. The
+        Optional ``seed``, ``data_mask`` and the internal ``_hpc_checkpoint_dir`` /
+        ``_hpc_checkpoint_interval`` / ``_hpc_run_id`` / ``_hpc_model_id`` markers
+        are consumed here; ``nan_policy`` and ``compute_covariance`` are read here
+        and also forwarded. The
         multi-start sampler options ``sampler``, ``center_on_p0`` and
         ``scale_factor`` are dropped with a ``UserWarning``. The remaining
         keywords are forwarded to ``CMAESOptimizer.fit``, except ``timeit``,
@@ -4970,10 +4971,10 @@ class CurveFit:
         method : str
             Optimization method passed to ``least_squares``.
         solver : str
-            Solver choice (``"minibatch"`` enables the minibatch logging path;
-            otherwise it selects ``tr_solver``).
+            Solver choice, mapped to ``tr_solver`` by ``_select_tr_solver``
+            (``"minibatch"`` maps to ``"lsmr"``).
         batch_size : int or None
-            Batch size for the minibatch solver.
+            Only logged for ``solver="minibatch"``; no batching is done.
         jac : callable or None
             Jacobian function.
         m : int
@@ -5007,6 +5008,16 @@ class CurveFit:
         ------
         ValueError
             If ``kwargs`` contains ``args``.
+        OptimizationError
+            If the solver ends with a failure status other than ``max_nfev``.
+        RuntimeError
+            If error recovery is enabled and recovery is unsuccessful.
+
+        Notes
+        -----
+        ``kwargs`` is modified in place (``maxfev`` becomes ``max_nfev``,
+        ``tr_solver`` is set, internal keys are dropped). With recovery
+        disabled, an exception from ``least_squares`` is re-raised.
         """
         # Validate kwargs
         if "args" in kwargs:
@@ -5355,12 +5366,14 @@ class CurveFit:
             Mask of length ``len(ydata)``; rows where it is False are excluded from
             the fit. Default is None (all rows used).
         timeit : bool, optional
-            Record the execution time of each residual and Jacobian evaluation in
-            ``result.all_times`` (unbounded fits only). Adds a device sync per
-            evaluation. Default is False.
+            Return ``(popt, pcov, res, post_time, ctime)`` instead of a
+            ``CurveFitResult``; the per-evaluation residual and Jacobian times are
+            in ``res.all_times`` (unbounded fits only; bounded fits give ``{}``).
+            Adds a device sync per evaluation. Default is False.
         return_eval : bool, optional
-            Return ``(popt, pcov, f(xdata, *popt))``, evaluated at the rows kept by
-            ``data_mask``. Default is False.
+            Return ``(popt, pcov, f(xdata, *popt))`` with one model value per input
+            row (padding removed; rows excluded by ``data_mask`` are still
+            evaluated). Default is False.
         full_output : bool, optional
             Return the SciPy-style ``(popt, pcov, infodict, mesg, ier)`` tuple.
             Default is False.

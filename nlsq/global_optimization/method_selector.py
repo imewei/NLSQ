@@ -155,7 +155,7 @@ class MethodSelector:
         Raises
         ------
         ValueError
-            If ``requested_method`` is not ``'auto'``, ``'cmaes'``,
+            If ``requested_method`` is not ``None``, ``'auto'``, ``'cmaes'``,
             ``'multi-start'`` or one of the local methods ``'trf'``, ``'lm'``,
             ``'dogbox'``, ``'hybrid_streaming'``, ``'exact_streaming'``.
 

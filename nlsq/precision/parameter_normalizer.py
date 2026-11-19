@@ -135,9 +135,10 @@ class ParameterNormalizer:
         Raises
         ------
         ValueError
-            If ``p0`` is not 1-D, if any lower bound exceeds its upper bound,
-            or if ``strategy`` is not one of ``'bounds'``, ``'p0'``, ``'none'``
-            or ``'auto'``.
+            If ``p0`` is not 1-D, if a bound is neither a scalar nor has one
+            element per parameter, contains NaN, or a lower bound exceeds its
+            upper bound, or if ``strategy`` is not one of ``'bounds'``,
+            ``'p0'``, ``'none'`` or ``'auto'``.
         """
         self.zero_p0_scales = zero_p0_scales
         self.p0 = jnp.atleast_1d(jnp.asarray(p0, dtype=jnp.float64))

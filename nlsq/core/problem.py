@@ -1334,7 +1334,9 @@ def prepare_problem(
     Raises
     ------
     ValueError
-        If ``nan_policy``, ``solver`` or ``batch_size`` is invalid; if
+        If ``nan_policy``, ``solver`` or ``batch_size`` is invalid; if ``p0`` has
+        more than one dimension; if the number of fit parameters cannot be
+        determined, or ``p0='auto'`` fails for a model with ``*args``; if
         ``x``, ``y`` or ``sigma`` is complex; if ``x`` and ``y`` lengths or
         the bounds length do not match; if input validation fails or
         ``nan_policy='omit'`` removes every point; if ``data_mask`` has the

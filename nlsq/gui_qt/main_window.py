@@ -578,7 +578,8 @@ class MainWindow(QMainWindow):
         ----------
         event : QCloseEvent
             Close event. It is ignored if a fit is running and the user
-            declines to close.
+            declines to close, or if the fit does not stop in time and the user
+            declines to force quit.
         """
         # A fit still running on a background QThread would otherwise keep
         # emitting progress/finished/error signals into page widgets that

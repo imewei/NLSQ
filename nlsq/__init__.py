@@ -1041,7 +1041,8 @@ def curve_fit_large(
         both routes (and their warnings).
     stability : {'auto', 'check', False}, optional
         Stability checks, as in ``curve_fit``: 'auto' and 'check' warn without
-        modifying data, False skips the checks. Only the in-memory path applies it
+        modifying data, False skips the checks. Only the in-memory path applies it;
+        the default exact path and the chunked path ignore it without a warning
         (see "Options ignored by chunked processing"). Must stay at its default
         with ``method="exact_streaming"``; ignored with a warning by
         ``method="hybrid_streaming"``. Default: False.
@@ -1116,9 +1117,14 @@ def curve_fit_large(
     ------
     TypeError
         If a removed sampling keyword (``enable_sampling``,
-        ``sampling_threshold``, ``max_sampled_size``) is passed, or if
+        ``sampling_threshold``, ``max_sampled_size``) is passed, if
         ``strategy`` is combined with a non-default path option or with extra
-        keyword arguments.
+        keyword arguments, or if keyword arguments not accepted by the
+        ``exact_streaming``/``hybrid_streaming`` path are passed.
+    ValueError
+        If ``method`` is unknown, if ``method='exact_streaming'`` is combined
+        with an option it does not support (or with multistart), or if every
+        used row has infinite ``sigma``.
 
     Notes
     -----

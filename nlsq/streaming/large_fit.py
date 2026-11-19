@@ -170,10 +170,18 @@ def fit_with_strategy(
         If a chunk factory (callable ``xdata`` or ``ydata=None``) is passed
         without an ``Exact`` strategy, if ``compute_covariance=False`` is used
         with ``Hybrid``, or if ``Auto`` resolves to ``Exact`` but the input
-        cannot be fitted by exact streaming for a data reason.
+        cannot be fitted by exact streaming for a data reason, if the data are
+        empty, of mismatched length or have fewer than 2 points, or if the exact
+        path's own input checks fail (see ``exact_lm_fit``).
     TypeError
-        If ``strategy`` is not a known large-fit strategy, or if ``kwargs``
-        contains a key the strategy owns (or any key for ``Hybrid``).
+        If ``strategy`` is not a known large-fit strategy, if ``kwargs``
+        contains a key the strategy owns (or any key for ``Hybrid``), or if
+        ``xdata`` or ``ydata`` is a scalar.
+    ExactSolverError
+        If the exact streaming fit ends with termination ``"stalled"`` or
+        ``"max_nfev"``; the result is on ``.result``.
+    RuntimeError
+        If the chunked fit fails.
     """
     common: dict[str, Any] = {
         "sigma": sigma,
