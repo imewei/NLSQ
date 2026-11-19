@@ -2311,13 +2311,6 @@ class LeastSquares:
         jac : Callable
             The Jacobian function to wrap.
 
-        Notes
-        -----
-        Returns nothing: stores the wrapped functions on ``self`` as ``jac_none``,
-        ``jac_1d`` and ``jac_2d`` (one per ``sigma`` transform) and the user's
-        ``jac`` as ``self.jac``. Each wrapped function returns the masked
-        Jacobian evaluated at ``args``.
-
         Raises
         ------
         ValueError
@@ -2326,6 +2319,13 @@ class LeastSquares:
             ``(n_params, m)`` nor ``(m, n_params)``, or a 1-D array for a
             one-parameter model whose length differs from the number of
             observations.
+
+        Notes
+        -----
+        Returns nothing: stores the wrapped functions on ``self`` as ``jac_none``,
+        ``jac_1d`` and ``jac_2d`` (one per ``sigma`` transform) and the user's
+        ``jac`` as ``self.jac``. Each wrapped function returns the masked
+        Jacobian evaluated at ``args``.
         """
 
         # Note: Uses @jit (not cached_jit) because these closures capture 'jac'

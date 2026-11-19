@@ -2929,7 +2929,7 @@ class LargeDatasetFitter:
         Returns
         -------
         np.ndarray
-            np.ndarray: Covariance matrix
+            Covariance matrix
         """
         accum_information = self._accum_information
         if accum_information is not None:
