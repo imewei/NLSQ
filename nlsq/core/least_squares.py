@@ -1602,6 +1602,12 @@ class LeastSquares:
             Accepted for scipy compatibility but not used by either solver
             (scipy also ignores it for ``'exact'``); a non-empty value with
             ``tr_solver='lsmr'`` emits a ``UserWarning``.
+        diff_step : array_like, optional
+            Accepted for scipy compatibility; ignored with a warning, because NLSQ
+            always uses exact JAX-autodiff Jacobians, never finite differences.
+        jac_sparsity : array_like, optional
+            Accepted for scipy compatibility; ignored with a warning, because NLSQ
+            detects Jacobian sparsity itself rather than taking a pattern.
         x_scale : str or array_like, optional
             Parameter scaling ('jac' for automatic).
         loss : str or callable, optional
@@ -1616,6 +1622,7 @@ class LeastSquares:
         jacobian_mode : {'auto', 'fwd', 'rev'}, optional
             Jacobian automatic differentiation mode. If None, uses configuration
             from environment variable, config file, or auto-default. Default is None.
+
             - 'auto': Automatically select based on problem dimensions
             - 'fwd': Force forward-mode AD (jacfwd)
             - 'rev': Force reverse-mode AD (jacrev)
@@ -1649,6 +1656,9 @@ class LeastSquares:
             Pre-prepared bounds as (lb, ub). If provided, skips prepare_bounds call.
             This optimization avoids redundant bounds preparation when caller has
             already called prepare_bounds. Default is None.
+        **timeout_kwargs
+            Unrecognised keyword arguments (including ``seed``) are ignored with an
+            ``OptimizeWarning``; ``options`` raises ``TypeError``.
 
         Returns
         -------

@@ -99,6 +99,10 @@ def run_fit(
         If the model function cannot be resolved.
     FitError
         If curve fitting fails.
+    CLIError
+        If the results file would overwrite the workflow configuration, or a
+        visualization output path contains a NUL character or would overwrite
+        a workflow input file.
     """
     # Set up logging
     logger = setup_logging(

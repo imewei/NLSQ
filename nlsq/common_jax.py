@@ -718,15 +718,16 @@ class CommonJIT:
             matrices and LinearOperators are not accepted).
         g : ndarray, shape (n,)
             Gradient, defines the linear term.
-        s : ndarray, shape (k, n) or (n,)
+        s_np : ndarray, shape (k, n) or (n,)
             Array containing steps as rows.
         diag : ndarray, shape (n,), optional
-            Addition diagonal part, affects the quadratic term.
+            Additional diagonal part, affects the quadratic term.
             If None, assumed to be 0.
+
         Returns
         -------
         values : ndarray with shape (k,) or float
-            Values of the function. If `s` was 2-D, then ndarray is
+            Values of the function. If `s_np` was 2-D, then ndarray is
             returned, otherwise, float is returned.
         """
         # OPT-2: Use jnp.asarray() to avoid copy if already JAX array
@@ -741,6 +742,7 @@ class CommonJIT:
         return self.evaluate_quadratic_diagonal2(J, g, s, diag)
 
     def create_quadratic_funcs(self):
+        """Bind the JIT-compiled quadratic evaluators used by ``evaluate_quadratic``."""
         self.evaluate_quadratic1 = _evaluate_quadratic1
         self.evaluate_quadratic_diagonal1 = _evaluate_quadratic_diagonal1
         self.evaluate_quadratic2 = _evaluate_quadratic2

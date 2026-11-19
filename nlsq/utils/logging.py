@@ -413,6 +413,8 @@ class NLSQLogger:
             Optimization method
         bounds : str
             Bounds type ("none", "bounded", "semi-bounded")
+        **kwargs
+            Extra key-value pairs added to the log record.
         """
         self.info(
             "Fit started",
@@ -443,6 +445,8 @@ class NLSQLogger:
             Final cost/residual value
         termination : str, optional
             Termination reason
+        **kwargs
+            Extra key-value pairs added to the log record.
         """
         status = "SUCCESS" if success else "FAILED"
         metrics: dict[str, str | int | float] = {"status": status}
@@ -572,6 +576,8 @@ class NLSQLogger:
             Description of the issue
         suggestion : str, optional
             Suggested fix or action
+        **kwargs
+            Extra key-value pairs added to the log record.
         """
         msg = f"Numerical issue ({issue_type}): {details}"
         if suggestion:

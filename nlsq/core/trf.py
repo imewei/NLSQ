@@ -682,6 +682,24 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             ``TRFProfiler``; ``nfev``/``njev`` entries, the x0 evaluations
             included when ``initial_times`` is given). Only the unbounded version is timed; the bounded
             version returns ``all_times == {}``. Default is False.
+        solver : {'exact', 'lsmr', 'cg'}, optional
+            Trust-region subproblem solver. Default is ``"exact"``.
+        diagnostics : OptimizationDiagnostics, optional
+            Collector that records per-iteration diagnostics. Default is None.
+        callback : callable, optional
+            Called once per iteration as ``callback(iteration, cost, params, info)``
+            (``info`` carries ``gradient_norm``, ``gradient``, ``nfev``,
+            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization`` or
+            ``StopIteration``, or returning True, stops the fit. Default is None.
+        fuse_scalars : bool, optional
+            Read the per-attempt scalars with one fused device-to-host transfer.
+            Only valid for ``loss_function`` None or a built-in loss. Unbounded
+            fits only; the bounded path ignores it. Default is False.
+        initial_times : tuple of float, optional
+            Wall times ``(residual, Jacobian)`` of the evaluations at ``x0`` done
+            before this call; recorded when ``timeit`` is True.
+        **kwargs
+            Accepted for call compatibility; not read.
         """
         # bounded or unbounded version
         if np.all(lb == -np.inf) and np.all(ub == np.inf):
@@ -2013,10 +2031,10 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         x0 : jnp.ndarray
             Initial guess. Array of real elements of size (n,), where 'n' is the
             number of independent variables.
-        f0 : jnp.ndarray
+        f : jnp.ndarray
             Initial residuals. Array of real elements of size (m,), where 'm' is
             the number of data points.
-        J0 : jnp.ndarray
+        J : jnp.ndarray
             Initial Jacobian. Array of real elements of size (m, n), where 'm' is
             the number of data points and 'n' is the number of independent
             variables.
@@ -2049,6 +2067,26 @@ class TrustRegionReflective(TrustRegionJITFunctions):
                 * 0 (default) : work silently.
                 * 1 : display a termination report.
 
+        solver : {'exact', 'lsmr', 'cg'}, optional
+            Trust-region subproblem solver. Default is ``"exact"``.
+        callback : callable, optional
+            Called once per iteration as ``callback(iteration, cost, params, info)``
+            (``info`` carries ``gradient_norm``, ``gradient``, ``nfev``,
+            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization`` or
+            ``StopIteration``, or returning True, stops the fit. Default is None.
+        profiler : TRFProfiler, NullProfiler, or None, optional
+            Profiler for timing algorithm operations. If None, uses NullProfiler
+            (zero overhead). Use TRFProfiler() for detailed performance analysis.
+            Default is None.
+        diagnostics : OptimizationDiagnostics, optional
+            Collector that records per-iteration diagnostics. Default is None.
+        fuse_scalars : bool, optional
+            Read the per-attempt scalars with one fused device-to-host transfer.
+            Only valid for ``loss_function`` None or a built-in loss. Default is
+            False.
+        **kwargs
+            Accepted for call compatibility; not read.
+
         Returns
         -------
         result : OptimizeResult
@@ -2057,11 +2095,6 @@ class TrustRegionReflective(TrustRegionJITFunctions):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
-
-        profiler : TRFProfiler, NullProfiler, or None, optional
-            Profiler for timing algorithm operations. If None, uses NullProfiler
-            (zero overhead). Use TRFProfiler() for detailed performance analysis.
-            Default is None.
 
         Notes
         -----
@@ -2358,10 +2391,10 @@ class TrustRegionReflective(TrustRegionJITFunctions):
         x0 : jnp.ndarray
             Initial guess. Array of real elements of size (n,), where 'n' is the
             number of independent variables.
-        f0 : jnp.ndarray
+        f : jnp.ndarray
             Initial residuals. Array of real elements of size (m,), where 'm' is
             the number of data points.
-        J0 : jnp.ndarray
+        J : jnp.ndarray
             Initial Jacobian. Array of real elements of size (m, n), where 'm' is
             the number of data points and 'n' is the number of independent
             variables.
@@ -2393,6 +2426,18 @@ class TrustRegionReflective(TrustRegionJITFunctions):
 
                 * 0 (default) : work silently.
                 * 1 : display a termination report.
+
+        solver : {'exact', 'lsmr', 'cg'}, optional
+            Trust-region subproblem solver. Default is ``"exact"``.
+        callback : callable, optional
+            Called once per iteration as ``callback(iteration, cost, params, info)``
+            (``info`` carries ``gradient_norm``, ``gradient``, ``nfev``,
+            ``step_norm`` and ``actual_reduction``). Raising ``StopOptimization`` or
+            ``StopIteration``, or returning True, stops the fit. Default is None.
+        diagnostics : OptimizationDiagnostics, optional
+            Collector that records per-iteration diagnostics. Default is None.
+        **kwargs
+            Accepted for call compatibility; not read.
 
         Returns
         -------

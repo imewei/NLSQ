@@ -359,6 +359,12 @@ class LossFunctionsJIT:
         self.scale_rhos = _scale_rhos
 
     def construct_single_loss_function(self, loss):
+        """Wrap a ``rho(z)`` loss as ``loss_function(f, f_scale, data_mask, cost_only)``.
+
+        With ``cost_only=True`` the wrapper returns the scalar cost (masked rows
+        excluded); otherwise it returns the scaled ``rho`` derivatives.
+        """
+
         def loss_function(f, f_scale, data_mask=None, cost_only=False):
             if cost_only and data_mask is not None:
                 # excluded rows must not enter the nonlinear ops (0 * NaN in grad)
@@ -373,6 +379,7 @@ class LossFunctionsJIT:
         return loss_function
 
     def construct_all_loss_functions(self):
+        """Build the wrapped loss function for every implemented loss except 'linear'."""
         loss_funcs = {}
         for key, loss in self.IMPLEMENTED_LOSSES.items():
             if loss is not None:
@@ -381,6 +388,19 @@ class LossFunctionsJIT:
         return loss_funcs
 
     def get_loss_function(self, loss):
+        """Return the loss function for a loss name or callable.
+
+        Parameters
+        ----------
+        loss : str or callable
+            A built-in loss name, or a user callable ``rho(z)``.
+
+        Returns
+        -------
+        callable or None
+            ``None`` for ``"linear"`` (plain least squares); otherwise a function
+            ``loss_function(f, f_scale, data_mask=None, cost_only=False)``.
+        """
         if loss == "linear":
             return None
 
