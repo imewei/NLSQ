@@ -379,12 +379,18 @@ def _clip_update_norm(updates: jnp.ndarray, max_norm: float) -> jnp.ndarray:
 class WarmupResult:
     """Result from L-BFGS warmup phase.
 
-    Attributes:
-        params: Optimized parameters after warmup.
-        cost: Final cost after warmup.
-        iterations: Number of warmup iterations performed.
-        converged: Whether warmup converged.
-        cost_history: Cost at each iteration.
+    Attributes
+    ----------
+    params : Array
+        Optimized parameters after warmup.
+    cost : float
+        Final cost after warmup.
+    iterations : int
+        Number of warmup iterations performed.
+    converged : bool
+        Whether warmup converged.
+    cost_history : list[float]
+        Cost at each iteration.
     """
 
     params: Array

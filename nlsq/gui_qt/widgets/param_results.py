@@ -36,8 +36,10 @@ class ParamResultsWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the parameter results widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self._setup_ui()

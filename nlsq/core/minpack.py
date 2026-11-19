@@ -20,22 +20,24 @@ Algorithms:
     - 'trf': Trust Region Reflective (bounded problems, recommended)
     - 'dogbox': not implemented (rejected as an unknown method)
 
-Example:
-    >>> from nlsq import CurveFit
-    >>> import jax.numpy as jnp
-    >>>
-    >>> def exponential(x, a, b): return a * jnp.exp(-b * x)
-    >>>
-    >>> # Class-based interface for reusing compilations
-    >>> fitter = CurveFit()
-    >>> popt1, pcov1 = fitter.curve_fit(exponential, x1, y1, p0=[2.0, 0.5])
-    >>> popt2, pcov2 = fitter.curve_fit(exponential, x2, y2, p0=[2.5, 0.6])
+Examples
+--------
+>>> from nlsq import CurveFit
+>>> import jax.numpy as jnp
+>>>
+>>> def exponential(x, a, b): return a * jnp.exp(-b * x)
+>>>
+>>> # Class-based interface for reusing compilations
+>>> fitter = CurveFit()
+>>> popt1, pcov1 = fitter.curve_fit(exponential, x1, y1, p0=[2.0, 0.5])
+>>> popt2, pcov2 = fitter.curve_fit(exponential, x2, y2, p0=[2.5, 0.6])
 
-See Also:
-    nlsq.curve_fit : Function-based interface
-    nlsq.fit : Unified entry point with automatic workflow selection
-    nlsq.least_squares : Lower-level optimization interface
-    nlsq.trf : Trust Region Reflective implementation
+See Also
+--------
+nlsq.curve_fit : Function-based interface
+nlsq.fit : Unified entry point with automatic workflow selection
+nlsq.least_squares : Lower-level optimization interface
+nlsq.trf : Trust Region Reflective implementation
 """
 
 # mypy: disable-error-code="arg-type,return-value,assignment,attr-defined,index"

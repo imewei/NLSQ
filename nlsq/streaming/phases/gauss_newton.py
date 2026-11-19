@@ -198,13 +198,20 @@ def _pad_chunk_to_bucket(
 class GNResult:
     """Result from streaming Gauss-Newton phase.
 
-    Attributes:
-        params: Final optimized parameters.
-        cost: Final cost value.
-        iterations: Number of GN iterations.
-        converged: Whether GN converged.
-        jacobian: Final Jacobian matrix (optional).
-        cov: Parameter covariance matrix (optional).
+    Attributes
+    ----------
+    params : Array
+        Final optimized parameters.
+    cost : float
+        Final cost value.
+    iterations : int
+        Number of GN iterations.
+    converged : bool
+        Whether GN converged.
+    jacobian : Array | None
+        Final Jacobian matrix (optional).
+    cov : Array | None
+        Parameter covariance matrix (optional).
     """
 
     params: Array

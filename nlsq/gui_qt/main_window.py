@@ -86,8 +86,10 @@ class MainWindow(QMainWindow):
     def __init__(self, app_state: AppState) -> None:
         """Initialize the main window.
 
-        Args:
-            app_state: Application state manager
+        Parameters
+        ----------
+        app_state : AppState
+            Application state manager
         """
         super().__init__()
         self._app_state = app_state

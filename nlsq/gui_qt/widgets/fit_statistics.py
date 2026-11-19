@@ -29,9 +29,12 @@ class StatCard(QFrame):
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
         """Initialize the stat card.
 
-        Args:
-            title: Card title
-            parent: Parent widget
+        Parameters
+        ----------
+        title : str
+            Card title
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -65,11 +68,16 @@ class StatCard(QFrame):
     ) -> None:
         """Apply base card styling from explicit color values.
 
-        Args:
-            surface_variant: Card background color
-            border: Border color
-            text_secondary: Title label color
-            text_primary: Value label base color (overridden by set_value_color)
+        Parameters
+        ----------
+        surface_variant : str
+            Card background color
+        border : str
+            Border color
+        text_secondary : str
+            Title label color
+        text_primary : str
+            Value label base color (overridden by set_value_color)
         """
         self.setStyleSheet(
             f"StatCard {{ background-color: {surface_variant}; "
@@ -138,8 +146,10 @@ class FitStatisticsWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the fit statistics widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
 

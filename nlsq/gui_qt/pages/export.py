@@ -69,8 +69,10 @@ class ExportPage(QWidget):
     def __init__(self, app_state: AppState) -> None:
         """Initialize the export page.
 
-        Args:
-            app_state: Application state manager
+        Parameters
+        ----------
+        app_state : AppState
+            Application state manager
         """
         super().__init__()
         self._app_state = app_state
@@ -837,7 +839,9 @@ class ExportPage(QWidget):
     def _generate_json(self) -> str:
         """Generate JSON representation of results.
 
-        Returns:
+        Returns
+        -------
+        str
             JSON string
         """
         state = self._app_state.state
@@ -977,7 +981,9 @@ class ExportPage(QWidget):
     def _compute_y_fit(self) -> np.ndarray | None:
         """Compute fitted y values.
 
-        Returns:
+        Returns
+        -------
+        np.ndarray | None
             Fitted y values or None
         """
         state = self._app_state.state
@@ -1003,7 +1009,9 @@ class ExportPage(QWidget):
     def _get_param_names(self) -> list[str]:
         """Get parameter names from the model.
 
-        Returns:
+        Returns
+        -------
+        list[str]
             List of parameter names
         """
         from nlsq.gui_qt.adapters.model_adapter import get_model_info

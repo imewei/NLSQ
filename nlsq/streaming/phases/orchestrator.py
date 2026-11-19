@@ -31,14 +31,22 @@ class PhaseOrchestratorResult:
 
     ``run()`` returns a plain ``dict`` (keys ``final_params``, ``best_cost``, ...).
 
-    Attributes:
-        params: Final optimized parameters in original space.
-        normalized_params: Final parameters in normalized space.
-        cost: Final cost value.
-        warmup_result: Result from Phase 1 warmup.
-        gn_result: Result from Phase 2 Gauss-Newton.
-        phase_history: List of phase transition records.
-        total_time: Total optimization time.
+    Attributes
+    ----------
+    params : Array
+        Final optimized parameters in original space.
+    normalized_params : Array
+        Final parameters in normalized space.
+    cost : float
+        Final cost value.
+    warmup_result : WarmupResult | None
+        Result from Phase 1 warmup.
+    gn_result : GNResult | None
+        Result from Phase 2 Gauss-Newton.
+    phase_history : list[dict[str, Any]]
+        List of phase transition records.
+    total_time : float
+        Total optimization time.
     """
 
     params: Array

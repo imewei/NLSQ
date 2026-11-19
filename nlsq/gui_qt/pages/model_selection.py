@@ -69,8 +69,10 @@ class ModelSelectionPage(QWidget):
     def __init__(self, app_state: AppState) -> None:
         """Initialize the model selection page.
 
-        Args:
-            app_state: Application state manager
+        Parameters
+        ----------
+        app_state : AppState
+            Application state manager
         """
         super().__init__()
         self._app_state = app_state
@@ -330,8 +332,10 @@ class ModelSelectionPage(QWidget):
     def _on_type_changed(self, type_id: int) -> None:
         """Handle model type change.
 
-        Args:
-            type_id: The type button ID (0=builtin, 1=polynomial, 2=custom)
+        Parameters
+        ----------
+        type_id : int
+            The type button ID (0=builtin, 1=polynomial, 2=custom)
         """
         # Show/hide relevant sections
         self._builtin_group.setVisible(type_id == 0)
@@ -353,8 +357,10 @@ class ModelSelectionPage(QWidget):
     def _on_builtin_model_changed(self, index: int) -> None:
         """Handle built-in model selection change.
 
-        Args:
-            index: The selected combo box index
+        Parameters
+        ----------
+        index : int
+            The selected combo box index
         """
         from nlsq.gui_qt.adapters.model_adapter import (
             get_latex_equation,
@@ -416,8 +422,10 @@ class ModelSelectionPage(QWidget):
     def _on_degree_changed(self, degree: int) -> None:
         """Handle polynomial degree change.
 
-        Args:
-            degree: The polynomial degree
+        Parameters
+        ----------
+        degree : int
+            The polynomial degree
         """
         from nlsq.gui_qt.adapters.model_adapter import get_model, get_polynomial_latex
 
@@ -448,8 +456,10 @@ class ModelSelectionPage(QWidget):
     def _on_code_changed(self, code: str) -> None:
         """Handle custom code change.
 
-        Args:
-            code: The code content
+        Parameters
+        ----------
+        code : str
+            The code content
         """
         # Update function combo
         funcs = self._code_editor.get_function_names()
@@ -475,8 +485,10 @@ class ModelSelectionPage(QWidget):
     def _on_function_selected(self, index: int) -> None:
         """Handle function selection from custom code.
 
-        Args:
-            index: The selected function index
+        Parameters
+        ----------
+        index : int
+            The selected function index
         """
         from nlsq.gui_qt.adapters.model_adapter import (
             get_model_info,
@@ -575,9 +587,12 @@ class ModelSelectionPage(QWidget):
     def _show_error(self, title: str, message: str) -> None:
         """Show an error dialog.
 
-        Args:
-            title: Dialog title
-            message: Error message
+        Parameters
+        ----------
+        title : str
+            Dialog title
+        message : str
+            Error message
         """
         QMessageBox.critical(self, title, message)
 

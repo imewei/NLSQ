@@ -76,8 +76,10 @@ class DataLoadingPage(QWidget):
     def __init__(self, app_state: AppState) -> None:
         """Initialize the data loading page.
 
-        Args:
-            app_state: Application state manager
+        Parameters
+        ----------
+        app_state : AppState
+            Application state manager
         """
         super().__init__()
         self._app_state = app_state
@@ -311,12 +313,17 @@ class DataLoadingPage(QWidget):
     ) -> bool:
         """Load data from a file.
 
-        Args:
-            file_path: Path to the file to load
-            key_config: Optional YAML ``npz`` / ``hdf5`` sections (array keys
-                and dataset paths) forwarded to the loader
+        Parameters
+        ----------
+        file_path : Path
+            Path to the file to load
+        key_config : dict[str, Any] | None
+            Optional YAML ``npz`` / ``hdf5`` sections (array keys
+            and dataset paths) forwarded to the loader
 
-        Returns:
+        Returns
+        -------
+        bool
             True if the file was loaded; False after showing an error
         """
         from nlsq.cli.data_loaders import DataLoader
@@ -457,8 +464,10 @@ class DataLoadingPage(QWidget):
     def _on_column_selection_changed(self, selection: dict[str, int | None]) -> None:
         """Handle column selection change.
 
-        Args:
-            selection: Column selection dictionary
+        Parameters
+        ----------
+        selection : dict[str, int | None]
+            Column selection dictionary
         """
         if self._raw_data is None:
             return
@@ -677,25 +686,32 @@ class DataLoadingPage(QWidget):
     def _show_error(self, title: str, message: str) -> None:
         """Show an error dialog.
 
-        Args:
-            title: Dialog title
-            message: Error message
+        Parameters
+        ----------
+        title : str
+            Dialog title
+        message : str
+            Error message
         """
         QMessageBox.critical(self, title, message)
 
     def set_app_state(self, state: AppState) -> None:
         """Set the application state.
 
-        Args:
-            state: Application state manager
+        Parameters
+        ----------
+        state : AppState
+            Application state manager
         """
         self._app_state = state
 
     def set_theme(self, theme: ThemeConfig) -> None:
         """Apply theme to this page.
 
-        Args:
-            theme: Theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            Theme configuration
         """
         self._column_selector.set_theme(theme)
 
@@ -725,8 +741,10 @@ class DataLoadingPage(QWidget):
     def load_yaml_config(self, config_path: Path) -> None:
         """Load data configuration from YAML file (FR-020).
 
-        Args:
-            config_path: Path to YAML configuration file
+        Parameters
+        ----------
+        config_path : Path
+            Path to YAML configuration file
         """
         import yaml
 

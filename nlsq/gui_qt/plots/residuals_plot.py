@@ -60,8 +60,10 @@ class ResidualsPlotWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the residuals plot widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self._x: NDArray | None = None
@@ -273,10 +275,14 @@ class ResidualsPlotWidget(QWidget):
         Colors transition from the theme's 'stat_good' (small residuals) through
         'stat_warning' to 'stat_bad' (large residuals).
 
-        Args:
-            residuals: Residual values
+        Parameters
+        ----------
+        residuals : NDArray
+            Residual values
 
-        Returns:
+        Returns
+        -------
+        list
             List of QBrush objects
         """
         # Normalize by standard deviation or max, computed over finite values

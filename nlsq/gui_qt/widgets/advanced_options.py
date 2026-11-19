@@ -53,8 +53,10 @@ class AdvancedOptionsWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the advanced options widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         # Non-auto workflows (e.g. "hpc") have no widget; carry them through.

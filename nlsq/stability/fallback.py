@@ -15,15 +15,16 @@ Key Features:
 - Robust loss function application
 - Problem rescaling for numerical stability
 
-Example:
-    >>> from nlsq.stability.fallback import FallbackOrchestrator
-    >>>
-    >>> orchestrator = FallbackOrchestrator(verbose=True)
-    >>> result = orchestrator.fit_with_fallback(
-    ...     model, xdata, ydata, p0=[1, 0.5],
-    ...     max_attempts=5
-    ... )
-    >>> print(f"Success with strategy: {result.fallback_strategy_used}")
+Examples
+--------
+>>> from nlsq.stability.fallback import FallbackOrchestrator
+>>>
+>>> orchestrator = FallbackOrchestrator(verbose=True)
+>>> result = orchestrator.fit_with_fallback(
+...     model, xdata, ydata, p0=[1, 0.5],
+...     max_attempts=5
+... )
+>>> print(f"Success with strategy: {result.fallback_strategy_used}")
 """
 
 import warnings

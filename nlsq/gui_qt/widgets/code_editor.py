@@ -164,8 +164,10 @@ class PythonHighlighter(QSyntaxHighlighter):
 
         Call :meth:`set_theme_colors` to switch to a different palette.
 
-        Args:
-            document: The QTextDocument to highlight
+        Parameters
+        ----------
+        document : QTextDocument
+            The QTextDocument to highlight
         """
         super().__init__(document)
         # Set default dark-theme colors; overridden by set_theme_colors()
@@ -191,14 +193,22 @@ class PythonHighlighter(QSyntaxHighlighter):
     ) -> None:
         """Build QTextCharFormat objects from color strings.
 
-        Args:
-            keyword: Color for language keywords
-            builtin: Color for built-in functions
-            string: Color for string literals
-            comment: Color for comments
-            number: Color for numeric literals
-            function: Color for function-definition names and scientific identifiers
-            decorator: Color for decorators
+        Parameters
+        ----------
+        keyword : str
+            Color for language keywords
+        builtin : str
+            Color for built-in functions
+        string : str
+            Color for string literals
+        comment : str
+            Color for comments
+        number : str
+            Color for numeric literals
+        function : str
+            Color for function-definition names and scientific identifiers
+        decorator : str
+            Color for decorators
         """
         self._keyword_format = QTextCharFormat()
         self._keyword_format.setForeground(QColor(keyword))
@@ -375,8 +385,10 @@ class CodeEditorWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the code editor widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
 
@@ -445,9 +457,12 @@ class CodeEditorWidget(QWidget):
     def _update_validation_display(self, is_valid: bool, message: str) -> None:
         """Update the validation display.
 
-        Args:
-            is_valid: Whether the code is valid
-            message: Validation message
+        Parameters
+        ----------
+        is_valid : bool
+            Whether the code is valid
+        message : str
+            Validation message
         """
         if not self._editor.toPlainText().strip():
             self._validation_label.setText("")
@@ -470,8 +485,10 @@ class CodeEditorWidget(QWidget):
     def _reapply_validation_color(self, theme: ThemeConfig) -> None:
         """Refresh the validation label color after a theme change.
 
-        Args:
-            theme: New theme configuration
+        Parameters
+        ----------
+        theme : ThemeConfig
+            New theme configuration
         """
         current_text = self._validation_label.text()
         if not current_text:

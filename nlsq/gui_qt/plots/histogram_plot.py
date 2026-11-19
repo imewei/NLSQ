@@ -83,8 +83,10 @@ class HistogramPlotWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the histogram plot widget.
 
-        Args:
-            parent: Parent widget
+        Parameters
+        ----------
+        parent : QWidget | None
+            Parent widget
         """
         super().__init__(parent)
         self._data: NDArray | None = None
@@ -151,8 +153,10 @@ class HistogramPlotWidget(QWidget):
     def _on_bins_changed(self, value: int) -> None:
         """Handle bins value change.
 
-        Args:
-            value: New number of bins
+        Parameters
+        ----------
+        value : int
+            New number of bins
         """
         self._n_bins = value
         self._update_plot()
@@ -205,9 +209,12 @@ class HistogramPlotWidget(QWidget):
     ) -> None:
         """Add normal distribution overlay to the plot.
 
-        Args:
-            bin_edges: Histogram bin edges
-            counts: Histogram counts
+        Parameters
+        ----------
+        bin_edges : NDArray
+            Histogram bin edges
+        counts : NDArray
+            Histogram counts
         """
         if self._data is None:
             return

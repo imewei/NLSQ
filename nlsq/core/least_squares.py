@@ -2310,10 +2310,12 @@ class LeastSquares:
         jac : Callable
             The Jacobian function to wrap.
 
-        Returns
-        -------
-        jnp.ndarray
-            The masked Jacobian of the function evaluated at `args` with respect to the data.
+        Notes
+        -----
+        Returns nothing: stores the wrapped functions on ``self`` as ``jac_none``,
+        ``jac_1d`` and ``jac_2d`` (one per ``sigma`` transform) and the user's
+        ``jac`` as ``self.jac``. Each wrapped function returns the masked
+        Jacobian evaluated at ``args``.
 
         Raises
         ------
