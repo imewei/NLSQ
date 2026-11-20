@@ -181,6 +181,7 @@ dev = [
     # Jupyter
     "jupyterlab>=4.5.0",      # Tested on 4.6.5
     "ipykernel>=7.0.0",       # Tested on 7.4.0
+    "ipywidgets>=8.1.0",      # tqdm.notebook progress bars (else TqdmWarning: IProgress not found)
     "notebook>=7.5.0",        # Tested on 7.6.3
 
     # Build tools

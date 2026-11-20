@@ -619,7 +619,8 @@ plt.suptitle(
 # plt.savefig('raman_analysis_figure1.png', dpi=300, bbox_inches='tight')
 # plt.savefig('raman_analysis_figure1.pdf', bbox_inches='tight')
 
-plt.tight_layout()
+# Spacing comes from the explicit gridspec (hspace/wspace); tight_layout is
+# incompatible with its table axes and warns.
 # Save figure to file
 fig_dir = Path(__file__).parent / "figures" / "research_workflow_case_study"
 fig_dir.mkdir(parents=True, exist_ok=True)
