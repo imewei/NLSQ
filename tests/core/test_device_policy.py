@@ -246,11 +246,10 @@ def test_cross_device_placement_emulated():
     assert r.returncode == 0 and "OK" in r.stdout, r.stderr[-3000:]
 
 
-@pytest.mark.gpu
 @pytest.mark.parametrize("rank_deficient", [False, True])
-def test_host_svd_matches_device_svd_on_real_gpu(monkeypatch, rank_deficient):
-    if jax.default_backend() not in ("gpu", "cuda", "rocm"):
-        pytest.skip("needs a GPU backend")
+def test_host_svd_hop_matches_device_svd(monkeypatch, rank_deficient):
+    # Backend-agnostic: on CPU both paths run on the same device, so this checks
+    # the value and placement contract; on a GPU it exercises the real host hop.
     J, f, d = _problem(rank_deficient)
     n, p = J.shape
     monkeypatch.setattr(

@@ -71,14 +71,17 @@ def test_diagnostics_capture_is_per_thread():
         logging.getLogger("nlsq.core.test").warning("log from another thread")
         other_done.set()
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # keep the delegated warning off stderr
-        with capture_fit_diagnostics() as msgs:
-            warnings.warn("mine", OptimizeWarning, stacklevel=1)
-            logging.getLogger("nlsq.core.test").warning("my log record")
-            t = threading.Thread(target=other)
-            t.start()
-            t.join()
+    # The other thread's warning is delegated to the previous hook, which
+    # pytest.warns records; that keeps it off stderr and out of the summary.
+    with (
+        pytest.warns(OptimizeWarning, match="from another thread"),
+        capture_fit_diagnostics() as msgs,
+    ):
+        warnings.warn("mine", OptimizeWarning, stacklevel=1)
+        logging.getLogger("nlsq.core.test").warning("my log record")
+        t = threading.Thread(target=other)
+        t.start()
+        t.join()
     assert other_done.is_set()
     text = " ".join(msgs)
     assert "mine" in text and "my log record" in text

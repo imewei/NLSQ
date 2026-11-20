@@ -339,7 +339,7 @@ def test_custom_model_file_executed_once_with_plot(tmp_path, monkeypatch):
     marker = tmp_path / "executed.log"
     Path("m.py").write_text(
         "import jax.numpy as jnp\n"
-        f"open({str(marker)!r}, 'a').write('x')\n"
+        f"with open({str(marker)!r}, 'a') as _f:\n    _f.write('x')\n"
         "def line(x, a, b):\n    return a * x + b\n"
     )
     Path("d.csv").write_text("x,y\n" + "".join(f"{i},{2 * i + 1}\n" for i in range(8)))

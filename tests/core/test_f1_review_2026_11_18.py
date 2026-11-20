@@ -315,6 +315,9 @@ def test_prepare_problem_accepts_scipy_bounds_with_stability():
 # --------------------------------------------------------------- covariance (codex)
 
 
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
 def test_absolute_sigma_covariance_does_not_overflow_intermediate():
     """codex P01 #6: diag(2e-150, 2e160) normal matrix, representable inverse."""
     H = np.diag([2e-150, 2e160])

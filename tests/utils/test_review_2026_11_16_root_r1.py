@@ -112,6 +112,7 @@ def test_iteration_logger_reused_writes_header_per_fit():
     assert buf.getvalue().count("NLSQ Optimization Log") == 2
 
 
+@pytest.mark.filterwarnings("ignore:Callback raised exception:RuntimeWarning")
 def test_callback_chain_failure_does_not_starve_later_callbacks():
     seen = []
 
@@ -201,6 +202,7 @@ def test_fit_strategy_rejects_conflicting_engine_option(spy_fit_with_strategy):
         nlsq.fit(_model, x, x, p0=[1, 1], strategy=Chunked(), n_starts=3)
 
 
+@pytest.mark.filterwarnings("ignore:goal tolerances are not applied:UserWarning")
 def test_fit_hybrid_with_goal_above_threshold(spy_fit_with_strategy):
     x = np.linspace(0, 4, 3000)
     nlsq.fit(
@@ -356,6 +358,7 @@ def test_callback_chain_true_stops_a_real_fit():
     assert calls == [1]
 
 
+@pytest.mark.filterwarnings("ignore:goal tolerances are not applied:UserWarning")
 def test_fit_strategy_with_goal_does_not_forward_tolerances(spy_fit_with_strategy):
     x = np.linspace(0, 1, 100)
     strategy = Chunked()
@@ -363,6 +366,7 @@ def test_fit_strategy_with_goal_does_not_forward_tolerances(spy_fit_with_strateg
     assert spy_fit_with_strategy == [strategy]
 
 
+@pytest.mark.filterwarnings("ignore:goal tolerances are not applied:UserWarning")
 def test_fit_hybrid_with_goal_below_threshold(monkeypatch):
     seen = {}
 
