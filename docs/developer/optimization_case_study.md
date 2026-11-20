@@ -30,7 +30,6 @@ This case study documents a performance optimization effort on NLSQ (Nonlinear L
 
 ---
 
-(project-context)=
 ## Project Context
 
 ### The Library
@@ -54,7 +53,6 @@ The initial analysis assumed the code had **many unoptimized patterns** and **si
 
 ---
 
-(initial-assessment)=
 ## Initial Assessment
 
 ### Codebase Analysis
@@ -91,7 +89,6 @@ The initial analysis assumed the code had **many unoptimized patterns** and **si
 
 ---
 
-(the-profiling-revelation)=
 ## The Profiling Revelation
 
 ### Benchmark Infrastructure Setup
@@ -141,7 +138,6 @@ Problem Size    Total Time    TRF Time    Scaling
 
 ---
 
-(optimization-implementation)=
 ## Optimization Implementation
 
 ### Phase 1 Work Completed
@@ -214,7 +210,6 @@ return OptimizeResult(
 
 ---
 
-(results-and-analysis)=
 ## Results and Analysis
 
 ### Performance Improvement
@@ -266,7 +261,6 @@ Distributed           10 days   0-100x*      [FAIL] High risk
 
 ---
 
-(the-decision-to-stop)=
 ## The Decision to Stop
 
 ### Why We Stopped After 8%
@@ -354,7 +348,6 @@ def inner_body(carry, _):
 
 ---
 
-(lessons-learned)=
 ## Lessons Learned
 
 ### 1. Profile Before Planning [PASS]
@@ -453,7 +446,6 @@ ELSE:
 
 ---
 
-(recommendations)=
 ## Recommendations
 
 ### For NLSQ Project
