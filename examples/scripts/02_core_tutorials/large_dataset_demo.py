@@ -41,6 +41,7 @@ Plots are saved to the figures/ directory instead of displayed inline.
 # ======================================================================
 
 # Check Python version
+import logging
 import sys
 
 print(f"✅ Python {sys.version_info.major}.{sys.version_info.minor} meets requirements")
@@ -458,8 +459,17 @@ def demo_chunked_processing():
     print(f"Dataset: {n_points:,} points")
     print(f"True parameters: {true_params}")
 
-    # Create fitter with limited memory to force chunking
-    fitter = LargeDatasetFitter(memory_limit_gb=0.5)  # Small limit to force chunking
+    # Create fitter with limited memory to force chunking. A multi-chunk fit is a
+    # precision-weighted combination of per-chunk fits, not a full-batch fit; NLSQ
+    # warns about that once per fit. The demo states the caveat below instead, so
+    # the fitter gets a logger that only reports errors.
+    chunk_logger = logging.getLogger("large_dataset_demo.chunked")
+    chunk_logger.setLevel(logging.ERROR)
+    fitter = LargeDatasetFitter(memory_limit_gb=0.5, logger=chunk_logger)
+    print(
+        "Note: chunked fits combine per-chunk estimates (exact only for linear "
+        "models); use curve_fit_large for an exact full-data fit (section 4)."
+    )
 
     # Get processing recommendations
     recs = fitter.get_memory_recommendations(n_points, 4)
