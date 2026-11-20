@@ -1,11 +1,11 @@
 # Pre-commit configuration
-# Updated: 2026-11-01
+# Updated: 2026-11-20
 # Python 3.13 (supports >=3.12), uv package manager
 # Tool versions below match uv.lock (ruff, mypy, pyupgrade, bandit)
 #
 # Package structure:
-#   nlsq/core/                - Optimization pipeline (minpack, trf, least_squares, workflow)
-#   nlsq/streaming/           - Large dataset handling (large_dataset, adaptive_hybrid, exact_lm)
+#   nlsq/core/                - Optimization pipeline (minpack, problem, trf, least_squares, covariance, workflow)
+#   nlsq/streaming/           - Large dataset handling (large_fit, strategy, normal_equations, exact_lm, adaptive_hybrid, large_dataset)
 #   nlsq/caching/             - Memory and JIT caching (memory_manager, unified_cache)
 #   nlsq/stability/           - Numerical stability (guard, svd_fallback, recovery, fallback)
 #   nlsq/precision/           - Precision controls (parameter_normalizer, algorithm_selector, bound_inference)
@@ -45,7 +45,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.3  # Aligned with uv.lock ruff 0.17.3 and pyproject.toml >=0.14.0
+    rev: v0.17.6  # Aligned with uv.lock ruff 0.17.6 and pyproject.toml >=0.14.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]

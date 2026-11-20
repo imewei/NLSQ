@@ -3,12 +3,13 @@
 # GPU-Accelerated Nonlinear Least Squares Curve Fitting
 # Built on JAX for datasets up to 100M+ points
 
-.PHONY: help install dev install-dev install-jax-gpu install-jax-gpu-cuda12 install-jax-gpu-cuda13 gpu-check gpu-diagnose env-info \
-        test test-fast test-slow test-parallel test-all-parallel test-coverage \
+.PHONY: help install dev install-dev install-all install-jax-gpu install-jax-gpu-cuda12 install-jax-gpu-cuda13 gpu-check gpu-diagnose env-info \
+        test test-fast test-slow test-parallel test-all-parallel test-all-parallell test-coverage \
+        test-memory test-cache test-diagnostics test-recovery test-validation \
         test-cpu test-debug test-large test-modules test-comprehensive \
         clean clean-all clean-pyc clean-build clean-test clean-venv \
         format lint type-check check quick docs build publish info version \
-        benchmark benchmark-large security-check pre-commit-all validate-install \
+        benchmark benchmark-large security-check pre-commit-all validate-install validate publish-test debug-modules \
         verify verify-fast install-hooks \
         conda-install-tools conda-build conda-upload
 
@@ -123,6 +124,7 @@ help:
 	@echo "  $(CYAN)install$(RESET)          Install package in editable mode (CPU-only JAX)"
 	@echo "  $(CYAN)dev$(RESET)              Install dev dependencies + pre-commit hooks"
 	@echo "  $(CYAN)install-dev$(RESET)      Same as dev"
+	@echo "  $(CYAN)install-all$(RESET)      Same as dev (gui extra + dev/bench groups)"
 	@echo ""
 	@echo "$(BOLD)$(GREEN)GPU COMMANDS (System CUDA)$(RESET)"
 	@echo "  $(CYAN)install-jax-gpu$(RESET)         Auto-detect system CUDA and install JAX (Linux only)"
@@ -144,6 +146,11 @@ help:
 	@echo "  $(CYAN)test-large$(RESET)       Run large dataset feature tests"
 	@echo "  $(CYAN)test-modules$(RESET)     Run tests for specific modules"
 	@echo "  $(CYAN)test-comprehensive$(RESET) Run comprehensive test suite"
+	@echo "  $(CYAN)test-memory$(RESET)      Run tests matching 'memory'"
+	@echo "  $(CYAN)test-cache$(RESET)       Run tests matching 'cache'"
+	@echo "  $(CYAN)test-diagnostics$(RESET) Run tests/diagnostics/"
+	@echo "  $(CYAN)test-recovery$(RESET)    Run tests matching 'recovery'"
+	@echo "  $(CYAN)test-validation$(RESET)  Run tests matching 'validat'"
 	@echo ""
 	@echo "$(BOLD)$(GREEN)CODE QUALITY$(RESET)"
 	@echo "  $(CYAN)format$(RESET)           Format code with ruff"
@@ -164,7 +171,9 @@ help:
 	@echo ""
 	@echo "$(BOLD)$(GREEN)BUILD & PUBLISH$(RESET)"
 	@echo "  $(CYAN)build$(RESET)            Build distribution packages"
+	@echo "  $(CYAN)validate$(RESET)         Check built distributions with twine"
 	@echo "  $(CYAN)publish$(RESET)          Publish to PyPI (requires credentials)"
+	@echo "  $(CYAN)publish-test$(RESET)     Publish to TestPyPI"
 	@echo ""
 	@echo "$(BOLD)$(GREEN)BENCHMARKS$(RESET)"
 	@echo "  $(CYAN)benchmark$(RESET)        Run performance benchmarks"
@@ -593,7 +602,7 @@ test-debug:
 
 test-large:
 	@echo "$(BOLD)$(BLUE)Running large dataset feature tests...$(RESET)"
-	$(RUN_CMD) $(PYTEST) tests/streaming/test_large_dataset.py tests/core/test_sparse_jacobian.py tests/streaming/test_adaptive_hybrid_streaming.py -v
+	$(RUN_CMD) $(PYTEST) tests/streaming/test_large_dataset.py tests/streaming/test_exact_lm.py tests/core/test_sparse_jacobian.py tests/streaming/test_adaptive_hybrid_streaming.py -v
 
 test-modules:
 	@echo "$(BOLD)$(BLUE)Running module-specific tests...$(RESET)"
