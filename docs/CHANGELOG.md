@@ -1,6 +1,15 @@
 # Documentation Changelog
 
 ## Unreleased
+- `make latexpdf`: removed the explicit `(slug)=` MyST targets above headings in `developer/optimization_case_study.md`
+  and `developer/gui_development_guide.md`. `myst_heading_anchors = 3` already creates the same anchors, so LaTeX
+  reported 13 multiply-defined labels. The `#slug` links in both files' tables of contents still resolve.
+- Full docs pass on `main@456d3be3`. `sphinx-build` finishes with no warnings, and the docstring PRs #80–#82 flow into
+  the API pages through autodoc, so no `docs/api` page needed edits. `developer/ci_cd/index` listed 3819 tests; the
+  suite now collects 9,841, so it says "about 9,800 tests collected" and no longer claims a 100% pass rate (the
+  count was not re-run). Python, JAX, NumPy and SciPy minimums in `README.md` match `pyproject.toml`. Benchmark pages
+  and `benchmarks/baselines/` are unchanged on purpose: the 2026-11-19 run was made on a loaded machine
+  (GitLab runners) and is kept only as a local record in the gitignored `benchmarks/results/`, so it is not a baseline.
 - Hybrid streaming and validator docs corrected against `nlsq/streaming/hybrid_config.py` and
   `nlsq/cli/model_validation.py`. `HybridStreamingConfig.memory_optimized()` was documented as using float32
   (`api/nlsq.hybrid_streaming_config`, `api/nlsq.adaptive_hybrid_streaming`); it sets `chunk_size=5000`,

@@ -12,7 +12,6 @@ This guide covers best practices, common pitfalls, and code review checklists fo
 
 ---
 
-(architecture-overview)=
 ## Architecture Overview
 
 The Qt GUI follows a layered architecture:
@@ -66,7 +65,6 @@ nlsq/gui_qt/
 
 ---
 
-(code-review-checklist)=
 ## Code Review Checklist
 
 ### State Management
@@ -129,7 +127,6 @@ nlsq/gui_qt/
 
 ---
 
-(state-management)=
 ## State Management
 
 ### SessionState vs AppState
@@ -167,7 +164,6 @@ if page_state.can_access("fitting_options"):
 
 ---
 
-(qt-best-practices)=
 ## Qt Best Practices
 
 ### 1. Use Signals and Slots
@@ -251,7 +247,6 @@ class FitPlotWidget(PlotWidget):
 
 ---
 
-(testing-guidelines)=
 ## Testing Guidelines
 
 ### pytest-qt Integration
