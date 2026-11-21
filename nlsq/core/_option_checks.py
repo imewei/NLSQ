@@ -346,7 +346,8 @@ def validate_tolerance(name: str, tol: Any, *, strict: bool = False) -> float:
     if value == math.inf:
         msg = (
             f"`{name}=inf` makes the corresponding termination condition "
-            "hold immediately, so the solver stops at the initial guess."
+            "hold immediately, so the solver stops at the initial guess (``ftol``: after "
+            "the first accepted step)."
         )
     elif value < _EPS:
         msg = (

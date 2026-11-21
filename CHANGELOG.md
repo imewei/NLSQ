@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Checkpoint loading.** `CheckpointManager.load` (hybrid streaming) and the CMA-ES checkpoint loader now reject
+  HDF5 external links, external raw storage and virtual datasets, as the CLI data loader already did; a crafted
+  checkpoint could previously read another file's bytes into optimizer state.
+- **CLI input boundaries.** A bare `.npy` file named `.npz` is rejected with a `DataLoadError` before it is read
+  (it skipped `NLSQ_MAX_LOAD_ELEMENTS` and could raise a raw `MemoryError`), and a NUL byte in `export.results_file` is a
+  `ConfigError` instead of a traceback. The NPZ loader makes fewer temporary copies of each array.
+- **GUI.** The column selector's validation warning follows the light/dark theme (it was a fixed orange, 2.2:1 on white).
+- **Docs and tests.** Seven docstrings follow the numpydoc section order; three large-array tests carry
+  `@pytest.mark.serial`.
+
 ## [0.8.0] - 2026-11-21
 
 ### Added
@@ -297,7 +309,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-finite `f_scale`, and negative `n_starts` with multi-start.
 - `absolute_sigma` must be a bool (`bool`, `np.bool_`, or `0`/`1`); any other value raises
   `TypeError` on the `curve_fit`/`fit`/`CurveFit.curve_fit`/`curve_fit_large` paths.
-- `ftol`/`xtol`/`gtol=inf` emit a warning (the solver stops at p0).
+- `ftol`/`xtol`/`gtol=inf` emit a warning (the solver stops at p0; with `ftol` it stops after the first accepted step).
   `curve_fit_large(method="exact_streaming")` rejects NaN, inf or negative tolerances and
   a non-positive `memory_limit_gb`.
 - `curve_fit(..., method="hybrid_streaming")` raises when the initial residuals are not
