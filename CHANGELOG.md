@@ -413,6 +413,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Qt GUI dark mode (PR #89).** The Dark Mode checkbox was invisible because a stylesheet rule on
+  `QCheckBox::indicator` erased the box, so the toggle looked dead; the rule is removed and the label is the
+  checkbox's own text. A switch now applies a full application `QPalette` built from `ThemeConfig` and re-polishes
+  the stylesheet, so no widget keeps the old colours, and `theme_changed` fires once per switch. Status labels
+  on the data, fitting-options and export pages follow the theme (`StatusPainter`). `ThemeManager.set_theme` and
+  `StatusPainter.paint` now raise `ValueError` for an unknown theme name or status role.
 - **Qt GUI plots/pages, round 2 (2026-11-18).** `FitPlotWidget`/`ResidualsPlotWidget`/`HistogramPlotWidget.export_image`
   now raise `OSError` when no file is written (it returned silently; `.svg` goes through the SVG exporter). A YAML
   import whose column mapping is invalid resets the data page instead of leaving guessed columns staged with Apply

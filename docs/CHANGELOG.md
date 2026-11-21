@@ -3,6 +3,7 @@
 ## Unreleased
 
 ## v0.8.0 (2026-11-21)
+- `gui_qt` theme docs: module and class docstrings, `docs/api/nlsq.gui_qt.rst` and the widget `set_theme` notes now describe the full-`QPalette` switch (PR #89).
 - `make latexpdf`: removed the explicit `(slug)=` MyST targets above headings in `developer/optimization_case_study.md`
   and `developer/gui_development_guide.md`. `myst_heading_anchors = 3` already creates the same anchors, so LaTeX
   reported 13 multiply-defined labels. The `#slug` links in both files' tables of contents still resolve.
