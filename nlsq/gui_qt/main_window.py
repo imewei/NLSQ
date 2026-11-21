@@ -167,16 +167,9 @@ class MainWindow(QMainWindow):
             # Visually dim navigation items that are not yet accessible
             "QListWidget#navList::item:disabled {"
             "  color: rgba(128, 128, 128, 0.5);"
-            "}"
-            # --- Check boxes (theme toggle, plot options) ---
-            "QCheckBox::indicator {"
-            "  border-radius: 3px;"
-            "  width: 14px;"
-            "  height: 14px;"
-            "}"
-            "QCheckBox:focus {"
-            "  outline: 2px solid #2196F3;"
-            "  outline-offset: 1px;"
+            # No QCheckBox::indicator rule: styling the sub-control without an
+            # image or border makes Qt stop drawing the box, so every checkbox
+            # (the Dark Mode toggle included) became invisible.
             "}",
         )
 
@@ -251,12 +244,10 @@ class MainWindow(QMainWindow):
         theme_layout.setContentsMargins(0, 0, 0, 0)
         theme_layout.setSpacing(SPACING_SM)
 
-        theme_label = QLabel("Dark Mode")
-        self._theme_toggle = QCheckBox()
+        # The text belongs to the checkbox so clicking it toggles the theme too.
+        self._theme_toggle = QCheckBox("Dark Mode")
         self._theme_toggle.setChecked(True)  # Start in dark mode
 
-        theme_layout.addWidget(theme_label)
-        theme_layout.addStretch()
         theme_layout.addWidget(self._theme_toggle)
 
         layout.addWidget(theme_container)
@@ -405,8 +396,8 @@ class MainWindow(QMainWindow):
     def _on_theme_toggled(self, checked: bool) -> None:
         """Handle theme toggle."""
         theme_name = "dark" if checked else "light"
+        # _on_theme_changed (via theme_changed) syncs the app state
         self._theme_manager.set_theme(theme_name)
-        self._app_state.set_theme_name(theme_name)
 
     def _on_theme_changed(self, theme) -> None:
         """Handle theme change signal."""
@@ -423,6 +414,14 @@ class MainWindow(QMainWindow):
         for page in self._pages.values():
             if hasattr(page, "set_theme"):
                 page.set_theme(theme)
+        # Widgets under a stylesheet keep the palette cached when they were
+        # polished (labels stay light-on-light after a switch). Re-polish once
+        # the new application palette has reached the window.
+        QTimer.singleShot(0, self._repolish)
+
+    def _repolish(self) -> None:
+        """Re-apply the window stylesheet so every descendant re-reads the palette."""
+        self.setStyleSheet(self.styleSheet())
 
     def _update_navigation_guards(self) -> None:
         """Update navigation item enabled state based on workflow."""
@@ -486,8 +485,7 @@ class MainWindow(QMainWindow):
         theme : str
             ``"light"`` or ``"dark"``.
         """
-        is_dark = theme == "dark"
-        self._theme_toggle.setChecked(is_dark)
+        # the toggle follows via _on_theme_changed; setChecked here would re-enter
         self._theme_manager.set_theme(theme)
 
     def update_navigation_guards(self) -> None:
@@ -524,7 +522,6 @@ class MainWindow(QMainWindow):
         # Restore theme
         theme = self._settings.value("theme")
         if theme in ("light", "dark"):
-            self._theme_toggle.setChecked(theme == "dark")
             self._theme_manager.set_theme(theme)
         else:  # nothing saved: the manager already follows the system scheme
             self._on_theme_changed(self._theme_manager.current_theme)

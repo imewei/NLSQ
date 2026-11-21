@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from nlsq.gui_qt.theme import StatusPainter
 from nlsq.gui_qt.widgets.column_selector import ColumnSelectorWidget
 
 if TYPE_CHECKING:
@@ -83,6 +84,7 @@ class DataLoadingPage(QWidget):
         """
         super().__init__()
         self._app_state = app_state
+        self._status = StatusPainter()
 
         # Data storage
         self._raw_data: NDArray[np.float64] | None = None
@@ -371,7 +373,7 @@ class DataLoadingPage(QWidget):
 
             # Update UI
             self._file_path_label.setText(str(file_path))
-            self._file_path_label.setStyleSheet("")
+            self._status.clear(self._file_path_label)
             self._column_selector.set_columns(self._column_names)
             self._key_columns = key_columns
             if key_columns is not None:
@@ -449,7 +451,7 @@ class DataLoadingPage(QWidget):
 
             # Update UI
             self._file_path_label.setText("(Clipboard data)")
-            self._file_path_label.setStyleSheet("color: green;")
+            self._status.paint(self._file_path_label, "ok")
             self._column_selector.set_columns(self._column_names)
             self._update_preview()
 
@@ -477,7 +479,7 @@ class DataLoadingPage(QWidget):
 
         if not is_valid:
             self._validation_label.setText(f"Invalid: {message}")
-            self._validation_label.setStyleSheet("color: #f44336;")
+            self._status.paint(self._validation_label, "bad")
             self._apply_btn.setEnabled(False)
             return
 
@@ -509,7 +511,7 @@ class DataLoadingPage(QWidget):
 
         except IndexError as e:
             self._validation_label.setText(f"Column error: {e}")
-            self._validation_label.setStyleSheet("color: #f44336;")
+            self._status.paint(self._validation_label, "bad")
             self._apply_btn.setEnabled(False)
 
     def _clear_stats(self) -> None:
@@ -532,7 +534,7 @@ class DataLoadingPage(QWidget):
         if not result.is_valid:
             self._clear_stats()  # never leave the previous dataset's numbers up
             self._validation_label.setText(f"Validation: {result.message}")
-            self._validation_label.setStyleSheet("color: #f44336;")
+            self._status.paint(self._validation_label, "bad")
             self._apply_btn.setEnabled(False)
 
             # Show warning for NaN/Inf
@@ -570,7 +572,7 @@ class DataLoadingPage(QWidget):
             self._stats_sigma.setText("Sigma: (not provided)")
 
         self._validation_label.setText("Data valid")
-        self._validation_label.setStyleSheet("color: #4CAF50;")
+        self._status.paint(self._validation_label, "ok")
         self._apply_btn.setEnabled(True)
 
     def _update_preview(self) -> None:
@@ -673,7 +675,7 @@ class DataLoadingPage(QWidget):
             self._column_selector.set_mode("1d")
 
         self._file_path_label.setText(state.data_file_name or "(Restored session)")
-        self._file_path_label.setStyleSheet("color: green;")
+        self._status.paint(self._file_path_label, "ok")
         self._column_selector.set_columns(self._column_names)
         # set_columns re-runs the default column selection, which would keep
         # only column 0 of a 2-D x; show exactly what the session holds.
@@ -713,6 +715,7 @@ class DataLoadingPage(QWidget):
         theme : ThemeConfig
             Theme configuration
         """
+        self._status.set_theme(theme)
         self._column_selector.set_theme(theme)
 
     def reset(self) -> None:
@@ -725,7 +728,7 @@ class DataLoadingPage(QWidget):
         self._key_columns = None
 
         self._file_path_label.setText("No file selected")
-        self._file_path_label.setStyleSheet("color: gray; font-style: italic;")
+        self._status.clear(self._file_path_label, "color: gray; font-style: italic;")
         self._clipboard_text.clear()
         self._preview_model.clear()
         self._preview_info.setText("Load data to see preview")

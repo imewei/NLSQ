@@ -337,6 +337,9 @@ class _FakeApp:
     def styleHints(self):
         return self.hints
 
+    def setPalette(self, palette):  # ThemeManager applies a theme palette
+        self.applied_palette = palette
+
 
 def test_theme_follows_system_scheme_until_user_chooses():
     from PySide6.QtCore import Qt
