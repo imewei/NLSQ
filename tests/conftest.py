@@ -384,6 +384,50 @@ def reset_random_seed(random_seed):
     np.random.seed(random_seed)
 
 
+@pytest.fixture(autouse=True)
+def restore_nlsq_logging_state():
+    """Undo logger-level, global-level and NLSQ_DEBUG/NLSQ_VERBOSE changes a test leaves.
+
+    ``enable_debug_mode()`` / ``enable_verbose_mode()`` lower every ``nlsq.*``
+    logger and set ``_global_level``, which ``get_logger()`` bakes into each logger
+    it first creates (and then caches for the worker's lifetime). Tests restored
+    only the root ``nlsq`` logger, so a leaked DEBUG level failed unrelated
+    log-capture tests that landed on the same xdist worker.
+    """
+    import logging
+
+    from nlsq.utils import logging as nlsq_logging
+
+    def _nlsq_loggers():
+        return {
+            name: lg
+            for name, lg in logging.root.manager.loggerDict.items()
+            if name.startswith("nlsq") and isinstance(lg, logging.Logger)
+        }
+
+    levels = {name: lg.level for name, lg in _nlsq_loggers().items()}
+    env = {k: os.environ.get(k) for k in ("NLSQ_DEBUG", "NLSQ_VERBOSE")}
+    saved_global = nlsq_logging._global_level
+    yield
+    nlsq_logging._global_level = saved_global
+    # A logger first created inside the test inherits the test's leaked level;
+    # give it the level a clean first creation would have produced.
+    default = (
+        saved_global
+        if saved_global is not None
+        else logging.INFO
+        if env["NLSQ_VERBOSE"] == "1"
+        else logging.WARNING
+    )
+    for name, lg in _nlsq_loggers().items():
+        lg.setLevel(levels.get(name, default))
+    for k, v in env.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
 # ============================================================================
 # Loss Function Fixtures
 # ============================================================================
