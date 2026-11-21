@@ -1,6 +1,8 @@
 # Documentation Changelog
 
 ## Unreleased
+
+## v0.8.0 (2026-11-21)
 - `make latexpdf`: removed the explicit `(slug)=` MyST targets above headings in `developer/optimization_case_study.md`
   and `developer/gui_development_guide.md`. `myst_heading_anchors = 3` already creates the same anchors, so LaTeX
   reported 13 multiply-defined labels. The `#slug` links in both files' tables of contents still resolve.
@@ -35,7 +37,6 @@
   `MultiGPUConfig` / `get_multi_gpu_config` in `core/workflow.py` are not called by any fit path. Where each start
   actually runs was not measured here.
 
-## v0.8.0 (2026-11-14)
 - Version-output examples bumped to match the 0.8.0 release; `fit(preset=)` examples
   migrated to `multistart=True, n_starts=...` (the argument was removed; see the root `CHANGELOG.md`
   for the full migration table, the `WORKFLOW_PRESETS` / `_fit_with_preset` removal and the six removed
