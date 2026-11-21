@@ -247,9 +247,11 @@ def test_cross_device_placement_emulated():
 
 
 @pytest.mark.parametrize("rank_deficient", [False, True])
-def test_host_svd_hop_matches_device_svd(monkeypatch, rank_deficient):
-    # Backend-agnostic: on CPU both paths run on the same device, so this checks
-    # the value and placement contract; on a GPU it exercises the real host hop.
+def test_host_svd_hop_matches_device_svd(monkeypatch, force_host, rank_deficient):
+    # Backend-agnostic: on CPU the host and device are the same device, so the
+    # placement asserts cannot fail there; the ``force_host`` spy proves the host
+    # branch ran, and the value/pcov asserts check it against the device SVD.
+    # On a GPU this exercises the real host hop.
     J, f, d = _problem(rank_deficient)
     n, p = J.shape
     monkeypatch.setattr(
@@ -258,7 +260,9 @@ def test_host_svd_hop_matches_device_svd(monkeypatch, rank_deficient):
     _, _, sr, Vr, ufr = (np.asarray(a) for a in _svd_no_bounds(J, d, f))
     pref, _ = pcov_from_jacobian(J, 0.5, n, p, False, _covariance_svd)
     monkeypatch.setattr(device_policy, "use_host_for_small_svd", lambda s, b, **k: True)
+    entries = len(force_host)
     _, _, s, V, uf = _svd_no_bounds(J, d, f)
+    assert len(force_host) > entries, "host SVD branch was not taken"
     dev = next(iter(J.devices()))
     assert s.devices() == V.devices() == uf.devices() == {dev}
     s, V, uf = np.asarray(s), np.asarray(V), np.asarray(uf)
