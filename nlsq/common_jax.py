@@ -1051,14 +1051,6 @@ def intersect_trust_region_jax(
 
     Solves ||(x + s*t)||^2 = Delta^2 for t.
 
-    Notes
-    -----
-    Preconditions: ``s != 0`` and ``||x|| <= Delta``. Being jitted, this cannot
-    raise where ``scipy.optimize._lsq.common.intersect_trust_region`` does: for
-    ``s == 0`` it returns ``(0, 0)``, and for ``x`` outside the region it clamps
-    the discriminant to 0 and returns the double root, which is not a boundary
-    intersection. The only caller (trf reflective step) passes a step already restricted to the region.
-
     Parameters
     ----------
     x : jnp.ndarray
@@ -1074,6 +1066,14 @@ def intersect_trust_region_jax(
         Negative root.
     t_pos : jnp.ndarray
         Positive root.
+
+    Notes
+    -----
+    Preconditions: ``s != 0`` and ``||x|| <= Delta``. Being jitted, this cannot
+    raise where ``scipy.optimize._lsq.common.intersect_trust_region`` does: for
+    ``s == 0`` it returns ``(0, 0)``, and for ``x`` outside the region it clamps
+    the discriminant to 0 and returns the double root, which is not a boundary
+    intersection. The only caller (trf reflective step) passes a step already restricted to the region.
     """
     # Exact power-of-two scaling keeps a, b, c and the discriminant finite for
     # large |s|, |x|, Delta (a * c would overflow near 1e100); the roots in the

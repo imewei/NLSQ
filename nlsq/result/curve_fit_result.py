@@ -674,17 +674,17 @@ class CurveFitResult(OptimizeResult):
         ValueError
             If ``alpha`` is not finite and strictly between 0 and 1.
 
+        Notes
+        -----
+        Confidence intervals are computed using the parameter covariance matrix
+        and Student's t-distribution. Assumes residuals are normally distributed.
+
         Examples
         --------
         >>> result = curve_fit(model, x, y)
         >>> ci = result.confidence_intervals(alpha=0.95)
         >>> for i, (lower, upper) in enumerate(ci):
         ...     print(f"Parameter {i}: [{lower:.3f}, {upper:.3f}]")
-
-        Notes
-        -----
-        Confidence intervals are computed using the parameter covariance matrix
-        and Student's t-distribution. Assumes residuals are normally distributed.
         """
         if self.pcov is None:
             raise AttributeError(
@@ -980,12 +980,6 @@ class CurveFitResult(OptimizeResult):
         ValueError
             If ``alpha`` is not finite and strictly between 0 and 1.
 
-        Examples
-        --------
-        >>> result = curve_fit(model, x, y)
-        >>> pi = result.prediction_interval()  # Use fitted x values
-        >>> pi_new = result.prediction_interval(x_new)  # Use new x values
-
         Notes
         -----
         Prediction intervals account for both parameter uncertainty (from pcov)
@@ -998,6 +992,12 @@ class CurveFitResult(OptimizeResult):
         the noise is known (``sigma`` with ``absolute_sigma=True``, which then
         uses the normal quantile), every bound is NaN. ``confidence_intervals``
         and ``confidence_band`` behave the same way.
+
+        Examples
+        --------
+        >>> result = curve_fit(model, x, y)
+        >>> pi = result.prediction_interval()  # Use fitted x values
+        >>> pi_new = result.prediction_interval(x_new)  # Use new x values
         """
         if not hasattr(self, "model"):
             raise AttributeError(

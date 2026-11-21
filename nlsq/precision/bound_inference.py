@@ -491,6 +491,13 @@ def merge_bounds(
         upper bound, or if a user bound is not a scalar or a 1-D array with
         one element per inferred parameter.
 
+    Notes
+    -----
+    - If user provides -np.inf for lower bound, use inferred lower bound
+    - If user provides np.inf for upper bound, use inferred upper bound
+    - Scalar user bounds are broadcast to all parameters
+    - NaN, ``+inf`` lower or ``-inf`` upper user bounds raise ``ValueError``
+
     Examples
     --------
     >>> inferred = (np.array([0, 0, 0]), np.array([10, 5, 10]))
@@ -498,13 +505,6 @@ def merge_bounds(
     >>> merged = merge_bounds(inferred, user)
     >>> print(merged)
     (array([1., 0., 0.]), array([5., 5., 10.]))
-
-    Notes
-    -----
-    - If user provides -np.inf for lower bound, use inferred lower bound
-    - If user provides np.inf for upper bound, use inferred upper bound
-    - Scalar user bounds are broadcast to all parameters
-    - NaN, ``+inf`` lower or ``-inf`` upper user bounds raise ``ValueError``
     """
     lower_inferred, upper_inferred = inferred_bounds
 

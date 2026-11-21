@@ -148,6 +148,7 @@ def test_dark_mode_toggle_is_visible_and_text_is_clickable(qtbot, main_window):
     assert main_window._theme_manager.current_theme.is_dark is (not before)
 
 
+@pytest.mark.serial
 def test_status_painter_rejects_unknown_role_and_drops_cleared_labels(qtbot):
     from PySide6.QtWidgets import QLabel
 
@@ -217,3 +218,17 @@ def test_theme_manager_follows_os_scheme_with_matching_palette():
         slot(Qt.ColorScheme.Dark)
     assert tm.current_theme.name == "dark"
     assert _window_color(app.palettes[-1]) == DARK_THEME.background
+
+
+@pytest.mark.serial
+def test_column_selector_warning_follows_theme(qtbot):
+    from nlsq.gui_qt.widgets.column_selector import ColumnSelectorWidget
+
+    widget = ColumnSelectorWidget()
+    qtbot.addWidget(widget)
+    widget.set_theme(DARK_THEME)
+    widget._validation_label.setText("x")
+    widget._status.paint(widget._validation_label, "warn")
+    assert DARK_THEME.warning in widget._validation_label.styleSheet()
+    widget.set_theme(LIGHT_THEME)
+    assert LIGHT_THEME.warning in widget._validation_label.styleSheet()

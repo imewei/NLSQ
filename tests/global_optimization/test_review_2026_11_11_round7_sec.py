@@ -96,3 +96,64 @@ def test_wrong_shape_rejected(saved):
         f["state"].create_dataset("C", data=np.zeros(9))  # 1-D where (n, n) expected
     with pytest.raises(ValueError, match="shape"):
         mgr.load(path, fp)
+
+
+def _tamper_external_link(tmp_path, state):
+    other = tmp_path / "other.h5"
+    with h5py.File(other, "w") as o:
+        o["x"] = np.zeros(3)
+    del state["mean"]
+    state["mean"] = h5py.ExternalLink(str(other), "/x")
+
+
+def _tamper_external_storage(tmp_path, state):
+    raw = tmp_path / "raw.bin"
+    raw.write_bytes(bytes(24))
+    n = state["mean"].shape[0]
+    del state["mean"]
+    state.create_dataset(
+        "mean", shape=(n,), dtype="<f8", external=[(str(raw), 0, 8 * n)]
+    )
+
+
+def _tamper_virtual(tmp_path, state):
+    src = tmp_path / "src.h5"
+    n = state["mean"].shape[0]
+    with h5py.File(src, "w") as o:
+        o["x"] = np.zeros(n)
+    layout = h5py.VirtualLayout(shape=(n,), dtype="<f8")
+    layout[:] = h5py.VirtualSource(str(src), "x", shape=(n,))
+    del state["mean"]
+    state.create_virtual_dataset("mean", layout)
+
+
+@pytest.mark.parametrize(
+    "tamper, message",
+    [
+        (_tamper_external_link, "external link"),
+        (_tamper_external_storage, "external or virtual storage"),
+        (_tamper_virtual, "external or virtual storage"),
+    ],
+)
+def test_cmaes_load_rejects_data_stored_outside_the_file(
+    saved, tmp_path, tamper, message
+):
+    mgr, fp, path = saved
+    with h5py.File(path, "a") as f:
+        tamper(tmp_path, f["state"])
+    with pytest.raises(ValueError, match=message):
+        mgr.load(path, fp)
+
+
+def test_cmaes_foreign_storage_is_rejected_before_other_checks(saved, tmp_path):
+    # opening f["state"] already follows a link, so the guard must come first
+    mgr, fp, path = saved
+    other = tmp_path / "other.h5"
+    with h5py.File(other, "w") as o:
+        o.create_group("g")
+    with h5py.File(path, "a") as f:
+        del f["state"]
+        f["state"] = h5py.ExternalLink(str(other), "/g")
+        del f.attrs["completion_marker"]
+    with pytest.raises(ValueError, match="external link"):
+        mgr.load(path, fp)

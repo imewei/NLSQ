@@ -51,6 +51,41 @@ def _find_lbfgs_state(tree: Any) -> Any | None:
     return None
 
 
+def reject_foreign_storage(f: Any) -> None:
+    """Refuse a checkpoint whose data live outside the file itself.
+
+    Walks every link and dataset from metadata only. A checkpoint is untrusted
+    input, so external links (data read from another HDF5 file), external raw
+    storage (data read from an arbitrary file) and virtual datasets are all
+    rejected.
+
+    Parameters
+    ----------
+    f : h5py.File
+        Open checkpoint file.
+
+    Raises
+    ------
+    ValueError
+        If any entry is an external link, uses external storage, or is virtual.
+    """
+
+    # Return, don't raise: a value returned from an h5py visitor stops the walk
+    # and comes back, while an exception raised inside one is a C-layer SystemError.
+    def _link(name: str, link: Any) -> str | None:
+        if isinstance(link, h5py.ExternalLink):
+            return f"Checkpoint entry '{name}' is an external link"
+        return None
+
+    def _dataset(name: str, obj: Any) -> str | None:
+        if isinstance(obj, h5py.Dataset) and (obj.external or obj.is_virtual):
+            return f"Checkpoint dataset '{name}' uses external or virtual storage"
+        return None
+
+    if msg := f.visititems_links(_link) or f.visititems(_dataset):
+        raise ValueError(msg)
+
+
 # Element cap for any array read from a checkpoint (2**26 f8 = 512 MiB).
 MAX_CHECKPOINT_ELEMENTS = 1 << 26
 
@@ -365,6 +400,7 @@ class CheckpointManager:
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
         with h5py.File(checkpoint_path, "r") as f:
+            reject_foreign_storage(f)
             self._validate_version(f)
             phase_state = f["phase_state"]
 

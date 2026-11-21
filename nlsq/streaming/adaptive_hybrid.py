@@ -1183,6 +1183,11 @@ class AdaptiveHybridStreamingOptimizer:
         model : Callable
             Model function.
 
+        Returns
+        -------
+        best_params : array_like
+            Best starting parameters in normalized space.
+
         Notes
         -----
         Batches are ``(x, y)`` and candidates are ranked on the unweighted loss:
@@ -1191,11 +1196,6 @@ class AdaptiveHybridStreamingOptimizer:
         same way) before this runs, so there is no weighting to pass. If sigma support is added
         to the engine, yield ``(x, y, sigma)`` batches here (1-D sigma only; a
         covariance-matrix sigma would need whitening first).
-
-        Returns
-        -------
-        best_params : array_like
-            Best starting parameters in normalized space.
         """
         import numpy as np
 

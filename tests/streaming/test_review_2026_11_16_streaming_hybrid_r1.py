@@ -785,6 +785,7 @@ def _warmup_cfg(**kw):
     )
 
 
+@pytest.mark.serial
 def test_warmup_phase_never_evaluates_model_beyond_chunk_when_over_budget():
     from nlsq.config import MemoryConfig, memory_context
     from nlsq.streaming.phases.warmup import WarmupPhase

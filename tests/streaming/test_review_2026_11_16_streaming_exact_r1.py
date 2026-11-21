@@ -433,6 +433,8 @@ def test_resolved_signal_floor_is_documented():
 
 
 # n=1e6 is a documented limit: the remaining 0.27 sigma is below the rounding of the cost
+@pytest.mark.serial
+@pytest.mark.slow
 @pytest.mark.parametrize("n", [20_000, 200_000, 400_000, 4_000_000])
 def test_dominant_offset_xtol_bias_is_far_below_one_sigma(n):
     x = np.linspace(0.0, 10.0, n)
@@ -514,6 +516,7 @@ def test_healthy_near_exact_fits_do_not_warn(n, rel_noise, p0):
     assert "rounding" not in out["message"]
 
 
+@pytest.mark.serial
 def test_rounding_limited_offset_fit_is_labelled_honestly():
     from nlsq.result.optimize_warning import OptimizeWarning
 

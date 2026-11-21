@@ -121,7 +121,7 @@ def _real_float(arr: np.ndarray, key: str, file_path: Path) -> np.ndarray:
             file_path=file_path,
             file_format="npz",
         )
-    return np.real(arr).astype(np.float64)
+    return np.real(arr).astype(np.float64, copy=False)
 
 
 def _flatten_recording(
@@ -129,7 +129,7 @@ def _flatten_recording(
 ) -> np.ndarray:
     """Flatten ``arr``, recording its stored shape under ``name`` for _check_aligned."""
     shapes[name] = arr.shape
-    return arr.flatten()
+    return arr.reshape(-1)
 
 
 def _check_aligned(
@@ -948,6 +948,13 @@ class DataLoader:
 
         try:
             limit = _max_load_elements(file_path, "npz")
+            if not zipfile.is_zipfile(file_path):
+                # np.load would read a bare .npy named .npz in full, past the cap
+                raise DataLoadError(
+                    "Not a valid .npz archive (a bare .npy file cannot be loaded as npz)",
+                    file_path=file_path,
+                    file_format="npz",
+                )
             with np.load(file_path) as data:
                 available_keys = list(data.keys())
 

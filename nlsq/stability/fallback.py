@@ -972,6 +972,11 @@ class FallbackOrchestrator:
         result : FallbackResult
             Optimization result with fallback metadata
 
+        Raises
+        ------
+        RuntimeError
+            If all fallback strategies fail
+
         Notes
         -----
         ``full_output`` / ``return_eval`` / ``timeit`` are passed to every
@@ -984,11 +989,6 @@ class FallbackOrchestrator:
         there a finite fit counts as converged and fallback only triggers on
         exceptions or non-finite parameters. Use ``full_output=True`` or
         ``timeit=True`` without ``return_eval`` for status-aware fallback.
-
-        Raises
-        ------
-        RuntimeError
-            If all fallback strategies fail
         """
         from nlsq.core.minpack import (
             curve_fit,  # Deferred import to avoid circular dependency

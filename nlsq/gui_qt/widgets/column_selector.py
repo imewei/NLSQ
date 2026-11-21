@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from nlsq.gui_qt.theme import StatusPainter
+
 if TYPE_CHECKING:
     from nlsq.gui_qt.theme import ThemeConfig
 
@@ -112,6 +114,7 @@ class ColumnSelectorWidget(QWidget):
         layout.addWidget(columns_group)
 
         # Validation message
+        self._status = StatusPainter()
         self._validation_label = QLabel("")
         self._validation_label.setWordWrap(True)
         layout.addWidget(self._validation_label)
@@ -163,10 +166,10 @@ class ColumnSelectorWidget(QWidget):
         # Update validation display
         if is_valid:
             self._validation_label.setText("")
-            self._validation_label.setStyleSheet("")
+            self._status.clear(self._validation_label)
         else:
             self._validation_label.setText(f"⚠ {message}")
-            self._validation_label.setStyleSheet("color: #FF9800;")
+            self._status.paint(self._validation_label, "warn")
 
         self.selection_changed.emit(selection)
 
@@ -362,6 +365,4 @@ class ColumnSelectorWidget(QWidget):
         theme : ThemeConfig
             Theme configuration.
         """
-        # Update validation label color based on theme
-        # Warning color is consistent across themes
-        # Theme is applied globally by ThemeManager (color scheme and application palette)
+        self._status.set_theme(theme)

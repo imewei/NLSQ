@@ -190,6 +190,13 @@ def run_fit(
             config_file=workflow_path,
             suggestion="Quote the name in YAML, e.g. results_file: 'results.json'",
         )
+    if results_file is not None and "\0" in str(results_file):
+        # POSIX resolve()/is_dir() raise on NUL; Windows does not
+        raise ConfigError(
+            "export.results_file contains a NUL character",
+            config_file=workflow_path,
+            suggestion="Remove the NUL (\\x00) from the file name",
+        )
     json_stdout = cfg_bool(export_config, "stdout", False, "export")
     skip_requested = cfg_bool(export_config, "skip_file_on_stdout", False, "export")
     skip_file = json_stdout and skip_requested
