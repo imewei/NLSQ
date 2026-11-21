@@ -15,8 +15,8 @@ From Python:
     >>> results = run_batch(["w1.yaml", "w2.yaml"])
     >>> results = run_batch(["w1.yaml", "w2.yaml"], summary_file="summary.json")
 
-Note
-----
+Notes
+-----
 Uses ThreadPoolExecutor by default for JAX compatibility. JAX does not work well
 with ProcessPoolExecutor due to fork safety issues with GPU devices.
 """
