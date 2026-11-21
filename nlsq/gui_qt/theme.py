@@ -4,14 +4,15 @@ NLSQ Qt GUI Theme Management
 This module provides theme configuration and management for the Qt application.
 Supports light and dark themes with consistent styling across widgets and plots.
 
-Uses Qt 6.5+ built-in color scheme API for widget theming. pyqtgraph plots
-are themed separately via ThemeConfig since they don't follow Qt's color scheme.
+Uses the Qt 6.5+ color scheme API plus a complete application QPalette (see
+``_palette_for``) for widget theming. pyqtgraph plots are themed separately via
+ThemeConfig since they don't follow Qt's color scheme.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette, Qt
@@ -19,7 +20,16 @@ from PySide6.QtGui import QColor, QPalette, Qt
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication, QLabel
 
-__all__ = ["DARK_THEME", "LIGHT_THEME", "StatusPainter", "ThemeConfig", "ThemeManager"]
+__all__ = [
+    "DARK_THEME",
+    "LIGHT_THEME",
+    "StatusPainter",
+    "StatusRole",
+    "ThemeConfig",
+    "ThemeManager",
+]
+
+StatusRole = Literal["ok", "bad", "warn", "info"]
 
 
 @dataclass
@@ -217,14 +227,33 @@ class StatusPainter:
     switch; the role is remembered so ``set_theme`` can re-resolve it.
     """
 
+    _ROLES = ("ok", "bad", "warn", "info")
+
     def __init__(self) -> None:
         self._theme = DARK_THEME
-        self._roles: dict[QLabel, str] = {}
+        self._roles: dict[QLabel, StatusRole] = {}
 
-    def paint(self, label: QLabel, role: str) -> None:
-        """Color ``label`` with ``role`` (``"ok"`` or ``"bad"``) of the active theme."""
+    def paint(self, label: QLabel, role: StatusRole) -> None:
+        """Color ``label`` with ``role`` of the active theme.
+
+        Parameters
+        ----------
+        label : QLabel
+            Label to color.
+        role : {"ok", "bad", "warn", "info"}
+            Semantic role: the theme's success, error, warning or info color.
+
+        Raises
+        ------
+        ValueError
+            If ``role`` is not one of the listed roles.
+        """
+        if role not in self._ROLES:
+            raise ValueError(
+                f"unknown status role {role!r}; expected one of {self._ROLES}"
+            )
         self._roles[label] = role
-        label.setStyleSheet(f"color: {self._color(role)};")
+        self._apply(label, role)
 
     def clear(self, label: QLabel, style: str = "") -> None:
         """Forget ``label``'s role and set a theme-independent ``style``."""
@@ -235,10 +264,16 @@ class StatusPainter:
         """Adopt ``theme`` and repaint every labelled role."""
         self._theme = theme
         for label, role in self._roles.items():
-            label.setStyleSheet(f"color: {self._color(role)};")
+            self._apply(label, role)
 
-    def _color(self, role: str) -> str:
-        return self._theme.success if role == "ok" else self._theme.error
+    def _apply(self, label: QLabel, role: StatusRole) -> None:
+        colors = {
+            "ok": self._theme.success,
+            "bad": self._theme.error,
+            "warn": self._theme.warning,
+            "info": self._theme.info,
+        }
+        label.setStyleSheet(f"color: {colors[role]};")
 
 
 def _theme_for_scheme(scheme: Qt.ColorScheme, app: QApplication) -> ThemeConfig:
@@ -258,8 +293,8 @@ def _theme_for_scheme(scheme: Qt.ColorScheme, app: QApplication) -> ThemeConfig:
 class ThemeManager(QObject):
     """Manages application theme switching.
 
-    This class handles theme changes for the entire application using Qt 6.5+
-    built-in color scheme API and emitting signals for widgets to update their styling.
+    Sets the Qt color scheme and the matching application palette, and emits
+    ``theme_changed`` for widgets and plots to update their styling.
     """
 
     # Signal emitted when theme changes
@@ -323,10 +358,16 @@ class ThemeManager(QObject):
 
         Parameters
         ----------
-        name : str
-            Theme name (``"light"`` or ``"dark"``). Any value other than
-            ``"light"`` selects the dark theme.
+        name : {"light", "dark"}
+            Theme name.
+
+        Raises
+        ------
+        ValueError
+            If ``name`` is neither ``"light"`` nor ``"dark"``.
         """
+        if name not in ("light", "dark"):
+            raise ValueError(f"unknown theme {name!r}; expected 'light' or 'dark'")
         self._explicit = True
         if name == "light":
             self._current_theme = LIGHT_THEME

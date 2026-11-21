@@ -51,7 +51,7 @@ The main window manages the 5-page workflow:
 Theme Support
 ~~~~~~~~~~~~~
 
-The GUI supports light and dark themes via Qt's built-in color scheme API. Toggle with ``Ctrl+T``.
+The GUI supports light and dark themes via Qt's built-in color scheme API plus an application palette derived from ``ThemeConfig``. Toggle with ``Ctrl+T`` or the sidebar Dark Mode checkbox.
 
 Keyboard Shortcuts
 ~~~~~~~~~~~~~~~~~~

@@ -463,6 +463,6 @@ class AdvancedOptionsWidget(QWidget):
         ----------
         theme : ThemeConfig
             Theme configuration. The method body does nothing: the theme is
-            applied globally through the Qt color scheme.
+            applied globally by ThemeManager (color scheme and application palette).
         """
-        # Theme is applied globally via Qt color scheme
+        # Theme is applied globally by ThemeManager (color scheme and application palette)

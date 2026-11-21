@@ -364,4 +364,4 @@ class ColumnSelectorWidget(QWidget):
         """
         # Update validation label color based on theme
         # Warning color is consistent across themes
-        # Theme is applied globally via Qt color scheme
+        # Theme is applied globally by ThemeManager (color scheme and application palette)

@@ -7,6 +7,7 @@ and stacked page layout.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +33,8 @@ from nlsq.gui_qt.theme import ThemeManager
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["MainWindow"]
 
@@ -132,7 +135,8 @@ class MainWindow(QMainWindow):
     def _apply_app_stylesheet(self) -> None:
         """Apply global hover/focus styles for buttons and navigation items.
 
-        These rules layer on top of the Fusion palette applied by ThemeManager.
+        These rules layer on top of the application style (Fusion, set in
+        ``run_desktop``) and the palette applied by ThemeManager.
         They provide subtle interactive feedback without overriding the palette's
         background/foreground colors for the base (non-hovered) state.
         """
@@ -410,14 +414,22 @@ class MainWindow(QMainWindow):
             self._theme_toggle.blockSignals(False)
         if self._app_state.theme != theme.name:
             self._app_state.set_theme_name(theme.name)
-        # Propagate theme to all pages
-        for page in self._pages.values():
-            if hasattr(page, "set_theme"):
-                page.set_theme(theme)
         # Widgets under a stylesheet keep the palette cached when they were
         # polished (labels stay light-on-light after a switch). Re-polish once
-        # the new application palette has reached the window.
-        QTimer.singleShot(0, self._repolish)
+        # the new application palette has reached the window. Scheduled first
+        # and bound to ``self`` so a failing page cannot skip it and a closed
+        # window drops the call.
+        QTimer.singleShot(0, self, self._repolish)
+        # Propagate theme to all pages; one failing page must not leave the
+        # rest in the old theme (an exception in a Qt slot is only printed).
+        for name, page in self._pages.items():
+            if hasattr(page, "set_theme"):
+                try:
+                    page.set_theme(theme)
+                except Exception:
+                    logger.exception(
+                        "applying the %s theme to page %r failed", theme.name, name
+                    )
 
     def _repolish(self) -> None:
         """Re-apply the window stylesheet so every descendant re-reads the palette."""
