@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from nlsq.gui_qt.plots.live_cost_plot import LiveCostPlotWidget
 from nlsq.gui_qt.presets import PRESETS
+from nlsq.gui_qt.theme import StatusPainter
 from nlsq.gui_qt.widgets.advanced_options import AdvancedOptionsWidget
 from nlsq.gui_qt.widgets.iteration_table import IterationTableWidget
 from nlsq.gui_qt.widgets.param_config import ParamConfigWidget
@@ -118,6 +119,7 @@ class FittingOptionsPage(QWidget):
         """
         super().__init__()
         self._app_state = app_state
+        self._status = StatusPainter()
         self._fit_thread: QThread | None = None
         self._fit_worker: FitWorker | None = None
         # Keeps strong Python refs to threads in deferred cleanup so GC can't
@@ -452,7 +454,7 @@ class FittingOptionsPage(QWidget):
         self._set_running_state(False)
         self._app_state.set_fit_running(False)
         self._status_label.setText("Fit discarded: data or model changed")
-        self._status_label.setStyleSheet("color: #FF9800;")
+        self._status.paint(self._status_label, "warn")
 
     def _on_fit_progress(self, iteration: int, cost: float) -> None:
         """Handle fit progress update.
@@ -484,7 +486,7 @@ class FittingOptionsPage(QWidget):
             return
         self._set_running_state(False)
         self._status_label.setText("Fit completed")
-        self._status_label.setStyleSheet("color: #4CAF50;")
+        self._status.paint(self._status_label, "ok")
 
         # Update app state — navigation to Results page happens via signal
         self._app_state.set_fit_result(result, getattr(self, "_fit_settings", None))
@@ -506,7 +508,7 @@ class FittingOptionsPage(QWidget):
         self._app_state.set_fit_running(False)
 
         self._status_label.setText("Fit failed")
-        self._status_label.setStyleSheet("color: #f44336;")
+        self._status.paint(self._status_label, "bad")
         QMessageBox.critical(
             self,
             "Fit Error",
@@ -521,7 +523,7 @@ class FittingOptionsPage(QWidget):
         self._set_running_state(False)
         self._app_state.set_fit_running(False)
         self._status_label.setText("Fit aborted")
-        self._status_label.setStyleSheet("color: #FF9800;")
+        self._status.paint(self._status_label, "warn")
         self._app_state.set_fit_aborted()
         self.fit_aborted.emit()
 
@@ -596,7 +598,7 @@ class FittingOptionsPage(QWidget):
 
         if running:
             self._status_label.setText("Running...")
-            self._status_label.setStyleSheet("color: #2196F3;")
+            self._status.paint(self._status_label, "info")
 
     def set_app_state(self, state: AppState) -> None:
         """Set the application state.
@@ -616,6 +618,7 @@ class FittingOptionsPage(QWidget):
         theme : ThemeConfig
             Theme configuration.
         """
+        self._status.set_theme(theme)
         self._cost_plot.set_theme(theme)
         self._iteration_table.set_theme(theme)
         self._param_config.set_theme(theme)
@@ -637,4 +640,4 @@ class FittingOptionsPage(QWidget):
         self._cost_plot.reset()
         self._iteration_table.clear()
         self._status_label.setText("Ready")
-        self._status_label.setStyleSheet("color: gray;")
+        self._status.clear(self._status_label, "color: gray;")

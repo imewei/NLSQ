@@ -40,6 +40,7 @@ from nlsq.gui_qt.adapters.fit_adapter import (
     parameter_confidence_intervals,
 )
 from nlsq.gui_qt.session_state import n_points
+from nlsq.gui_qt.theme import StatusPainter
 
 if TYPE_CHECKING:
     from nlsq.gui_qt.app_state import AppState
@@ -76,6 +77,7 @@ class ExportPage(QWidget):
         """
         super().__init__()
         self._app_state = app_state
+        self._status = StatusPainter()
         self._setup_ui()
         self._connect_signals()
 
@@ -265,12 +267,12 @@ class ExportPage(QWidget):
             try:
                 self.export_session_bundle(path)
                 self._status_label.setText(f"Exported to {path}")
-                self._status_label.setStyleSheet("color: #4CAF50;")
+                self._status.paint(self._status_label, "ok")
                 self.export_completed.emit(path)
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
                 self._status_label.setText("Export failed")
-                self._status_label.setStyleSheet("color: #f44336;")
+                self._status.paint(self._status_label, "bad")
 
     def _on_export_json(self) -> None:
         """Handle export JSON."""
@@ -284,7 +286,7 @@ class ExportPage(QWidget):
             try:
                 self.export_json(path)
                 self._status_label.setText(f"Exported to {path}")
-                self._status_label.setStyleSheet("color: #4CAF50;")
+                self._status.paint(self._status_label, "ok")
                 self.export_completed.emit(path)
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
@@ -297,7 +299,7 @@ class ExportPage(QWidget):
             if clipboard is not None:
                 clipboard.setText(json_str)
                 self._status_label.setText("JSON copied to clipboard")
-                self._status_label.setStyleSheet("color: #4CAF50;")
+                self._status.paint(self._status_label, "ok")
         except Exception as e:
             QMessageBox.critical(self, "Copy Error", str(e))
 
@@ -313,7 +315,7 @@ class ExportPage(QWidget):
             try:
                 self.export_csv(path, include_data=False)
                 self._status_label.setText(f"Exported to {path}")
-                self._status_label.setStyleSheet("color: #4CAF50;")
+                self._status.paint(self._status_label, "ok")
                 self.export_completed.emit(path)
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
@@ -330,7 +332,7 @@ class ExportPage(QWidget):
             try:
                 self.export_csv(path, include_data=True)
                 self._status_label.setText(f"Exported to {path}")
-                self._status_label.setStyleSheet("color: #4CAF50;")
+                self._status.paint(self._status_label, "ok")
                 self.export_completed.emit(path)
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
@@ -340,7 +342,7 @@ class ExportPage(QWidget):
         code = self.generate_python_code()
         self._code_preview.setPlainText(code)
         self._status_label.setText("Code generated")
-        self._status_label.setStyleSheet("color: #4CAF50;")
+        self._status.paint(self._status_label, "ok")
 
     def _on_copy_code(self) -> None:
         """Handle copy code to clipboard."""
@@ -351,7 +353,7 @@ class ExportPage(QWidget):
         if clipboard is not None:
             clipboard.setText(code)
             self._status_label.setText("Code copied to clipboard")
-            self._status_label.setStyleSheet("color: #4CAF50;")
+            self._status.paint(self._status_label, "ok")
 
     def _on_export_code(self) -> None:
         """Handle export code to file."""
@@ -367,7 +369,7 @@ class ExportPage(QWidget):
                 self._code_preview.setPlainText(code)
                 _atomic_write(Path(path).resolve(), code)
                 self._status_label.setText(f"Exported to {path}")
-                self._status_label.setStyleSheet("color: #4CAF50;")
+                self._status.paint(self._status_label, "ok")
                 self.export_completed.emit(path)
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
@@ -390,6 +392,7 @@ class ExportPage(QWidget):
         theme : ThemeConfig
             Theme configuration.
         """
+        self._status.set_theme(theme)
         if theme.is_dark:
             fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
             family = fixed_font.family()

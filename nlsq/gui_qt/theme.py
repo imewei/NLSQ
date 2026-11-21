@@ -4,22 +4,32 @@ NLSQ Qt GUI Theme Management
 This module provides theme configuration and management for the Qt application.
 Supports light and dark themes with consistent styling across widgets and plots.
 
-Uses Qt 6.5+ built-in color scheme API for widget theming. pyqtgraph plots
-are themed separately via ThemeConfig since they don't follow Qt's color scheme.
+Uses the Qt 6.5+ color scheme API plus a complete application QPalette (see
+``_palette_for``) for widget theming. pyqtgraph plots are themed separately via
+ThemeConfig since they don't follow Qt's color scheme.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import Qt
+from PySide6.QtGui import QColor, QPalette, Qt
 
 if TYPE_CHECKING:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QLabel
 
-__all__ = ["DARK_THEME", "LIGHT_THEME", "ThemeConfig", "ThemeManager"]
+__all__ = [
+    "DARK_THEME",
+    "LIGHT_THEME",
+    "StatusPainter",
+    "StatusRole",
+    "ThemeConfig",
+    "ThemeManager",
+]
+
+StatusRole = Literal["ok", "bad", "warn", "info"]
 
 
 @dataclass
@@ -175,6 +185,97 @@ LIGHT_THEME = ThemeConfig(
 )
 
 
+def _palette_for(theme: ThemeConfig) -> QPalette:
+    """Complete application palette for ``theme``.
+
+    ``setColorScheme`` alone leaves a Fusion palette half-switched under some
+    platform themes (light window, light-on-light labels, dark item views), so
+    every role the widgets read is set from the ThemeConfig.
+    """
+    pal = QPalette(QColor(theme.surface_variant), QColor(theme.background))
+    roles = {
+        QPalette.ColorRole.Window: theme.background,
+        QPalette.ColorRole.WindowText: theme.text_primary,
+        QPalette.ColorRole.Base: theme.surface,
+        QPalette.ColorRole.AlternateBase: theme.surface_variant,
+        QPalette.ColorRole.Text: theme.text_primary,
+        QPalette.ColorRole.Button: theme.surface_variant,
+        QPalette.ColorRole.ButtonText: theme.text_primary,
+        QPalette.ColorRole.BrightText: theme.error,
+        QPalette.ColorRole.ToolTipBase: theme.surface_variant,
+        QPalette.ColorRole.ToolTipText: theme.text_primary,
+        QPalette.ColorRole.PlaceholderText: theme.text_secondary,
+        QPalette.ColorRole.Link: theme.accent,
+        QPalette.ColorRole.Highlight: theme.accent,
+        QPalette.ColorRole.HighlightedText: "#ffffff",
+    }
+    for role, color in roles.items():
+        pal.setColor(role, QColor(color))
+    for role in (
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+    ):
+        pal.setColor(QPalette.ColorGroup.Disabled, role, QColor(theme.text_secondary))
+    return pal
+
+
+class StatusPainter:
+    """Color status labels by semantic role and repaint them on a theme change.
+
+    Fixed hex colors set at event time stay in the old theme's shade after a
+    switch; the role is remembered so ``set_theme`` can re-resolve it.
+    """
+
+    _ROLES = ("ok", "bad", "warn", "info")
+
+    def __init__(self) -> None:
+        self._theme = DARK_THEME
+        self._roles: dict[QLabel, StatusRole] = {}
+
+    def paint(self, label: QLabel, role: StatusRole) -> None:
+        """Color ``label`` with ``role`` of the active theme.
+
+        Parameters
+        ----------
+        label : QLabel
+            Label to color.
+        role : {"ok", "bad", "warn", "info"}
+            Semantic role: the theme's success, error, warning or info color.
+
+        Raises
+        ------
+        ValueError
+            If ``role`` is not one of the listed roles.
+        """
+        if role not in self._ROLES:
+            raise ValueError(
+                f"unknown status role {role!r}; expected one of {self._ROLES}"
+            )
+        self._roles[label] = role
+        self._apply(label, role)
+
+    def clear(self, label: QLabel, style: str = "") -> None:
+        """Forget ``label``'s role and set a theme-independent ``style``."""
+        self._roles.pop(label, None)
+        label.setStyleSheet(style)
+
+    def set_theme(self, theme: ThemeConfig) -> None:
+        """Adopt ``theme`` and repaint every labelled role."""
+        self._theme = theme
+        for label, role in self._roles.items():
+            self._apply(label, role)
+
+    def _apply(self, label: QLabel, role: StatusRole) -> None:
+        colors = {
+            "ok": self._theme.success,
+            "bad": self._theme.error,
+            "warn": self._theme.warning,
+            "info": self._theme.info,
+        }
+        label.setStyleSheet(f"color: {colors[role]};")
+
+
 def _theme_for_scheme(scheme: Qt.ColorScheme, app: QApplication) -> ThemeConfig:
     """Theme for an OS color scheme.
 
@@ -192,8 +293,8 @@ def _theme_for_scheme(scheme: Qt.ColorScheme, app: QApplication) -> ThemeConfig:
 class ThemeManager(QObject):
     """Manages application theme switching.
 
-    This class handles theme changes for the entire application using Qt 6.5+
-    built-in color scheme API and emitting signals for widgets to update their styling.
+    Sets the Qt color scheme and the matching application palette, and emits
+    ``theme_changed`` for widgets and plots to update their styling.
     """
 
     # Signal emitted when theme changes
@@ -213,6 +314,7 @@ class ThemeManager(QObject):
         # the toggle, --theme or a saved choice); no scheme is forced here.
         self._explicit = False
         self._current_theme = _theme_for_scheme(app.styleHints().colorScheme(), app)
+        self._app.setPalette(_palette_for(self._current_theme))
         app.styleHints().colorSchemeChanged.connect(self._on_system_scheme_changed)
 
     @property
@@ -240,9 +342,15 @@ class ThemeManager(QObject):
 
     def _on_system_scheme_changed(self, scheme: Qt.ColorScheme) -> None:
         """Follow an OS light/dark switch unless a theme was chosen explicitly."""
+        # Qt rebuilds the platform palette on a scheme change (also one we
+        # triggered in set_theme), so re-assert ours before anything else.
+        if self._explicit:
+            self._app.setPalette(_palette_for(self._current_theme))
+            return
         theme = _theme_for_scheme(scheme, self._app)
-        if not self._explicit and theme is not self._current_theme:
+        if theme is not self._current_theme:
             self._current_theme = theme
+            self._app.setPalette(_palette_for(theme))
             self.theme_changed.emit(theme)
 
     def set_theme(self, name: str) -> None:
@@ -250,10 +358,16 @@ class ThemeManager(QObject):
 
         Parameters
         ----------
-        name : str
-            Theme name (``"light"`` or ``"dark"``). Any value other than
-            ``"light"`` selects the dark theme.
+        name : {"light", "dark"}
+            Theme name.
+
+        Raises
+        ------
+        ValueError
+            If ``name`` is neither ``"light"`` nor ``"dark"``.
         """
+        if name not in ("light", "dark"):
+            raise ValueError(f"unknown theme {name!r}; expected 'light' or 'dark'")
         self._explicit = True
         if name == "light":
             self._current_theme = LIGHT_THEME
@@ -261,6 +375,7 @@ class ThemeManager(QObject):
         else:
             self._current_theme = DARK_THEME
             self._app.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+        self._app.setPalette(_palette_for(self._current_theme))
 
         self.theme_changed.emit(self._current_theme)
 

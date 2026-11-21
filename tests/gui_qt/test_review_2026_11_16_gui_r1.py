@@ -330,12 +330,16 @@ class _FakeApp:
     def __init__(self, scheme, lightness=30):
         self.hints = _FakeHints(scheme)
         self._lightness = lightness
+        self.palettes = []
 
     def palette(self):
         return _FakePalette(self._lightness)
 
     def styleHints(self):
         return self.hints
+
+    def setPalette(self, palette):  # ThemeManager applies a theme palette
+        self.palettes.append(palette)
 
 
 def test_theme_follows_system_scheme_until_user_chooses():

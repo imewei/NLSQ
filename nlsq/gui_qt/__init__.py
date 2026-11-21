@@ -260,7 +260,8 @@ def run_desktop(argv: Sequence[str] | None = None) -> int:
     _stage("Fusion style applied")
 
     # Without --theme the OS color scheme stays in force (ThemeManager follows it);
-    # an explicit one is applied via Qt 6.5+ built-in color scheme.
+    # an explicit one is applied via the Qt color scheme; ThemeManager then sets the
+    # matching application palette.
     # Protected: some macOS + PySide6 combinations crash here.
     import contextlib
 
