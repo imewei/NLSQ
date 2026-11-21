@@ -464,7 +464,7 @@ class HPCCheckpointManager:
 
         with h5py.File(path, "r") as f:
             # first: opening f["state"] would already follow an external link
-            pass
+            reject_foreign_storage(f)
             if not bool(f.attrs.get("completion_marker", False)):
                 raise ValueError(
                     f"Checkpoint at {path} is missing its completion marker "
