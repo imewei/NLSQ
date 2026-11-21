@@ -1,1 +1,0 @@
-../nlsq/cli/templates/custom_model_template.py
