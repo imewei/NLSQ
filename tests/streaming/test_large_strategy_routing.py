@@ -1816,6 +1816,9 @@ class _Ctx(SimpleNamespace):
     "row",
     [pytest.param(r, id=r.id, marks=r.marks) for r in ROWS],
 )
+@pytest.mark.filterwarnings(
+    "ignore:Chunked\\(multistart=\\.\\.\\.\\) is not applied:UserWarning"
+)
 def test_routing_table(row: Row, rec: Recorder) -> None:
     rec.stubs.update(row.stubs)
     ambient_before = dataclasses.asdict(get_memory_config())

@@ -4,6 +4,8 @@ import os
 import unittest
 from unittest.mock import patch
 
+import pytest
+
 from nlsq.config import JAXConfig, enable_x64, is_x64_enabled, precision_context
 
 
@@ -570,6 +572,9 @@ class TestMemoryConfigFunctions(unittest.TestCase):
         # v0.2.0: Verify sampling param is removed
         self.assertFalse(hasattr(config, "enable_sampling"))
 
+    @pytest.mark.filterwarnings(
+        "ignore:enable_chunking=False and progress_reporting=False are recorded:UserWarning"
+    )
     def test_configure_for_large_datasets(self):
         """Test configure_for_large_datasets function."""
         from nlsq.config import (

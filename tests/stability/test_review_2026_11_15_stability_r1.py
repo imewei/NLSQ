@@ -1661,6 +1661,7 @@ class TestRound13:
         np.testing.assert_array_equal(np.asarray(x), np.asarray(ref))
         assert bool(used)
 
+    @pytest.mark.filterwarnings("ignore:regularize_hessian:UserWarning")
     def test_regularize_hessian_symmetrization_does_not_overflow(self):
         g = NumericalStabilityGuard()
         H = g.regularize_hessian(jnp.array([[1e308, 0.0], [0.0, 1e308]]))
@@ -1706,6 +1707,9 @@ class TestRound13:
         )
         assert ok
 
+    @pytest.mark.filterwarnings(
+        "ignore:Recovery strategy _perturb_parameters failed:UserWarning"
+    )
     def test_bounds_that_would_change_the_length_are_rejected(self):
         state = {"p0": [1.0, 1.0], "bounds": ([0.0, 0.0, 0.0], [9.0, 9.0, 9.0])}
         (ok, _), _ = self._recovery({"success": True, "x": [1.0, 1.0]}, state)

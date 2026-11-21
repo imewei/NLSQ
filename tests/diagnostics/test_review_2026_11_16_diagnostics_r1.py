@@ -597,6 +597,7 @@ class TestRound5TallFloat32:
 
 @pytest.mark.serial
 @pytest.mark.slow
+@pytest.mark.filterwarnings("ignore:Explicitly requested dtype float64:UserWarning")
 def test_curve_fit_x64_off_tall_fit_is_not_rank_deficient(x64_off):
     x = np.linspace(5, 6, 10**6)
     y = 1.0 + 2.0 * x + np.random.default_rng(0).normal(0, 0.1, x.size)

@@ -385,6 +385,8 @@ def test_callback_stop_reports_current_gradient_norm(bounds):
 # --- round 2: stability recovery, bounded all_times -------------------------------
 
 
+@pytest.mark.filterwarnings("ignore:divide by zero encountered:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:Jacobian contains NaN or Inf values:UserWarning")
 def test_stability_clipping_recovers_when_start_becomes_usable():
     # 1/x overflows at x0=0; clipping + zeroing the Inf Jacobian row leaves a
     # nonzero gradient, so the fit proceeds to the true minimiser (HEAD: 1.3803).

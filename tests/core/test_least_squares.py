@@ -1058,6 +1058,7 @@ class TestMethodLM:
 
 
 @pytest.mark.parametrize("enable_stability", [True, False])
+@pytest.mark.filterwarnings("ignore:Ill-conditioned Jacobian:UserWarning")
 def test_result_jac_is_true_jacobian_for_rank_deficient_problem(enable_stability):
     """Stability regularization must not leak into the returned Jacobian."""
     x = jnp.linspace(1.0, 5.0, 20)

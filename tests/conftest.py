@@ -384,6 +384,71 @@ def reset_random_seed(random_seed):
     np.random.seed(random_seed)
 
 
+@pytest.fixture(autouse=True)
+def restore_nlsq_logging_state():
+    """Undo logger-level, handler, global-level and NLSQ_DEBUG/NLSQ_VERBOSE changes.
+
+    ``enable_debug_mode()`` / ``enable_verbose_mode()`` lower every ``nlsq.*``
+    logger and set ``_global_level``, which ``get_logger()`` bakes into each logger
+    it first creates (and then caches for the worker's lifetime). They also
+    replace NLSQ's own handlers on the ``nlsq`` logger (adding a debug
+    ``FileHandler``) and move the console handler threshold. Tests restored
+    only the root ``nlsq`` logger, so a leaked DEBUG level failed unrelated
+    log-capture tests that landed on the same xdist worker.
+    """
+    import logging
+
+    from nlsq.utils import logging as nlsq_logging
+
+    def _nlsq_loggers():
+        return {
+            name: lg
+            for name, lg in logging.root.manager.loggerDict.items()
+            if name.startswith("nlsq") and isinstance(lg, logging.Logger)
+        }
+
+    root = logging.getLogger("nlsq")
+    levels = {name: lg.level for name, lg in _nlsq_loggers().items()}
+    env = {k: os.environ.get(k) for k in ("NLSQ_DEBUG", "NLSQ_VERBOSE")}
+    saved_global = nlsq_logging._global_level
+    saved_handlers = {
+        h: h.level for h in root.handlers if getattr(h, "_nlsq_owned", False)
+    }
+    saved_initialized = getattr(root, "_nlsq_initialized", False)
+    yield
+    nlsq_logging._global_level = saved_global
+    # enable_debug_mode() closes NLSQ's handlers and adds a debug FileHandler.
+    for h in list(root.handlers):
+        if getattr(h, "_nlsq_owned", False) and h not in saved_handlers:
+            root.removeHandler(h)
+            h.close()
+    for h, lvl in saved_handlers.items():
+        # A closed FileHandler cannot be revived; stream handlers can.
+        if not isinstance(h, logging.FileHandler):
+            if h not in root.handlers:
+                root.addHandler(h)
+            h.setLevel(lvl)
+    root._nlsq_initialized = saved_initialized  # type: ignore[attr-defined]
+    # A logger first created inside the test inherits the test's leaked level;
+    # give it the level NLSQLogger.__init__ would pick from the original env:
+    # NLSQ_DEBUG forces DEBUG, else the global level, else INFO/WARNING.
+    if (env["NLSQ_DEBUG"] or "0").strip().lower() in {"1", "true", "yes", "on"}:
+        default = logging.DEBUG
+    elif saved_global is not None:
+        default = saved_global
+    elif env["NLSQ_VERBOSE"] == "1":
+        default = logging.INFO
+    else:
+        default = logging.WARNING
+    for name, lg in _nlsq_loggers().items():
+        lg.setLevel(levels.get(name, default))
+    for k, v in env.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
 # ============================================================================
 # Loss Function Fixtures
 # ============================================================================

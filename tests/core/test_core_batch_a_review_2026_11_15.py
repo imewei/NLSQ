@@ -34,6 +34,9 @@ def _rank2_of_3():
 
 
 @pytest.mark.parametrize("cond_warn", [True, False])
+@pytest.mark.filterwarnings(
+    "ignore:normal-equation Hessian is ill-conditioned:UserWarning"
+)
 def test_pcov_from_normal_warns_on_rank_deficiency(cond_warn):
     J = _rank2_of_3()
     with pytest.warns(OptimizeWarning, match=r"rank-deficient \(rank 2 < 3"):
