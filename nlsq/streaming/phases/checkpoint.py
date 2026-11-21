@@ -57,7 +57,7 @@ def reject_foreign_storage(f: Any) -> None:
     Walks every link and dataset from metadata only. A checkpoint is untrusted
     input, so external links (data read from another HDF5 file), external raw
     storage (data read from an arbitrary file) and virtual datasets are all
-    rejected, matching the CLI data loader.
+    rejected.
 
     Parameters
     ----------
@@ -70,22 +70,20 @@ def reject_foreign_storage(f: Any) -> None:
         If any entry is an external link, uses external storage, or is virtual.
     """
 
-    # Collect, then raise: an exception raised inside an h5py visitor surfaces
-    # as a SystemError from the C layer.
-    bad: list[str] = []
-
-    def _link(name: str, link: Any) -> None:
+    # Return, don't raise: a value returned from an h5py visitor stops the walk
+    # and comes back, while an exception raised inside one is a C-layer SystemError.
+    def _link(name: str, link: Any) -> str | None:
         if isinstance(link, h5py.ExternalLink):
-            bad.append(f"Checkpoint entry '{name}' is an external link")
+            return f"Checkpoint entry '{name}' is an external link"
+        return None
 
-    def _dataset(name: str, obj: Any) -> None:
+    def _dataset(name: str, obj: Any) -> str | None:
         if isinstance(obj, h5py.Dataset) and (obj.external or obj.is_virtual):
-            bad.append(f"Checkpoint dataset '{name}' uses external or virtual storage")
+            return f"Checkpoint dataset '{name}' uses external or virtual storage"
+        return None
 
-    f.visititems_links(_link)
-    f.visititems(_dataset)
-    if bad:
-        raise ValueError(bad[0])
+    if msg := f.visititems_links(_link) or f.visititems(_dataset):
+        raise ValueError(msg)
 
 
 # Element cap for any array read from a checkpoint (2**26 f8 = 512 MiB).

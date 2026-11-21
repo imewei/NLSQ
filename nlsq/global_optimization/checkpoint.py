@@ -455,7 +455,16 @@ class HPCCheckpointManager:
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
 
+        from nlsq.streaming.phases.checkpoint import (
+            check_checkpoint_dataset,
+            read_checkpoint_bytes,
+            read_checkpoint_scalar,
+            reject_foreign_storage,
+        )
+
         with h5py.File(path, "r") as f:
+            # first: opening f["state"] would already follow an external link
+            pass
             if not bool(f.attrs.get("completion_marker", False)):
                 raise ValueError(
                     f"Checkpoint at {path} is missing its completion marker "
@@ -470,15 +479,6 @@ class HPCCheckpointManager:
             state_group = f["state"]
             # Metadata-only validation before any read: a tiny sparse file must
             # not expand to its declared shape (n from `mean`; C/B are (n, n)).
-            from nlsq.streaming.phases.checkpoint import (
-                check_checkpoint_dataset,
-                read_checkpoint_bytes,
-                read_checkpoint_scalar,
-                reject_foreign_storage,
-            )
-
-            reject_foreign_storage(f)
-
             n = int(state_group["mean"].shape[0]) if state_group["mean"].ndim else None
             vec = (n,)
             expected = {
