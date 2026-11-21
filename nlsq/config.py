@@ -547,13 +547,6 @@ class JAXConfig:
             Control returns to the body of the ``with`` block; the previous
             setting is restored on exit.
 
-        Examples
-        --------
-        >>> with JAXConfig.precision_context(use_x64=False):
-        ...     # Code here runs with 32-bit precision
-        ...     result = some_computation()
-        >>> # Back to previous precision setting
-
         Notes
         -----
         ``jax_enable_x64`` is one process-wide flag, so contexts must nest
@@ -561,6 +554,13 @@ class JAXConfig:
         asyncio tasks of one thread are not: do not keep a ``precision_context``
         open across an ``await`` while another task of the same thread enters its
         own, or the exits restore the wrong precision.
+
+        Examples
+        --------
+        >>> with JAXConfig.precision_context(use_x64=False):
+        ...     # Code here runs with 32-bit precision
+        ...     result = some_computation()
+        >>> # Back to previous precision setting
         """
         instance = cls()
 

@@ -96,3 +96,15 @@ def test_wrong_shape_rejected(saved):
         f["state"].create_dataset("C", data=np.zeros(9))  # 1-D where (n, n) expected
     with pytest.raises(ValueError, match="shape"):
         mgr.load(path, fp)
+
+
+def test_cmaes_load_rejects_external_link(saved, tmp_path):
+    mgr, fp, path = saved
+    other = tmp_path / "other.h5"
+    with h5py.File(other, "w") as o:
+        o["x"] = np.zeros(3)
+    with h5py.File(path, "a") as f:
+        del f["state"]["mean"]
+        f["state"]["mean"] = h5py.ExternalLink(str(other), "/x")
+    with pytest.raises(ValueError, match="external link"):
+        mgr.load(path, fp)

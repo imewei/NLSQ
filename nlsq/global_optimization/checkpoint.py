@@ -474,7 +474,10 @@ class HPCCheckpointManager:
                 check_checkpoint_dataset,
                 read_checkpoint_bytes,
                 read_checkpoint_scalar,
+                reject_foreign_storage,
             )
+
+            reject_foreign_storage(f)
 
             n = int(state_group["mean"].shape[0]) if state_group["mean"].ndim else None
             vec = (n,)
