@@ -142,7 +142,7 @@ JAX backend, GPU info, and available builtin models.
    NLSQ System Information
    ============================================================
 
-   NLSQ Version: 0.8.0
+   NLSQ Version: 0.8.1
 
    Python Version: 3.12.0 (main, ...)
 

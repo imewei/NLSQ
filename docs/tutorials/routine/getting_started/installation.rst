@@ -33,7 +33,7 @@ Expected output:
 
 .. code-block:: text
 
-   NLSQ version: 0.8.0
+   NLSQ version: 0.8.1
    Device: cpu  # or 'gpu' if GPU is available
 
 GPU Support (Optional)

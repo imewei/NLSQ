@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-21
+
 ### Fixed
 
 - **Checkpoint loading.** `CheckpointManager.load` (hybrid streaming) and the CMA-ES checkpoint loader now reject
@@ -16,8 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (it skipped `NLSQ_MAX_LOAD_ELEMENTS` and could raise a raw `MemoryError`), and a NUL byte in `export.results_file` is a
   `ConfigError` instead of a traceback. The NPZ loader makes fewer temporary copies of each array.
 - **GUI.** The column selector's validation warning follows the light/dark theme (it was a fixed orange, 2.2:1 on white).
-- **Docs and tests.** Seven docstrings follow the numpydoc section order; three large-array tests carry
-  `@pytest.mark.serial`.
+- **Docs and tests.** The `ftol=inf` warning says the solver stops after the first accepted step (it only said
+  "at the initial guess"). Seven docstrings follow the numpydoc section order; large-array tests carry
+  `@pytest.mark.serial`; 14 new tests kill mutants in caching, callbacks, global optimization and diagnostics.
 
 ## [0.8.0] - 2026-11-21
 
