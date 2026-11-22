@@ -6,8 +6,8 @@ package:
   version: {{ version }}
 
 source:
-  url: https://files.pythonhosted.org/packages/62/4e/dce5cce84c9ffdbec7053e90e1dceaca0126f1d21ff771a87ae3908797e6/nlsq-{{ version }}.tar.gz
-  sha256: 2db180ae835bb2ed15bec0bd3057cf9c87ad0a82de9d8a5d72bc9578466abaa3
+  url: https://files.pythonhosted.org/packages/01/70/a670cd0cf901fc8670850daa0efdefb0f5320f2d03c7543c4ca957dfa988/nlsq-{{ version }}.tar.gz
+  sha256: 1a8805b06bd12b56f3714da88f3b76a4f4ebcc500278bbb796ea1ddfc35d5a11
 
 build:
   number: 0
