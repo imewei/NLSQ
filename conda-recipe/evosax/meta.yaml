@@ -1,13 +1,13 @@
 {% set name = "evosax" %}
-{% set version = "0.3.1" %}
+{% set version = "0.3.2" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  url: https://files.pythonhosted.org/packages/65/2d/3408839c2151b576ffa2fd53cb1e80ab335b6845f0bc9248884dfc79524c/evosax-{{ version }}.tar.gz
-  sha256: 38609f64704b48921b500b2d4729779beacd82eb39749978fe8e6db790a790dc
+  url: https://files.pythonhosted.org/packages/bd/51/169959bbbaf400d500e71c41635e22f9b11cdfc4ba2ebeb576cc4567a9a1/evosax-{{ version }}.tar.gz
+  sha256: c5d85711785313a96781bb92bd76c7f433fbc4bd7f883bfa8d9e2fa0a34e9725
 
 build:
   number: 0
