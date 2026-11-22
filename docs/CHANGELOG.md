@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.8.1 (2026-11-21)
+- Docstring-only: seven numpydoc section reorders (`intersect_trust_region_jax`, `precision_context`, `merge_bounds`,
+  `confidence_intervals`, `prediction_interval`, `fit_with_fallback`, `_run_tournament_selection`), a `Notes` heading in
+  `cli/commands/batch.py`, and the `ftol=inf` warning wording. Verified code-identical with `ast.dump` (docstrings
+  stripped). Version strings in the CLI, installation and
+  getting-help samples read 0.8.1.
+
 ## v0.8.0 (2026-11-21)
 - `gui_qt` theme docs: module and class docstrings, `docs/api/nlsq.gui_qt.rst` and the widget `set_theme` notes now describe the full-`QPalette` switch (PR #89).
 - `make latexpdf`: removed the explicit `(slug)=` MyST targets above headings in `developer/optimization_case_study.md`
